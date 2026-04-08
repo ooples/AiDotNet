@@ -1,6 +1,7 @@
 using AiDotNet.DataVersionControl;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DataVersionControl;
 
@@ -59,16 +60,16 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithExplicitStorageDirectory_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithExplicitStorageDirectory_CreatesInstance()
     {
         // Test basic constructor with explicit storage directory
         var dvc = new DataVersionControl<double>(_storageDirectory);
         Assert.NotNull(dvc);
     }
 
-    [Fact]
-    public void Constructor_WithCustomStorageDirectory_CreatesDirectory()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomStorageDirectory_CreatesDirectory()
     {
         var customStorage = Path.Combine(_testDirectory, "custom_storage");
         Assert.False(Directory.Exists(customStorage));
@@ -82,8 +83,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region CreateDatasetVersion Tests
 
-    [Fact]
-    public void CreateDatasetVersion_WithValidFile_ReturnsHash()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithValidFile_ReturnsHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("test_data.csv", "col1,col2\n1,2\n3,4");
@@ -94,8 +95,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(hash);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithDescription_StoresDescription()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithDescription_StoresDescription()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("test_data.csv", "col1,col2\n1,2");
@@ -106,8 +107,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("My description", version.Description);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_MultipleVersions_IncrementsVersionNumber()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_MultipleVersions_IncrementsVersionNumber()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("data1.csv", "col1\n1\n2");
@@ -127,8 +128,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(3, version3.Version);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithTags_StoresTags()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithTags_StoresTags()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("tagged_data.csv", "data");
@@ -145,8 +146,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("api", version.Tags["source"]);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithNullDatasetName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithNullDatasetName_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("test.csv", "data");
@@ -155,8 +156,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetVersion(null!, dataPath));
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithEmptyDataPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithEmptyDataPath_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -164,8 +165,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetVersion("test", ""));
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithDirectory_ComputesHashCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetVersion_WithDirectory_ComputesHashCorrectly()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dirPath = CreateTestDirectory("multi_file_data");
@@ -182,8 +183,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetDatasetVersion Tests
 
-    [Fact]
-    public void GetDatasetVersion_WithoutVersionHash_ReturnsLatest()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetVersion_WithoutVersionHash_ReturnsLatest()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("data1.csv", "old");
@@ -198,8 +199,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("v2", latest.Description);
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithSpecificHash_ReturnsCorrectVersion()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetVersion_WithSpecificHash_ReturnsCorrectVersion()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("data1.csv", "version1");
@@ -214,8 +215,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("First", version.Description);
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithNonexistentDataset_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetVersion_WithNonexistentDataset_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -223,8 +224,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.GetDatasetVersion("nonexistent"));
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithNonexistentHash_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetVersion_WithNonexistentHash_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("test.csv", "data");
@@ -238,8 +239,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetLatestDatasetVersion Tests
 
-    [Fact]
-    public void GetLatestDatasetVersion_ReturnsHighestVersionNumber()
+    [Fact(Timeout = 120000)]
+    public async Task GetLatestDatasetVersion_ReturnsHighestVersionNumber()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("data1.csv", "v1");
@@ -260,8 +261,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ListDatasetVersions Tests
 
-    [Fact]
-    public void ListDatasetVersions_ReturnsAllVersionsDescending()
+    [Fact(Timeout = 120000)]
+    public async Task ListDatasetVersions_ReturnsAllVersionsDescending()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -280,8 +281,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(1, versions[2].Version);
     }
 
-    [Fact]
-    public void ListDatasetVersions_IncludesVersionInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ListDatasetVersions_IncludesVersionInfo()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "col1,col2\n1,2\n3,4");
@@ -299,8 +300,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ListDatasets Tests
 
-    [Fact]
-    public void ListDatasets_ReturnsAllDatasetNames()
+    [Fact(Timeout = 120000)]
+    public async Task ListDatasets_ReturnsAllDatasetNames()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -319,8 +320,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Contains("dataset_gamma", datasets);
     }
 
-    [Fact]
-    public void ListDatasets_WithFilter_ReturnsMatchingDatasets()
+    [Fact(Timeout = 120000)]
+    public async Task ListDatasets_WithFilter_ReturnsMatchingDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -340,8 +341,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("training_data", trainingDatasets[0]);
     }
 
-    [Fact]
-    public void ListDatasets_WithTagFilter_ReturnsMatchingDatasets()
+    [Fact(Timeout = 120000)]
+    public async Task ListDatasets_WithTagFilter_ReturnsMatchingDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -360,8 +361,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region ComputeDatasetHash Tests
 
-    [Fact]
-    public void ComputeDatasetHash_SameContent_ReturnsSameHash()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeDatasetHash_SameContent_ReturnsSameHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var content = "identical content";
@@ -374,8 +375,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
-    public void ComputeDatasetHash_DifferentContent_ReturnsDifferentHash()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeDatasetHash_DifferentContent_ReturnsDifferentHash()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var path1 = CreateTestFile("file1.txt", "content1");
@@ -387,8 +388,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEqual(hash1, hash2);
     }
 
-    [Fact]
-    public void ComputeDatasetHash_Directory_ComputesHashOfAllFiles()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeDatasetHash_Directory_ComputesHashOfAllFiles()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dir = CreateTestDirectory("hash_test_dir");
@@ -401,8 +402,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(hash);
     }
 
-    [Fact]
-    public void ComputeDatasetHash_NullPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeDatasetHash_NullPath_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -410,8 +411,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.ComputeDatasetHash(null!));
     }
 
-    [Fact]
-    public void ComputeDatasetHash_NonexistentPath_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeDatasetHash_NonexistentPath_ThrowsFileNotFoundException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -423,8 +424,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region VerifyDatasetIntegrity Tests
 
-    [Fact]
-    public void VerifyDatasetIntegrity_UnchangedFile_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task VerifyDatasetIntegrity_UnchangedFile_ReturnsTrue()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "original content");
@@ -435,8 +436,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.True(isValid);
     }
 
-    [Fact]
-    public void VerifyDatasetIntegrity_ModifiedFile_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task VerifyDatasetIntegrity_ModifiedFile_ReturnsFalse()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "original content");
@@ -455,8 +456,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region LinkDatasetToRun Tests
 
-    [Fact]
-    public void LinkDatasetToRun_CreatesLink()
+    [Fact(Timeout = 120000)]
+    public async Task LinkDatasetToRun_CreatesLink()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "training data");
@@ -468,8 +469,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Contains("run_001", runs);
     }
 
-    [Fact]
-    public void LinkDatasetToRun_WithInvalidRunId_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LinkDatasetToRun_WithInvalidRunId_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -479,8 +480,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.LinkDatasetToRun("dataset", hash, ""));
     }
 
-    [Fact]
-    public void GetDatasetForRun_ReturnsLinkedDataset()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetForRun_ReturnsLinkedDataset()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "training data");
@@ -493,8 +494,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, dataset.Hash);
     }
 
-    [Fact]
-    public void GetDatasetForRun_WithUnlinkedRun_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetForRun_WithUnlinkedRun_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -506,8 +507,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region TagDatasetVersion Tests
 
-    [Fact]
-    public void TagDatasetVersion_CreatesTag()
+    [Fact(Timeout = 120000)]
+    public async Task TagDatasetVersion_CreatesTag()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "production data");
@@ -519,8 +520,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, taggedVersion.Hash);
     }
 
-    [Fact]
-    public void TagDatasetVersion_MultipleTagsOnSameVersion_AllTagsWork()
+    [Fact(Timeout = 120000)]
+    public async Task TagDatasetVersion_MultipleTagsOnSameVersion_AllTagsWork()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -539,8 +540,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, v3.Hash);
     }
 
-    [Fact]
-    public void TagDatasetVersion_WithEmptyTag_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task TagDatasetVersion_WithEmptyTag_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -550,8 +551,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.TagDatasetVersion("dataset", hash, ""));
     }
 
-    [Fact]
-    public void GetDatasetByTag_WithNonexistentTag_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetByTag_WithNonexistentTag_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -565,8 +566,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region CompareDatasetVersions Tests
 
-    [Fact]
-    public void CompareDatasetVersions_IdenticalVersions_NoChanges()
+    [Fact(Timeout = 120000)]
+    public async Task CompareDatasetVersions_IdenticalVersions_NoChanges()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -578,8 +579,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(0, comparison.RecordsRemoved);
     }
 
-    [Fact]
-    public void CompareDatasetVersions_DifferentSizes_DetectsSchemaChange()
+    [Fact(Timeout = 120000)]
+    public async Task CompareDatasetVersions_DifferentSizes_DetectsSchemaChange()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var smallPath = CreateTestFile("small.csv", "a");
@@ -594,8 +595,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(comparison.SchemaChanges);
     }
 
-    [Fact]
-    public void CompareDatasetVersions_DifferentHashes_DetectsModification()
+    [Fact(Timeout = 120000)]
+    public async Task CompareDatasetVersions_DifferentHashes_DetectsModification()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var path1 = CreateTestFile("data1.csv", "content1");
@@ -613,8 +614,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region RecordDatasetLineage Tests
 
-    [Fact]
-    public void RecordDatasetLineage_StoresLineageInfo()
+    [Fact(Timeout = 120000)]
+    public async Task RecordDatasetLineage_StoresLineageInfo()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "derived data");
@@ -640,8 +641,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("test_user", retrieved.Creator);
     }
 
-    [Fact]
-    public void GetDatasetLineage_WithNoRecordedLineage_ReturnsDefaultLineage()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetLineage_WithNoRecordedLineage_ReturnsDefaultLineage()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -654,8 +655,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Null(lineage.SourceDataset);
     }
 
-    [Fact]
-    public void RecordDatasetLineage_WithNullLineage_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task RecordDatasetLineage_WithNullLineage_ThrowsArgumentNullException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -669,8 +670,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region DeleteDatasetVersion Tests
 
-    [Fact]
-    public void DeleteDatasetVersion_RemovesVersion()
+    [Fact(Timeout = 120000)]
+    public async Task DeleteDatasetVersion_RemovesVersion()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -686,8 +687,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash2, versions[0].Hash);
     }
 
-    [Fact]
-    public void DeleteDatasetVersion_RemovesAssociatedTags()
+    [Fact(Timeout = 120000)]
+    public async Task DeleteDatasetVersion_RemovesAssociatedTags()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("d1.csv", "a");
@@ -703,8 +704,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.GetDatasetByTag("dataset", "old_tag"));
     }
 
-    [Fact]
-    public void DeleteDatasetVersion_LastVersion_RemovesDataset()
+    [Fact(Timeout = 120000)]
+    public async Task DeleteDatasetVersion_LastVersion_RemovesDataset()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -716,8 +717,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.DoesNotContain("dataset", datasets);
     }
 
-    [Fact]
-    public void DeleteDatasetVersion_NonexistentVersion_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DeleteDatasetVersion_NonexistentVersion_DoesNotThrow()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -731,8 +732,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region GetDatasetStatistics Tests
 
-    [Fact]
-    public void GetDatasetStatistics_ReturnsBasicStats()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetStatistics_ReturnsBasicStats()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "col1,col2\n1,2\n3,4\n5,6");
@@ -750,8 +751,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Snapshot Tests
 
-    [Fact]
-    public void CreateDatasetSnapshot_ReturnsSnapshotId()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetSnapshot_ReturnsSnapshotId()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("train.csv", "training");
@@ -770,8 +771,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotEmpty(snapshotId);
     }
 
-    [Fact]
-    public void GetDatasetSnapshot_ReturnsSnapshotMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetSnapshot_ReturnsSnapshotMetadata()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("train.csv", "training");
@@ -793,8 +794,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal("My experiment", snapshot.Description);
     }
 
-    [Fact]
-    public void GetAllDatasetsInSnapshot_ReturnsAllDatasets()
+    [Fact(Timeout = 120000)]
+    public async Task GetAllDatasetsInSnapshot_ReturnsAllDatasets()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("train.csv", "training");
@@ -821,8 +822,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash3, datasets["validation"]);
     }
 
-    [Fact]
-    public void CreateDatasetSnapshot_WithEmptyDatasets_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetSnapshot_WithEmptyDatasets_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -830,8 +831,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetSnapshot("empty_snapshot", new Dictionary<string, string>()));
     }
 
-    [Fact]
-    public void CreateDatasetSnapshot_WithNullName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetSnapshot_WithNullName_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath = CreateTestFile("data.csv", "data");
@@ -841,8 +842,8 @@ public class DataVersionControlIntegrationTests : IDisposable
             dvc.CreateDatasetSnapshot(null!, new Dictionary<string, string> { { "dataset", hash } }));
     }
 
-    [Fact]
-    public void GetDatasetSnapshot_WithNonexistentSnapshot_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetDatasetSnapshot_WithNonexistentSnapshot_ThrowsArgumentException()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
@@ -854,8 +855,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact]
-    public void DataVersionControl_PersistsAcrossInstances()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionControl_PersistsAcrossInstances()
     {
         var dataPath = CreateTestFile("persist_test.csv", "persistent data");
 
@@ -875,8 +876,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, tagged.Hash);
     }
 
-    [Fact]
-    public void DataVersionControl_PersistsRunLinks()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionControl_PersistsRunLinks()
     {
         var dataPath = CreateTestFile("run_link_test.csv", "data");
 
@@ -894,8 +895,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(hash, dataset.Hash);
     }
 
-    [Fact]
-    public void DataVersionControl_PersistsSnapshots()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionControl_PersistsSnapshots()
     {
         var dataPath1 = CreateTestFile("snap1.csv", "data1");
         var dataPath2 = CreateTestFile("snap2.csv", "data2");
@@ -925,8 +926,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void DataVersionControl_ConcurrentVersionCreation_IsThreadSafe()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionControl_ConcurrentVersionCreation_IsThreadSafe()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var tasks = new List<Task<string>>();
@@ -956,8 +957,8 @@ public class DataVersionControlIntegrationTests : IDisposable
 
     #region Model Classes Tests
 
-    [Fact]
-    public void DatasetVersion_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetVersion_HasCorrectDefaults()
     {
         var version = new DatasetVersion<double>();
 
@@ -968,8 +969,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(version.Tags);
     }
 
-    [Fact]
-    public void DatasetLineage_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetLineage_HasCorrectDefaults()
     {
         var lineage = new DatasetLineage();
 
@@ -981,8 +982,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(lineage.UsedInRuns);
     }
 
-    [Fact]
-    public void DatasetComparison_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetComparison_HasCorrectDefaults()
     {
         var comparison = new DatasetComparison<double>();
 
@@ -995,8 +996,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(comparison.StatisticalChanges);
     }
 
-    [Fact]
-    public void DatasetStatistics_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetStatistics_HasCorrectDefaults()
     {
         var stats = new DatasetStatistics<double>();
 
@@ -1007,8 +1008,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(stats.CategoricalStats);
     }
 
-    [Fact]
-    public void NumericColumnStats_SupportsNullableValues()
+    [Fact(Timeout = 120000)]
+    public async Task NumericColumnStats_SupportsNullableValues()
     {
         var stats = new NumericColumnStats<double>();
 
@@ -1034,8 +1035,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.Equal(48.0, stats.Median);
     }
 
-    [Fact]
-    public void CategoricalColumnStats_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task CategoricalColumnStats_HasCorrectDefaults()
     {
         var stats = new CategoricalColumnStats();
 
@@ -1045,8 +1046,8 @@ public class DataVersionControlIntegrationTests : IDisposable
         Assert.NotNull(stats.ValueCounts);
     }
 
-    [Fact]
-    public void DatasetSnapshot_HasCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetSnapshot_HasCorrectDefaults()
     {
         var snapshot = new DatasetSnapshot();
 

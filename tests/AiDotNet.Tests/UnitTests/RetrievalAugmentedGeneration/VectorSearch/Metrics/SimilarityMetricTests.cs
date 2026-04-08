@@ -2,6 +2,7 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metrics
 {
@@ -9,8 +10,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
     {
         #region Cosine Similarity Tests
 
-        [Fact]
-        public void CosineSimilarity_WithIdenticalVectors_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CosineSimilarity_WithIdenticalVectors_ReturnsOne()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -39,8 +40,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CosineSimilarity_WithOppositeVectors_ReturnsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task CosineSimilarity_WithOppositeVectors_ReturnsNegativeOne()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(-1.0, result, 10);
         }
 
-        [Fact]
-        public void CosineSimilarity_HigherIsBetter_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task CosineSimilarity_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact]
-        public void CosineSimilarity_WithScaledVectors_ReturnsSameValue()
+        [Fact(Timeout = 60000)]
+        public async Task CosineSimilarity_WithScaledVectors_ReturnsSameValue()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Euclidean Distance Tests
 
-        [Fact]
-        public void EuclideanDistance_WithIdenticalVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task EuclideanDistance_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void EuclideanDistance_WithDifferentVectors_ReturnsCorrectDistance()
+        [Fact(Timeout = 60000)]
+        public async Task EuclideanDistance_WithDifferentVectors_ReturnsCorrectDistance()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -113,8 +114,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(5.0, result, 10);
         }
 
-        [Fact]
-        public void EuclideanDistance_HigherIsBetter_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task EuclideanDistance_HigherIsBetter_ReturnsFalse()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -123,8 +124,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.False(metric.HigherIsBetter);
         }
 
-        [Fact]
-        public void EuclideanDistance_IsSymmetric()
+        [Fact(Timeout = 60000)]
+        public async Task EuclideanDistance_IsSymmetric()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -139,8 +140,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(d1, d2, 10);
         }
 
-        [Fact]
-        public void EuclideanDistance_WithHighDimensionalVectors_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task EuclideanDistance_WithHighDimensionalVectors_WorksCorrectly()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -158,8 +159,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Manhattan Distance Tests
 
-        [Fact]
-        public void ManhattanDistance_WithIdenticalVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task ManhattanDistance_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
             var metric = new ManhattanDistanceMetric<double>();
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void ManhattanDistance_WithDifferentVectors_ReturnsCorrectDistance()
+        [Fact(Timeout = 60000)]
+        public async Task ManhattanDistance_WithDifferentVectors_ReturnsCorrectDistance()
         {
             // Arrange
             var metric = new ManhattanDistanceMetric<double>();
@@ -188,8 +189,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(7.0, result, 10);
         }
 
-        [Fact]
-        public void ManhattanDistance_HigherIsBetter_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task ManhattanDistance_HigherIsBetter_ReturnsFalse()
         {
             // Arrange
             var metric = new ManhattanDistanceMetric<double>();
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.False(metric.HigherIsBetter);
         }
 
-        [Fact]
-        public void ManhattanDistance_IsSymmetric()
+        [Fact(Timeout = 60000)]
+        public async Task ManhattanDistance_IsSymmetric()
         {
             // Arrange
             var metric = new ManhattanDistanceMetric<double>();
@@ -214,8 +215,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(d1, d2, 10);
         }
 
-        [Fact]
-        public void ManhattanDistance_WithNegativeValues_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ManhattanDistance_WithNegativeValues_WorksCorrectly()
         {
             // Arrange
             var metric = new ManhattanDistanceMetric<double>();
@@ -233,8 +234,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Dot Product Tests
 
-        [Fact]
-        public void DotProduct_WithIdenticalUnitVectors_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task DotProduct_WithIdenticalUnitVectors_ReturnsOne()
         {
             // Arrange
             var metric = new DotProductMetric<double>();
@@ -248,8 +249,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void DotProduct_WithOrthogonalVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task DotProduct_WithOrthogonalVectors_ReturnsZero()
         {
             // Arrange
             var metric = new DotProductMetric<double>();
@@ -263,8 +264,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void DotProduct_HigherIsBetter_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task DotProduct_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
             var metric = new DotProductMetric<double>();
@@ -273,8 +274,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact]
-        public void DotProduct_WithRegularVectors_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task DotProduct_WithRegularVectors_ReturnsCorrectValue()
         {
             // Arrange
             var metric = new DotProductMetric<double>();
@@ -288,8 +289,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(32.0, result, 10);
         }
 
-        [Fact]
-        public void DotProduct_IsSymmetric()
+        [Fact(Timeout = 60000)]
+        public async Task DotProduct_IsSymmetric()
         {
             // Arrange
             var metric = new DotProductMetric<double>();
@@ -308,8 +309,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Jaccard Similarity Tests
 
-        [Fact]
-        public void JaccardSimilarity_WithIdenticalVectors_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task JaccardSimilarity_WithIdenticalVectors_ReturnsOne()
         {
             // Arrange
             var metric = new JaccardSimilarityMetric<double>();
@@ -323,8 +324,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void JaccardSimilarity_WithDisjointVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task JaccardSimilarity_WithDisjointVectors_ReturnsZero()
         {
             // Arrange
             var metric = new JaccardSimilarityMetric<double>();
@@ -338,8 +339,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void JaccardSimilarity_HigherIsBetter_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task JaccardSimilarity_HigherIsBetter_ReturnsTrue()
         {
             // Arrange
             var metric = new JaccardSimilarityMetric<double>();
@@ -348,8 +349,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.True(metric.HigherIsBetter);
         }
 
-        [Fact]
-        public void JaccardSimilarity_WithPartialOverlap_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task JaccardSimilarity_WithPartialOverlap_ReturnsCorrectValue()
         {
             // Arrange
             var metric = new JaccardSimilarityMetric<double>();
@@ -366,8 +367,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.333333333, result, 5);
         }
 
-        [Fact]
-        public void JaccardSimilarity_IsSymmetric()
+        [Fact(Timeout = 60000)]
+        public async Task JaccardSimilarity_IsSymmetric()
         {
             // Arrange
             var metric = new JaccardSimilarityMetric<double>();
@@ -386,8 +387,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
 
         #region Edge Cases and Numerical Stability
 
-        [Fact]
-        public void Metrics_WithSingleElementVectors_WorkCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Metrics_WithSingleElementVectors_WorkCorrectly()
         {
             // Arrange
             var cosine = new CosineSimilarityMetric<double>();
@@ -400,8 +401,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0, euclidean.Calculate(v1, v2), 10);
         }
 
-        [Fact]
-        public void Metrics_WithFloatType_WorkCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Metrics_WithFloatType_WorkCorrectly()
         {
             // Arrange
             var cosine = new CosineSimilarityMetric<float>();
@@ -414,8 +415,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(0.0f, euclidean.Calculate(v1, v2), 5);
         }
 
-        [Fact]
-        public void Metrics_WithVerySmallValues_MaintainNumericalStability()
+        [Fact(Timeout = 60000)]
+        public async Task Metrics_WithVerySmallValues_MaintainNumericalStability()
         {
             // Arrange
             var cosine = new CosineSimilarityMetric<double>();
@@ -429,8 +430,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Metr
             Assert.Equal(1.0, result, 8);
         }
 
-        [Fact]
-        public void Metrics_WithLargeValues_MaintainNumericalStability()
+        [Fact(Timeout = 60000)]
+        public async Task Metrics_WithLargeValues_MaintainNumericalStability()
         {
             // Arrange
             var cosine = new CosineSimilarityMetric<double>();

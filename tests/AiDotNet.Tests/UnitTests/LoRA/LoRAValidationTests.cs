@@ -4,6 +4,7 @@ using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LoRA;
 
@@ -14,8 +15,8 @@ public class LoRAValidationTests
 {
     #region LoRALayer Input/Output Validation Tests
 
-    [Fact]
-    public void LoRALayer_InvalidInputSize_Zero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidInputSize_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -24,8 +25,8 @@ public class LoRAValidationTests
         Assert.Contains("Input size", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidInputSize_Negative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidInputSize_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -34,8 +35,8 @@ public class LoRAValidationTests
         Assert.Contains("Input size", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidOutputSize_Zero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidOutputSize_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -44,8 +45,8 @@ public class LoRAValidationTests
         Assert.Contains("Output size", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidOutputSize_Negative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidOutputSize_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -54,8 +55,8 @@ public class LoRAValidationTests
         Assert.Contains("Output size", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidRank_Zero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidRank_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -64,8 +65,8 @@ public class LoRAValidationTests
         Assert.Contains("Rank", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidRank_Negative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidRank_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -74,8 +75,8 @@ public class LoRAValidationTests
         Assert.Contains("Rank", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_InvalidRank_ExceedsMinDimension_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_InvalidRank_ExceedsMinDimension_ThrowsArgumentOutOfRangeException()
     {
         // Rank cannot exceed min(inputSize, outputSize)
         // Arrange & Act & Assert
@@ -85,8 +86,8 @@ public class LoRAValidationTests
         Assert.Contains("cannot exceed", ex.Message);
     }
 
-    [Fact]
-    public void LoRALayer_ValidParameters_CreatesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task LoRALayer_ValidParameters_CreatesSuccessfully()
     {
         // Arrange & Act
         var layer = new LoRALayer<double>(inputSize: 10, outputSize: 8, rank: 4);
@@ -100,8 +101,8 @@ public class LoRAValidationTests
 
     #region AdaLoRAAdapter PruningInterval Validation Tests
 
-    [Fact]
-    public void AdaLoRAAdapter_InvalidPruningInterval_Zero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task AdaLoRAAdapter_InvalidPruningInterval_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(10, 5);
@@ -114,8 +115,8 @@ public class LoRAValidationTests
         Assert.Contains("Pruning interval", ex.Message);
     }
 
-    [Fact]
-    public void AdaLoRAAdapter_InvalidPruningInterval_Negative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task AdaLoRAAdapter_InvalidPruningInterval_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(10, 5);
@@ -128,8 +129,8 @@ public class LoRAValidationTests
         Assert.Contains("Pruning interval", ex.Message);
     }
 
-    [Fact]
-    public void AdaLoRAAdapter_ValidPruningInterval_CreatesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task AdaLoRAAdapter_ValidPruningInterval_CreatesSuccessfully()
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(10, 5);
@@ -146,8 +147,8 @@ public class LoRAValidationTests
 
     #region DefaultLoRAConfiguration CreateAdapter Tests
 
-    [Fact]
-    public void DefaultLoRAConfiguration_StandardLoRAAdapter_CreatesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_StandardLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true);
@@ -160,8 +161,8 @@ public class LoRAValidationTests
         Assert.IsType<StandardLoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
-    public void DefaultLoRAConfiguration_DoRAAdapter_CreatesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_DoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - DoRA has matching constructor signature (ILayer<T>, int, double, bool)
         var doraAdapter = new DoRAAdapter<double>(new DenseLayer<double>(10, 5), rank: 4, alpha: 4, freezeBaseLayer: true);
@@ -175,8 +176,8 @@ public class LoRAValidationTests
         Assert.IsType<DoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
-    public void DefaultLoRAConfiguration_AdaLoRAAdapter_CreatesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_AdaLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - AdaLoRA has compatible constructor (4th param is bool, rest have defaults)
         var adaloraAdapter = new AdaLoRAAdapter<double>(new DenseLayer<double>(10, 5), maxRank: 4);
@@ -190,8 +191,8 @@ public class LoRAValidationTests
         Assert.IsType<AdaLoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
-    public void DefaultLoRAConfiguration_QLoRAAdapter_ThrowsInvalidOperationException()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_QLoRAAdapter_ThrowsInvalidOperationException()
     {
         // QLoRA has incompatible constructor signature (4th param is QuantizationType, not bool)
         // This should throw a helpful error message
@@ -205,8 +206,8 @@ public class LoRAValidationTests
         Assert.Contains("compatible constructor", ex.Message);
     }
 
-    [Fact]
-    public void DefaultLoRAConfiguration_NonAdaptableLayers_PassThrough()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_NonAdaptableLayers_PassThrough()
     {
         // Layers without trainable weights should pass through unchanged
         // Arrange
@@ -224,8 +225,8 @@ public class LoRAValidationTests
 
     #region Matrix Indexing Bug Fix Verification Tests
 
-    [Fact]
-    public void LoRAAdapterBase_MergeWeights_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task LoRAAdapterBase_MergeWeights_ReturnsCorrectShape()
     {
         // Verify that MergeWeights() returns [inputSize, outputSize]
         // Arrange
@@ -242,8 +243,8 @@ public class LoRAValidationTests
         Assert.Equal(outputSize, merged.Columns);
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task StandardLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
         // Before the fix, this would throw IndexOutOfRangeException when outputSize > inputSize
@@ -259,8 +260,8 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
-    public void DoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task DoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
         // Arrange
@@ -275,8 +276,8 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
-    public void QLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task QLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
         // Arrange
@@ -291,8 +292,8 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
-    public void VeRAAdapter_MergeToOriginalLayer_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task VeRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that VeRA's matrix indexing is correct
         // Arrange
@@ -323,8 +324,8 @@ public class LoRAValidationTests
 
     #region DoRAAdapter Forward Pass Bug Fix Verification Tests
 
-    [Fact]
-    public void DoRAAdapter_Forward_DoesNotThrowWithAsymmetricDimensions()
+    [Fact(Timeout = 60000)]
+    public async Task DoRAAdapter_Forward_DoesNotThrowWithAsymmetricDimensions()
     {
         // This tests that the matrix indexing fix in Forward() works correctly
         // Before the fix, this would throw IndexOutOfRangeException when outputSize > inputSize

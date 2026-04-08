@@ -1,6 +1,7 @@
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,8 +18,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 1: Loss is finite for similar pairs
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_SimilarPair_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_SimilarPair_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
@@ -34,8 +35,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 2: Loss is finite for dissimilar pairs
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_DissimilarPair_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_DissimilarPair_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
@@ -51,8 +52,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 3: Loss is non-negative
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeNonNegative()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
@@ -66,8 +67,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 4: Identical vectors → zero loss for similar pairs
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_IdenticalVectors_SimilarLabel_ShouldBeZero()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_IdenticalVectors_SimilarLabel_ShouldBeZero()
     {
         var loss = CreateLoss();
         var v = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
@@ -81,8 +82,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 5: Closer similar pairs → lower loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_CloserSimilarPair_ShouldProduceLowerLoss()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_CloserSimilarPair_ShouldProduceLowerLoss()
     {
         var loss = CreateLoss();
         var anchor = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
@@ -100,8 +101,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 6: Well-separated dissimilar pairs → zero loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_WellSeparatedDissimilarPair_ShouldBeZero()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_WellSeparatedDissimilarPair_ShouldBeZero()
     {
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
@@ -116,8 +117,8 @@ public abstract class PairedContrastiveLossTestBase
     // INVARIANT 7: Gradients are finite
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });

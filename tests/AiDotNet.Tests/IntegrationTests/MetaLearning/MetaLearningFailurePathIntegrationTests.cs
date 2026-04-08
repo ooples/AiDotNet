@@ -13,6 +13,7 @@ using AiDotNet.MetaLearning.Modules;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -96,15 +97,15 @@ public class MetaLearningFailurePathIntegrationTests
         return prototypes;
     }
 
-    [Fact]
-    public void TaskBatch_Constructor_NullTasks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TaskBatch_Constructor_NullTasks_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TaskBatch<double, Matrix<double>, Vector<double>>(null!));
     }
 
-    [Fact]
-    public void TaskBatch_Constructor_EmptyTasks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TaskBatch_Constructor_EmptyTasks_Throws()
     {
         var tasks = Array.Empty<IMetaLearningTask<double, Matrix<double>, Vector<double>>>();
 
@@ -112,8 +113,8 @@ public class MetaLearningFailurePathIntegrationTests
             new TaskBatch<double, Matrix<double>, Vector<double>>(tasks));
     }
 
-    [Fact]
-    public void TaskBatch_Constructor_MismatchedConfiguration_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TaskBatch_Constructor_MismatchedConfiguration_Throws()
     {
         var taskA = CreateVectorTask(2, 1, 1);
         var taskB = CreateVectorTask(3, 1, 1);
@@ -123,8 +124,8 @@ public class MetaLearningFailurePathIntegrationTests
             new TaskBatch<double, Matrix<double>, Vector<double>>(tasks));
     }
 
-    [Fact]
-    public void TaskBatch_GetRange_InvalidIndices_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TaskBatch_GetRange_InvalidIndices_Throws()
     {
         var task = CreateVectorTask(2, 1, 1);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(
@@ -134,8 +135,8 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => batch.GetRange(0, 3));
     }
 
-    [Fact]
-    public void TaskBatch_Split_InvalidCount_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TaskBatch_Split_InvalidCount_Throws()
     {
         var task = CreateVectorTask(2, 1, 1);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(
@@ -145,8 +146,8 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => batch.Split(3));
     }
 
-    [Fact]
-    public void MatchingNetworks_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNetworks_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(3, 2);
         var options = new MatchingNetworksOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -159,8 +160,8 @@ public class MetaLearningFailurePathIntegrationTests
             new MatchingNetworksAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact]
-    public void ProtoNets_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(3, 2);
         var options = new ProtoNetsOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -172,8 +173,8 @@ public class MetaLearningFailurePathIntegrationTests
             new ProtoNetsAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact]
-    public void MetaSGD_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MetaSGD_InvalidOptions_Throws()
     {
         var model = new LinearVectorModel(2);
         var options = new MetaSGDOptions<double, Matrix<double>, Vector<double>>(model)
@@ -185,8 +186,8 @@ public class MetaLearningFailurePathIntegrationTests
             new MetaSGDAlgorithm<double, Matrix<double>, Vector<double>>(options));
     }
 
-    [Fact]
-    public void MetaLearningModels_TrainAndUpdateParameters_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearningModels_TrainAndUpdateParameters_Throw()
     {
         static void AssertModelNotSupported(
             Action trainAction,
@@ -244,8 +245,8 @@ public class MetaLearningFailurePathIntegrationTests
         Assert.Throws<NotSupportedException>(() => protoModel.GetParameters());
     }
 
-    [Fact]
-    public void MetaLearningAlgorithms_VectorOutputs_Adapt_NullTask_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearningAlgorithms_VectorOutputs_Adapt_NullTask_Throws()
     {
         static void AssertNullTaskThrows<TInput, TOutput>(
             IMetaLearner<double, TInput, TOutput> algorithm)
@@ -382,8 +383,8 @@ public class MetaLearningFailurePathIntegrationTests
             }));
     }
 
-    [Fact]
-    public void MetaLearningAlgorithms_TensorOutputs_Adapt_NullTask_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearningAlgorithms_TensorOutputs_Adapt_NullTask_Throws()
     {
         static void AssertNullTaskThrows<TInput, TOutput>(
             IMetaLearner<double, TInput, TOutput> algorithm)

@@ -1,5 +1,6 @@
 using AiDotNet.TimeSeries;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
@@ -10,16 +11,16 @@ public class ChronosFoundationModelTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new ChronosFoundationModel<double>();
 
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new ChronosOptions<double>
         {
@@ -37,8 +38,8 @@ public class ChronosFoundationModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithVocabularySizeLessThan2_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithVocabularySizeLessThan2_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -48,8 +49,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroEmbeddingDim_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroEmbeddingDim_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -59,8 +60,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeEmbeddingDim_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeEmbeddingDim_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -70,8 +71,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroNumHeads_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroNumHeads_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -81,8 +82,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithEmbeddingDimNotDivisibleByNumHeads_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithEmbeddingDimNotDivisibleByNumHeads_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -93,8 +94,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroNumLayers_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroNumLayers_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -104,8 +105,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroContextLength_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroContextLength_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -115,8 +116,8 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroForecastHorizon_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroForecastHorizon_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
         {
@@ -130,8 +131,8 @@ public class ChronosFoundationModelTests
 
     #region Training Tests
 
-    [Fact]
-    public void Train_WithValidData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithValidData_CompletesWithoutError()
     {
         var options = new ChronosOptions<double>
         {
@@ -152,8 +153,8 @@ public class ChronosFoundationModelTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Train_WithMinimalData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new ChronosOptions<double>
         {
@@ -178,8 +179,8 @@ public class ChronosFoundationModelTests
 
     #region Prediction Tests
 
-    [Fact]
-    public void PredictSingle_AfterTraining_ReturnsFiniteValue()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new ChronosOptions<double>
         {
@@ -208,8 +209,8 @@ public class ChronosFoundationModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
-    public void PredictSingle_ReturnsFiniteValues()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_ReturnsFiniteValues()
     {
         var options = new ChronosOptions<double>
         {
@@ -238,8 +239,8 @@ public class ChronosFoundationModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
-    public void Predict_WithMatrix_ReturnsValidPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new ChronosOptions<double>
         {
@@ -272,8 +273,8 @@ public class ChronosFoundationModelTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_AndDeserialize_PreservesModel()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_AndDeserialize_PreservesModel()
     {
         var options = new ChronosOptions<double>
         {
@@ -313,8 +314,8 @@ public class ChronosFoundationModelTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new ChronosOptions<float>
         {

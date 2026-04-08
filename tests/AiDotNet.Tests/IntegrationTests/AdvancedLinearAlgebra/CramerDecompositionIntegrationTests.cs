@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -105,8 +106,8 @@ public class CramerDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void CramerDecomposition_Invert_2x2Matrix_ExactInverse()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_Invert_2x2Matrix_ExactInverse()
     {
         // Arrange - 2x2 matrix [[a, b], [c, d]]
         // Inverse = 1/(ad-bc) * [[d, -b], [-c, a]]
@@ -127,8 +128,8 @@ public class CramerDecompositionIntegrationTests
         Assert.True(Math.Abs(AInv[1, 1] - (-2.0)) < Tolerance);
     }
 
-    [Fact]
-    public void CramerDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(3);
@@ -153,8 +154,8 @@ public class CramerDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void CramerDecomposition_NonSquareMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4); // Non-square
@@ -164,8 +165,8 @@ public class CramerDecompositionIntegrationTests
     }
 
 
-    [Fact]
-    public void CramerDecomposition_SingularMatrix_Invert_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_SingularMatrix_Invert_ThrowsInvalidOperationException()
     {
         // Arrange - Singular matrix
         var A = new Matrix<double>(2, 2);
@@ -183,8 +184,8 @@ public class CramerDecompositionIntegrationTests
     #region Edge Cases
 
 
-    [Fact]
-    public void CramerDecomposition_1x1Matrix_Invert_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_1x1Matrix_Invert_WorksCorrectly()
     {
         // Arrange - 1x1 matrix inversion now works after the 0x0 determinant fix
         var A = new Matrix<double>(1, 1);
@@ -198,8 +199,8 @@ public class CramerDecompositionIntegrationTests
         Assert.True(Math.Abs(AInv[0, 0] - 0.25) < Tolerance, "1/4 = 0.25");
     }
 
-    [Fact]
-    public void CramerDecomposition_2x2Matrix_Invert_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_2x2Matrix_Invert_WorksCorrectly()
     {
         // Arrange
         var A = new Matrix<double>(2, 2);
@@ -223,8 +224,8 @@ public class CramerDecompositionIntegrationTests
     #region Numerical Properties Tests
 
 
-    [Fact]
-    public void CramerDecomposition_Invert_Twice_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task CramerDecomposition_Invert_Twice_ReturnsOriginal()
     {
         // Arrange
         var A = CreateDiagonallyDominantMatrix(3);

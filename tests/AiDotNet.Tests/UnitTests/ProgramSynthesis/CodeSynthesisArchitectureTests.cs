@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class CodeSynthesisArchitectureTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidParameters_CreatesInstance()
     {
         // Arrange & Act
         var architecture = new CodeSynthesisArchitecture<double>(
@@ -42,8 +43,8 @@ public class CodeSynthesisArchitectureTests
         Assert.Equal(100, architecture.MaxProgramLength);
     }
 
-    [Fact]
-    public void Constructor_DefaultValues_CreatesInstanceWithDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultValues_CreatesInstanceWithDefaults()
     {
         // Arrange & Act
         var architecture = new CodeSynthesisArchitecture<double>(
@@ -62,8 +63,8 @@ public class CodeSynthesisArchitectureTests
         Assert.False(architecture.UseDataFlow);
     }
 
-    [Fact]
-    public void Constructor_WithDataFlow_SetsDataFlowCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDataFlow_SetsDataFlowCorrectly()
     {
         // Arrange & Act
         var architecture = new CodeSynthesisArchitecture<double>(
@@ -76,8 +77,8 @@ public class CodeSynthesisArchitectureTests
         Assert.True(architecture.UseDataFlow);
     }
 
-    [Fact]
-    public void Constructor_DifferentLanguages_CreatesCorrectInstances()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DifferentLanguages_CreatesCorrectInstances()
     {
         // Arrange & Act
         var pythonArch = new CodeSynthesisArchitecture<double>(

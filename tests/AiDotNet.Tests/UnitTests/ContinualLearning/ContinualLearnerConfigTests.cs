@@ -1,5 +1,6 @@
 using AiDotNet.ContinualLearning.Config;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 
@@ -8,8 +9,8 @@ namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 /// </summary>
 public class ContinualLearnerConfigTests
 {
-    [Fact]
-    public void Constructor_DefaultParameters_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultParameters_InitializesSuccessfully()
     {
         // Act
         var config = new ContinualLearnerConfig<double>();
@@ -19,8 +20,8 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
-    public void PropertyInitialization_CustomParameters_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task PropertyInitialization_CustomParameters_InitializesSuccessfully()
     {
         // Arrange & Act
         var config = new ContinualLearnerConfig<double>
@@ -42,8 +43,8 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
-    public void IsValid_WithNegativeLearningRate_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsValid_WithNegativeLearningRate_ReturnsFalse()
     {
         // Arrange
         var config = new ContinualLearnerConfig<double>
@@ -58,8 +59,8 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
-    public void IsValid_WithZeroEpochs_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsValid_WithZeroEpochs_ReturnsFalse()
     {
         // Arrange
         var config = new ContinualLearnerConfig<double>
@@ -74,8 +75,8 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
-    public void IsValid_WithNegativeBatchSize_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsValid_WithNegativeBatchSize_ReturnsFalse()
     {
         // Arrange
         var config = new ContinualLearnerConfig<double>
@@ -90,8 +91,8 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
-    public void Constructor_SetsDefaultLearningRate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_SetsDefaultLearningRate()
     {
         // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
@@ -100,8 +101,8 @@ public class ContinualLearnerConfigTests
         Assert.Equal(0.001, config.LearningRate);
     }
 
-    [Fact]
-    public void Constructor_SetsDefaultBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_SetsDefaultBatchSize()
     {
         // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
@@ -110,8 +111,8 @@ public class ContinualLearnerConfigTests
         Assert.Equal(32, config.BatchSize);
     }
 
-    [Fact]
-    public void Constructor_SetsDefaultEpochsPerTask()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_SetsDefaultEpochsPerTask()
     {
         // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
@@ -120,8 +121,8 @@ public class ContinualLearnerConfigTests
         Assert.Equal(10, config.EpochsPerTask);
     }
 
-    [Fact]
-    public void Constructor_SetsDefaultEwcLambda()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_SetsDefaultEwcLambda()
     {
         // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
@@ -130,8 +131,8 @@ public class ContinualLearnerConfigTests
         Assert.Equal(1000.0, config.EwcLambda);
     }
 
-    [Fact]
-    public void ForEwc_CreatesEwcOptimizedConfig()
+    [Fact(Timeout = 60000)]
+    public async Task ForEwc_CreatesEwcOptimizedConfig()
     {
         // Act
         var config = ContinualLearnerConfig<double>.ForEwc(lambda: 5000.0, fisherSamples: 500);
@@ -143,8 +144,8 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
-    public void ForLwf_CreatesLwfOptimizedConfig()
+    [Fact(Timeout = 60000)]
+    public async Task ForLwf_CreatesLwfOptimizedConfig()
     {
         // Act
         var config = ContinualLearnerConfig<double>.ForLwf(temperature: 4.0, weight: 2.0);
@@ -156,8 +157,8 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
-    public void ForGem_CreatesGemOptimizedConfig()
+    [Fact(Timeout = 60000)]
+    public async Task ForGem_CreatesGemOptimizedConfig()
     {
         // Act
         var config = ContinualLearnerConfig<double>.ForGem(memoryStrength: 0.8, memorySize: 2000);
@@ -169,8 +170,8 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
-    public void IsValid_WithInvalidGemMemoryStrength_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsValid_WithInvalidGemMemoryStrength_ReturnsFalse()
     {
         // Arrange - GEM memory strength must be between 0 and 1
         var config = new ContinualLearnerConfig<double>
@@ -182,8 +183,8 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
-    public void IsValid_WithInvalidPackNetPruneRatio_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsValid_WithInvalidPackNetPruneRatio_ReturnsFalse()
     {
         // Arrange - PackNet prune ratio must be > 0 and < 1
         var config = new ContinualLearnerConfig<double>

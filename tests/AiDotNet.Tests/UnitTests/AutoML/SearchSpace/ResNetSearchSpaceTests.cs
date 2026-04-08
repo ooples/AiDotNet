@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
 {
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class ResNetSearchSpaceTests
     {
-        [Fact]
-        public void ResNetSearchSpace_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new ResNetSearchSpace<double>();
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_ContainsResNetOperations()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_ContainsResNetOperations()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("grouped_conv3x3", searchSpace.Operations);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_HasNineOperations()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_HasNineOperations()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -48,8 +49,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_MaxNodes_IsSixteen()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_MaxNodes_IsSixteen()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -58,8 +59,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(16, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_InputChannels_IsThree()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_InputChannels_IsThree()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_OutputChannels_IsOneThousand()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_OutputChannels_IsOneThousand()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -78,8 +79,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_BottleneckRatio_DefaultIsFour()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_BottleneckRatio_DefaultIsFour()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -88,8 +89,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(4, searchSpace.BottleneckRatio);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_GroupCount_DefaultIsThirtyTwo()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_GroupCount_DefaultIsThirtyTwo()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -98,8 +99,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(32, searchSpace.GroupCount);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_BlockDepths_ContainsExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_BlockDepths_ContainsExpectedValues()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -114,8 +115,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(8, searchSpace.BlockDepths);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_BottleneckRatio_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_BottleneckRatio_CanBeModified()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -127,8 +128,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(2, searchSpace.BottleneckRatio);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_GroupCount_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_GroupCount_CanBeModified()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -140,8 +141,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(64, searchSpace.GroupCount);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_BlockDepths_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_BlockDepths_CanBeModified()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -154,8 +155,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(1, searchSpace.BlockDepths);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Float_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Float_WorksCorrectly()
         {
             // Arrange & Act
             var searchSpace = new ResNetSearchSpace<float>();
@@ -166,8 +167,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_InheritsFromSearchSpaceBase()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_InheritsFromSearchSpaceBase()
         {
             // Arrange & Act
             var searchSpace = new ResNetSearchSpace<double>();
@@ -176,8 +177,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.IsAssignableFrom<SearchSpaceBase<double>>(searchSpace);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_IncludesResidualBlocks()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_IncludesResidualBlocks()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -187,8 +188,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(2, residualBlocks.Count);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_IncludesBasicBlock()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_IncludesBasicBlock()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -197,8 +198,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("residual_block_basic", searchSpace.Operations);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_IncludesBottleneckBlock()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_IncludesBottleneckBlock()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -207,8 +208,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("residual_block_bottleneck", searchSpace.Operations);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_IncludesGroupedConvolution()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_IncludesGroupedConvolution()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();
@@ -217,8 +218,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("grouped_conv3x3", searchSpace.Operations);
         }
 
-        [Fact]
-        public void ResNetSearchSpace_Operations_IncludesPoolingOperations()
+        [Fact(Timeout = 60000)]
+        public async Task ResNetSearchSpace_Operations_IncludesPoolingOperations()
         {
             // Arrange
             var searchSpace = new ResNetSearchSpace<double>();

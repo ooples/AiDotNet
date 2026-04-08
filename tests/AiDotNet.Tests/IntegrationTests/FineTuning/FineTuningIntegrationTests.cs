@@ -9,6 +9,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FineTuning;
 
@@ -295,8 +296,8 @@ public class FineTuningIntegrationTests
 
     #region FineTuningBase Tests
 
-    [Fact]
-    public void FineTuningOptions_DefaultValues_AreReasonable()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningOptions_DefaultValues_AreReasonable()
     {
         var options = new FineTuningOptions<double>();
 
@@ -308,8 +309,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(1.0, options.MaxGradientNorm);
     }
 
-    [Fact]
-    public void FineTuningData_HasSFTData_ReturnsTrueWhenValid()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningData_HasSFTData_ReturnsTrueWhenValid()
     {
         var data = CreateSFTData(SampleCount);
 
@@ -317,8 +318,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(SampleCount, data.Count);
     }
 
-    [Fact]
-    public void FineTuningData_HasPreferenceData_ReturnsTrueWhenValid()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningData_HasPreferenceData_ReturnsTrueWhenValid()
     {
         var data = CreatePreferenceData(SampleCount);
 
@@ -326,8 +327,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(SampleCount, data.Count);
     }
 
-    [Fact]
-    public void FineTuningData_Split_CreatesValidSplits()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningData_Split_CreatesValidSplits()
     {
         var data = CreateSFTData(100);
         var (train, val) = data.Split(validationRatio: 0.2, seed: 42);
@@ -338,8 +339,8 @@ public class FineTuningIntegrationTests
         Assert.True(val.HasSFTData);
     }
 
-    [Fact]
-    public void FineTuningData_Subset_CreatesCorrectSubset()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningData_Subset_CreatesCorrectSubset()
     {
         var data = CreateSFTData(SampleCount);
         var indices = new[] { 0, 5, 10 };
@@ -354,8 +355,8 @@ public class FineTuningIntegrationTests
 
     #region SupervisedFineTuning Tests
 
-    [Fact]
-    public void SFT_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SFT_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var sft = new SupervisedFineTuning<double, Vector<double>, Vector<double>>(options);
@@ -367,7 +368,7 @@ public class FineTuningIntegrationTests
         Assert.True(sft.SupportsPEFT);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -387,7 +388,7 @@ public class FineTuningIntegrationTests
         Assert.NotSame(model, fineTunedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_FineTuneAsync_ThrowsOnNullModel()
     {
         var options = new FineTuningOptions<double>();
@@ -398,7 +399,7 @@ public class FineTuningIntegrationTests
             sft.FineTuneAsync(null!, data));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_FineTuneAsync_ThrowsOnEmptyData()
     {
         var options = new FineTuningOptions<double>();
@@ -410,7 +411,7 @@ public class FineTuningIntegrationTests
             sft.FineTuneAsync(model, emptyData));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_EvaluateAsync_ReturnsMetrics()
     {
         var options = new FineTuningOptions<double> { LoggingSteps = 1000 };
@@ -425,7 +426,7 @@ public class FineTuningIntegrationTests
         Assert.True(metrics.CustomMetrics.ContainsKey("accuracy"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_FineTuneAsync_SupportsCancellation()
     {
         var options = new FineTuningOptions<double>
@@ -448,8 +449,8 @@ public class FineTuningIntegrationTests
 
     #region DirectPreferenceOptimization Tests
 
-    [Fact]
-    public void DPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var dpo = new DirectPreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -462,7 +463,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningMethodType.DPO, dpo.GetOptions().MethodType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -482,7 +483,7 @@ public class FineTuningIntegrationTests
         Assert.NotSame(model, fineTunedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DPO_FineTuneAsync_ThrowsOnSFTData()
     {
         var options = new FineTuningOptions<double>();
@@ -494,7 +495,7 @@ public class FineTuningIntegrationTests
             dpo.FineTuneAsync(model, sftData));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DPO_EvaluateAsync_ReturnsPreferenceMetrics()
     {
         var options = new FineTuningOptions<double> { LoggingSteps = 1000 };
@@ -512,8 +513,8 @@ public class FineTuningIntegrationTests
 
     #region SimplePreferenceOptimization (SimPO) Tests
 
-    [Fact]
-    public void SimPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SimPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var simpo = new SimplePreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -524,7 +525,7 @@ public class FineTuningIntegrationTests
         Assert.False(simpo.RequiresReferenceModel); // SimPO doesn't need reference model
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SimPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -547,8 +548,8 @@ public class FineTuningIntegrationTests
 
     #region OddsRatioPreferenceOptimization (ORPO) Tests
 
-    [Fact]
-    public void ORPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ORPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var orpo = new OddsRatioPreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -559,7 +560,7 @@ public class FineTuningIntegrationTests
         Assert.False(orpo.RequiresReferenceModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ORPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -582,8 +583,8 @@ public class FineTuningIntegrationTests
 
     #region IdentityPreferenceOptimization (IPO) Tests
 
-    [Fact]
-    public void IPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task IPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var ipo = new IdentityPreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -592,7 +593,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.DirectPreference, ipo.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task IPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -614,8 +615,8 @@ public class FineTuningIntegrationTests
 
     #region RobustDirectPreferenceOptimization (RDPO) Tests
 
-    [Fact]
-    public void RDPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RDPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var rdpo = new RobustDirectPreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -624,7 +625,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.DirectPreference, rdpo.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RDPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -646,8 +647,8 @@ public class FineTuningIntegrationTests
 
     #region KahnemanTverskyOptimization (KTO) Tests
 
-    [Fact]
-    public void KTO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task KTO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var kto = new KahnemanTverskyOptimization<double, Vector<double>, Vector<double>>(options);
@@ -656,7 +657,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.DirectPreference, kto.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task KTO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -680,8 +681,8 @@ public class FineTuningIntegrationTests
 
     #region ContrastivePreferenceOptimization (CPO) Tests
 
-    [Fact]
-    public void CPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var cpo = new ContrastivePreferenceOptimization<double, Vector<double>, Vector<double>>(options);
@@ -690,7 +691,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.DirectPreference, cpo.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -712,8 +713,8 @@ public class FineTuningIntegrationTests
 
     #region ReinforcementLearningHumanFeedback (RLHF) Tests
 
-    [Fact]
-    public void RLHF_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RLHF_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var rlhf = new ReinforcementLearningHumanFeedback<double, Vector<double>, Vector<double>>(options);
@@ -724,7 +725,7 @@ public class FineTuningIntegrationTests
         Assert.True(rlhf.RequiresReferenceModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RLHF_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -748,8 +749,8 @@ public class FineTuningIntegrationTests
 
     #region GroupRelativePolicyOptimization (GRPO) Tests
 
-    [Fact]
-    public void GRPO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GRPO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var grpo = new GroupRelativePolicyOptimization<double, Vector<double>, Vector<double>>(options);
@@ -758,7 +759,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.ReinforcementLearning, grpo.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GRPO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -782,8 +783,8 @@ public class FineTuningIntegrationTests
 
     #region PairwiseRankingOptimization (PRO) Tests
 
-    [Fact]
-    public void PRO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PRO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var pro = new PairwiseRankingOptimization<double, Vector<double>, Vector<double>>(options);
@@ -792,7 +793,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.RankingBased, pro.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PRO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -815,8 +816,8 @@ public class FineTuningIntegrationTests
 
     #region RankResponsesHumanFeedback (RRHF) Tests
 
-    [Fact]
-    public void RRHF_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RRHF_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var rrhf = new RankResponsesHumanFeedback<double, Vector<double>, Vector<double>>(options);
@@ -825,7 +826,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.RankingBased, rrhf.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RRHF_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -847,8 +848,8 @@ public class FineTuningIntegrationTests
 
     #region StatisticalRejectionSampling (RSO) Tests
 
-    [Fact]
-    public void RSO_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RSO_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var rso = new StatisticalRejectionSampling<double, Vector<double>, Vector<double>>(options);
@@ -857,7 +858,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.RankingBased, rso.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RSO_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -879,8 +880,8 @@ public class FineTuningIntegrationTests
 
     #region SelfPlayFineTuning (SPIN) Tests
 
-    [Fact]
-    public void SPIN_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SPIN_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var spin = new SelfPlayFineTuning<double, Vector<double>, Vector<double>>(options);
@@ -889,7 +890,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.SelfPlay, spin.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SPIN_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -912,8 +913,8 @@ public class FineTuningIntegrationTests
 
     #region ConstitutionalAIFineTuning (CAI) Tests
 
-    [Fact]
-    public void CAI_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CAI_Constructor_InitializesCorrectly()
     {
         var options = new FineTuningOptions<double>();
         var cai = new ConstitutionalAIFineTuning<double, Vector<double>, Vector<double>>(options);
@@ -922,7 +923,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(FineTuningCategory.Constitutional, cai.Category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CAI_FineTuneAsync_CompletesSuccessfully()
     {
         var options = new FineTuningOptions<double>
@@ -946,8 +947,8 @@ public class FineTuningIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void FineTuning_Serialize_Deserialize_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuning_Serialize_Deserialize_PreservesOptions()
     {
         var options = new FineTuningOptions<double>
         {
@@ -971,8 +972,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(options.Beta, restoredOptions.Beta);
     }
 
-    [Fact]
-    public void FineTuning_Reset_ClearsMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuning_Reset_ClearsMetrics()
     {
         var options = new FineTuningOptions<double>();
         var sft = new SupervisedFineTuning<double, Vector<double>, Vector<double>>(options);
@@ -987,8 +988,8 @@ public class FineTuningIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
-    public void FineTuningOptions_ExtremeBeta_Handled()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningOptions_ExtremeBeta_Handled()
     {
         var options = new FineTuningOptions<double>
         {
@@ -999,8 +1000,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(10.0, dpo.GetOptions().Beta);
     }
 
-    [Fact]
-    public void FineTuningOptions_ZeroLearningRate_Allowed()
+    [Fact(Timeout = 120000)]
+    public async Task FineTuningOptions_ZeroLearningRate_Allowed()
     {
         var options = new FineTuningOptions<double>
         {
@@ -1010,7 +1011,7 @@ public class FineTuningIntegrationTests
         Assert.Equal(0.0, options.LearningRate);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SFT_SingleSample_Works()
     {
         var options = new FineTuningOptions<double>
@@ -1028,7 +1029,7 @@ public class FineTuningIntegrationTests
         Assert.NotNull(fineTunedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DPO_LabelSmoothing_Works()
     {
         var options = new FineTuningOptions<double>
@@ -1051,8 +1052,8 @@ public class FineTuningIntegrationTests
 
     #region All Fine-Tuning Methods Test
 
-    [Fact]
-    public void AllFineTuningMethods_HaveUniqueNames()
+    [Fact(Timeout = 120000)]
+    public async Task AllFineTuningMethods_HaveUniqueNames()
     {
         var options = new FineTuningOptions<double>();
         var methods = new FineTuningBase<double, Vector<double>, Vector<double>>[]
@@ -1080,8 +1081,8 @@ public class FineTuningIntegrationTests
         Assert.Equal(methods.Length, uniqueNames.Length);
     }
 
-    [Fact]
-    public void AllFineTuningMethods_HaveValidCategories()
+    [Fact(Timeout = 120000)]
+    public async Task AllFineTuningMethods_HaveValidCategories()
     {
         var options = new FineTuningOptions<double>();
         var methods = new FineTuningBase<double, Vector<double>, Vector<double>>[]

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
 {
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class SearchSpaceBaseTests
     {
-        [Fact]
-        public void SearchSpaceBase_Constructor_InitializesWithDefaultValues()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Constructor_InitializesWithDefaultValues()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
-        public void SearchSpaceBase_DefaultOperations_ContainsExpectedOperations()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_DefaultOperations_ContainsExpectedOperations()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -37,8 +38,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("avgpool3x3", operations);
         }
 
-        [Fact]
-        public void SearchSpaceBase_DefaultOperations_HasFiveOperations()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_DefaultOperations_HasFiveOperations()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -47,8 +48,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(5, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void SearchSpaceBase_DefaultMaxNodes_IsEight()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_DefaultMaxNodes_IsEight()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -57,8 +58,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(8, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void SearchSpaceBase_DefaultInputChannels_IsOne()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_DefaultInputChannels_IsOne()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -67,8 +68,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1, searchSpace.InputChannels);
         }
 
-        [Fact]
-        public void SearchSpaceBase_DefaultOutputChannels_IsOne()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_DefaultOutputChannels_IsOne()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -77,8 +78,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1, searchSpace.OutputChannels);
         }
 
-        [Fact]
-        public void SearchSpaceBase_Operations_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Operations_CanBeModified()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -93,8 +94,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("custom_op2", searchSpace.Operations);
         }
 
-        [Fact]
-        public void SearchSpaceBase_MaxNodes_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_MaxNodes_CanBeModified()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -106,8 +107,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(16, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void SearchSpaceBase_InputChannels_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_InputChannels_CanBeModified()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -119,8 +120,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
-        public void SearchSpaceBase_OutputChannels_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_OutputChannels_CanBeModified()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -132,8 +133,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
-        public void SearchSpaceBase_Float_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Float_WorksCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<float>();
@@ -143,8 +144,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(8, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void SearchSpaceBase_Operations_CanAddItems()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Operations_CanAddItems()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -158,8 +159,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("new_operation", searchSpace.Operations);
         }
 
-        [Fact]
-        public void SearchSpaceBase_Operations_CanRemoveItems()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Operations_CanRemoveItems()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -173,8 +174,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.DoesNotContain("identity", searchSpace.Operations);
         }
 
-        [Fact]
-        public void SearchSpaceBase_Operations_CanClear()
+        [Fact(Timeout = 60000)]
+        public async Task SearchSpaceBase_Operations_CanClear()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

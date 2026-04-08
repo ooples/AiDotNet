@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -10,14 +11,14 @@ using Xunit;
 
 public class ModelLoaderTests
 {
-    [Fact]
-    public void IsSelfDescribing_ReturnsFalseForMissingFile()
+    [Fact(Timeout = 60000)]
+    public async Task IsSelfDescribing_ReturnsFalseForMissingFile()
     {
         Assert.False(ModelLoader.IsSelfDescribing("nonexistent_file_99999.bin"));
     }
 
-    [Fact]
-    public void IsSelfDescribing_ReturnsTrueForAimfFile()
+    [Fact(Timeout = 60000)]
+    public async Task IsSelfDescribing_ReturnsTrueForAimfFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_isd_{Guid.NewGuid():N}.bin");
         try
@@ -38,8 +39,8 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
-    public void IsSelfDescribing_ReturnsFalseForLegacyFile()
+    [Fact(Timeout = 60000)]
+    public async Task IsSelfDescribing_ReturnsFalseForLegacyFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"legacy_isd_{Guid.NewGuid():N}.bin");
         try
@@ -57,27 +58,27 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
-    public void Inspect_ThrowsOnNullPath()
+    [Fact(Timeout = 60000)]
+    public async Task Inspect_ThrowsOnNullPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(null));
     }
 
-    [Fact]
-    public void Inspect_ThrowsOnEmptyPath()
+    [Fact(Timeout = 60000)]
+    public async Task Inspect_ThrowsOnEmptyPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(""));
     }
 
-    [Fact]
-    public void Inspect_ThrowsOnMissingFile()
+    [Fact(Timeout = 60000)]
+    public async Task Inspect_ThrowsOnMissingFile()
     {
         Assert.Throws<FileNotFoundException>(() =>
             ModelLoader.Inspect("definitely_not_a_real_file_abc123.bin"));
     }
 
-    [Fact]
-    public void Inspect_ReturnsHeaderInfo()
+    [Fact(Timeout = 60000)]
+    public async Task Inspect_ReturnsHeaderInfo()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_inspect_{Guid.NewGuid():N}.bin");
         try
@@ -109,27 +110,27 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
-    public void Load_ThrowsOnNullPath()
+    [Fact(Timeout = 60000)]
+    public async Task Load_ThrowsOnNullPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(null));
     }
 
-    [Fact]
-    public void Load_ThrowsOnEmptyPath()
+    [Fact(Timeout = 60000)]
+    public async Task Load_ThrowsOnEmptyPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(""));
     }
 
-    [Fact]
-    public void Load_ThrowsOnMissingFile()
+    [Fact(Timeout = 60000)]
+    public async Task Load_ThrowsOnMissingFile()
     {
         Assert.Throws<FileNotFoundException>(() =>
             ModelLoader.Load<double>("no_such_model_xyz.aimf"));
     }
 
-    [Fact]
-    public void Load_ThrowsOnLegacyFile()
+    [Fact(Timeout = 60000)]
+    public async Task Load_ThrowsOnLegacyFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"legacy_load_{Guid.NewGuid():N}.bin");
         try
@@ -148,22 +149,22 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
-    public void LoadFromBytes_ThrowsOnNull()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromBytes_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() => ModelLoader.LoadFromBytes<double>(null));
     }
 
-    [Fact]
-    public void LoadFromBytes_ThrowsOnNonAimfData()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromBytes_ThrowsOnNonAimfData()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ModelLoader.LoadFromBytes<double>(new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 }));
         Assert.Contains("AIMF", ex.Message);
     }
 
-    [Fact]
-    public void LoadFromBytes_StubModel_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromBytes_StubModel_RoundTrip()
     {
         // Register the stub so the registry can resolve it
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -183,8 +184,8 @@ public class ModelLoaderTests
         Assert.Equal(payload, loadedStub.GetDeserializedData());
     }
 
-    [Fact]
-    public void Load_FileRoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task Load_FileRoundTrip()
     {
         // Register the stub so the registry can resolve it
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -221,8 +222,8 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
-    public void LoadFromBytes_UnknownType_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromBytes_UnknownType_Throws()
     {
         // Create AIMF data with a type name that won't be in the registry
         // We'll manually craft the header with a fake type name

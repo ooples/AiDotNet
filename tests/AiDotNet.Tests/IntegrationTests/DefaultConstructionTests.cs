@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Xunit;
 using Xunit.Abstractions;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests;
 
@@ -70,8 +71,8 @@ public class DefaultConstructionTests
         }
     }
 
-    [Fact]
-    public void AllDefaultConstructableModels_ShouldListDiscoveredTypes()
+    [Fact(Timeout = 120000)]
+    public async Task AllDefaultConstructableModels_ShouldListDiscoveredTypes()
     {
         var types = GetDefaultConstructableModelTypes().ToList();
         _output.WriteLine($"Found {types.Count} default-constructable IFullModel types:");
@@ -85,8 +86,8 @@ public class DefaultConstructionTests
             "This may indicate a regression in default constructor availability.");
     }
 
-    [Fact]
-    public void AllDefaultConstructableModels_ShouldConstructWithoutException()
+    [Fact(Timeout = 120000)]
+    public async Task AllDefaultConstructableModels_ShouldConstructWithoutException()
     {
         var types = GetDefaultConstructableModelTypes().ToList();
         var failures = new List<(string TypeName, string Error)>();

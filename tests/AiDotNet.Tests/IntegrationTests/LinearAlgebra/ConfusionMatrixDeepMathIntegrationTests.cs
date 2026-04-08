@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinearAlgebra;
 
@@ -14,8 +15,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Binary-MultiClass Consistency
 
-    [Fact]
-    public void Binary_Precision_Equals_GetPrecision0()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_Precision_Equals_GetPrecision0()
     {
         // Binary Precision property and GetPrecision(0) must agree
         // TP=50, TN=30, FP=10, FN=5
@@ -29,8 +30,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(binaryPrecision, multiClassPrecision, Tolerance);
     }
 
-    [Fact]
-    public void Binary_Recall_Equals_GetRecall0()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_Recall_Equals_GetRecall0()
     {
         // Binary Recall property and GetRecall(0) must agree
         var cm = new ConfusionMatrix<double>(50, 30, 10, 5);
@@ -43,8 +44,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(binaryRecall, multiClassRecall, Tolerance);
     }
 
-    [Fact]
-    public void Binary_F1_Equals_GetF1Score0()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_F1_Equals_GetF1Score0()
     {
         var cm = new ConfusionMatrix<double>(50, 30, 10, 5);
 
@@ -54,8 +55,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(binaryF1, multiClassF1, Tolerance);
     }
 
-    [Fact]
-    public void Binary_Specificity_Consistent_With_GetRecall1()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_Specificity_Consistent_With_GetRecall1()
     {
         // Specificity = TN / (TN + FP) is the "recall" for the negative class
         var cm = new ConfusionMatrix<double>(50, 30, 10, 5);
@@ -68,8 +69,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(specificity, recall1, Tolerance);
     }
 
-    [Fact]
-    public void Increment_Built_Binary_Matches_Constructor_Built()
+    [Fact(Timeout = 120000)]
+    public async Task Increment_Built_Binary_Matches_Constructor_Built()
     {
         // A 2x2 matrix built with Increment should give same metrics as constructor-built
         var cmConstructor = new ConfusionMatrix<double>(3, 4, 2, 1);
@@ -95,8 +96,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Hand-Calculated Binary Metrics
 
-    [Fact]
-    public void Binary_HandCalculated_AllMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_HandCalculated_AllMetrics()
     {
         // TP=80, TN=10, FP=5, FN=5 → total=100
         var cm = new ConfusionMatrix<double>(80, 10, 5, 5);
@@ -119,8 +120,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(2 * p * r / (p + r), cm.F1Score, Tolerance);
     }
 
-    [Fact]
-    public void Binary_HandCalculated_AsymmetricFPFN()
+    [Fact(Timeout = 120000)]
+    public async Task Binary_HandCalculated_AsymmetricFPFN()
     {
         // TP=40, TN=30, FP=20, FN=10 → total=100
         var cm = new ConfusionMatrix<double>(40, 30, 20, 10);
@@ -148,8 +149,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Mathematical Identities
 
-    [Fact]
-    public void Identity_Accuracy_Plus_HammingLoss_Equals_One()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_Accuracy_Plus_HammingLoss_Equals_One()
     {
         var cm = new ConfusionMatrix<double>(3);
         for (int i = 0; i < 7; i++) cm.Increment(0, 0);
@@ -162,8 +163,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(1.0, cm.GetAccuracy() + cm.GetHammingLoss(), Tolerance);
     }
 
-    [Fact]
-    public void Identity_F1_Equals_2Jaccard_Over_1PlusJaccard()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_F1_Equals_2Jaccard_Over_1PlusJaccard()
     {
         // F1 = 2*J / (1+J) where J = TP/(TP+FP+FN) and F1 = 2*P*R/(P+R)
         var cm = new ConfusionMatrix<double>(3);
@@ -179,8 +180,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(expected, f1_0, Tolerance);
     }
 
-    [Fact]
-    public void Identity_F1_HarmonicMean_LessEqual_ArithmeticMean()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_F1_HarmonicMean_LessEqual_ArithmeticMean()
     {
         // F1 (harmonic mean of P and R) <= (P + R) / 2 (arithmetic mean)
         var cm = new ConfusionMatrix<double>(3);
@@ -203,8 +204,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_PerClass_TP_FP_FN_TN_Equals_Total()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_PerClass_TP_FP_FN_TN_Equals_Total()
     {
         // For each class: TP + FP + FN + TN = total number of samples
         var cm = new ConfusionMatrix<double>(3);
@@ -229,8 +230,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_MicroPrecision_Equals_MicroRecall_Equals_Accuracy()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_MicroPrecision_Equals_MicroRecall_Equals_Accuracy()
     {
         // For multi-class: Micro P = Micro R = Micro F1 = Accuracy
         var cm = new ConfusionMatrix<double>(3);
@@ -246,8 +247,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(accuracy, cm.GetMicroF1Score(), Tolerance);
     }
 
-    [Fact]
-    public void Identity_Jaccard_LessEqual_F1()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_Jaccard_LessEqual_F1()
     {
         // Jaccard <= F1 always (since J = TP/(TP+FP+FN) and F1 = 2TP/(2TP+FP+FN))
         var cm = new ConfusionMatrix<double>(3);
@@ -272,8 +273,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Hand-Calculated Multi-Class MCC
 
-    [Fact]
-    public void MCC_Binary_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_Binary_HandCalculated()
     {
         // TP=20, TN=30, FP=5, FN=10
         var cm = new ConfusionMatrix<double>(20, 30, 5, 10);
@@ -288,8 +289,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(expected, cm.GetMatthewsCorrelationCoefficient(), Tolerance);
     }
 
-    [Fact]
-    public void MCC_MultiClass_HandCalculated_3x3()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_MultiClass_HandCalculated_3x3()
     {
         // 3x3 confusion matrix:
         //       actual0  actual1  actual2
@@ -321,8 +322,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(expected, cm.GetMatthewsCorrelationCoefficient(), Tolerance);
     }
 
-    [Fact]
-    public void MCC_Bounded_Between_Minus1_And_1()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_Bounded_Between_Minus1_And_1()
     {
         // Various confusion matrices should all have MCC in [-1, 1]
         var matrices = new[]
@@ -346,8 +347,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Hand-Calculated Cohen's Kappa
 
-    [Fact]
-    public void Kappa_Binary_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_Binary_HandCalculated()
     {
         // TP=45, TN=35, FP=10, FN=10 → total=100
         var cm = new ConfusionMatrix<double>(45, 35, 10, 10);
@@ -362,8 +363,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(expected, cm.GetCohenKappa(), 1e-4);
     }
 
-    [Fact]
-    public void Kappa_Bounded()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_Bounded()
     {
         var matrices = new[]
         {
@@ -380,8 +381,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Kappa_LessThanOrEqual_Accuracy_ForNonPerfect()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_LessThanOrEqual_Accuracy_ForNonPerfect()
     {
         // Kappa <= accuracy for non-perfect classifiers (adjusts for chance)
         var cm = new ConfusionMatrix<double>(3);
@@ -403,8 +404,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Jaccard Mathematical Properties
 
-    [Fact]
-    public void Jaccard_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Jaccard_HandCalculated()
     {
         // Class 0: TP=8, FP=3, FN=2
         // Jaccard = 8 / (8+3+2) = 8/13
@@ -417,8 +418,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(8.0 / 13.0, cm.GetJaccardScore(0), Tolerance);
     }
 
-    [Fact]
-    public void Jaccard_Bounded_0_to_1()
+    [Fact(Timeout = 120000)]
+    public async Task Jaccard_Bounded_0_to_1()
     {
         var cm = new ConfusionMatrix<double>(3);
         for (int i = 0; i < 10; i++) cm.Increment(0, 0);
@@ -439,8 +440,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Perfect and Worst-Case Scenarios
 
-    [Fact]
-    public void Perfect_Binary_AllMetricsOptimal()
+    [Fact(Timeout = 120000)]
+    public async Task Perfect_Binary_AllMetricsOptimal()
     {
         var cm = new ConfusionMatrix<double>(50, 50, 0, 0);
 
@@ -455,8 +456,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(1.0, cm.GetJaccardScore(), Tolerance);
     }
 
-    [Fact]
-    public void Perfect_MultiClass_AllMetricsOptimal()
+    [Fact(Timeout = 120000)]
+    public async Task Perfect_MultiClass_AllMetricsOptimal()
     {
         var cm = new ConfusionMatrix<double>(3);
         for (int i = 0; i < 10; i++) cm.Increment(0, 0);
@@ -476,8 +477,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(1.0, cm.GetJaccardScore(), Tolerance);
     }
 
-    [Fact]
-    public void AllWrong_Binary_Accuracy_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task AllWrong_Binary_Accuracy_Zero()
     {
         var cm = new ConfusionMatrix<double>(0, 0, 10, 10);
 
@@ -486,8 +487,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(-1.0, cm.GetMatthewsCorrelationCoefficient(), Tolerance);
     }
 
-    [Fact]
-    public void AllWrong_MultiClass_Accuracy_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task AllWrong_MultiClass_Accuracy_Zero()
     {
         // All predictions wrong: predicted 0→actual 1, 1→actual 2, 2→actual 0
         var cm = new ConfusionMatrix<double>(3);
@@ -503,8 +504,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Weighted Average Properties
 
-    [Fact]
-    public void Weighted_Recall_Equals_Accuracy_For_MultiClass()
+    [Fact(Timeout = 120000)]
+    public async Task Weighted_Recall_Equals_Accuracy_For_MultiClass()
     {
         // Weighted recall = sum(recall_i * support_i) / total
         // = sum(TP_i / (TP_i + FN_i) * (TP_i + FN_i)) / total
@@ -520,8 +521,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(cm.GetAccuracy(), cm.GetWeightedRecall(), Tolerance);
     }
 
-    [Fact]
-    public void Macro_Average_Gives_Equal_Weight_To_Each_Class()
+    [Fact(Timeout = 120000)]
+    public async Task Macro_Average_Gives_Equal_Weight_To_Each_Class()
     {
         // Macro average: each class contributes equally regardless of support
         var cm = new ConfusionMatrix<double>(2);
@@ -535,8 +536,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(1.0, cm.GetMacroPrecision(), Tolerance);
     }
 
-    [Fact]
-    public void Macro_F1_Is_Average_Of_PerClass_F1()
+    [Fact(Timeout = 120000)]
+    public async Task Macro_F1_Is_Average_Of_PerClass_F1()
     {
         var cm = new ConfusionMatrix<double>(3);
         for (int i = 0; i < 10; i++) cm.Increment(0, 0);
@@ -554,8 +555,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Multi-Class Per-Class Metric Correctness
 
-    [Fact]
-    public void MultiClass_PerClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MultiClass_PerClass_HandCalculated()
     {
         // 3x3 confusion matrix:
         //       actual0  actual1  actual2
@@ -607,8 +608,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Empty_Matrix_Returns_Zero_ForAll()
+    [Fact(Timeout = 120000)]
+    public async Task Empty_Matrix_Returns_Zero_ForAll()
     {
         var cm = new ConfusionMatrix<double>(3);
 
@@ -618,8 +619,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(0.0, cm.GetJaccardScore());
     }
 
-    [Fact]
-    public void SingleClass_AllPredictions_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task SingleClass_AllPredictions_Correct()
     {
         // Only one class has any predictions
         var cm = new ConfusionMatrix<double>(3);
@@ -632,15 +633,15 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.Equal(0.0, cm.GetRecall(1));     // No actual class 1 samples
     }
 
-    [Fact]
-    public void Dimension_Minimum_2_Enforced()
+    [Fact(Timeout = 120000)]
+    public async Task Dimension_Minimum_2_Enforced()
     {
         Assert.Throws<ArgumentException>(() => new ConfusionMatrix<double>(1));
         Assert.Throws<ArgumentException>(() => new ConfusionMatrix<double>(0));
     }
 
-    [Fact]
-    public void Increment_OutOfRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Increment_OutOfRange_Throws()
     {
         var cm = new ConfusionMatrix<double>(3);
         Assert.Throws<ArgumentOutOfRangeException>(() => cm.Increment(-1, 0));
@@ -653,8 +654,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Metric Ordering and Relationships
 
-    [Fact]
-    public void Better_Predictions_Improve_All_Metrics()
+    [Fact(Timeout = 120000)]
+    public async Task Better_Predictions_Improve_All_Metrics()
     {
         // Good model
         var good = new ConfusionMatrix<double>(3);
@@ -674,8 +675,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
         Assert.True(good.GetHammingLoss() < bad.GetHammingLoss());
     }
 
-    [Fact]
-    public void MCC_PerfectPrediction_1_TotalDisagreement_Minus1()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_PerfectPrediction_1_TotalDisagreement_Minus1()
     {
         var perfect = new ConfusionMatrix<double>(10, 10, 0, 0);
         var inverted = new ConfusionMatrix<double>(0, 0, 10, 10);
@@ -688,8 +689,8 @@ public class ConfusionMatrixDeepMathIntegrationTests
 
     #region Large Matrix Stress Tests
 
-    [Fact]
-    public void LargeMatrix_10Class_MetricsConsistent()
+    [Fact(Timeout = 120000)]
+    public async Task LargeMatrix_10Class_MetricsConsistent()
     {
         var cm = new ConfusionMatrix<double>(10);
         var random = new Random(42);

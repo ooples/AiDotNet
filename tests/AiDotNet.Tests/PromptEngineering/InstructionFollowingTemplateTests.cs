@@ -1,20 +1,21 @@
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class InstructionFollowingTemplateTests
 {
-    [Fact]
-    public void Constructor_Default_CreatesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_Default_CreatesTemplate()
     {
         var template = new InstructionFollowingTemplate();
 
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void Constructor_WithCustomTemplate_UsesCustomTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "Custom instruction: {input}";
         var template = new InstructionFollowingTemplate(customTemplate);
@@ -22,8 +23,8 @@ public class InstructionFollowingTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact]
-    public void WithObjective_SetsObjective()
+    [Fact(Timeout = 60000)]
+    public async Task WithObjective_SetsObjective()
     {
         var template = new InstructionFollowingTemplate()
             .WithObjective("Summarize the document");
@@ -32,8 +33,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Summarize the document", template.Template);
     }
 
-    [Fact]
-    public void AddInstruction_AddsInstruction()
+    [Fact(Timeout = 60000)]
+    public async Task AddInstruction_AddsInstruction()
     {
         var template = new InstructionFollowingTemplate()
             .AddInstruction("Read the document carefully");
@@ -42,8 +43,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Read the document carefully", template.Template);
     }
 
-    [Fact]
-    public void AddInstructions_AddsMultipleInstructions()
+    [Fact(Timeout = 60000)]
+    public async Task AddInstructions_AddsMultipleInstructions()
     {
         var template = new InstructionFollowingTemplate()
             .AddInstructions("Step 1", "Step 2", "Step 3");
@@ -54,8 +55,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Step 3", template.Template);
     }
 
-    [Fact]
-    public void AddConstraint_AddsConstraint()
+    [Fact(Timeout = 60000)]
+    public async Task AddConstraint_AddsConstraint()
     {
         var template = new InstructionFollowingTemplate()
             .AddConstraint("Keep under 200 words");
@@ -64,8 +65,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Keep under 200 words", template.Template);
     }
 
-    [Fact]
-    public void AddConstraints_AddsMultipleConstraints()
+    [Fact(Timeout = 60000)]
+    public async Task AddConstraints_AddsMultipleConstraints()
     {
         var template = new InstructionFollowingTemplate()
             .AddConstraints("Be concise", "Use bullet points", "No jargon");
@@ -76,8 +77,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("No jargon", template.Template);
     }
 
-    [Fact]
-    public void WithInputDescription_SetsInputDescription()
+    [Fact(Timeout = 60000)]
+    public async Task WithInputDescription_SetsInputDescription()
     {
         var template = new InstructionFollowingTemplate()
             .WithInputDescription("The meeting notes to summarize");
@@ -86,8 +87,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("meeting notes", template.Template);
     }
 
-    [Fact]
-    public void WithOutputDescription_SetsOutputDescription()
+    [Fact(Timeout = 60000)]
+    public async Task WithOutputDescription_SetsOutputDescription()
     {
         var template = new InstructionFollowingTemplate()
             .WithOutputDescription("A bullet-point summary");
@@ -96,8 +97,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("bullet-point summary", template.Template);
     }
 
-    [Fact]
-    public void Format_ReplacesInputVariable()
+    [Fact(Timeout = 60000)]
+    public async Task Format_ReplacesInputVariable()
     {
         var template = new InstructionFollowingTemplate()
             .WithObjective("Summarize");
@@ -111,8 +112,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("This is the document content.", result);
     }
 
-    [Fact]
-    public void Summarization_CreatesSummarizationTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Summarization_CreatesSummarizationTemplate()
     {
         var template = InstructionFollowingTemplate.Summarization();
 
@@ -120,8 +121,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("summary", template.Template.ToLower());
     }
 
-    [Fact]
-    public void Summarization_WithMaxLength_IncludesMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task Summarization_WithMaxLength_IncludesMaxLength()
     {
         var template = InstructionFollowingTemplate.Summarization(100);
 
@@ -129,8 +130,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("100", template.Template);
     }
 
-    [Fact]
-    public void Translation_CreatesTranslationTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Translation_CreatesTranslationTemplate()
     {
         var template = InstructionFollowingTemplate.Translation("Spanish");
 
@@ -139,8 +140,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Translate", template.Template);
     }
 
-    [Fact]
-    public void Classification_CreatesClassificationTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Classification_CreatesClassificationTemplate()
     {
         var template = InstructionFollowingTemplate.Classification("Positive", "Negative", "Neutral");
 
@@ -150,8 +151,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Neutral", template.Template);
     }
 
-    [Fact]
-    public void Classification_WithNoCategories_CreatesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Classification_WithNoCategories_CreatesTemplate()
     {
         var template = InstructionFollowingTemplate.Classification();
 
@@ -159,8 +160,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Classify", template.Template);
     }
 
-    [Fact]
-    public void QuestionAnswering_CreatesQATemplate()
+    [Fact(Timeout = 60000)]
+    public async Task QuestionAnswering_CreatesQATemplate()
     {
         var template = InstructionFollowingTemplate.QuestionAnswering();
 
@@ -169,8 +170,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("question", template.Template.ToLower());
     }
 
-    [Fact]
-    public void Builder_CreatesTemplateWithObjective()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_CreatesTemplateWithObjective()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithObjective("Extract key points")
@@ -180,8 +181,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Extract key points", template.Template);
     }
 
-    [Fact]
-    public void Builder_AddInstruction_AddsInstruction()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_AddInstruction_AddsInstruction()
     {
         var template = InstructionFollowingTemplate.Builder()
             .AddInstruction("First, read carefully")
@@ -191,8 +192,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("First, read carefully", template.Template);
     }
 
-    [Fact]
-    public void Builder_AddConstraint_AddsConstraint()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_AddConstraint_AddsConstraint()
     {
         var template = InstructionFollowingTemplate.Builder()
             .AddConstraint("Be accurate")
@@ -202,8 +203,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Be accurate", template.Template);
     }
 
-    [Fact]
-    public void Builder_WithInputDescription_SetsDescription()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_WithInputDescription_SetsDescription()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithInputDescription("Raw data file")
@@ -213,8 +214,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Raw data file", template.Template);
     }
 
-    [Fact]
-    public void Builder_WithOutputDescription_SetsDescription()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_WithOutputDescription_SetsDescription()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithOutputDescription("Formatted report")
@@ -224,8 +225,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Formatted report", template.Template);
     }
 
-    [Fact]
-    public void Builder_CompleteExample_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_CompleteExample_WorksCorrectly()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithObjective("Summarize meeting notes")
@@ -247,8 +248,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("bullet points", template.Template);
     }
 
-    [Fact]
-    public void Template_ContainsInstructionsSection()
+    [Fact(Timeout = 60000)]
+    public async Task Template_ContainsInstructionsSection()
     {
         var template = new InstructionFollowingTemplate()
             .AddInstruction("Test instruction");
@@ -256,8 +257,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Instructions", template.Template);
     }
 
-    [Fact]
-    public void Template_ContainsConstraintsSection()
+    [Fact(Timeout = 60000)]
+    public async Task Template_ContainsConstraintsSection()
     {
         var template = new InstructionFollowingTemplate()
             .AddConstraint("Test constraint");
@@ -265,8 +266,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Constraints", template.Template);
     }
 
-    [Fact]
-    public void Template_ContainsInputSection()
+    [Fact(Timeout = 60000)]
+    public async Task Template_ContainsInputSection()
     {
         var template = new InstructionFollowingTemplate()
             .WithObjective("Test");
@@ -274,8 +275,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Input", template.Template);
     }
 
-    [Fact]
-    public void Template_ContainsOutputSection()
+    [Fact(Timeout = 60000)]
+    public async Task Template_ContainsOutputSection()
     {
         var template = new InstructionFollowingTemplate()
             .WithObjective("Test");
@@ -283,8 +284,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Output", template.Template);
     }
 
-    [Fact]
-    public void FluentChaining_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FluentChaining_WorksCorrectly()
     {
         var template = new InstructionFollowingTemplate()
             .WithObjective("Objective")
@@ -303,8 +304,8 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Constraint 2", template.Template);
     }
 
-    [Fact]
-    public void Builder_WithEmptyObjective_HandlesGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_WithEmptyObjective_HandlesGracefully()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithObjective("")
@@ -313,8 +314,8 @@ public class InstructionFollowingTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void Builder_WithWhitespaceObjective_HandlesGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_WithWhitespaceObjective_HandlesGracefully()
     {
         var template = InstructionFollowingTemplate.Builder()
             .WithObjective("   ")

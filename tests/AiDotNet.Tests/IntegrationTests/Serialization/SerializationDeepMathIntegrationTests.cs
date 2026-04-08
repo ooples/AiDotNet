@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Serialization;
 
@@ -27,8 +28,8 @@ public class SerializationDeepMathIntegrationTests
     // Vector Roundtrip Tests
     // ============================
 
-    [Fact]
-    public void Vector_Roundtrip_PreservesExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_PreservesExactValues()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.5, -3.7, 0.0, 100.0 });
         var settings = CreateSettings();
@@ -44,8 +45,8 @@ public class SerializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vector_Roundtrip_PreservesHighPrecision()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_PreservesHighPrecision()
     {
         // Test that very precise floating point values survive the roundtrip
         var v = new Vector<double>(new double[]
@@ -64,8 +65,8 @@ public class SerializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vector_Roundtrip_NegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_NegativeValues()
     {
         var v = new Vector<double>(new double[] { -1e-10, -999.999, -0.0, double.MinValue / 2 });
         var settings = CreateSettings();
@@ -81,8 +82,8 @@ public class SerializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vector_Roundtrip_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_SingleElement()
     {
         var v = new Vector<double>(new double[] { 42.0 });
         var settings = CreateSettings();
@@ -95,8 +96,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(42.0, deserialized[0], Tolerance);
     }
 
-    [Fact]
-    public void Vector_Roundtrip_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_AllZeros()
     {
         var v = new Vector<double>(new double[] { 0.0, 0.0, 0.0, 0.0 });
         var settings = CreateSettings();
@@ -111,8 +112,8 @@ public class SerializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vector_Roundtrip_LargeVector()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_LargeVector()
     {
         // Test with 1000 elements to verify no truncation
         var data = new double[1000];
@@ -133,8 +134,8 @@ public class SerializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vector_JsonStructure_ContainsLengthAndData()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_JsonStructure_ContainsLengthAndData()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var settings = CreateSettings();
@@ -145,8 +146,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Contains("\"data\":", json);
     }
 
-    [Fact]
-    public void Vector_Deserialize_MissingLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Deserialize_MissingLength_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"data\":[1.0,2.0]}";
@@ -155,8 +156,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Vector<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Vector_Deserialize_MissingData_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Deserialize_MissingData_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"length\":2}";
@@ -165,8 +166,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Vector<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Vector_Deserialize_LengthMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Deserialize_LengthMismatch_Throws()
     {
         var settings = CreateSettings();
         // length says 3 but only 2 elements
@@ -176,8 +177,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Vector<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Vector_Deserialize_NegativeLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Deserialize_NegativeLength_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"length\":-1,\"data\":[]}";
@@ -190,8 +191,8 @@ public class SerializationDeepMathIntegrationTests
     // Matrix Roundtrip Tests
     // ============================
 
-    [Fact]
-    public void Matrix_Roundtrip_PreservesExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_PreservesExactValues()
     {
         var m = new Matrix<double>(3, 3);
         // Fill with known values: Hilbert-like matrix
@@ -212,8 +213,8 @@ public class SerializationDeepMathIntegrationTests
                 Assert.Equal(m[i, j], deserialized[i, j], Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_Identity()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_Identity()
     {
         var m = new Matrix<double>(4, 4);
         for (int i = 0; i < 4; i++)
@@ -230,8 +231,8 @@ public class SerializationDeepMathIntegrationTests
                 Assert.Equal(i == j ? 1.0 : 0.0, deserialized[i, j], Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_NonSquare()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_NonSquare()
     {
         var m = new Matrix<double>(2, 5);
         for (int i = 0; i < 2; i++)
@@ -251,8 +252,8 @@ public class SerializationDeepMathIntegrationTests
                 Assert.Equal(m[i, j], deserialized[i, j], Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_SingleElement()
     {
         var m = new Matrix<double>(1, 1);
         m[0, 0] = -7.5;
@@ -268,8 +269,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(-7.5, deserialized[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_SymmetricPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_SymmetricPreserved()
     {
         // Symmetric matrix: A = A^T
         var m = new Matrix<double>(3, 3);
@@ -289,8 +290,8 @@ public class SerializationDeepMathIntegrationTests
                 Assert.Equal(deserialized[i, j], deserialized[j, i], Tolerance);
     }
 
-    [Fact]
-    public void Matrix_JsonStructure_ContainsRowsColumnsData()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_JsonStructure_ContainsRowsColumnsData()
     {
         var m = new Matrix<double>(2, 3);
         var settings = CreateSettings();
@@ -302,8 +303,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Contains("\"data\":", json);
     }
 
-    [Fact]
-    public void Matrix_Deserialize_DimensionMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Deserialize_DimensionMismatch_Throws()
     {
         var settings = CreateSettings();
         // 2x2 = 4 elements but only 3 provided
@@ -313,8 +314,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Matrix<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Matrix_Deserialize_MissingRows_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Deserialize_MissingRows_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"columns\":2,\"data\":[1.0,2.0]}";
@@ -323,8 +324,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Matrix<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Matrix_Deserialize_NegativeDimension_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Deserialize_NegativeDimension_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"rows\":-1,\"columns\":2,\"data\":[]}";
@@ -337,8 +338,8 @@ public class SerializationDeepMathIntegrationTests
     // Tensor Roundtrip Tests
     // ============================
 
-    [Fact]
-    public void Tensor_Roundtrip_1D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_1D()
     {
         var t = new Tensor<double>(new[] { 5 });
         for (int i = 0; i < 5; i++)
@@ -355,8 +356,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(t[i], deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_2D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_2D()
     {
         var shape = new[] { 3, 4 };
         var t = new Tensor<double>(shape);
@@ -374,8 +375,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(t[i], deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_3D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_3D()
     {
         var shape = new[] { 2, 3, 4 };
         var t = new Tensor<double>(shape);
@@ -393,8 +394,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(t[i], deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_4D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_4D()
     {
         // Simulates a small batch of feature maps: [batch, channels, height, width]
         var shape = new[] { 2, 3, 2, 2 };
@@ -413,8 +414,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(t[i], deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_SingleElement()
     {
         var t = new Tensor<double>(new[] { 1 });
         t[0] = 99.99;
@@ -429,8 +430,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(99.99, deserialized[0], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_LargeData()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_LargeData()
     {
         // 10x10x10 = 1000 elements
         var shape = new[] { 10, 10, 10 };
@@ -449,8 +450,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(t[i], deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_JsonStructure_ContainsShapeAndData()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_JsonStructure_ContainsShapeAndData()
     {
         var t = new Tensor<double>(new[] { 2, 3 });
         var settings = CreateSettings();
@@ -461,8 +462,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Contains("\"data\":", json);
     }
 
-    [Fact]
-    public void Tensor_Deserialize_ShapeMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Deserialize_ShapeMismatch_Throws()
     {
         var settings = CreateSettings();
         // Shape [2,3] = 6 elements but only 4 provided
@@ -472,8 +473,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Tensor<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Tensor_Deserialize_MissingShape_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Deserialize_MissingShape_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"data\":[1.0,2.0]}";
@@ -482,8 +483,8 @@ public class SerializationDeepMathIntegrationTests
             JsonConvert.DeserializeObject<Tensor<double>>(invalidJson, settings));
     }
 
-    [Fact]
-    public void Tensor_Deserialize_NegativeDimension_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Deserialize_NegativeDimension_Throws()
     {
         var settings = CreateSettings();
         var invalidJson = "{\"shape\":[-1,3],\"data\":[]}";
@@ -496,8 +497,8 @@ public class SerializationDeepMathIntegrationTests
     // Cross-Type Consistency Tests
     // ============================
 
-    [Fact]
-    public void Vector_DoubleSerialization_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_DoubleSerialization_IsIdempotent()
     {
         // Serialize -> Deserialize -> Serialize should produce identical JSON
         var v = new Vector<double>(new double[] { 1.0, Math.PI, -0.001 });
@@ -511,8 +512,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(json1, json2);
     }
 
-    [Fact]
-    public void Matrix_DoubleSerialization_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_DoubleSerialization_IsIdempotent()
     {
         var m = new Matrix<double>(2, 2);
         m[0, 0] = 1.0; m[0, 1] = 2.0;
@@ -527,8 +528,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(json1, json2);
     }
 
-    [Fact]
-    public void Tensor_DoubleSerialization_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_DoubleSerialization_IsIdempotent()
     {
         var t = new Tensor<double>(new[] { 2, 3 });
         for (int i = 0; i < 6; i++)
@@ -547,8 +548,8 @@ public class SerializationDeepMathIntegrationTests
     // Mathematical Property Preservation Tests
     // ============================
 
-    [Fact]
-    public void Vector_Roundtrip_PreservesDotProduct()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_PreservesDotProduct()
     {
         // dot(v, w) before roundtrip == dot(v', w') after roundtrip
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -577,8 +578,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(dotBefore, dotAfter, Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_PreservesDeterminant2x2()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_PreservesDeterminant2x2()
     {
         // det([[a,b],[c,d]]) = ad - bc
         var m = new Matrix<double>(2, 2);
@@ -600,8 +601,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(detBefore, detAfter, Tolerance);
     }
 
-    [Fact]
-    public void Matrix_Roundtrip_PreservesTrace()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_Roundtrip_PreservesTrace()
     {
         // trace(A) = sum of diagonal elements
         var m = new Matrix<double>(3, 3);
@@ -624,8 +625,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Equal(traceBefore, traceAfter, Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Roundtrip_PreservesSum()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Roundtrip_PreservesSum()
     {
         var t = new Tensor<double>(new[] { 3, 4 });
         var expectedSum = 0.0;
@@ -655,8 +656,8 @@ public class SerializationDeepMathIntegrationTests
     // Null Handling Tests
     // ============================
 
-    [Fact]
-    public void Vector_SerializeNull_DeserializesNull()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_SerializeNull_DeserializesNull()
     {
         var settings = CreateSettings();
         Vector<double>? v = null;
@@ -667,8 +668,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Null(deserialized);
     }
 
-    [Fact]
-    public void Matrix_SerializeNull_DeserializesNull()
+    [Fact(Timeout = 120000)]
+    public async Task Matrix_SerializeNull_DeserializesNull()
     {
         var settings = CreateSettings();
         Matrix<double>? m = null;
@@ -679,8 +680,8 @@ public class SerializationDeepMathIntegrationTests
         Assert.Null(deserialized);
     }
 
-    [Fact]
-    public void Tensor_SerializeNull_DeserializesNull()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SerializeNull_DeserializesNull()
     {
         var settings = CreateSettings();
         Tensor<double>? t = null;
@@ -695,43 +696,43 @@ public class SerializationDeepMathIntegrationTests
     // CanConvert Tests
     // ============================
 
-    [Fact]
-    public void VectorConverter_CanConvert_VectorDouble_True()
+    [Fact(Timeout = 120000)]
+    public async Task VectorConverter_CanConvert_VectorDouble_True()
     {
         var converter = new VectorJsonConverter();
         Assert.True(converter.CanConvert(typeof(Vector<double>)));
     }
 
-    [Fact]
-    public void VectorConverter_CanConvert_String_False()
+    [Fact(Timeout = 120000)]
+    public async Task VectorConverter_CanConvert_String_False()
     {
         var converter = new VectorJsonConverter();
         Assert.False(converter.CanConvert(typeof(string)));
     }
 
-    [Fact]
-    public void MatrixConverter_CanConvert_MatrixDouble_True()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixConverter_CanConvert_MatrixDouble_True()
     {
         var converter = new MatrixJsonConverter();
         Assert.True(converter.CanConvert(typeof(Matrix<double>)));
     }
 
-    [Fact]
-    public void MatrixConverter_CanConvert_Int_False()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixConverter_CanConvert_Int_False()
     {
         var converter = new MatrixJsonConverter();
         Assert.False(converter.CanConvert(typeof(int)));
     }
 
-    [Fact]
-    public void TensorConverter_CanConvert_TensorDouble_True()
+    [Fact(Timeout = 120000)]
+    public async Task TensorConverter_CanConvert_TensorDouble_True()
     {
         var converter = new TensorJsonConverter();
         Assert.True(converter.CanConvert(typeof(Tensor<double>)));
     }
 
-    [Fact]
-    public void TensorConverter_CanConvert_List_False()
+    [Fact(Timeout = 120000)]
+    public async Task TensorConverter_CanConvert_List_False()
     {
         var converter = new TensorJsonConverter();
         Assert.False(converter.CanConvert(typeof(List<double>)));
@@ -741,8 +742,8 @@ public class SerializationDeepMathIntegrationTests
     // Special Floating Point Values
     // ============================
 
-    [Fact]
-    public void Vector_Roundtrip_ZeroVector()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_ZeroVector()
     {
         var v = new Vector<double>(10);
         // All zeros by default
@@ -757,8 +758,8 @@ public class SerializationDeepMathIntegrationTests
             Assert.Equal(0.0, deserialized[i], Tolerance);
     }
 
-    [Fact]
-    public void Vector_Roundtrip_AlternatingSign()
+    [Fact(Timeout = 120000)]
+    public async Task Vector_Roundtrip_AlternatingSign()
     {
         var v = new Vector<double>(new double[] { 1.0, -1.0, 1.0, -1.0, 1.0 });
         var settings = CreateSettings();
@@ -778,8 +779,8 @@ public class SerializationDeepMathIntegrationTests
     // Roundtrip With Mixed Settings
     // ============================
 
-    [Fact]
-    public void AllConverters_RegisteredOnce_WorkTogether()
+    [Fact(Timeout = 120000)]
+    public async Task AllConverters_RegisteredOnce_WorkTogether()
     {
         var settings = CreateSettings();
 

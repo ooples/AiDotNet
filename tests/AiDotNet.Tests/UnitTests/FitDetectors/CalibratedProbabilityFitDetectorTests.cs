@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -25,8 +26,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -35,8 +36,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var options = new CalibratedProbabilityFitDetectorOptions
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithWellCalibratedProbabilities_ReturnsGoodFit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithWellCalibratedProbabilities_ReturnsGoodFit()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -68,8 +69,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithPoorlyCalibratedProbabilities_ReturnsNonGoodFit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithPoorlyCalibratedProbabilities_ReturnsNonGoodFit()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -84,8 +85,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_CalculatesConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_CalculatesConfidenceLevel()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_GeneratesRecommendationsBasedOnFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact]
-        public void DetectFit_WithOverconfidentPredictions_ReturnsRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithOverconfidentPredictions_ReturnsRecommendations()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -131,8 +132,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithUnderconfidentPredictions_ReturnsRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithUnderconfidentPredictions_ReturnsRecommendations()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -146,8 +147,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
             var options = new CalibratedProbabilityFitDetectorOptions
@@ -166,8 +167,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomBinCount_UsesCorrectBinCount()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomBinCount_UsesCorrectBinCount()
         {
             // Arrange
             var options = new CalibratedProbabilityFitDetectorOptions
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_WithLargeDataset_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithLargeDataset_HandlesCorrectly()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_RecommendationsIncludeCalibrationMethods()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_RecommendationsIncludeCalibrationMethods()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasCalibrationAdvice, "Recommendations should include calibration-related advice");
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -240,8 +241,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact]
-        public void DetectFit_WithBinaryClassificationData_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithBinaryClassificationData_HandlesCorrectly()
         {
             // Arrange
             var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();

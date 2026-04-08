@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 
@@ -13,8 +14,8 @@ public class LearningWithoutForgettingTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_DefaultParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultParameters_InitializesCorrectly()
     {
         // Arrange & Act
         var lwf = new LearningWithoutForgetting<double>();
@@ -26,8 +27,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0, lwf.TaskCount);
     }
 
-    [Fact]
-    public void Constructor_CustomLambda_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CustomLambda_InitializesCorrectly()
     {
         // Arrange
         double customLambda = 2.5;
@@ -39,8 +40,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(customLambda, lwf.Lambda);
     }
 
-    [Fact]
-    public void Constructor_CustomTemperature_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CustomTemperature_InitializesCorrectly()
     {
         // Arrange
         double customTemperature = 4.0;
@@ -52,8 +53,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(customTemperature, lwf.Temperature);
     }
 
-    [Fact]
-    public void Constructor_AllCustomParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AllCustomParameters_InitializesCorrectly()
     {
         // Arrange
         double lambda = 0.5;
@@ -72,8 +73,8 @@ public class LearningWithoutForgettingTests
 
     #region Property Tests
 
-    [Fact]
-    public void Lambda_SetValue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Lambda_SetValue_UpdatesCorrectly()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -86,8 +87,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(newLambda, lwf.Lambda);
     }
 
-    [Fact]
-    public void Temperature_SetValue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_SetValue_UpdatesCorrectly()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -100,8 +101,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(newTemperature, lwf.Temperature);
     }
 
-    [Fact]
-    public void Temperature_SetVeryLowValue_ClampsToMinimum()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_SetVeryLowValue_ClampsToMinimum()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -113,8 +114,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0.1, lwf.Temperature);
     }
 
-    [Fact]
-    public void Temperature_SetNegativeValue_ClampsToMinimum()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_SetNegativeValue_ClampsToMinimum()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -130,8 +131,8 @@ public class LearningWithoutForgettingTests
 
     #region BeforeTask Tests
 
-    [Fact]
-    public void BeforeTask_WithValidNetwork_ExecutesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task BeforeTask_WithValidNetwork_ExecutesWithoutError()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -145,8 +146,8 @@ public class LearningWithoutForgettingTests
 
     #region PrepareDistillation Tests
 
-    [Fact]
-    public void PrepareDistillation_WithValidInputs_StoresOldPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task PrepareDistillation_WithValidInputs_StoresOldPredictions()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -160,8 +161,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(1, lwf.TaskCount);
     }
 
-    [Fact]
-    public void PrepareDistillation_NullNetwork_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task PrepareDistillation_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -171,8 +172,8 @@ public class LearningWithoutForgettingTests
         Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(null!, inputs, taskId: 0));
     }
 
-    [Fact]
-    public void PrepareDistillation_NullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task PrepareDistillation_NullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -182,8 +183,8 @@ public class LearningWithoutForgettingTests
         Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(network, null!, taskId: 0));
     }
 
-    [Fact]
-    public void PrepareDistillation_MultipleTasks_StoresMultiplePredictions()
+    [Fact(Timeout = 60000)]
+    public async Task PrepareDistillation_MultipleTasks_StoresMultiplePredictions()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -203,8 +204,8 @@ public class LearningWithoutForgettingTests
 
     #region AfterTask Tests
 
-    [Fact]
-    public void AfterTask_ClearsCurrentTaskInputs()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_ClearsCurrentTaskInputs()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -226,8 +227,8 @@ public class LearningWithoutForgettingTests
 
     #region ComputeLoss Tests
 
-    [Fact]
-    public void ComputeLoss_BeforeAnyDistillation_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_BeforeAnyDistillation_ReturnsZero()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -240,8 +241,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0.0, loss);
     }
 
-    [Fact]
-    public void ComputeLoss_NullNetwork_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -250,8 +251,8 @@ public class LearningWithoutForgettingTests
         Assert.Throws<ArgumentNullException>(() => lwf.ComputeLoss(null!));
     }
 
-    [Fact]
-    public void ComputeLoss_AfterDistillationPrep_ReturnsNonNegativeLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_AfterDistillationPrep_ReturnsNonNegativeLoss()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -267,8 +268,8 @@ public class LearningWithoutForgettingTests
         Assert.True(loss >= 0);
     }
 
-    [Fact]
-    public void ComputeLoss_HigherLambda_ProducesHigherLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_HigherLambda_ProducesHigherLoss()
     {
         // Arrange
         var lwfLowLambda = new LearningWithoutForgetting<double>(lambda: 0.5);
@@ -301,8 +302,8 @@ public class LearningWithoutForgettingTests
 
     #region ComputeDistillationLoss Tests
 
-    [Fact]
-    public void ComputeDistillationLoss_IdenticalPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeDistillationLoss_IdenticalPredictions_ReturnsZero()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -315,8 +316,8 @@ public class LearningWithoutForgettingTests
         Assert.True(Math.Abs(loss) < 1e-6);
     }
 
-    [Fact]
-    public void ComputeDistillationLoss_DifferentPredictions_ReturnsPositiveLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeDistillationLoss_DifferentPredictions_ReturnsPositiveLoss()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -336,8 +337,8 @@ public class LearningWithoutForgettingTests
         Assert.True(loss >= 0);
     }
 
-    [Fact]
-    public void ComputeDistillationLoss_NullCurrentPredictions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeDistillationLoss_NullCurrentPredictions_ThrowsArgumentNullException()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -347,8 +348,8 @@ public class LearningWithoutForgettingTests
         Assert.Throws<ArgumentNullException>(() => lwf.ComputeDistillationLoss(null!, oldPredictions));
     }
 
-    [Fact]
-    public void ComputeDistillationLoss_NullOldPredictions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeDistillationLoss_NullOldPredictions_ThrowsArgumentNullException()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -362,8 +363,8 @@ public class LearningWithoutForgettingTests
 
     #region ModifyGradients Tests
 
-    [Fact]
-    public void ModifyGradients_ReturnsUnmodifiedGradients()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_ReturnsUnmodifiedGradients()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -385,8 +386,8 @@ public class LearningWithoutForgettingTests
         }
     }
 
-    [Fact]
-    public void ModifyGradients_AfterDistillation_StillReturnsUnmodified()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_AfterDistillation_StillReturnsUnmodified()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -415,8 +416,8 @@ public class LearningWithoutForgettingTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_AfterDistillation_ClearsAllStoredData()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_AfterDistillation_ClearsAllStoredData()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -434,8 +435,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0, lwf.TaskCount);
     }
 
-    [Fact]
-    public void Reset_BeforeAnyDistillation_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_BeforeAnyDistillation_DoesNotThrow()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -445,8 +446,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0, lwf.TaskCount);
     }
 
-    [Fact]
-    public void Reset_ThenComputeLoss_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ThenComputeLoss_ReturnsZero()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>();
@@ -467,8 +468,8 @@ public class LearningWithoutForgettingTests
 
     #region Temperature Effect Tests
 
-    [Fact]
-    public void Temperature_HigherValue_ProducesSofterDistribution()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_HigherValue_ProducesSofterDistribution()
     {
         // Arrange - Two LwF instances with different temperatures
         var lwfLowTemp = new LearningWithoutForgetting<double>(temperature: 1.0);
@@ -488,8 +489,8 @@ public class LearningWithoutForgettingTests
 
     #region Integration Tests
 
-    [Fact]
-    public void LwF_CompleteWorkflow_ExecutesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LwF_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>(lambda: 1.0, temperature: 2.0);
@@ -540,8 +541,8 @@ public class LearningWithoutForgettingTests
         Assert.Equal(0, lwf.TaskCount);
     }
 
-    [Fact]
-    public void LwF_DistillationLoss_IncreasesWhenPredictionsChange()
+    [Fact(Timeout = 60000)]
+    public async Task LwF_DistillationLoss_IncreasesWhenPredictionsChange()
     {
         // Arrange
         var lwf = new LearningWithoutForgetting<double>(lambda: 1.0, temperature: 2.0);

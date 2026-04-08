@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Preprocessing;
 
@@ -13,8 +14,8 @@ public class ImputerTests
 
     #region SimpleImputer Tests
 
-    [Fact]
-    public void SimpleImputer_MeanStrategy_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_MeanStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 3], mean = 2
         var data = new Matrix<double>(new double[,]
@@ -35,8 +36,8 @@ public class ImputerTests
         Assert.Equal(20.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact]
-    public void SimpleImputer_MedianStrategy_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_MedianStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 3, 5], median = 3
         var data = new Matrix<double>(new double[,]
@@ -57,8 +58,8 @@ public class ImputerTests
         Assert.Equal(3.0, result[1, 0], Tolerance); // NaN replaced with median
     }
 
-    [Fact]
-    public void SimpleImputer_MostFrequentStrategy_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_MostFrequentStrategy_ImputesMissingValues()
     {
         // Arrange - Column 0: [1, NaN, 2, 2, 1, 2], most frequent = 2
         var data = new Matrix<double>(new double[,]
@@ -81,8 +82,8 @@ public class ImputerTests
         Assert.Equal(2.0, result[1, 0], Tolerance); // NaN replaced with most frequent
     }
 
-    [Fact]
-    public void SimpleImputer_ConstantStrategy_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_ConstantStrategy_ImputesMissingValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -103,8 +104,8 @@ public class ImputerTests
         Assert.Equal(-999.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void SimpleImputer_ConstantStrategy_WithDefaultFillValue_UsesNumOpsZero()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_ConstantStrategy_WithDefaultFillValue_UsesNumOpsZero()
     {
         // Arrange - When no fill value is explicitly provided, the imputer uses NumOps.Zero
         var data = new Matrix<double>(new double[,]
@@ -126,8 +127,8 @@ public class ImputerTests
         Assert.Equal(20.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void SimpleImputer_SpecificColumns_OnlyImputesSelectedColumns()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_SpecificColumns_OnlyImputesSelectedColumns()
     {
         // Arrange - Only impute column 0
         var data = new Matrix<double>(new double[,]
@@ -148,8 +149,8 @@ public class ImputerTests
         Assert.True(double.IsNaN(result[0, 1])); // Not imputed (column 1 not selected)
     }
 
-    [Fact]
-    public void SimpleImputer_NoMissingValues_ReturnsOriginalData()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -171,8 +172,8 @@ public class ImputerTests
         Assert.Equal(4.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void SimpleImputer_AllMissingInColumn_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_AllMissingInColumn_ReturnsZero()
     {
         // Arrange - Column 0 has all NaN
         var data = new Matrix<double>(new double[,]
@@ -194,8 +195,8 @@ public class ImputerTests
         Assert.Equal(0.0, result[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void SimpleImputer_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -209,8 +210,8 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact]
-    public void SimpleImputer_FitTransform_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_FitTransform_WorksCorrectly()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -229,8 +230,8 @@ public class ImputerTests
         Assert.Equal(2.0, result[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void SimpleImputer_Statistics_ReturnsComputedValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_Statistics_ReturnsComputedValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -251,8 +252,8 @@ public class ImputerTests
         Assert.Equal(20.0, imputer.Statistics[1], Tolerance); // Mean of [10, 20, 30]
     }
 
-    [Fact]
-    public void SimpleImputer_InverseTransform_ThrowsNotSupported()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -268,8 +269,8 @@ public class ImputerTests
 
     #region KNNImputer Tests
 
-    [Fact]
-    public void KNNImputer_UniformWeights_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_UniformWeights_ImputesMissingValues()
     {
         // Arrange - Simple case where nearest neighbors have clear values
         var data = new Matrix<double>(new double[,]
@@ -290,8 +291,8 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[2, 0]));
     }
 
-    [Fact]
-    public void KNNImputer_DistanceWeights_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_DistanceWeights_ImputesMissingValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -312,16 +313,16 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[2, 0]));
     }
 
-    [Fact]
-    public void KNNImputer_InvalidNNeighbors_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_InvalidNNeighbors_ThrowsException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => new KNNImputer<double>(nNeighbors: 0));
         Assert.Throws<ArgumentException>(() => new KNNImputer<double>(nNeighbors: -1));
     }
 
-    [Fact]
-    public void KNNImputer_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -331,8 +332,8 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact]
-    public void KNNImputer_NoMissingValues_ReturnsOriginalData()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -352,8 +353,8 @@ public class ImputerTests
         Assert.Equal(2.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void KNNImputer_SpecificColumns_OnlyImputesSelectedColumns()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_SpecificColumns_OnlyImputesSelectedColumns()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -374,8 +375,8 @@ public class ImputerTests
         Assert.True(double.IsNaN(result[0, 1])); // Not imputed
     }
 
-    [Fact]
-    public void KNNImputer_InverseTransform_ThrowsNotSupported()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -387,8 +388,8 @@ public class ImputerTests
         Assert.Throws<NotSupportedException>(() => imputer.InverseTransform(data));
     }
 
-    [Fact]
-    public void KNNImputer_DefaultNNeighbors_IsFive()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_DefaultNNeighbors_IsFive()
     {
         // Arrange
         var imputer = new KNNImputer<double>();
@@ -401,8 +402,8 @@ public class ImputerTests
 
     #region IterativeImputer Tests
 
-    [Fact]
-    public void IterativeImputer_ImputesMissingValues()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_ImputesMissingValues()
     {
         // Arrange - Data with clear linear relationship
         var data = new Matrix<double>(new double[,]
@@ -426,23 +427,23 @@ public class ImputerTests
         Assert.True(Math.Abs(result[2, 1] - 6.0) < 2.0);
     }
 
-    [Fact]
-    public void IterativeImputer_InvalidMaxIterations_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_InvalidMaxIterations_ThrowsException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => new IterativeImputer<double>(maxIterations: 0));
         Assert.Throws<ArgumentException>(() => new IterativeImputer<double>(maxIterations: -1));
     }
 
-    [Fact]
-    public void IterativeImputer_InvalidTolerance_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_InvalidTolerance_ThrowsException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => new IterativeImputer<double>(tolerance: -0.1));
     }
 
-    [Fact]
-    public void IterativeImputer_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -452,8 +453,8 @@ public class ImputerTests
         Assert.Throws<InvalidOperationException>(() => imputer.Transform(data));
     }
 
-    [Fact]
-    public void IterativeImputer_NoMissingValues_ReturnsOriginalData()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_NoMissingValues_ReturnsOriginalData()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -473,8 +474,8 @@ public class ImputerTests
         Assert.Equal(2.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void IterativeImputer_MeanInitialStrategy_Works()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_MeanInitialStrategy_Works()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -495,8 +496,8 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 0]));
     }
 
-    [Fact]
-    public void IterativeImputer_MedianInitialStrategy_Works()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_MedianInitialStrategy_Works()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -517,8 +518,8 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 0]));
     }
 
-    [Fact]
-    public void IterativeImputer_InverseTransform_ThrowsNotSupported()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_InverseTransform_ThrowsNotSupported()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -530,8 +531,8 @@ public class ImputerTests
         Assert.Throws<NotSupportedException>(() => imputer.InverseTransform(data));
     }
 
-    [Fact]
-    public void IterativeImputer_MultipleMissingColumns_ImputesAll()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_MultipleMissingColumns_ImputesAll()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -552,8 +553,8 @@ public class ImputerTests
         Assert.False(double.IsNaN(result[1, 2]));
     }
 
-    [Fact]
-    public void IterativeImputer_Convergence_StopsEarly()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_Convergence_StopsEarly()
     {
         // Arrange - Simple data that should converge quickly
         var data = new Matrix<double>(new double[,]
@@ -578,8 +579,8 @@ public class ImputerTests
 
     #region Properties and Configuration Tests
 
-    [Fact]
-    public void SimpleImputer_Properties_ReturnCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
         var imputer = new SimpleImputer<double>(
@@ -591,8 +592,8 @@ public class ImputerTests
         Assert.Equal(42.0, imputer.FillValue);
     }
 
-    [Fact]
-    public void KNNImputer_Properties_ReturnCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
         var imputer = new KNNImputer<double>(nNeighbors: 10, weights: KNNWeights.Distance);
@@ -602,8 +603,8 @@ public class ImputerTests
         Assert.Equal(KNNWeights.Distance, imputer.Weights);
     }
 
-    [Fact]
-    public void IterativeImputer_Properties_ReturnCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task IterativeImputer_Properties_ReturnCorrectValues()
     {
         // Arrange
         var imputer = new IterativeImputer<double>(
@@ -623,8 +624,8 @@ public class ImputerTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact]
-    public void SimpleImputer_GetFeatureNamesOut_ReturnsInputNames()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -638,8 +639,8 @@ public class ImputerTests
         Assert.Equal(new[] { "feature1", "feature2" }, names);
     }
 
-    [Fact]
-    public void KNNImputer_GetFeatureNamesOut_ReturnsInputNames()
+    [Fact(Timeout = 60000)]
+    public async Task KNNImputer_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });

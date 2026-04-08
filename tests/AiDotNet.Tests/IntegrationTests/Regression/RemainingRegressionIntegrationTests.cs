@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -132,8 +133,8 @@ public class RemainingRegressionIntegrationTests
 
     #region LogisticRegression Tests
 
-    [Fact]
-    public void LogisticRegression_Train_BinaryData_MakesProbabilisticPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task LogisticRegression_Train_BinaryData_MakesProbabilisticPredictions()
     {
         // Arrange
         var options = new LogisticRegressionOptions<double>
@@ -157,8 +158,8 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogisticRegression_Train_LearnableBoundary_SeparatesClasses()
+    [Fact(Timeout = 120000)]
+    public async Task LogisticRegression_Train_LearnableBoundary_SeparatesClasses()
     {
         // Arrange
         var options = new LogisticRegressionOptions<double>
@@ -196,8 +197,8 @@ public class RemainingRegressionIntegrationTests
         Assert.True(accuracy > 0.5, $"Accuracy {accuracy} should be better than random");
     }
 
-    [Fact]
-    public void LogisticRegression_Coefficients_AreAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task LogisticRegression_Coefficients_AreAccessible()
     {
         // Arrange
         var logistic = new LogisticRegression<double>(new LogisticRegressionOptions<double>());
@@ -211,8 +212,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(2, logistic.Coefficients.Length); // Two features
     }
 
-    [Fact]
-    public void LogisticRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task LogisticRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new LogisticRegressionOptions<double>
@@ -239,8 +240,8 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogisticRegression_GetModelType_ReturnsLogisticRegression()
+    [Fact(Timeout = 120000)]
+    public async Task LogisticRegression_GetModelType_ReturnsLogisticRegression()
     {
         // Arrange
         var logistic = new LogisticRegression<double>(new LogisticRegressionOptions<double>());
@@ -258,8 +259,8 @@ public class RemainingRegressionIntegrationTests
 
     #region TimeSeriesRegression Tests
 
-    [Fact]
-    public void TimeSeriesRegression_Train_WithLagOrder_MakesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesRegression_Train_WithLagOrder_MakesPredictions()
     {
         // Arrange
         var options = new TimeSeriesRegressionOptions<double>
@@ -281,8 +282,8 @@ public class RemainingRegressionIntegrationTests
         Assert.True(predictions.Length > 0);
     }
 
-    [Fact]
-    public void TimeSeriesRegression_Train_WithSeasonality_CapturesPattern()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesRegression_Train_WithSeasonality_CapturesPattern()
     {
         // Arrange
         var options = new TimeSeriesRegressionOptions<double>
@@ -304,8 +305,8 @@ public class RemainingRegressionIntegrationTests
         Assert.True(predictions.Length > 0);
     }
 
-    [Fact]
-    public void TimeSeriesRegression_GetModelType_ReturnsTimeSeriesRegression()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesRegression_GetModelType_ReturnsTimeSeriesRegression()
     {
         // Arrange
         var options = new TimeSeriesRegressionOptions<double>
@@ -329,8 +330,8 @@ public class RemainingRegressionIntegrationTests
 
     #region GeneticAlgorithmRegression Tests
 
-    [Fact]
-    public void GeneticAlgorithmRegression_Train_FindsSolution()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticAlgorithmRegression_Train_FindsSolution()
     {
         // Arrange
         var gaOptions = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -351,8 +352,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void GeneticAlgorithmRegression_Coefficients_AreAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticAlgorithmRegression_Coefficients_AreAccessible()
     {
         // Arrange
         var gaOptions = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -370,8 +371,8 @@ public class RemainingRegressionIntegrationTests
         Assert.NotNull(gaRegression.Coefficients);
     }
 
-    [Fact]
-    public void GeneticAlgorithmRegression_GetModelType_ReturnsGeneticAlgorithmRegression()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticAlgorithmRegression_GetModelType_ReturnsGeneticAlgorithmRegression()
     {
         // Arrange
         var gaOptions = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -394,8 +395,8 @@ public class RemainingRegressionIntegrationTests
 
     #region PrincipalComponentRegression Tests
 
-    [Fact]
-    public void PrincipalComponentRegression_Train_ReducesDimensionality()
+    [Fact(Timeout = 120000)]
+    public async Task PrincipalComponentRegression_Train_ReducesDimensionality()
     {
         // Arrange
         var options = new PrincipalComponentRegressionOptions<double>
@@ -413,8 +414,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void PrincipalComponentRegression_Train_WithFewerComponents_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PrincipalComponentRegression_Train_WithFewerComponents_WorksCorrectly()
     {
         // Arrange
         var options = new PrincipalComponentRegressionOptions<double>
@@ -436,8 +437,8 @@ public class RemainingRegressionIntegrationTests
 
     #region PartialLeastSquaresRegression Tests
 
-    [Fact]
-    public void PartialLeastSquaresRegression_Train_MakesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task PartialLeastSquaresRegression_Train_MakesPredictions()
     {
         // Arrange
         var options = new PartialLeastSquaresRegressionOptions<double>
@@ -455,8 +456,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void PartialLeastSquaresRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task PartialLeastSquaresRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new PartialLeastSquaresRegressionOptions<double>
@@ -479,8 +480,8 @@ public class RemainingRegressionIntegrationTests
 
     #region MultivariateRegression Tests
 
-    [Fact]
-    public void MultivariateRegression_Train_WithMultipleTargets_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultivariateRegression_Train_WithMultipleTargets_WorksCorrectly()
     {
         // Arrange - using multiple target variables
         var X = CreateMatrix(new double[,]
@@ -504,8 +505,8 @@ public class RemainingRegressionIntegrationTests
 
     #region StepwiseRegression Tests
 
-    [Fact]
-    public void StepwiseRegression_Train_SelectsFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task StepwiseRegression_Train_SelectsFeatures()
     {
         // Arrange
         var options = new StepwiseRegressionOptions<double>
@@ -525,8 +526,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void StepwiseRegression_BackwardDirection_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task StepwiseRegression_BackwardDirection_WorksCorrectly()
     {
         // Arrange
         var options = new StepwiseRegressionOptions<double>
@@ -549,8 +550,8 @@ public class RemainingRegressionIntegrationTests
 
     #region WeightedRegression Tests
 
-    [Fact]
-    public void WeightedRegression_Train_WithUniformWeights_WorksLikeOLS()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedRegression_Train_WithUniformWeights_WorksLikeOLS()
     {
         // Arrange
         var (X, y) = GenerateLinearData(30);
@@ -574,8 +575,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void WeightedRegression_Train_WithVaryingWeights_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedRegression_Train_WithVaryingWeights_WorksCorrectly()
     {
         // Arrange
         var (X, y) = GenerateLinearData(30);
@@ -603,8 +604,8 @@ public class RemainingRegressionIntegrationTests
 
     #region OrthogonalRegression Tests
 
-    [Fact]
-    public void OrthogonalRegression_Train_MinimizesTotalLeastSquares()
+    [Fact(Timeout = 120000)]
+    public async Task OrthogonalRegression_Train_MinimizesTotalLeastSquares()
     {
         // Arrange
         var orthogonal = new OrthogonalRegression<double>(new OrthogonalRegressionOptions<double>());
@@ -622,8 +623,8 @@ public class RemainingRegressionIntegrationTests
 
     #region NeuralNetworkRegression Tests
 
-    [Fact]
-    public void NeuralNetworkRegression_Train_SimpleData_MakesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegression_Train_SimpleData_MakesPredictions()
     {
         // Arrange
         var options = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
@@ -643,8 +644,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void NeuralNetworkRegression_Train_NonLinearData_CapturesPattern()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegression_Train_NonLinearData_CapturesPattern()
     {
         // Arrange - quadratic data y = x^2
         var options = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
@@ -672,8 +673,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void NeuralNetworkRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
@@ -697,8 +698,8 @@ public class RemainingRegressionIntegrationTests
 
     #region MultilayerPerceptronRegression Tests
 
-    [Fact]
-    public void MultilayerPerceptronRegression_Train_SimpleData_MakesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task MultilayerPerceptronRegression_Train_SimpleData_MakesPredictions()
     {
         // Arrange
         var options = new MultilayerPerceptronOptions<double, Matrix<double>, Vector<double>>
@@ -718,8 +719,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void MultilayerPerceptronRegression_Train_MultipleLayers_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultilayerPerceptronRegression_Train_MultipleLayers_WorksCorrectly()
     {
         // Arrange
         var options = new MultilayerPerceptronOptions<double, Matrix<double>, Vector<double>>
@@ -739,8 +740,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void MultilayerPerceptronRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task MultilayerPerceptronRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new MultilayerPerceptronOptions<double, Matrix<double>, Vector<double>>
@@ -787,8 +788,8 @@ public class RemainingRegressionIntegrationTests
         return (X, y);
     }
 
-    [Fact]
-    public void MultinomialLogisticRegression_Train_MultiClassData_MakesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task MultinomialLogisticRegression_Train_MultiClassData_MakesPredictions()
     {
         // Arrange
         var options = new MultinomialLogisticRegressionOptions<double>
@@ -813,8 +814,8 @@ public class RemainingRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MultinomialLogisticRegression_Coefficients_AreAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task MultinomialLogisticRegression_Coefficients_AreAccessible()
     {
         // Arrange
         var options = new MultinomialLogisticRegressionOptions<double>
@@ -831,8 +832,8 @@ public class RemainingRegressionIntegrationTests
         Assert.NotNull(multinomial.Coefficients);
     }
 
-    [Fact]
-    public void MultinomialLogisticRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task MultinomialLogisticRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new MultinomialLogisticRegressionOptions<double>();
@@ -852,8 +853,8 @@ public class RemainingRegressionIntegrationTests
 
     #region SymbolicRegression Tests
 
-    [Fact]
-    public void SymbolicRegression_Train_SimpleData_FindsExpression()
+    [Fact(Timeout = 120000)]
+    public async Task SymbolicRegression_Train_SimpleData_FindsExpression()
     {
         // Arrange
         var options = new SymbolicRegressionOptions
@@ -872,8 +873,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void SymbolicRegression_Train_QuadraticData_DiscoversPattern()
+    [Fact(Timeout = 120000)]
+    public async Task SymbolicRegression_Train_QuadraticData_DiscoversPattern()
     {
         // Arrange - y = x^2 data
         var options = new SymbolicRegressionOptions
@@ -900,8 +901,8 @@ public class RemainingRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void SymbolicRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task SymbolicRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new SymbolicRegressionOptions
@@ -925,8 +926,8 @@ public class RemainingRegressionIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact]
-    public void AllRemainingModels_TrainAndPredict_CompletesWithoutException()
+    [Fact(Timeout = 120000)]
+    public async Task AllRemainingModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange
         var (X, y) = GenerateLinearData(30);

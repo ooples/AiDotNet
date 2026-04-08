@@ -5,13 +5,14 @@ using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
 public sealed class TreeSitterTokenizerFallbackTests
 {
-    [Fact]
-    public void Tokenize_FallsBackToBaseTokenizer_WhenTreeSitterUnavailable()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_FallsBackToBaseTokenizer_WhenTreeSitterUnavailable()
     {
         var baseTokenizer = new SimpleTestTokenizer();
         var tokenizer = new TreeSitterTokenizer(baseTokenizer, language: TreeSitterLanguage.Python);
@@ -22,8 +23,8 @@ public sealed class TreeSitterTokenizerFallbackTests
         Assert.Equal(baseTokenizer.Tokenize("print('hi')"), tokens);
     }
 
-    [Fact]
-    public void FactoryHelpers_CreateTokenizers_AndDispose()
+    [Fact(Timeout = 60000)]
+    public async Task FactoryHelpers_CreateTokenizers_AndDispose()
     {
         var baseTokenizer = new SimpleTestTokenizer();
 

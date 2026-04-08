@@ -1,6 +1,7 @@
 using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Metrics.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -26,8 +27,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // PEARSON CORRELATION
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void PearsonCorrelation_PerfectPositiveLinear_ShouldBeOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_PerfectPositiveLinear_ShouldBeOne()
     {
         // y = 2x + 3: perfect linear relationship
         var pred = new double[] { 5, 7, 9, 11, 13 };
@@ -37,8 +38,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void PearsonCorrelation_PerfectNegativeLinear_ShouldBeNegOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_PerfectNegativeLinear_ShouldBeNegOne()
     {
         var pred = new double[] { 5, 4, 3, 2, 1 };
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -47,8 +48,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
-    public void PearsonCorrelation_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_HandCalculated()
     {
         // pred = [1, 2, 3, 4, 5], actual = [2, 4, 5, 4, 5]
         // mean_pred = 3, mean_actual = 4
@@ -65,8 +66,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void PearsonCorrelation_ConstantPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_ConstantPredictions_ShouldBeZero()
     {
         var pred = new double[] { 5, 5, 5, 5 };
         var actual = new double[] { 1, 2, 3, 4 };
@@ -75,8 +76,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void PearsonCorrelation_SquaredEquals_R2_ForLinearFit()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_SquaredEquals_R2_ForLinearFit()
     {
         // For a simple linear relationship: R2 = r^2
         // pred = actual + small noise (good linear fit, nearly unbiased)
@@ -91,8 +92,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
             $"Pearson^2 ({r * r}) should approximately equal R2 ({r2}) for good linear fit");
     }
 
-    [Fact]
-    public void PearsonCorrelation_LinearTransform_PreservesSign()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_LinearTransform_PreservesSign()
     {
         // Pearson is invariant under positive linear transform
         var pred = new double[] { 1, 2, 3, 4, 5 };
@@ -106,8 +107,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(original, scaled, Tol);
     }
 
-    [Fact]
-    public void PearsonCorrelation_BoundedByNegOneAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_BoundedByNegOneAndOne()
     {
         var pred = new double[] { 10, -5, 3, 0, 7 };
         var actual = new double[] { 1, 8, 2, 9, 3 };
@@ -120,8 +121,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // NORMALIZED MSE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void NormalizedMSE_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMSE_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3, 4, 5 };
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -130,8 +131,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void NormalizedMSE_MeanPredictor_ShouldBeOne()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMSE_MeanPredictor_ShouldBeOne()
     {
         // Predicting mean for all => NMSE = MSE/Var = Var/Var = 1
         double mean = 3.0;
@@ -142,8 +143,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void NormalizedMSE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMSE_HandCalculated()
     {
         // actual = [1,2,3,4,5], mean=3
         // pred = [1.5, 2.5, 3.5, 4.5, 5.5]
@@ -157,8 +158,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.125, result, Tol);
     }
 
-    [Fact]
-    public void NormalizedMSE_PlusR2_EqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMSE_PlusR2_EqualsOne()
     {
         // NMSE = SS_res/SS_tot = 1 - R2 (using population variance, no n-1)
         // Note: NMSE uses /n for both MSE and Var, so it equals 1-R2 exactly
@@ -175,8 +176,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // MEAN BIAS ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void MeanBiasError_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3, 4, 5 };
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -185,8 +186,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void MeanBiasError_SystematicOverPrediction_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_SystematicOverPrediction_IsPositive()
     {
         // All predictions 2 higher than actual
         // MBE = mean(pred - actual) = 2.0
@@ -197,8 +198,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
-    public void MeanBiasError_SystematicUnderPrediction_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_SystematicUnderPrediction_IsNegative()
     {
         // All predictions 1 lower than actual
         var pred = new double[] { 0, 1, 2, 3, 4 };
@@ -208,8 +209,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
-    public void MeanBiasError_BalancedErrors_CancelOut()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_BalancedErrors_CancelOut()
     {
         // Errors: +2, -2, +2, -2 => MBE = 0
         var pred = new double[] { 3, 0, 5, 2 };
@@ -219,8 +220,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void MeanBiasError_AbsValue_LessThanOrEqual_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_AbsValue_LessThanOrEqual_MAE()
     {
         // |MBE| <= MAE always (triangle inequality for means)
         var pred = new double[] { 1, 5, 2, 8 };
@@ -233,8 +234,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
             $"|MBE| ({Math.Abs(mbe)}) should be <= MAE ({mae})");
     }
 
-    [Fact]
-    public void MeanBiasError_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_HandCalculated()
     {
         // pred = [3, 1, 5], actual = [2, 3, 4]
         // errors: 1, -2, 1
@@ -250,8 +251,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // WEIGHTED MAPE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void WeightedMAPE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedMAPE_HandCalculated()
     {
         // wMAPE = 100 * sum(|y-yhat|) / sum(|y|)
         // actual = [100, 200, 300], pred = [110, 190, 310]
@@ -265,8 +266,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(5.0, result, Tol);
     }
 
-    [Fact]
-    public void WeightedMAPE_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedMAPE_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
         var actual = new double[] { 1, 2, 3 };
@@ -274,8 +275,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void WeightedMAPE_EqualErrors_WeightsLargerActuals()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedMAPE_EqualErrors_WeightsLargerActuals()
     {
         // Same absolute error of 10, but different actuals
         // Large actual (1000): contributes 10/1000 relative error
@@ -294,8 +295,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(10.0, wmape2, Tol);
     }
 
-    [Fact]
-    public void WeightedMAPE_RelatesTo_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedMAPE_RelatesTo_MAE()
     {
         // wMAPE = 100 * N * MAE / sum(|actual|)
         var pred = new double[] { 110, 190, 310 };
@@ -313,8 +314,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // MEDIAN ABSOLUTE ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void MedianAbsoluteError_HandCalculated_OddCount()
+    [Fact(Timeout = 120000)]
+    public async Task MedianAbsoluteError_HandCalculated_OddCount()
     {
         // errors: |1-2|=1, |3-2|=1, |5-2|=3
         // sorted: [1, 1, 3]
@@ -326,8 +327,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void MedianAbsoluteError_HandCalculated_EvenCount()
+    [Fact(Timeout = 120000)]
+    public async Task MedianAbsoluteError_HandCalculated_EvenCount()
     {
         // errors: |1-3|=2, |2-3|=1, |4-3|=1, |5-3|=2
         // sorted: [1, 1, 2, 2]
@@ -339,8 +340,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.5, result, Tol);
     }
 
-    [Fact]
-    public void MedianAbsoluteError_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task MedianAbsoluteError_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
         var actual = new double[] { 1, 2, 3 };
@@ -348,8 +349,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void MedianAbsoluteError_RobustToOutliers()
+    [Fact(Timeout = 120000)]
+    public async Task MedianAbsoluteError_RobustToOutliers()
     {
         // Median is robust to outliers, MAE is not as robust
         // errors: 1, 1, 1, 1, 100 => median=1, MAE=20.8
@@ -367,8 +368,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // MAX ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void MaxError_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MaxError_HandCalculated()
     {
         // errors: |1-3|=2, |5-3|=2, |10-3|=7
         // max = 7
@@ -379,8 +380,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(7.0, result, Tol);
     }
 
-    [Fact]
-    public void MaxError_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task MaxError_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
         var actual = new double[] { 1, 2, 3 };
@@ -388,8 +389,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void MaxError_GreaterThanOrEqual_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task MaxError_GreaterThanOrEqual_MAE()
     {
         // Max error >= MAE always (max >= mean for positive values)
         var pred = new double[] { 1, 5, 2, 8 };
@@ -406,8 +407,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // RELATIVE ABSOLUTE ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void RelativeAbsoluteError_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task RelativeAbsoluteError_HandCalculated()
     {
         // RAE = sum(|y-yhat|) / sum(|y-mean(y)|)
         // actual=[1,2,3,4,5], mean=3, pred=[1.5,2.5,3.5,4.5,5.5]
@@ -421,8 +422,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(2.5 / 6.0, result, Tol);
     }
 
-    [Fact]
-    public void RelativeAbsoluteError_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task RelativeAbsoluteError_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
         var actual = new double[] { 1, 2, 3 };
@@ -430,8 +431,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void RelativeAbsoluteError_MeanPredictor_ShouldBeOne()
+    [Fact(Timeout = 120000)]
+    public async Task RelativeAbsoluteError_MeanPredictor_ShouldBeOne()
     {
         // Predicting mean for all: sum(|y-mean|)/sum(|y-mean|) = 1
         double mean = 3.0;
@@ -446,8 +447,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // RELATIVE SQUARED ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void RelativeSquaredError_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task RelativeSquaredError_HandCalculated()
     {
         // RSE = sum((y-yhat)^2) / sum((y-mean(y))^2) = 1 - R2
         // actual=[1,2,3,4,5], mean=3, pred=[1.5,2.5,3.5,4.5,5.5]
@@ -461,8 +462,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.125, result, Tol);
     }
 
-    [Fact]
-    public void RelativeSquaredError_PlusR2_EqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task RelativeSquaredError_PlusR2_EqualsOne()
     {
         // RSE = 1 - R2 (they share SS_res/SS_tot)
         var pred = new double[] { 1.1, 2.2, 2.8, 4.1, 4.8 };
@@ -478,8 +479,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // RMSLE (Root Mean Squared Log Error)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void RMSLE_EqualsSqrt_MSLE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSLE_EqualsSqrt_MSLE()
     {
         // RMSLE = sqrt(MSLE) by definition
         var pred = new double[] { 2.5, 4.8, 7.0 };
@@ -491,8 +492,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(msle), rmsle, Tol);
     }
 
-    [Fact]
-    public void RMSLE_PerfectPredictions_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task RMSLE_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
         var actual = new double[] { 1, 2, 3 };
@@ -500,8 +501,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void RMSLE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task RMSLE_HandCalculated()
     {
         // y=3,yhat=2.5: (log(4)-log(3.5))^2 = (1.3863-1.2528)^2 = 0.01785
         // RMSLE = sqrt(0.01785) = 0.1336
@@ -517,8 +518,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // RMSE = sqrt(MSE) RELATIONSHIP
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void RMSE_EqualsSqrt_MSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_EqualsSqrt_MSE()
     {
         var pred = new double[] { 1.5, 2.5, 3.5 };
         var actual = new double[] { 1, 2, 3 };
@@ -529,8 +530,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(mse), rmse, Tol);
     }
 
-    [Fact]
-    public void RMSE_GreaterThanOrEqual_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_GreaterThanOrEqual_MAE()
     {
         // RMSE >= MAE always (QM >= AM for absolute errors)
         var pred = new double[] { 1, 5, 2, 8 };
@@ -547,8 +548,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // PEARSON vs SPEARMAN COMPARISON
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void PearsonVsSpearman_LinearRelationship_BothOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonVsSpearman_LinearRelationship_BothOne()
     {
         // Linear relationship => both Pearson and Spearman = 1
         var pred = new double[] { 2, 4, 6, 8, 10 };
@@ -559,8 +560,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, spearman, Tol);
     }
 
-    [Fact]
-    public void PearsonVsSpearman_NonlinearMonotonic_SpearmanHigher()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonVsSpearman_NonlinearMonotonic_SpearmanHigher()
     {
         // Exponential relationship: monotonic but not linear
         // pred = [1, 2, 4, 8, 16], actual = [1, 2, 3, 4, 5]
@@ -579,8 +580,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // COMPREHENSIVE CROSS-METRIC IDENTITIES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void CrossMetric_NMSE_Equals_OneMinusR2()
+    [Fact(Timeout = 120000)]
+    public async Task CrossMetric_NMSE_Equals_OneMinusR2()
     {
         var pred = new double[] { 1.5, 2.3, 3.1, 4.2, 4.8 };
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -589,8 +590,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, nmse + r2, Tol);
     }
 
-    [Fact]
-    public void CrossMetric_RSE_Equals_OneMinusR2()
+    [Fact(Timeout = 120000)]
+    public async Task CrossMetric_RSE_Equals_OneMinusR2()
     {
         var pred = new double[] { 1.5, 2.3, 3.1, 4.2, 4.8 };
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -599,8 +600,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, rse + r2, Tol);
     }
 
-    [Fact]
-    public void CrossMetric_MSE_GreaterThanOrEqual_MAE_Squared()
+    [Fact(Timeout = 120000)]
+    public async Task CrossMetric_MSE_GreaterThanOrEqual_MAE_Squared()
     {
         // MSE >= MAE^2 always (Jensen's inequality: E[X^2] >= (E[X])^2)
         // Note: MAE = E[|error|], MSE = E[error^2]
@@ -615,8 +616,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
             $"MSE ({mse}) should be >= MBE^2 ({mbe * mbe})");
     }
 
-    [Fact]
-    public void CrossMetric_MaxError_GreaterThanOrEqual_AllOtherErrors()
+    [Fact(Timeout = 120000)]
+    public async Task CrossMetric_MaxError_GreaterThanOrEqual_AllOtherErrors()
     {
         var pred = new double[] { 1, 5, 2, 8 };
         var actual = new double[] { 3, 3, 3, 3 };
@@ -631,8 +632,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
     // EDGE CASES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
-    public void AllMetrics_EmptyInput_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_EmptyInput_HandlesGracefully()
     {
         var empty = Array.Empty<double>();
         Assert.Equal(0.0, new NormalizedMSEMetric<double>().Compute(empty, empty), Tol);
@@ -640,8 +641,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, new WeightedMAPEMetric<double>().Compute(empty, empty), Tol);
     }
 
-    [Fact]
-    public void AllMetrics_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_MismatchedLengths_Throws()
     {
         var a = new double[] { 1, 2 };
         var b = new double[] { 1 };
@@ -653,8 +654,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new RelativeSquaredErrorMetric<double>().Compute(a, b));
     }
 
-    [Fact]
-    public void PearsonCorrelation_SingleElement_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_SingleElement_ReturnsZero()
     {
         var pred = new double[] { 1.0 };
         var actual = new double[] { 2.0 };
@@ -662,8 +663,8 @@ public class CorrelationAndErrorMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
-    public void MeanBiasError_DirectionIs_TargetValue()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_DirectionIs_TargetValue()
     {
         // MBE has TargetValue direction (ideal is 0, not higher or lower)
         var metric = new MeanBiasErrorMetric<double>();

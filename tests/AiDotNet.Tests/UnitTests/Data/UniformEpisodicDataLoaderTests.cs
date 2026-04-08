@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Data;
 
@@ -44,8 +45,8 @@ public class UniformEpisodicDataLoaderTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_ValidInputs_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -63,8 +64,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void Constructor_NullDatasetX_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullDatasetX_ThrowsArgumentNullException()
     {
         // Arrange
         var (_, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -81,8 +82,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("datasetX", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_NullDatasetY_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullDatasetY_ThrowsArgumentNullException()
     {
         // Arrange
         var (X, _) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -99,8 +100,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("datasetY", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_MismatchedDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_MismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
         var X = new Matrix<double>(100, 5);
@@ -118,8 +119,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("must match", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_NWayLessThan2_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NWayLessThan2_ThrowsArgumentException()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -137,8 +138,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 2", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_KShotLessThan1_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_KShotLessThan1_ThrowsArgumentException()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -156,8 +157,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 1", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_QueryShotsLessThan1_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_QueryShotsLessThan1_ThrowsArgumentException()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -175,8 +176,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 1", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_InsufficientClasses_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_InsufficientClasses_ThrowsArgumentException()
     {
         // Arrange - Only 3 classes, but requesting 5-way
         var (X, Y) = CreateTestDataset(numClasses: 3, examplesPerClass: 20, numFeatures: 5);
@@ -194,8 +195,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("nWay=5", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_InsufficientExamplesPerClass_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_InsufficientExamplesPerClass_ThrowsArgumentException()
     {
         // Arrange - Only 5 examples per class, but need 3+10=13
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 5, numFeatures: 5);
@@ -212,8 +213,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("insufficient examples", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultParameters_UsesIndustryStandards()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
@@ -233,8 +234,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(75, task.QuerySetY.Shape[0]);
     }
 
-    [Fact]
-    public void Constructor_WithPartialDefaultParameters_UsesCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithPartialDefaultParameters_UsesCorrectValues()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
@@ -252,8 +253,8 @@ public class UniformEpisodicDataLoaderTests
 
     #region GetNextTask Tests
 
-    [Fact]
-    public void GetNextTask_VerifyTaskDimensions_MatchesExpectedShape()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_VerifyTaskDimensions_MatchesExpectedShape()
     {
         // Arrange
         int nWay = 5;
@@ -284,8 +285,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(nWay * queryShots, task.QuerySetY.Shape[0]); // 50 labels
     }
 
-    [Fact]
-    public void GetNextTask_VerifyUniqueClasses_ExactlyNWayClasses()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_VerifyUniqueClasses_ExactlyNWayClasses()
     {
         // Arrange
         int nWay = 5;
@@ -322,8 +323,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(expectedClasses, supportClasses);
     }
 
-    [Fact]
-    public void GetNextTask_VerifyNoOverlap_SupportAndQuerySetsAreDisjoint()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_VerifyNoOverlap_SupportAndQuerySetsAreDisjoint()
     {
         // Arrange
         int nWay = 5;
@@ -360,8 +361,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Empty(overlaps); // No overlaps should exist
     }
 
-    [Fact]
-    public void GetNextTask_VerifyClassDistribution_EachClassHasCorrectCounts()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_VerifyClassDistribution_EachClassHasCorrectCounts()
     {
         // Arrange
         int nWay = 5;
@@ -411,8 +412,8 @@ public class UniformEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
-    public void GetNextTask_MultipleCalls_ProducesDifferentTasks()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_MultipleCalls_ProducesDifferentTasks()
     {
         // Arrange - Use enough classes to ensure different class sets are selected
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -459,8 +460,8 @@ public class UniformEpisodicDataLoaderTests
             "Multiple calls to GetNextTask should produce different tasks (different classes or different examples)");
     }
 
-    [Fact]
-    public void GetNextTask_WithSeed_ProducesReproducibleTasks()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
         int seed = 42;
@@ -506,8 +507,8 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(nWay * queryShots, task.QuerySetY.Shape[0]);
     }
 
-    [Fact]
-    public void GetNextTask_VerifyDataIntegrity_FeaturesMatchOriginalDataset()
+    [Fact(Timeout = 60000)]
+    public async Task GetNextTask_VerifyDataIntegrity_FeaturesMatchOriginalDataset()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 5, examplesPerClass: 20, numFeatures: 10);

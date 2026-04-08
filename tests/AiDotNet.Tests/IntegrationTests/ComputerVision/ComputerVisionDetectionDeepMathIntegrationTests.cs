@@ -4,6 +4,7 @@ using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -19,8 +20,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // BoundingBox Format Conversion Tests
     // ============================
 
-    [Fact]
-    public void BoundingBox_XYXY_ToXYXY_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_XYXY_ToXYXY_IsIdentity()
     {
         // Box: (10, 20, 50, 80) in XYXY format
         var box = new BoundingBox<double>(10, 20, 50, 80, BoundingBoxFormat.XYXY);
@@ -32,8 +33,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(80.0, y2, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_XYWH_ToXYXY_AddsWidthHeight()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_XYWH_ToXYXY_AddsWidthHeight()
     {
         // XYWH: (10, 20, 40, 60) => XYXY: (10, 20, 10+40, 20+60) = (10, 20, 50, 80)
         var box = new BoundingBox<double>(10, 20, 40, 60, BoundingBoxFormat.XYWH);
@@ -45,8 +46,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(80.0, y2, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_CXCYWH_ToXYXY_CentersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_CXCYWH_ToXYXY_CentersCorrectly()
     {
         // CXCYWH: (30, 50, 40, 60)
         // XYXY: (30-20, 50-30, 30+20, 50+30) = (10, 20, 50, 80)
@@ -59,8 +60,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(80.0, y2, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_ToCXCYWH_ComputesCenterAndDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_ToCXCYWH_ComputesCenterAndDimensions()
     {
         // XYXY: (10, 20, 50, 80)
         // Center: ((10+50)/2, (20+80)/2) = (30, 50), W=40, H=60
@@ -73,8 +74,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(60.0, h, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_ToXYWH_ComputesMinAndDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_ToXYWH_ComputesMinAndDimensions()
     {
         // XYXY: (10, 20, 50, 80)
         // XYWH: (10, 20, 40, 60)
@@ -87,16 +88,16 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(60.0, h, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_Area_IsWidthTimesHeight()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_Area_IsWidthTimesHeight()
     {
         // XYXY: (10, 20, 50, 80), area = 40 * 60 = 2400
         var box = new BoundingBox<double>(10, 20, 50, 80, BoundingBoxFormat.XYXY);
         Assert.Equal(2400.0, box.Area(), Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_Area_DegenerateBox_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_Area_DegenerateBox_IsZero()
     {
         // Zero-width box
         var box = new BoundingBox<double>(10, 20, 10, 80, BoundingBoxFormat.XYXY);
@@ -107,8 +108,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // IoU Tests
     // ============================
 
-    [Fact]
-    public void IoU_IdenticalBoxes_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_IdenticalBoxes_IsOne()
     {
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
         double iou = box.IoU(box);
@@ -116,8 +117,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, iou, Tolerance);
     }
 
-    [Fact]
-    public void IoU_NonOverlapping_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_NonOverlapping_IsZero()
     {
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
         var box2 = new BoundingBox<double>(20, 20, 30, 30, BoundingBoxFormat.XYXY);
@@ -126,8 +127,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, iou, Tolerance);
     }
 
-    [Fact]
-    public void IoU_HandComputed_PartialOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_HandComputed_PartialOverlap()
     {
         // Box1: (0,0,10,10) area=100
         // Box2: (5,5,15,15) area=100
@@ -141,8 +142,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0 / 7.0, iou, Tolerance);
     }
 
-    [Fact]
-    public void IoU_ContainedBox_IsAreaRatio()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_ContainedBox_IsAreaRatio()
     {
         // Box1: (0,0,10,10) area=100
         // Box2: (2,2,8,8) area=36
@@ -156,8 +157,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.36, iou, Tolerance);
     }
 
-    [Fact]
-    public void IoU_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_IsSymmetric()
     {
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
         var box2 = new BoundingBox<double>(5, 5, 15, 15, BoundingBoxFormat.XYXY);
@@ -165,8 +166,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(box1.IoU(box2), box2.IoU(box1), Tolerance);
     }
 
-    [Fact]
-    public void IoU_BoundedBetween0And1()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_BoundedBetween0And1()
     {
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
         var box2 = new BoundingBox<double>(3, 3, 12, 12, BoundingBoxFormat.XYXY);
@@ -179,8 +180,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // NMS IoU Computation Tests (via loss classes)
     // ============================
 
-    [Fact]
-    public void NMS_ComputeIoU_IdenticalBoxes_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task NMS_ComputeIoU_IdenticalBoxes_ReturnsOne()
     {
         var nms = new NMS<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -189,8 +190,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, iou, Tolerance);
     }
 
-    [Fact]
-    public void NMS_ComputeIoU_HandComputed_MatchesBoundingBoxIoU()
+    [Fact(Timeout = 120000)]
+    public async Task NMS_ComputeIoU_HandComputed_MatchesBoundingBoxIoU()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -206,8 +207,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // GIoU Tests
     // ============================
 
-    [Fact]
-    public void GIoU_IdenticalBoxes_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_IdenticalBoxes_IsOne()
     {
         var nms = new NMS<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -218,8 +219,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, giou, Tolerance);
     }
 
-    [Fact]
-    public void GIoU_NonOverlapping_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_NonOverlapping_IsNegative()
     {
         var nms = new NMS<double>();
         // Far apart non-overlapping boxes
@@ -235,8 +236,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(-700.0 / 900.0, giou, Tolerance);
     }
 
-    [Fact]
-    public void GIoU_HandComputed_PartialOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_HandComputed_PartialOverlap()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -253,8 +254,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(expectedGIoU, giou, Tolerance);
     }
 
-    [Fact]
-    public void GIoU_BoundedBetweenNeg1And1()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_BoundedBetweenNeg1And1()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -264,8 +265,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.InRange(giou, -1.0, 1.0);
     }
 
-    [Fact]
-    public void GIoU_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_IsSymmetric()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -278,8 +279,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // DIoU Tests
     // ============================
 
-    [Fact]
-    public void DIoU_IdenticalBoxes_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task DIoU_IdenticalBoxes_IsOne()
     {
         var nms = new NMS<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -289,8 +290,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, diou, Tolerance);
     }
 
-    [Fact]
-    public void DIoU_HandComputed_CenterDistancePenalty()
+    [Fact(Timeout = 120000)]
+    public async Task DIoU_HandComputed_CenterDistancePenalty()
     {
         var nms = new NMS<double>();
         // Box1: (0,0,10,10), center=(5,5)
@@ -309,8 +310,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(expectedDIoU, diou, Tolerance);
     }
 
-    [Fact]
-    public void DIoU_ConcentrieBoxes_NoCenterPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task DIoU_ConcentrieBoxes_NoCenterPenalty()
     {
         var nms = new NMS<double>();
         // Boxes with same center but different sizes
@@ -326,8 +327,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(iou, diou, Tolerance);
     }
 
-    [Fact]
-    public void DIoU_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task DIoU_IsSymmetric()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -340,8 +341,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // CIoU Tests
     // ============================
 
-    [Fact]
-    public void CIoU_IdenticalBoxes_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CIoU_IdenticalBoxes_IsOne()
     {
         var nms = new NMS<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -351,8 +352,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, ciou, Tolerance);
     }
 
-    [Fact]
-    public void CIoU_SameAspectRatio_EqualsDIoU()
+    [Fact(Timeout = 120000)]
+    public async Task CIoU_SameAspectRatio_EqualsDIoU()
     {
         var nms = new NMS<double>();
         // Both 10x10 (same aspect ratio 1:1)
@@ -366,8 +367,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(diou, ciou, Tolerance);
     }
 
-    [Fact]
-    public void CIoU_DifferentAspectRatio_LessThanDIoU()
+    [Fact(Timeout = 120000)]
+    public async Task CIoU_DifferentAspectRatio_LessThanDIoU()
     {
         var nms = new NMS<double>();
         // Box1: 10x10 (square, aspect ratio=1)
@@ -382,8 +383,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.True(ciou < diou, $"CIoU ({ciou}) should be less than DIoU ({diou}) for different aspect ratios");
     }
 
-    [Fact]
-    public void CIoU_HandComputed_AspectRatioPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task CIoU_HandComputed_AspectRatioPenalty()
     {
         var nms = new NMS<double>();
         // Box1: (0,0,10,10), w1=10, h1=10, arctan(10/10)=pi/4
@@ -406,8 +407,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(expectedCIoU, ciou, Tolerance);
     }
 
-    [Fact]
-    public void CIoU_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task CIoU_IsSymmetric()
     {
         var nms = new NMS<double>();
         // Use boxes with different aspect ratios
@@ -426,8 +427,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // IoU Loss Tests (1 - IoU variants)
     // ============================
 
-    [Fact]
-    public void GIoULoss_IdenticalBoxes_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GIoULoss_IdenticalBoxes_IsZero()
     {
         var loss = new GIoULoss<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -437,8 +438,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, lossVal, Tolerance);
     }
 
-    [Fact]
-    public void DIoULoss_IdenticalBoxes_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DIoULoss_IdenticalBoxes_IsZero()
     {
         var loss = new DIoULoss<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -447,8 +448,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, lossVal, Tolerance);
     }
 
-    [Fact]
-    public void CIoULoss_IdenticalBoxes_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CIoULoss_IdenticalBoxes_IsZero()
     {
         var loss = new CIoULoss<double>();
         var box = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -457,8 +458,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, lossVal, Tolerance);
     }
 
-    [Fact]
-    public void GIoULoss_NonOverlapping_GreaterThanOne()
+    [Fact(Timeout = 120000)]
+    public async Task GIoULoss_NonOverlapping_GreaterThanOne()
     {
         var loss = new GIoULoss<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -469,8 +470,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.True(lossVal > 1.0, $"GIoU loss ({lossVal}) should be > 1 for non-overlapping boxes");
     }
 
-    [Fact]
-    public void GIoULoss_VectorForm_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task GIoULoss_VectorForm_HandComputed()
     {
         var loss = new GIoULoss<double>();
         // Single box as flat vector [x1,y1,x2,y2]
@@ -487,8 +488,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(expectedLoss, lossVal, Tolerance);
     }
 
-    [Fact]
-    public void CIoULoss_VectorForm_MultipleBoxes_IsMeanLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CIoULoss_VectorForm_MultipleBoxes_IsMeanLoss()
     {
         var loss = new CIoULoss<double>();
         var nms = new NMS<double>();
@@ -518,8 +519,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(expectedMean, totalLoss, Tolerance);
     }
 
-    [Fact]
-    public void IoULoss_Ordering_GIoU_LE_IoU_For_Overlapping()
+    [Fact(Timeout = 120000)]
+    public async Task IoULoss_Ordering_GIoU_LE_IoU_For_Overlapping()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -532,8 +533,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.True(giou <= iou + Tolerance, $"GIoU ({giou}) should be <= IoU ({iou})");
     }
 
-    [Fact]
-    public void IoULoss_Ordering_DIoU_LE_IoU()
+    [Fact(Timeout = 120000)]
+    public async Task IoULoss_Ordering_DIoU_LE_IoU()
     {
         var nms = new NMS<double>();
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -546,8 +547,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.True(diou <= iou + Tolerance, $"DIoU ({diou}) should be <= IoU ({iou})");
     }
 
-    [Fact]
-    public void IoULoss_Ordering_CIoU_LE_DIoU()
+    [Fact(Timeout = 120000)]
+    public async Task IoULoss_Ordering_CIoU_LE_DIoU()
     {
         var nms = new NMS<double>();
         // Use different aspect ratios so alpha*v > 0
@@ -565,8 +566,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // Numerical Gradient Tests
     // ============================
 
-    [Fact]
-    public void GIoULoss_NumericalGradient_IsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GIoULoss_NumericalGradient_IsFinite()
     {
         var loss = new GIoULoss<double>();
         var pred = new Vector<double>(new double[] { 0, 0, 10, 10 });
@@ -581,8 +582,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DIoULoss_NumericalGradient_IsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task DIoULoss_NumericalGradient_IsFinite()
     {
         var loss = new DIoULoss<double>();
         var pred = new Vector<double>(new double[] { 0, 0, 10, 10 });
@@ -601,8 +602,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // Anchor Generator Tests
     // ============================
 
-    [Fact]
-    public void AnchorGenerator_BaseAnchors_CountIsScalesTimesRatios()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_BaseAnchors_CountIsScalesTimesRatios()
     {
         var gen = new AnchorGenerator<double>(
             baseSizes: new double[] { 32 },
@@ -613,8 +614,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(6, gen.NumAnchorsPerLocation); // 3 ratios * 2 scales
     }
 
-    [Fact]
-    public void AnchorGenerator_AnchorCount_FeatureSize()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_AnchorCount_FeatureSize()
     {
         var gen = new AnchorGenerator<double>(
             baseSizes: new double[] { 32 },
@@ -627,8 +628,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(48, anchors.Count);
     }
 
-    [Fact]
-    public void AnchorGenerator_BaseAnchor_AreaPreservation()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_BaseAnchor_AreaPreservation()
     {
         // For baseSize=32, scale=1.0:
         // width = 32 / sqrt(aspectRatio), height = 32 * sqrt(aspectRatio)
@@ -651,8 +652,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AnchorGenerator_AspectRatio_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_AspectRatio_Formula()
     {
         // baseSize=32, aspectRatio=2.0 (height/width), scale=1.0
         // width = 32 / sqrt(2), height = 32 * sqrt(2)
@@ -671,8 +672,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(2.0, actualAR, 1e-4);
     }
 
-    [Fact]
-    public void AnchorGenerator_CenterPosition_UsesStride()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_CenterPosition_UsesStride()
     {
         var gen = new AnchorGenerator<double>(
             baseSizes: new double[] { 32 },
@@ -697,8 +698,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(24.0, centers[3].cy, Tolerance);
     }
 
-    [Fact]
-    public void AnchorGenerator_ScaleFactor_ScalesBaseSize()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_ScaleFactor_ScalesBaseSize()
     {
         // baseSize=32, scale=2.0 => scaledSize=64
         // aspectRatio=1.0 => width=height=64, area=4096
@@ -715,8 +716,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(64.0 * 64.0, area, 1.0);
     }
 
-    [Fact]
-    public void AnchorGenerator_TotalAnchorCount_MultiLevel()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_TotalAnchorCount_MultiLevel()
     {
         var gen = new AnchorGenerator<double>(
             baseSizes: new double[] { 32, 64, 128 },
@@ -733,8 +734,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(4032, total);
     }
 
-    [Fact]
-    public void AnchorGenerator_FeatureMapSize_CeilDivision()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_FeatureMapSize_CeilDivision()
     {
         var gen = new AnchorGenerator<double>(
             baseSizes: new double[] { 32 },
@@ -749,8 +750,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(169, total);
     }
 
-    [Fact]
-    public void AnchorGenerator_FasterRCNN_HasCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_FasterRCNN_HasCorrectConfig()
     {
         var gen = AnchorGenerator<double>.CreateFasterRCNNAnchors();
 
@@ -761,8 +762,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(3, gen.NumAnchorsPerLocation); // 3 ratios * 1 scale
     }
 
-    [Fact]
-    public void AnchorGenerator_RetinaNet_HasCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorGenerator_RetinaNet_HasCorrectConfig()
     {
         var gen = AnchorGenerator<double>.CreateRetinaNetAnchors();
 
@@ -776,8 +777,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
     // BoundingBox Edge Cases
     // ============================
 
-    [Fact]
-    public void IoU_TouchingEdge_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task IoU_TouchingEdge_IsZero()
     {
         // Boxes share an edge but don't overlap in area
         var box1 = new BoundingBox<double>(0, 0, 10, 10, BoundingBoxFormat.XYXY);
@@ -787,8 +788,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, iou, Tolerance);
     }
 
-    [Fact]
-    public void GIoU_AdjacentBoxes_PenaltyReflectsGap()
+    [Fact(Timeout = 120000)]
+    public async Task GIoU_AdjacentBoxes_PenaltyReflectsGap()
     {
         var nms = new NMS<double>();
         // Adjacent boxes (no gap)
@@ -806,8 +807,8 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         Assert.True(giouAdj > giouFar, $"Adjacent GIoU ({giouAdj}) should be > far GIoU ({giouFar})");
     }
 
-    [Fact]
-    public void IoULoss_Vector_InvalidLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task IoULoss_Vector_InvalidLength_Throws()
     {
         var loss = new GIoULoss<double>();
         var pred = new Vector<double>(new double[] { 0, 0, 10 }); // Length 3, not multiple of 4

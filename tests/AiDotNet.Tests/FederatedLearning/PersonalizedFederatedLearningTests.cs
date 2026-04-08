@@ -1,19 +1,20 @@
 using AiDotNet.FederatedLearning.Personalization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class PersonalizedFederatedLearningTests
 {
-    [Fact]
-    public void Constructor_ThrowsForInvalidFraction()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsForInvalidFraction()
     {
         Assert.Throws<ArgumentException>(() => new PersonalizedFederatedLearning<double>(personalizationFraction: -0.1));
         Assert.Throws<ArgumentException>(() => new PersonalizedFederatedLearning<double>(personalizationFraction: 1.1));
     }
 
-    [Fact]
-    public void IdentifyPersonalizedLayers_LastN_SelectsExpectedTailLayers()
+    [Fact(Timeout = 60000)]
+    public async Task IdentifyPersonalizedLayers_LastN_SelectsExpectedTailLayers()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.4);
         var structure = new Dictionary<string, double[]>
@@ -40,8 +41,8 @@ public class PersonalizedFederatedLearningTests
         Assert.False(pfl.IsLayerPersonalized("layer2"));
     }
 
-    [Fact]
-    public void SeparateModel_ThenCombineModels_RoundTripsStructure()
+    [Fact(Timeout = 60000)]
+    public async Task SeparateModel_ThenCombineModels_RoundTripsStructure()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
         var fullModel = new Dictionary<string, double[]>
@@ -74,8 +75,8 @@ public class PersonalizedFederatedLearningTests
         Assert.Equal(0.5, stats["communication_reduction"], precision: 10);
     }
 
-    [Fact]
-    public void IdentifyPersonalizedLayers_ByPattern_SelectsMatchingLayers()
+    [Fact(Timeout = 60000)]
+    public async Task IdentifyPersonalizedLayers_ByPattern_SelectsMatchingLayers()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.2);
         var structure = new Dictionary<string, double[]>
@@ -92,8 +93,8 @@ public class PersonalizedFederatedLearningTests
         Assert.False(pfl.IsLayerPersonalized("conv1"));
     }
 
-    [Fact]
-    public void IdentifyPersonalizedLayers_ThrowsForInvalidInputs()
+    [Fact(Timeout = 60000)]
+    public async Task IdentifyPersonalizedLayers_ThrowsForInvalidInputs()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
@@ -103,8 +104,8 @@ public class PersonalizedFederatedLearningTests
         Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: PersonalizedLayerSelectionStrategy.ByPattern, customPatterns: null));
     }
 
-    [Fact]
-    public void SeparateModel_AndSplitStatistics_ValidateInputs()
+    [Fact(Timeout = 60000)]
+    public async Task SeparateModel_AndSplitStatistics_ValidateInputs()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
@@ -113,8 +114,8 @@ public class PersonalizedFederatedLearningTests
         Assert.Throws<ArgumentException>(() => pfl.GetModelSplitStatistics(new Dictionary<string, double[]>()));
     }
 
-    [Fact]
-    public void CombineModels_ThrowsForNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task CombineModels_ThrowsForNullArguments()
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 

@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests;
 
@@ -26,8 +27,8 @@ public class PackageUpgradeValidationTests
 
     #region Tensor Core Operations
 
-    [Fact]
-    public void Tensor_3D_ShapePreserved()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_3D_ShapePreserved()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
 
@@ -38,8 +39,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(4, tensor.Shape[2]);
     }
 
-    [Fact]
-    public void Tensor_IndexCopy_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_IndexCopy_RoundTrip()
     {
         var source = new Tensor<double>(new[] { 2, 3 });
         for (int i = 0; i < 6; i++)
@@ -63,8 +64,8 @@ public class PackageUpgradeValidationTests
 
     #region NumericOperations
 
-    [Fact]
-    public void NumericOperations_Double_BasicArithmetic()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_Double_BasicArithmetic()
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
@@ -74,8 +75,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(2.5, ops.Divide(5.0, 2.0));
     }
 
-    [Fact]
-    public void NumericOperations_Double_Conversions()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_Double_Conversions()
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
@@ -85,8 +86,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(1.0, ops.One);
     }
 
-    [Fact]
-    public void NumericOperations_Double_MathFunctions()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_Double_MathFunctions()
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
@@ -96,8 +97,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(8.0, ops.Power(2.0, 3.0), Tolerance);
     }
 
-    [Fact]
-    public void NumericOperations_Float_BasicArithmetic()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_Float_BasicArithmetic()
     {
         var ops = MathHelper.GetNumericOperations<float>();
 
@@ -107,8 +108,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(1.0f, ops.One);
     }
 
-    [Fact]
-    public void NumericOperations_Comparison()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_Comparison()
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
@@ -122,8 +123,8 @@ public class PackageUpgradeValidationTests
 
     #region Engine Operations
 
-    [Fact]
-    public void Engine_TensorAdd_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_TensorAdd_Correct()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
         var b = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
@@ -135,8 +136,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(9.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void Engine_TensorSubtract_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_TensorSubtract_Correct()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 10.0, 20.0, 30.0 }));
         var b = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
@@ -148,8 +149,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(27.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void Engine_TensorMultiply_ElementWise()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_TensorMultiply_ElementWise()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 2.0, 3.0, 4.0 }));
         var b = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 5.0, 6.0, 7.0 }));
@@ -161,8 +162,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(28.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void Engine_Sigmoid_ValueRange()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_Sigmoid_ValueRange()
     {
         var input = new Tensor<double>(new[] { 5 }, new Vector<double>(new[] { -10.0, -1.0, 0.0, 1.0, 10.0 }));
 
@@ -186,8 +187,8 @@ public class PackageUpgradeValidationTests
         }
     }
 
-    [Fact]
-    public void Engine_VectorOperations_AddSubtractMultiply()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_VectorOperations_AddSubtractMultiply()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var b = new Vector<double>(new[] { 4.0, 5.0, 6.0 });
@@ -208,8 +209,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(18.0, product[2], Tolerance); // 3*6
     }
 
-    [Fact]
-    public void Engine_DotProduct_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_DotProduct_Correct()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var b = new Vector<double>(new[] { 4.0, 5.0, 6.0 });
@@ -218,8 +219,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(32.0, dot, Tolerance); // 1*4 + 2*5 + 3*6
     }
 
-    [Fact]
-    public void Engine_VectorScalarMultiply_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Engine_VectorScalarMultiply_Correct()
     {
         var v = new Vector<double>(new[] { 2.0, 4.0, 6.0 });
 
@@ -237,8 +238,8 @@ public class PackageUpgradeValidationTests
 
 
 
-    [Fact]
-    public void BatchNormLayer_Forward_NormalizesValues()
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormLayer_Forward_NormalizesValues()
     {
         var layer = new BatchNormalizationLayer<double>(4);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 }));
@@ -266,8 +267,8 @@ public class PackageUpgradeValidationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_ReLU_CorrectBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_ReLU_CorrectBehavior()
     {
         var activation = new ReLUActivation<double>();
         var layer = new ActivationLayer<double>(new[] { 4 }, (IActivationFunction<double>)activation);
@@ -285,8 +286,8 @@ public class PackageUpgradeValidationTests
 
     #region Cross-Type Consistency
 
-    [Fact]
-    public void Tensor_VectorConversion_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_VectorConversion_RoundTrip()
     {
         var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
         var tensor = new Tensor<double>(new[] { 4 }, original);
@@ -299,8 +300,8 @@ public class PackageUpgradeValidationTests
         }
     }
 
-    [Fact]
-    public void Tensor_MatrixConversion_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MatrixConversion_RoundTrip()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -316,8 +317,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(4.0, tensor[1, 1]);
     }
 
-    [Fact]
-    public void MathHelper_NumericOperations_CrossTypeConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task MathHelper_NumericOperations_CrossTypeConsistency()
     {
         // Verify that double and float NumericOperations produce consistent results
         var doubleOps = MathHelper.GetNumericOperations<double>();
@@ -341,15 +342,15 @@ public class PackageUpgradeValidationTests
 
     #region Edge Cases and Stability
 
-    [Fact]
-    public void Tensor_ZeroLengthDimension_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ZeroLengthDimension_HandledGracefully()
     {
         var tensor = new Tensor<double>(new[] { 0 });
         Assert.Equal(0, tensor.Length);
     }
 
-    [Fact]
-    public void NumericOperations_ExtremeValues_NoOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task NumericOperations_ExtremeValues_NoOverflow()
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
@@ -369,8 +370,8 @@ public class PackageUpgradeValidationTests
         Assert.Equal(1e-200, productDouble, 1e-210); // Expected: 1e-200
     }
 
-    [Fact]
-    public void Tensor_LargeAllocation_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_LargeAllocation_DoesNotThrow()
     {
         // Allocate a reasonably large tensor to test memory paths
         var tensor = new Tensor<double>(new[] { 100, 100 });

@@ -3,6 +3,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Factories;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 
@@ -14,8 +15,8 @@ public class YamlConfigTests
 {
     #region YamlConfigLoader.LoadFromString Tests
 
-    [Fact]
-    public void LoadFromString_WithOptimizerSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithOptimizerSection_DeserializesCorrectly()
     {
         var yaml = @"
 optimizer:
@@ -28,8 +29,8 @@ optimizer:
         Assert.Equal("Adam", config.Optimizer.Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithTimeSeriesModelSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithTimeSeriesModelSection_DeserializesCorrectly()
     {
         var yaml = @"
 timeSeriesModel:
@@ -42,8 +43,8 @@ timeSeriesModel:
         Assert.Equal("ARIMA", config.TimeSeriesModel.Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithCachingSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithCachingSection_DeserializesCorrectly()
     {
         var yaml = @"
 caching:
@@ -60,8 +61,8 @@ caching:
         Assert.Equal(7200, config.Caching.TimeToLiveSeconds);
     }
 
-    [Fact]
-    public void LoadFromString_WithQuantizationSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithQuantizationSection_DeserializesCorrectly()
     {
         var yaml = @"
 quantization:
@@ -82,8 +83,8 @@ quantization:
 
     // JitCompilation YAML test removed — per-layer JIT compiler system has been deleted
 
-    [Fact]
-    public void LoadFromString_WithProfilingSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithProfilingSection_DeserializesCorrectly()
     {
         var yaml = @"
 profiling:
@@ -100,8 +101,8 @@ profiling:
         Assert.Equal(2000, config.Profiling.ReservoirSize);
     }
 
-    [Fact]
-    public void LoadFromString_WithTelemetrySection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithTelemetrySection_DeserializesCorrectly()
     {
         var yaml = @"
 telemetry:
@@ -120,8 +121,8 @@ telemetry:
         Assert.Equal(0.75, config.Telemetry.SamplingRate);
     }
 
-    [Fact]
-    public void LoadFromString_WithVersioningSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithVersioningSection_DeserializesCorrectly()
     {
         var yaml = @"
 versioning:
@@ -138,8 +139,8 @@ versioning:
         Assert.Equal(10, config.Versioning.MaxVersionHistory);
     }
 
-    [Fact]
-    public void LoadFromString_WithCompressionSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithCompressionSection_DeserializesCorrectly()
     {
         var yaml = @"
 compression:
@@ -156,8 +157,8 @@ compression:
         Assert.Equal(200, config.Compression.MaxIterations);
     }
 
-    [Fact]
-    public void LoadFromString_WithMultipleSections_DeserializesAllSections()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithMultipleSections_DeserializesAllSections()
     {
         var yaml = @"
 optimizer:
@@ -184,8 +185,8 @@ profiling:
         Assert.False(config.Profiling.Enabled);
     }
 
-    [Fact]
-    public void LoadFromString_WithEmptySections_LeavesPropertiesNull()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithEmptySections_LeavesPropertiesNull()
     {
         var yaml = @"
 optimizer:
@@ -206,8 +207,8 @@ optimizer:
         Assert.Null(config.MemoryManagement);
     }
 
-    [Fact]
-    public void LoadFromString_IgnoresUnknownProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_IgnoresUnknownProperties()
     {
         var yaml = @"
 optimizer:
@@ -226,38 +227,38 @@ unknownSection:
 
     #region YamlConfigLoader Error Handling Tests
 
-    [Fact]
-    public void LoadFromString_WithNullContent_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithNullContent_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromString(null as string));
     }
 
-    [Fact]
-    public void LoadFromString_WithEmptyContent_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithEmptyContent_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromString(""));
     }
 
-    [Fact]
-    public void LoadFromString_WithWhitespaceContent_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithWhitespaceContent_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromString("   "));
     }
 
-    [Fact]
-    public void LoadFromFile_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromFile_WithNullPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromFile(null as string));
     }
 
-    [Fact]
-    public void LoadFromFile_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromFile_WithEmptyPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromFile(""));
     }
 
-    [Fact]
-    public void LoadFromFile_WithNonexistentFile_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromFile_WithNonexistentFile_ThrowsFileNotFoundException()
     {
         Assert.Throws<FileNotFoundException>(() => YamlConfigLoader.LoadFromFile("nonexistent-config.yaml"));
     }
@@ -266,29 +267,29 @@ unknownSection:
 
     #region AiModelBuilder Constructor Tests
 
-    [Fact]
-    public void Constructor_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AiModelBuilder<double, Matrix<double>, Vector<double>>(null as string));
     }
 
-    [Fact]
-    public void Constructor_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithEmptyPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AiModelBuilder<double, Matrix<double>, Vector<double>>(""));
     }
 
-    [Fact]
-    public void Constructor_WithNonexistentFile_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNonexistentFile_ThrowsFileNotFoundException()
     {
         Assert.Throws<FileNotFoundException>(() =>
             new AiModelBuilder<double, Matrix<double>, Vector<double>>("does-not-exist.yaml"));
     }
 
-    [Fact]
-    public void Constructor_WithYamlFile_AppliesConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithYamlFile_AppliesConfiguration()
     {
         var tempFile = Path.GetTempFileName();
         try
@@ -314,8 +315,8 @@ caching:
         }
     }
 
-    [Fact]
-    public void Constructor_WithYamlFile_FluentOverridesWork()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithYamlFile_FluentOverridesWork()
     {
         var tempFile = Path.GetTempFileName();
         try
@@ -348,8 +349,8 @@ caching:
         }
     }
 
-    [Fact]
-    public void DefaultConstructor_CreatesValidBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultConstructor_CreatesValidBuilder()
     {
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         Assert.NotNull(builder);
@@ -359,8 +360,8 @@ caching:
 
     #region YamlConfigApplier Validation Tests
 
-    [Fact]
-    public void Apply_WithInvalidOptimizerType_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithInvalidOptimizerType_ThrowsArgumentException()
     {
         var yaml = @"
 optimizer:
@@ -377,8 +378,8 @@ optimizer:
         Assert.Contains("NotARealOptimizer", ex.Message);
     }
 
-    [Fact]
-    public void Apply_WithInvalidTimeSeriesModelType_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithInvalidTimeSeriesModelType_ThrowsArgumentException()
     {
         var yaml = @"
 timeSeriesModel:
@@ -395,8 +396,8 @@ timeSeriesModel:
         Assert.Contains("NotARealModel", ex.Message);
     }
 
-    [Fact]
-    public void Apply_WithValidOptimizerType_ParsesEnumCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithValidOptimizerType_ParsesEnumCorrectly()
     {
         var yaml = @"
 optimizer:
@@ -411,8 +412,8 @@ optimizer:
         Assert.Equal(OptimizerType.Adam, parsed);
     }
 
-    [Fact]
-    public void Apply_WithCaseInsensitiveOptimizerType_ParsesEnumCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithCaseInsensitiveOptimizerType_ParsesEnumCorrectly()
     {
         var yaml = @"
 optimizer:
@@ -427,8 +428,8 @@ optimizer:
         Assert.Equal(OptimizerType.Adam, parsed);
     }
 
-    [Fact]
-    public void Apply_WithAllOptimizerTypeNames_ParsesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithAllOptimizerTypeNames_ParsesCorrectly()
     {
         foreach (var name in Enum.GetNames(typeof(OptimizerType)))
         {
@@ -443,8 +444,8 @@ optimizer:
         }
     }
 
-    [Fact]
-    public void Apply_WithValidTimeSeriesModel_ConfiguresModelOnBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithValidTimeSeriesModel_ConfiguresModelOnBuilder()
     {
         var yaml = @"
 timeSeriesModel:
@@ -464,8 +465,8 @@ timeSeriesModel:
         Assert.NotNull(builder);
     }
 
-    [Fact]
-    public void Apply_WithTimeSeriesModelOnIncompatibleBuilder_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithTimeSeriesModelOnIncompatibleBuilder_ThrowsInvalidOperationException()
     {
         var yaml = @"
 timeSeriesModel:
@@ -481,8 +482,8 @@ timeSeriesModel:
             YamlConfigApplier<double, double[], double[]>.Apply(config, builder));
     }
 
-    [Fact]
-    public void Apply_WithNullConfig_OnlyAppliesNonNullSections()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithNullConfig_OnlyAppliesNonNullSections()
     {
         var config = new YamlModelConfig();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -503,16 +504,16 @@ timeSeriesModel:
 
     #region OptimizerFactory Parameterless Overload Tests
 
-    [Fact]
-    public void OptimizerFactory_CreateOptimizer_WithUnknownType_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerFactory_CreateOptimizer_WithUnknownType_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             OptimizerFactory<double, Matrix<double>, Vector<double>>
                 .CreateOptimizer((OptimizerType)999));
     }
 
-    [Fact]
-    public void OptimizerFactory_CreateOptimizer_Adam_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerFactory_CreateOptimizer_Adam_CreatesInstance()
     {
         var optimizer = OptimizerFactory<double, Matrix<double>, Vector<double>>
             .CreateOptimizer(OptimizerType.Adam);
@@ -521,8 +522,8 @@ timeSeriesModel:
         Assert.Contains("Adam", optimizer.GetType().Name);
     }
 
-    [Fact]
-    public void OptimizerFactory_CreateOptimizer_GradientDescent_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerFactory_CreateOptimizer_GradientDescent_CreatesInstance()
     {
         var optimizer = OptimizerFactory<double, Matrix<double>, Vector<double>>
             .CreateOptimizer(OptimizerType.GradientDescent);
@@ -531,8 +532,8 @@ timeSeriesModel:
         Assert.Contains("GradientDescent", optimizer.GetType().Name);
     }
 
-    [Fact]
-    public void OptimizerFactory_CreateOptimizer_AllRegisteredTypes_CreateSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerFactory_CreateOptimizer_AllRegisteredTypes_CreateSuccessfully()
     {
         var registeredTypes = new Dictionary<OptimizerType, string>
         {
@@ -560,8 +561,8 @@ timeSeriesModel:
 
     #region New POCO Section Deserialization Tests
 
-    [Fact]
-    public void LoadFromString_WithInferenceOptimizationsSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithInferenceOptimizationsSection_DeserializesCorrectly()
     {
         var yaml = @"
 inferenceOptimizations:
@@ -582,8 +583,8 @@ inferenceOptimizations:
         Assert.False(config.InferenceOptimizations.EnableSpeculativeDecoding);
     }
 
-    [Fact]
-    public void LoadFromString_WithInterpretabilitySection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithInterpretabilitySection_DeserializesCorrectly()
     {
         var yaml = @"
 interpretability:
@@ -604,8 +605,8 @@ interpretability:
         Assert.Equal(10, config.Interpretability.PermutationRepeatCount);
     }
 
-    [Fact]
-    public void LoadFromString_WithMemoryManagementSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithMemoryManagementSection_DeserializesCorrectly()
     {
         var yaml = @"
 memoryManagement:
@@ -630,8 +631,8 @@ memoryManagement:
 
     #region Apply With Optimizer End-to-End Tests
 
-    [Fact]
-    public void Apply_WithAdamOptimizer_CreatesOptimizerOnBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithAdamOptimizer_CreatesOptimizerOnBuilder()
     {
         var yaml = @"
 optimizer:
@@ -648,8 +649,8 @@ optimizer:
         Assert.NotNull(builder.ConfiguredOptimizer);
     }
 
-    [Fact]
-    public void Apply_WithGradientDescentOptimizer_CreatesOptimizerOnBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithGradientDescentOptimizer_CreatesOptimizerOnBuilder()
     {
         var yaml = @"
 optimizer:
@@ -669,8 +670,8 @@ optimizer:
 
     #region Full YAML Recipe Tests
 
-    [Fact]
-    public void LoadFromString_FullRecipe_DeserializesAllSections()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_FullRecipe_DeserializesAllSections()
     {
         var yaml = @"
 optimizer:
@@ -751,8 +752,8 @@ memoryManagement:
         Assert.True(config.MemoryManagement.UseGradientCheckpointing);
     }
 
-    [Fact]
-    public void Constructor_WithFullYamlRecipe_AppliesAllSections()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithFullYamlRecipe_AppliesAllSections()
     {
         var tempFile = Path.GetTempFileName();
         try

@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 {
     public class PatchEmbeddingLayerTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new PatchEmbeddingLayer<double>(
@@ -25,8 +26,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.True(layer.ParameterCount > 0);
         }
 
-        [Fact]
-        public void Constructor_WithNonDivisibleHeight_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithNonDivisibleHeight_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
@@ -37,8 +38,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
                 embeddingDim: 64));
         }
 
-        [Fact]
-        public void Constructor_WithNonDivisibleWidth_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithNonDivisibleWidth_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
@@ -49,8 +50,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
                 embeddingDim: 64));
         }
 
-        [Fact]
-        public void Forward_WithValidInput_ReturnsCorrectShape()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithValidInput_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -78,8 +79,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(64, output.Shape[2]);
         }
 
-        [Fact]
-        public void Forward_CalculatesCorrectNumberOfPatches()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_CalculatesCorrectNumberOfPatches()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
 
 
-        [Fact]
-        public void GetParameters_ReturnsAllParameters()
+        [Fact(Timeout = 120000)]
+        public async Task GetParameters_ReturnsAllParameters()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -120,8 +121,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(expectedParams, parameters.Length);
         }
 
-        [Fact]
-        public void SetParameters_WithValidVector_UpdatesParameters()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithValidVector_UpdatesParameters()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -149,8 +150,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             }
         }
 
-        [Fact]
-        public void SetParameters_WithInvalidLength_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithInvalidLength_ThrowsArgumentException()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -166,8 +167,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
         }
 
-        [Fact]
-        public void ResetState_ClearsCachedValues()
+        [Fact(Timeout = 120000)]
+        public async Task ResetState_ClearsCachedValues()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             layer.ResetState();
         }
 
-        [Fact]
-        public void Forward_WithMultipleBatches_ProcessesIndependently()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithMultipleBatches_ProcessesIndependently()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
@@ -215,8 +216,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(32, output.Shape[2]);
         }
 
-        [Fact]
-        public void ParameterCount_MatchesGetParametersLength()
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_MatchesGetParametersLength()
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(

@@ -3,6 +3,7 @@ using AiDotNet.Safety.Video;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -15,8 +16,8 @@ public class VideoSafetyIntegrationTests
 {
     #region FrameSamplingVideoModerator Tests
 
-    [Fact]
-    public void FrameSampling_StandardFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task FrameSampling_StandardFrames_ProcessesWithoutError()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
         var frames = GenerateTestFrames(30, 8, 8);
@@ -25,8 +26,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void FrameSampling_FewFrames_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task FrameSampling_FewFrames_HandlesGracefully()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
         var frames = GenerateTestFrames(3, 8, 8);
@@ -35,8 +36,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void FrameSampling_LargerFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task FrameSampling_LargerFrames_ProcessesWithoutError()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 0.5);
         var frames = GenerateTestFrames(20, 16, 16);
@@ -45,8 +46,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void FrameSampling_SingleFrame_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task FrameSampling_SingleFrame_HandlesGracefully()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
         var frames = GenerateTestFrames(1, 8, 8);
@@ -59,8 +60,8 @@ public class VideoSafetyIntegrationTests
 
     #region TemporalConsistencyDetector Tests
 
-    [Fact]
-    public void Temporal_MotionSequence_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Temporal_MotionSequence_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
         var frames = GenerateTestFrames(10, 8, 8);
@@ -69,8 +70,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Temporal_StaticFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Temporal_StaticFrames_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
         var frames = GenerateStaticFrames(10, 8, 8);
@@ -79,8 +80,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Temporal_ManyFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Temporal_ManyFrames_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
         var frames = GenerateTestFrames(60, 8, 8);
@@ -89,8 +90,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Temporal_TwoFrames_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Temporal_TwoFrames_HandlesGracefully()
     {
         var detector = new TemporalConsistencyDetector<double>();
         var frames = GenerateTestFrames(2, 8, 8);
@@ -103,8 +104,8 @@ public class VideoSafetyIntegrationTests
 
     #region MultimodalVideoModerator Tests
 
-    [Fact]
-    public void Multimodal_StandardFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Multimodal_StandardFrames_ProcessesWithoutError()
     {
         var moderator = new MultimodalVideoModerator<double>();
         var frames = GenerateTestFrames(10, 8, 8);
@@ -113,8 +114,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Multimodal_LargerFrames_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Multimodal_LargerFrames_ProcessesWithoutError()
     {
         var moderator = new MultimodalVideoModerator<double>();
         var frames = GenerateTestFrames(15, 16, 16);
@@ -123,8 +124,8 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Multimodal_DifferentFrameRates_Work()
+    [Fact(Timeout = 120000)]
+    public async Task Multimodal_DifferentFrameRates_Work()
     {
         var moderator = new MultimodalVideoModerator<double>();
         var frames = GenerateTestFrames(10, 8, 8);
@@ -140,8 +141,8 @@ public class VideoSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllModerators_SameFrames_ProduceResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllModerators_SameFrames_ProduceResults()
     {
         var frames = GenerateTestFrames(10, 8, 8);
 

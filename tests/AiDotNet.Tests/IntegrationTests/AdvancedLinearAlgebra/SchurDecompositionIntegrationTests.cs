@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -182,8 +183,8 @@ public class SchurDecompositionIntegrationTests
             "Schur matrix should be quasi-upper triangular");
     }
 
-    [Fact]
-    public void SchurDecomposition_SymmetricMatrix_HasDiagonalSchurMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task SchurDecomposition_SymmetricMatrix_HasDiagonalSchurMatrix()
     {
         // Arrange - Symmetric matrices have real eigenvalues, so Schur form is diagonal
         var A = CreateSymmetricMatrix(4);
@@ -212,8 +213,8 @@ public class SchurDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void SchurDecomposition_IdentityMatrix_PreservesIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task SchurDecomposition_IdentityMatrix_PreservesIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -227,8 +228,8 @@ public class SchurDecompositionIntegrationTests
             $"Schur of identity should be identity. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void SchurDecomposition_DiagonalMatrix_PreservesDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task SchurDecomposition_DiagonalMatrix_PreservesDiagonal()
     {
         // Arrange
         var D = new Matrix<double>(4, 4);
@@ -292,8 +293,8 @@ public class SchurDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void SchurDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task SchurDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(10, seed: 999);

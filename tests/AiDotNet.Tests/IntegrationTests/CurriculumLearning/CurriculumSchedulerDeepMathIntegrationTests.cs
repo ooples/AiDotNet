@@ -1,6 +1,7 @@
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Schedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CurriculumLearning;
 
@@ -40,8 +41,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Linear Scheduler ───────────────────────────────────────────────
 
-    [Fact]
-    public void LinearScheduler_Epoch0_ReturnsMinFraction()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_Epoch0_ReturnsMinFraction()
     {
         // 10 epochs, minFraction=0.2, maxFraction=1.0
         // At epoch 0: progress = 0/(10-1) = 0
@@ -51,8 +52,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.2, fraction, Tolerance);
     }
 
-    [Fact]
-    public void LinearScheduler_FinalEpoch_ReturnsMaxFraction()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_FinalEpoch_ReturnsMaxFraction()
     {
         // 10 epochs, at epoch 9: progress = 9/9 = 1.0
         // fraction = 0.2 + 1.0 * (1.0 - 0.2) = 1.0
@@ -63,8 +64,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0, fraction, Tolerance);
     }
 
-    [Fact]
-    public void LinearScheduler_MidEpoch_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_MidEpoch_HandCalculated()
     {
         // 10 epochs, at epoch 4: progress = 4/9 ≈ 0.4444
         // fraction = 0.1 + 0.4444 * (1.0 - 0.1) = 0.1 + 0.4 = 0.5
@@ -78,8 +79,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, fraction, Tolerance);
     }
 
-    [Fact]
-    public void LinearScheduler_MonotonicallyIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_MonotonicallyIncreasing()
     {
         var scheduler = new LinearScheduler<double>(20, minFraction: 0.05, maxFraction: 1.0);
         double prevFraction = scheduler.GetDataFraction();
@@ -94,8 +95,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearScheduler_EachEpoch_ConstantIncrement()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_EachEpoch_ConstantIncrement()
     {
         // Linear scheduler: each epoch adds the same increment
         // increment = (max - min) / (totalEpochs - 1) = 0.9 / 9 = 0.1
@@ -113,8 +114,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Exponential Scheduler ──────────────────────────────────────────
 
-    [Fact]
-    public void ExponentialScheduler_Epoch0_ReturnsMinFraction()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_Epoch0_ReturnsMinFraction()
     {
         // At epoch 0: t = 0, numerator = 1 - e^0 = 0, progress = 0
         // fraction = 0.1 + 0 * 0.9 = 0.1
@@ -123,8 +124,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void ExponentialScheduler_FinalEpoch_ReturnsMaxFraction()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_FinalEpoch_ReturnsMaxFraction()
     {
         // At epoch 9: t = 1.0, numerator = 1-e^(-3), denominator = 1-e^(-3)
         // progress = 1.0, fraction = 0.1 + 1.0 * 0.9 = 1.0
@@ -135,8 +136,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void ExponentialScheduler_MidEpoch_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_MidEpoch_HandCalculated()
     {
         // 10 epochs, rate=3.0, epoch 4: t = 4/9
         // numerator = 1 - e^(-3 * 4/9) = 1 - e^(-4/3)
@@ -156,8 +157,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void ExponentialScheduler_HighGrowthRate_FasterEarlyGrowth()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_HighGrowthRate_FasterEarlyGrowth()
     {
         // Higher growth rate => faster initial growth
         var low = new ExponentialScheduler<double>(10, growthRate: 1.0,
@@ -179,8 +180,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
             $"High growth rate ({highFrac}) should produce larger fraction than low rate ({lowFrac}) early on");
     }
 
-    [Fact]
-    public void ExponentialScheduler_MonotonicallyIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_MonotonicallyIncreasing()
     {
         var scheduler = new ExponentialScheduler<double>(20, growthRate: 5.0,
             minFraction: 0.0, maxFraction: 1.0);
@@ -196,8 +197,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialScheduler_Rate1_HandCalculatedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_Rate1_HandCalculatedValues()
     {
         // rate=1.0, 5 epochs, min=0, max=1
         // epoch 0: t=0, progress=0
@@ -222,8 +223,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Polynomial Scheduler ───────────────────────────────────────────
 
-    [Fact]
-    public void PolynomialScheduler_Power2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_Power2_HandCalculated()
     {
         // 10 epochs, power=2, min=0.1, max=1.0
         // epoch 4: t = 4/9, progress = (4/9)^2 = 16/81 ≈ 0.1975
@@ -239,8 +240,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void PolynomialScheduler_Power1_EqualsLinear()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_Power1_EqualsLinear()
     {
         // power=1 should give same results as linear scheduler
         var poly = new PolynomialScheduler<double>(10, power: 1.0,
@@ -259,8 +260,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PolynomialScheduler_Power0_5_ConcaveCurve()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_Power0_5_ConcaveCurve()
     {
         // power < 1 => concave (fast start, slow finish)
         // At t=0.25: progress = 0.25^0.5 = 0.5
@@ -278,8 +279,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.True(frac > 0.25, "Concave curve (power<1) should be above linear at early points");
     }
 
-    [Fact]
-    public void PolynomialScheduler_Power3_ConvexCurve()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_Power3_ConvexCurve()
     {
         // power > 1 => convex (slow start, fast finish)
         // At epoch 1 (t=1/4): progress = 0.25^3 = 0.015625
@@ -294,8 +295,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.True(frac < 0.25, "Convex curve (power>1) should be below linear at early points");
     }
 
-    [Fact]
-    public void PolynomialScheduler_AllPowers_StartAtMinEndAtMax()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_AllPowers_StartAtMinEndAtMax()
     {
         double[] powers = { 0.5, 1.0, 2.0, 3.0, 5.0 };
         foreach (double power in powers)
@@ -317,8 +318,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Cosine Scheduler ───────────────────────────────────────────────
 
-    [Fact]
-    public void CosineScheduler_Epoch0_ReturnsMinFraction()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_Epoch0_ReturnsMinFraction()
     {
         // t=0: progress = 0.5*(1-cos(0)) = 0.5*(1-1) = 0
         // fraction = 0.1 + 0 * 0.9 = 0.1
@@ -326,8 +327,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void CosineScheduler_FinalEpoch_ReturnsMaxFraction()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_FinalEpoch_ReturnsMaxFraction()
     {
         // t=1: progress = 0.5*(1-cos(pi)) = 0.5*(1-(-1)) = 1.0
         // fraction = 0.1 + 1.0 * 0.9 = 1.0
@@ -337,8 +338,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void CosineScheduler_Midpoint_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_Midpoint_HandCalculated()
     {
         // 10 epochs, epoch 4: t = 4/9
         // progress = 0.5 * (1 - cos(pi * 4/9))
@@ -354,8 +355,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void CosineScheduler_HalfwayPoint_ProgressIs0_5()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_HalfwayPoint_ProgressIs0_5()
     {
         // At t=0.5: progress = 0.5*(1-cos(pi/2)) = 0.5*(1-0) = 0.5
         // fraction = min + 0.5 * (max - min) = exactly midpoint
@@ -366,8 +367,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void CosineScheduler_SymmetricAroundMidpoint()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_SymmetricAroundMidpoint()
     {
         // Cosine curve: 0.5*(1-cos(pi*t))
         // At t and (1-t): progress(t) + progress(1-t) should sum to ~1.0
@@ -389,8 +390,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0 + 1.0, frac1 + frac2, 1e-5);
     }
 
-    [Fact]
-    public void CosineScheduler_MonotonicallyIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task CosineScheduler_MonotonicallyIncreasing()
     {
         var scheduler = new CosineScheduler<double>(20, minFraction: 0.1, maxFraction: 1.0);
         double prev = scheduler.GetDataFraction();
@@ -407,8 +408,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Step Scheduler ─────────────────────────────────────────────────
 
-    [Fact]
-    public void StepScheduler_UniformSteps_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task StepScheduler_UniformSteps_HandCalculated()
     {
         // 12 epochs, 3 steps, min=0.1, max=1.0
         // epochsPerStep = 12/3 = 4
@@ -436,8 +437,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expectedStep2, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void StepScheduler_CustomFractions_ExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task StepScheduler_CustomFractions_ExactValues()
     {
         // Custom fractions: [0.2, 0.5, 0.8, 1.0]
         // 12 epochs, 4 steps => epochsPerStep = 3
@@ -463,8 +464,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void StepScheduler_NonDecreasing()
+    [Fact(Timeout = 120000)]
+    public async Task StepScheduler_NonDecreasing()
     {
         var scheduler = new StepScheduler<double>(20, numSteps: 5,
             minFraction: 0.1, maxFraction: 1.0);
@@ -480,16 +481,16 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StepScheduler_DecreasingFractions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StepScheduler_DecreasingFractions_Throws()
     {
         // Custom fractions must be non-decreasing
         Assert.Throws<ArgumentException>(() =>
             new StepScheduler<double>(10, new double[] { 0.5, 0.3, 0.8 }));
     }
 
-    [Fact]
-    public void StepScheduler_FractionOutOfRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StepScheduler_FractionOutOfRange_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new StepScheduler<double>(10, new double[] { 0.2, 1.5 }));
@@ -497,8 +498,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced Scheduler: Hard Regularizer ─────────────────────────
 
-    [Fact]
-    public void SelfPaced_Hard_SelectsOnlyBelowLambda()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Hard_SelectsOnlyBelowLambda()
     {
         // Hard: v = 1 if loss < lambda, else 0
         // initialLambda = 0.5
@@ -517,8 +518,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0, weights[4], Tolerance); // 0.9 >= 0.5
     }
 
-    [Fact]
-    public void SelfPaced_Hard_LambdaGrows_MoreSamplesSelected()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Hard_LambdaGrows_MoreSamplesSelected()
     {
         // After stepping, lambda increases by growthRate
         // initialLambda=0.3, growthRate=0.2 => after 1 step: lambda=0.5, after 2 steps: lambda=0.7
@@ -549,8 +550,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0, weights2[3], Tolerance); // 0.8 >= 0.7
     }
 
-    [Fact]
-    public void SelfPaced_Hard_LambdaCappedAtMax()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Hard_LambdaCappedAtMax()
     {
         // maxLambda = 1.0, growthRate = 0.5
         // After 3 steps: lambda = 0.5 + 3*0.5 = 2.0 => capped at 1.0
@@ -566,8 +567,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced Scheduler: Linear Regularizer ───────────────────────
 
-    [Fact]
-    public void SelfPaced_Linear_HandCalculatedWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Linear_HandCalculatedWeights()
     {
         // Linear: v = max(0, 1 - loss/lambda)
         // lambda = 1.0
@@ -589,8 +590,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0, weights[4], Tolerance); // above threshold
     }
 
-    [Fact]
-    public void SelfPaced_Linear_WeightsDecrease_WithLoss()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Linear_WeightsDecrease_WithLoss()
     {
         // Weights should decrease as loss increases (for selected samples)
         var scheduler = new SelfPacedScheduler<double>(10,
@@ -611,8 +612,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced Scheduler: Mixture Regularizer ──────────────────────
 
-    [Fact]
-    public void SelfPaced_Mixture_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Mixture_HandCalculated()
     {
         // Mixture: zeta=0.5, weight = zeta*1 + (1-zeta)*(1-loss/lambda) if loss < lambda
         // lambda=1.0
@@ -632,8 +633,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0, weights[3], Tolerance);
     }
 
-    [Fact]
-    public void SelfPaced_Mixture_AlwaysHigherThanLinear()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Mixture_AlwaysHigherThanLinear()
     {
         // Mixture adds a constant offset (zeta) to the linear part
         // So mixture weight >= linear weight for all selected samples
@@ -658,8 +659,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced Scheduler: Logarithmic Regularizer ──────────────────
 
-    [Fact]
-    public void SelfPaced_Logarithmic_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Logarithmic_HandCalculated()
     {
         // Logarithmic: v = max(0, log(lambda+eps) - log(loss+eps)) / log(lambda+eps)
         // lambda=2.0, epsilon=1e-10
@@ -682,8 +683,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, weights[0], 1e-4);
     }
 
-    [Fact]
-    public void SelfPaced_Logarithmic_LossAboveLambda_ZeroWeight()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Logarithmic_LossAboveLambda_ZeroWeight()
     {
         // When loss >= lambda, log(loss) >= log(lambda), diff <= 0, weight = 0
         var scheduler = new SelfPacedScheduler<double>(10,
@@ -698,8 +699,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced: SelectSamplesWithWeights ───────────────────────────
 
-    [Fact]
-    public void SelfPaced_SelectSamplesWithWeights_ReturnsCorrectIndices()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_SelectSamplesWithWeights_ReturnsCorrectIndices()
     {
         var scheduler = new SelfPacedScheduler<double>(10,
             initialLambda: 0.5, regularizer: SelfPaceRegularizer.Hard);
@@ -716,8 +717,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(3, indices.Length);
     }
 
-    [Fact]
-    public void SelfPaced_SelectSamplesWithWeights_AllAboveThreshold_SelectsEasiest()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_SelectSamplesWithWeights_AllAboveThreshold_SelectsEasiest()
     {
         // When no samples qualify, the easiest sample should still be selected
         var scheduler = new SelfPacedScheduler<double>(10,
@@ -733,8 +734,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Self-Paced: Reset ──────────────────────────────────────────────
 
-    [Fact]
-    public void SelfPaced_Reset_RestoresInitialLambda()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPaced_Reset_RestoresInitialLambda()
     {
         var scheduler = new SelfPacedScheduler<double>(10,
             initialLambda: 0.3, lambdaGrowthRate: 0.1,
@@ -752,15 +753,15 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Competence-Based Scheduler ─────────────────────────────────────
 
-    [Fact]
-    public void CompetenceBased_InitialCompetence_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_InitialCompetence_Zero()
     {
         var scheduler = new CompetenceBasedScheduler<double>(10);
         Assert.Equal(0.0, scheduler.CurrentCompetence, Tolerance);
     }
 
-    [Fact]
-    public void CompetenceBased_EMASmoothing_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_EMASmoothing_HandCalculated()
     {
         // EMA: competence = alpha * new + (1-alpha) * old
         // smoothingFactor=0.3 (default)
@@ -776,8 +777,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.24, scheduler.CurrentCompetence, Tolerance);
     }
 
-    [Fact]
-    public void CompetenceBased_EMASmoothing_TwoUpdates()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_EMASmoothing_TwoUpdates()
     {
         // First update: competence = 0.3 * 0.8 + 0.7 * 0.0 = 0.24
         // Second update: competence = 0.3 * 0.9 + 0.7 * 0.24 = 0.27 + 0.168 = 0.438
@@ -791,8 +792,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.438, scheduler.CurrentCompetence, Tolerance);
     }
 
-    [Fact]
-    public void CompetenceBased_PlateauDetection_AdvancesAfterPatience()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_PlateauDetection_AdvancesAfterPatience()
     {
         // Plateau: competence increases as epochs without improvement accumulate
         // patienceEpochs=3, smoothingFactor=1.0 (no smoothing, use latest value directly)
@@ -816,8 +817,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
             $"Competence ({scheduler.CurrentCompetence}) should exceed threshold after plateau patience");
     }
 
-    [Fact]
-    public void CompetenceBased_CompetenceClampedToZeroOne()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_CompetenceClampedToZeroOne()
     {
         var scheduler = new CompetenceBasedScheduler<double>(10,
             metricType: CompetenceMetricType.Accuracy, smoothingFactor: 1.0);
@@ -830,8 +831,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
             $"Competence should be >= 0.0, got {scheduler.CurrentCompetence}");
     }
 
-    [Fact]
-    public void CompetenceBased_ResetForNewPhase_HalvesCompetence()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBased_ResetForNewPhase_HalvesCompetence()
     {
         // When mastery is achieved and phase advances, competence is halved
         var scheduler = new CompetenceBasedScheduler<double>(20,
@@ -857,8 +858,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Cross-Scheduler Comparisons ────────────────────────────────────
 
-    [Fact]
-    public void AllSchedulers_StartAtMinFraction()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_StartAtMinFraction()
     {
         double min = 0.15;
         double max = 0.95;
@@ -874,8 +875,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(min, cosine.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void AllSchedulers_EndAtMaxFraction()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_EndAtMaxFraction()
     {
         double min = 0.15;
         double max = 0.95;
@@ -900,8 +901,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(max, cosine.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void Polynomial_Power2_BelowLinear_InFirstHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_Power2_BelowLinear_InFirstHalf()
     {
         // Convex curve (power>1) should be below linear in first half
         var poly = new PolynomialScheduler<double>(10, power: 2.0,
@@ -924,8 +925,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
 
     // ─── Validation and Edge Cases ──────────────────────────────────────
 
-    [Fact]
-    public void LinearScheduler_SingleEpoch_ReturnsMaxFraction()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_SingleEpoch_ReturnsMaxFraction()
     {
         // With 1 epoch, should return max fraction immediately (progress clamped to 1)
         var scheduler = new LinearScheduler<double>(1, minFraction: 0.2, maxFraction: 0.8);
@@ -937,8 +938,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0.2, scheduler.GetDataFraction(), Tolerance);
     }
 
-    [Fact]
-    public void AllSchedulers_Reset_RestoresEpoch0()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_Reset_RestoresEpoch0()
     {
         var linear = new LinearScheduler<double>(10, minFraction: 0.2, maxFraction: 1.0);
 
@@ -954,8 +955,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
         Assert.Equal(0, linear.CurrentEpoch);
     }
 
-    [Fact]
-    public void ExponentialScheduler_InvalidGrowthRate_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialScheduler_InvalidGrowthRate_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ExponentialScheduler<double>(10, growthRate: 0.0));
@@ -963,8 +964,8 @@ public class CurriculumSchedulerDeepMathIntegrationTests
             new ExponentialScheduler<double>(10, growthRate: -1.0));
     }
 
-    [Fact]
-    public void PolynomialScheduler_InvalidPower_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialScheduler_InvalidPower_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new PolynomialScheduler<double>(10, power: 0.0));
@@ -972,31 +973,31 @@ public class CurriculumSchedulerDeepMathIntegrationTests
             new PolynomialScheduler<double>(10, power: -1.0));
     }
 
-    [Fact]
-    public void SelfPacedScheduler_InvalidInitialLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedScheduler_InvalidInitialLambda_Throws()
     {
         // Negative lambda should throw (0.0 is treated as "use default" after ResolveDefault fix)
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SelfPacedScheduler<double>(10, initialLambda: -0.5));
     }
 
-    [Fact]
-    public void CompetenceBasedScheduler_InvalidThreshold_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedScheduler_InvalidThreshold_Throws()
     {
         // Threshold > 1 should throw (0.0 is treated as "use default" after ResolveDefault fix)
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new CompetenceBasedScheduler<double>(10, competenceThreshold: 1.5));
     }
 
-    [Fact]
-    public void Scheduler_InvalidTotalEpochs_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Scheduler_InvalidTotalEpochs_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new LinearScheduler<double>(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new LinearScheduler<double>(-1));
     }
 
-    [Fact]
-    public void Scheduler_MinGreaterThanMax_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Scheduler_MinGreaterThanMax_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new LinearScheduler<double>(10, minFraction: 0.8, maxFraction: 0.2));

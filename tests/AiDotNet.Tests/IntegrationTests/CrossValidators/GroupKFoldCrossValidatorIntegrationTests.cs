@@ -4,6 +4,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -72,8 +73,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithGroups_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithGroups_CreatesValidator()
     {
         // Arrange
         int[] groups = [0, 0, 1, 1, 2, 2];
@@ -85,8 +86,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithGroupsAndOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithGroupsAndOptions_CreatesValidator()
     {
         // Arrange
         int[] groups = [0, 0, 1, 1, 2, 2];
@@ -107,8 +108,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Group Preservation Tests
 
-    [Fact]
-    public void Validate_SamplesFromSameGroupStayTogether()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_SamplesFromSameGroupStayTogether()
     {
         // Arrange - 3 groups with 4 samples each
         int[] groups = CreateGroupAssignments([4, 4, 4]);  // 12 samples total
@@ -148,8 +149,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_GroupNeverSplitAcrossTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_GroupNeverSplitAcrossTrainAndValidation()
     {
         // Arrange - 5 groups with varying sizes
         int[] groups = CreateGroupAssignments([3, 5, 2, 4, 6]);  // 20 samples total
@@ -194,8 +195,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
         int[] groups = CreateGroupAssignments([5, 5, 5, 5]);  // 4 groups, 5 samples each
@@ -226,8 +227,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Fold Count Tests
 
-    [Fact]
-    public void Validate_ReturnsCorrectNumberOfFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsCorrectNumberOfFolds()
     {
         // Arrange
         int[] groups = CreateGroupAssignments([3, 3, 3, 3, 3]);  // 5 groups
@@ -249,8 +250,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         int[] groups = CreateGroupAssignments([4, 4, 4]);
@@ -282,8 +283,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Group Distribution Tests
 
-    [Fact]
-    public void Validate_EachGroupUsedExactlyOnceForValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EachGroupUsedExactlyOnceForValidation()
     {
         // Arrange - Equal number of groups and folds
         int[] groups = CreateGroupAssignments([2, 2, 2, 2, 2]);  // 5 groups
@@ -322,8 +323,8 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Uneven Group Sizes Tests
 
-    [Fact]
-    public void Validate_HandlesUnevenGroupSizes()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_HandlesUnevenGroupSizes()
     {
         // Arrange - Groups with different sizes
         int[] groups = CreateGroupAssignments([10, 2, 5, 3]);  // 4 groups, very different sizes

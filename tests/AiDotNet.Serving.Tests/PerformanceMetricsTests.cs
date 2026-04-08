@@ -1,5 +1,6 @@
 using AiDotNet.Serving.Monitoring;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -8,8 +9,8 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PerformanceMetricsTests
 {
-    [Fact]
-    public void PerformanceMetrics_ShouldRecordLatency()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldRecordLatency()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -24,8 +25,8 @@ public class PerformanceMetricsTests
         Assert.Equal(20.0, averageLatency, precision: 1);
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldCalculateLatencyPercentiles()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldCalculateLatencyPercentiles()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -47,8 +48,8 @@ public class PerformanceMetricsTests
         Assert.InRange(p99, 95, 100); // Around 99th percentile
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldRecordBatchMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldRecordBatchMetrics()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -65,8 +66,8 @@ public class PerformanceMetricsTests
         Assert.Equal(15.0, (double)allMetrics["averageBatchSize"]); // 45 / 3
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldCalculateThroughput()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldCalculateThroughput()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -84,8 +85,8 @@ public class PerformanceMetricsTests
         Assert.True(throughput > 0); // Should have some throughput
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldRecordQueueDepth()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldRecordQueueDepth()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -100,8 +101,8 @@ public class PerformanceMetricsTests
         Assert.Equal(10.0, avgQueueDepth, precision: 1);
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldCalculateBatchUtilization()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldCalculateBatchUtilization()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -115,8 +116,8 @@ public class PerformanceMetricsTests
         Assert.Equal(85.0, utilization, precision: 1); // (170 / 200) * 100
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldReturnAllMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldReturnAllMetrics()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -142,8 +143,8 @@ public class PerformanceMetricsTests
         Assert.Contains("uptimeSeconds", allMetrics.Keys);
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldReset()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldReset()
     {
         // Arrange
         var metrics = new PerformanceMetrics();
@@ -160,8 +161,8 @@ public class PerformanceMetricsTests
         Assert.Equal(0.0, (double)allMetrics["averageLatencyMs"]);
     }
 
-    [Fact]
-    public void PerformanceMetrics_ShouldLimitSampleSize()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_ShouldLimitSampleSize()
     {
         // Arrange
         var metrics = new PerformanceMetrics(maxSamples: 100);
@@ -179,8 +180,8 @@ public class PerformanceMetricsTests
 
     #region PR #758 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxSamples()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_Constructor_ThrowsOnInvalidMaxSamples()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new PerformanceMetrics(maxSamples: 0));
@@ -188,8 +189,8 @@ public class PerformanceMetricsTests
             new PerformanceMetrics(maxSamples: -1));
     }
 
-    [Fact]
-    public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxQueueDepthSamples()
+    [Fact(Timeout = 60000)]
+    public async Task PerformanceMetrics_Constructor_ThrowsOnInvalidMaxQueueDepthSamples()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new PerformanceMetrics(maxSamples: 100, maxQueueDepthSamples: 0));

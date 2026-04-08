@@ -29,7 +29,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region FedAvg Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_EqualWeights_IsSimpleAverage()
     {
@@ -50,7 +50,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(5.0, p[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_UnequalWeights_HandCalculated()
     {
@@ -70,7 +70,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(35.0, p[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_SingleClient_ReturnsSameParameters()
     {
@@ -86,7 +86,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(9.0, p[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_ThreeClients_WeightedAverage()
     {
@@ -106,7 +106,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(2.75, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_EmptyModels_Throws()
     {
@@ -117,7 +117,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => agg.Aggregate(models, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedAvg_StrategyName_IsFedAvg()
     {
@@ -129,7 +129,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region Median Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Median_OddClients_HandCalculated()
     {
@@ -151,7 +151,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(20.0, p[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Median_EvenClients_AverageOfMiddleTwo()
     {
@@ -171,7 +171,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(25.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Median_OutlierResistant_HandCalculated()
     {
@@ -192,7 +192,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(3.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Median_StrategyName_IsMedian()
     {
@@ -204,7 +204,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region TrimmedMean Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void TrimmedMean_20Pct_FiveClients_HandCalculated()
     {
@@ -227,7 +227,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(3.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void TrimmedMean_ZeroTrim_IsSameAsSimpleAverage()
     {
@@ -246,7 +246,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(20.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void TrimmedMean_MultipleParams_HandCalculated()
     {
@@ -269,7 +269,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(3.0, p[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void TrimmedMean_InvalidFraction_Throws()
     {
@@ -279,7 +279,7 @@ public class FederatedLearningDeepMathIntegrationTests
             new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>(trimFraction: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void TrimmedMean_StrategyName_IsTrimmedMean()
     {
@@ -291,7 +291,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region WinsorizedMean Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void WinsorizedMean_20Pct_FiveClients_HandCalculated()
     {
@@ -318,7 +318,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(3.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void WinsorizedMean_ZeroFraction_IsSameAsSimpleAverage()
     {
@@ -337,7 +337,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(20.0, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void WinsorizedMean_InvalidFraction_Throws()
     {
@@ -347,7 +347,7 @@ public class FederatedLearningDeepMathIntegrationTests
             new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>(winsorizeFraction: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void WinsorizedMean_StrategyName_IsWinsorizedMean()
     {
@@ -359,7 +359,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region Krum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Krum_SelectsMostCentralClient_HandCalculated()
     {
@@ -396,7 +396,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(0.0, p[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Krum_TooFewClients_Throws()
     {
@@ -411,7 +411,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => agg.Aggregate(models, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Krum_NegativeByzantine_Throws()
     {
@@ -419,7 +419,7 @@ public class FederatedLearningDeepMathIntegrationTests
             new KrumFullModelAggregationStrategy<double, double[], double[]>(byzantineClientCount: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Krum_StrategyName_IsKrum()
     {
@@ -431,7 +431,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region MultiKrum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void MultiKrum_SelectsTwoBestAndAverages_HandCalculated()
     {
@@ -471,7 +471,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(1.5, p[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void MultiKrum_StrategyName_IsMultiKrum()
     {
@@ -483,7 +483,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region Bulyan Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Bulyan_RequiresMinimumClients_HandCalculated()
     {
@@ -523,7 +523,7 @@ public class FederatedLearningDeepMathIntegrationTests
             $"Bulyan result {p[0]} should be in [0, 5] (robust against outlier)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Bulyan_TooFewClients_Throws()
     {
@@ -543,7 +543,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => agg.Aggregate(models, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void Bulyan_StrategyName_IsBulyan()
     {
@@ -555,7 +555,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region RFA (Geometric Median) Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RFA_IdenticalClients_ReturnsExactValue()
     {
@@ -574,7 +574,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(10.0, p[1], 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RFA_OutlierResistant_HandCalculated()
     {
@@ -600,7 +600,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(3.0, p[0], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RFA_TwoClients_ConvergesToMidpoint()
     {
@@ -622,7 +622,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(10.0, p[1], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RFA_StrategyName_IsRFA()
     {
@@ -630,7 +630,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal("RFA", agg.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RFA_InvalidParameters_Throw()
     {
@@ -646,7 +646,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region FedProx Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedProx_AggregationIsSameAsFedAvg()
     {
@@ -666,7 +666,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(avgResult[1], proxResult[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedProx_MuAccessible()
     {
@@ -674,7 +674,7 @@ public class FederatedLearningDeepMathIntegrationTests
         Assert.Equal(0.05, fedProx.GetMu(), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedProx_NegativeMu_Throws()
     {
@@ -682,7 +682,7 @@ public class FederatedLearningDeepMathIntegrationTests
             new FedProxFullModelAggregationStrategy<double, double[], double[]>(mu: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void FedProx_StrategyName_IsFedProx()
     {
@@ -694,7 +694,7 @@ public class FederatedLearningDeepMathIntegrationTests
 
     #region Cross-Strategy Comparison Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void AllStrategies_IdenticalClients_ReturnSameResult()
     {
@@ -729,7 +729,7 @@ public class FederatedLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
     public void RobustStrategies_OutlierResistant_AllNearMedian()
     {

@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -179,8 +180,8 @@ public class LdlDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void LdlDecomposition_IdentityMatrix_HasAllOnesInD()
+    [Fact(Timeout = 120000)]
+    public async Task LdlDecomposition_IdentityMatrix_HasAllOnesInD()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -196,8 +197,8 @@ public class LdlDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LdlDecomposition_DiagonalMatrix_PreservesDiagonalInD()
+    [Fact(Timeout = 120000)]
+    public async Task LdlDecomposition_DiagonalMatrix_PreservesDiagonalInD()
     {
         // Arrange - Diagonal matrix with positive values
         var D_input = new Matrix<double>(4, 4);
@@ -213,8 +214,8 @@ public class LdlDecompositionIntegrationTests
         Assert.True(Math.Abs(ldl.D[3] - 1.0) < Tolerance, $"D[3] = {ldl.D[3]}, expected 1");
     }
 
-    [Fact]
-    public void LdlDecomposition_PositiveDefiniteMatrix_HasPositiveD()
+    [Fact(Timeout = 120000)]
+    public async Task LdlDecomposition_PositiveDefiniteMatrix_HasPositiveD()
     {
         // Arrange - Positive definite matrix
         var A = CreateSpdMatrix(4, seed: 789);
@@ -267,8 +268,8 @@ public class LdlDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void LdlDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task LdlDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4);
@@ -282,8 +283,8 @@ public class LdlDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void LdlDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LdlDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         var A = CreateSpdMatrix(10, seed: 999);

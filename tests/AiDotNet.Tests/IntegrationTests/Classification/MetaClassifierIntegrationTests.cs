@@ -120,7 +120,7 @@ public class MetaClassifierIntegrationTests
 
     #region OneVsRestClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_TrainsKBinaryClassifiers_ForKClasses()
     {
@@ -142,7 +142,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_ProbabilitiesSumToOne()
     {
@@ -170,7 +170,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_PredictionMatchesHighestProbability()
     {
@@ -200,7 +200,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_MultiLabel_ReturnsIndependentPredictions()
     {
@@ -224,7 +224,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_Clone_ProducesSamePredictions()
     {
@@ -250,7 +250,7 @@ public class MetaClassifierIntegrationTests
 
     #region OneVsOneClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_TrainsCorrectNumberOfClassifiers()
     {
@@ -272,7 +272,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_VotingMechanism_Works()
     {
@@ -317,7 +317,7 @@ public class MetaClassifierIntegrationTests
         Assert.True(accuracy > 0.7, $"OneVsOne accuracy {accuracy:P2} is too low");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_ProbabilitiesSumToOne()
     {
@@ -344,7 +344,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_PairwiseClassifiers_UseCorrectSubsets()
     {
@@ -371,7 +371,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_Clone_ProducesSamePredictions()
     {
@@ -397,7 +397,7 @@ public class MetaClassifierIntegrationTests
 
     #region VotingClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_HardVoting_UsesMajorityVote()
     {
@@ -426,7 +426,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_SoftVoting_UsesAverageProbabilities()
     {
@@ -460,7 +460,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_Weights_AffectsVoting()
     {
@@ -504,7 +504,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, equalPreds.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_WeightsAreNormalized()
     {
@@ -543,7 +543,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_Clone_ProducesSamePredictions()
     {
@@ -573,7 +573,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_Metadata_ContainsVotingType()
     {
@@ -598,7 +598,7 @@ public class MetaClassifierIntegrationTests
 
     #region BaggingClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_TrainsMultipleEstimators()
     {
@@ -624,7 +624,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_BootstrapSampling_CreatesDifferentModels()
     {
@@ -672,7 +672,7 @@ public class MetaClassifierIntegrationTests
         Assert.True(anyDifference, "Different seeds should produce different models");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_MaxSamples_UsesSubsetOfData()
     {
@@ -696,7 +696,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_MaxFeatures_UsesSubsetOfFeatures()
     {
@@ -732,7 +732,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(n, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_ProbabilitiesAreAveraged()
     {
@@ -764,7 +764,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_Clone_ProducesSamePredictions()
     {
@@ -791,7 +791,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_Metadata_ContainsConfiguration()
     {
@@ -820,7 +820,7 @@ public class MetaClassifierIntegrationTests
 
     #region StackingClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_UsesBaseEstimatorPredictionsAsFeatures()
     {
@@ -855,7 +855,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_CrossValidation_ReducesOverfitting()
     {
@@ -901,7 +901,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, predsNoCV.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_Passthrough_IncludesOriginalFeatures()
     {
@@ -932,7 +932,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_UseProbabilities_AffectsMetaFeatures()
     {
@@ -976,7 +976,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, predsPreds.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_Clone_ProducesSamePredictions()
     {
@@ -1010,7 +1010,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_Metadata_ContainsConfiguration()
     {
@@ -1048,7 +1048,7 @@ public class MetaClassifierIntegrationTests
 
     #region ClassifierChain Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_CapturesLabelDependencies()
     {
@@ -1078,7 +1078,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_UsesAugmentedFeatures()
     {
@@ -1101,7 +1101,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(yMultiLabel.Columns, predictions.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_RandomOrder_ShufflesChain()
     {
@@ -1148,7 +1148,7 @@ public class MetaClassifierIntegrationTests
         Assert.True(anyDifference, "Different random orders should produce different results");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_ExplicitOrder_UsesProvidedOrder()
     {
@@ -1171,7 +1171,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(yMultiLabel.Columns, predictions.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_SingleLabelTraining_ConvertsToMultiLabel()
     {
@@ -1196,7 +1196,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_Clone_ProducesSamePredictions()
     {
@@ -1227,7 +1227,7 @@ public class MetaClassifierIntegrationTests
 
     #region MultiOutputClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_TrainsIndependentClassifiers()
     {
@@ -1252,7 +1252,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_LabelsAreIndependent()
     {
@@ -1293,7 +1293,7 @@ public class MetaClassifierIntegrationTests
         Assert.True(acc1 > 0.7, $"Label 1 accuracy {acc1:P2} is too low");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_SingleLabelTraining_Works()
     {
@@ -1311,7 +1311,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(x.Rows, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_ProbabilitiesPerLabel()
     {
@@ -1336,7 +1336,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_Clone_ProducesSamePredictions()
     {
@@ -1366,7 +1366,7 @@ public class MetaClassifierIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_ThrowsIfNotTrained()
     {
@@ -1378,7 +1378,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.Predict(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsOne_ThrowsIfNotTrained()
     {
@@ -1390,7 +1390,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.Predict(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_ThrowsIfNoEstimators()
     {
@@ -1405,7 +1405,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BaggingClassifier_ThrowsIfNotTrained()
     {
@@ -1417,7 +1417,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.Predict(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StackingClassifier_ThrowsIfNotTrained()
     {
@@ -1431,7 +1431,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.Predict(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_ThrowsIfNotTrained()
     {
@@ -1443,7 +1443,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.PredictMultiLabel(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MultiOutputClassifier_ThrowsIfNotTrained()
     {
@@ -1455,7 +1455,7 @@ public class MetaClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => classifier.PredictMultiLabel(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MetaClassifiers_HandleMismatchedXYLengths()
     {
@@ -1477,7 +1477,7 @@ public class MetaClassifierIntegrationTests
 
     #region Log Probability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_LogProbabilities_AreValid()
     {
@@ -1503,7 +1503,7 @@ public class MetaClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void VotingClassifier_LogProbabilities_AreNonPositive()
     {
@@ -1538,7 +1538,7 @@ public class MetaClassifierIntegrationTests
 
     #region Comparison Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void OneVsRest_VsOneVsOne_BothProduceValidResults()
     {
@@ -1571,7 +1571,7 @@ public class MetaClassifierIntegrationTests
         Assert.True(accOvo > 0.6, $"OvO accuracy {accOvo:P2} is too low");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ClassifierChain_VsMultiOutput_BothHandleMultiLabel()
     {
@@ -1597,7 +1597,7 @@ public class MetaClassifierIntegrationTests
         Assert.Equal(yMultiLabel.Columns, multiPreds.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Bagging_VsSingle_ReducesVariance()
     {

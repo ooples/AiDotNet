@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.ModelRegistry;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelRegistry;
 
@@ -27,8 +28,8 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(Enum.IsDefined(typeof(ModelStage), stage));
     }
 
-    [Fact]
-    public void ModelStage_HasFourValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStage_HasFourValues()
     {
         var values = (((ModelStage[])Enum.GetValues(typeof(ModelStage))));
         Assert.Equal(4, values.Length);
@@ -38,8 +39,8 @@ public class ModelRegistryDeepMathIntegrationTests
     // ModelStage: Lifecycle Progression
     // ============================
 
-    [Fact]
-    public void ModelStage_TypicalLifecycle_Order()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStage_TypicalLifecycle_Order()
     {
         // Models typically progress through these stages
         var lifecycle = new[]
@@ -62,8 +63,8 @@ public class ModelRegistryDeepMathIntegrationTests
     // ModelMetadata: Defaults
     // ============================
 
-    [Fact]
-    public void ModelMetadata_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task ModelMetadata_Defaults()
     {
         var metadata = new ModelMetadata<double>();
         Assert.NotNull(metadata);
@@ -146,8 +147,8 @@ public class ModelRegistryDeepMathIntegrationTests
     // Path Security: Directory Containment
     // ============================
 
-    [Fact]
-    public void PathSecurity_PathWithinDirectory_ValidPath()
+    [Fact(Timeout = 120000)]
+    public async Task PathSecurity_PathWithinDirectory_ValidPath()
     {
         // A path within the base directory should pass validation
         string baseDir = Path.GetTempPath();
@@ -163,8 +164,8 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(fullPath.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void PathSecurity_SiblingPrefixBypass_Prevented()
+    [Fact(Timeout = 120000)]
+    public async Task PathSecurity_SiblingPrefixBypass_Prevented()
     {
         // Test that "model_registrymalicious" doesn't match "model_registry"
         string baseDir = Path.Combine(Path.GetTempPath(), "model_registry");
@@ -228,8 +229,8 @@ public class ModelRegistryDeepMathIntegrationTests
     // JSON Serialization Security
     // ============================
 
-    [Fact]
-    public void JsonSettings_TypeNameHandlingNone()
+    [Fact(Timeout = 120000)]
+    public async Task JsonSettings_TypeNameHandlingNone()
     {
         // ModelRegistryBase uses TypeNameHandling.None for security
         // This prevents deserialization attacks via type metadata in JSON
@@ -245,8 +246,8 @@ public class ModelRegistryDeepMathIntegrationTests
     // Registry Operations: Thread Safety Patterns
     // ============================
 
-    [Fact]
-    public void ThreadSafety_LockObject_NotNull()
+    [Fact(Timeout = 120000)]
+    public async Task ThreadSafety_LockObject_NotNull()
     {
         // ModelRegistryBase uses a SyncLock object for thread safety
         // Verify the pattern works
@@ -261,8 +262,8 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(entered);
     }
 
-    [Fact]
-    public void ThreadSafety_ConcurrentAccess_Pattern()
+    [Fact(Timeout = 120000)]
+    public async Task ThreadSafety_ConcurrentAccess_Pattern()
     {
         // Verify concurrent dictionary access pattern
         var models = new Dictionary<string, int>();

@@ -1,13 +1,14 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.UncertaintyQuantification.Calibration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class TemperatureScalingTests
 {
-    [Fact]
-    public void Constructor_WithDefaultTemperature_InitializesToOne()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultTemperature_InitializesToOne()
     {
         // Arrange & Act
         var tempScaling = new TemperatureScaling<double>();
@@ -16,8 +17,8 @@ public class TemperatureScalingTests
         Assert.Equal(1.0, tempScaling.Temperature);
     }
 
-    [Fact]
-    public void Constructor_WithCustomTemperature_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomTemperature_InitializesCorrectly()
     {
         // Arrange & Act
         var tempScaling = new TemperatureScaling<double>(2.0);
@@ -26,8 +27,8 @@ public class TemperatureScalingTests
         Assert.Equal(2.0, tempScaling.Temperature);
     }
 
-    [Fact]
-    public void Temperature_SetToNegative_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_SetToNegative_ThrowsException()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>();
@@ -36,8 +37,8 @@ public class TemperatureScalingTests
         Assert.Throws<ArgumentException>(() => tempScaling.Temperature = -1.0);
     }
 
-    [Fact]
-    public void Temperature_SetToZero_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_SetToZero_ThrowsException()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>();
@@ -46,8 +47,8 @@ public class TemperatureScalingTests
         Assert.Throws<ArgumentException>(() => tempScaling.Temperature = 0.0);
     }
 
-    [Fact]
-    public void ScaleLogits_WithTemperatureOne_ReturnsUnchangedLogits()
+    [Fact(Timeout = 60000)]
+    public async Task ScaleLogits_WithTemperatureOne_ReturnsUnchangedLogits()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>(1.0);
@@ -64,8 +65,8 @@ public class TemperatureScalingTests
         }
     }
 
-    [Fact]
-    public void ScaleLogits_WithTemperatureTwo_HalvesLogits()
+    [Fact(Timeout = 60000)]
+    public async Task ScaleLogits_WithTemperatureTwo_HalvesLogits()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>(2.0);
@@ -81,8 +82,8 @@ public class TemperatureScalingTests
         Assert.Equal(3.0, scaled[2], precision: 6);
     }
 
-    [Fact]
-    public void ScaleLogits_WithTemperatureHalf_DoublesLogits()
+    [Fact(Timeout = 60000)]
+    public async Task ScaleLogits_WithTemperatureHalf_DoublesLogits()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>(0.5);
@@ -98,8 +99,8 @@ public class TemperatureScalingTests
         Assert.Equal(6.0, scaled[2], precision: 6);
     }
 
-    [Fact]
-    public void Calibrate_WithValidData_UpdatesTemperature()
+    [Fact(Timeout = 60000)]
+    public async Task Calibrate_WithValidData_UpdatesTemperature()
     {
         // Arrange
         var tempScaling = new TemperatureScaling<double>();

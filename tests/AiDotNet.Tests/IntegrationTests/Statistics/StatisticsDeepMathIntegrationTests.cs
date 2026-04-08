@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -17,38 +18,38 @@ public class StatisticsDeepMathIntegrationTests
     // MEDIAN
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Median_OddCount()
+    [Fact(Timeout = 120000)]
+    public async Task Median_OddCount()
     {
         // [1, 3, 5, 7, 9] → median = 5
         double result = StatisticsHelper<double>.CalculateMedian(new double[] { 9, 1, 5, 3, 7 });
         Assert.Equal(5.0, result, Tol);
     }
 
-    [Fact]
-    public void Median_EvenCount()
+    [Fact(Timeout = 120000)]
+    public async Task Median_EvenCount()
     {
         // [1, 3, 5, 7] → median = (3+5)/2 = 4
         double result = StatisticsHelper<double>.CalculateMedian(new double[] { 7, 1, 5, 3 });
         Assert.Equal(4.0, result, Tol);
     }
 
-    [Fact]
-    public void Median_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task Median_SingleElement()
     {
         double result = StatisticsHelper<double>.CalculateMedian(new double[] { 42 });
         Assert.Equal(42.0, result, Tol);
     }
 
-    [Fact]
-    public void Median_AllSame()
+    [Fact(Timeout = 120000)]
+    public async Task Median_AllSame()
     {
         double result = StatisticsHelper<double>.CalculateMedian(new double[] { 5, 5, 5, 5, 5 });
         Assert.Equal(5.0, result, Tol);
     }
 
-    [Fact]
-    public void Median_NegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Median_NegativeValues()
     {
         // [-10, -5, 0, 5, 10] → median = 0
         double result = StatisticsHelper<double>.CalculateMedian(new double[] { 10, -5, 0, -10, 5 });
@@ -59,8 +60,8 @@ public class StatisticsDeepMathIntegrationTests
     // MEAN ABSOLUTE DEVIATION (MAD)
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void MAD_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_HandCalculation()
     {
         // values = [2, 4, 6, 8], median = 5
         // absolute devs from median: |2-5|=3, |4-5|=1, |6-5|=1, |8-5|=3
@@ -70,8 +71,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
-    public void MAD_AllSame()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_AllSame()
     {
         // All values = median → MAD = 0
         var values = V(3, 3, 3, 3);
@@ -79,8 +80,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void MAD_SymmetricData()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_SymmetricData()
     {
         // values = [1, 3, 5, 7, 9], median = 5
         // devs: 4, 2, 0, 2, 4 → MAD = 12/5 = 2.4
@@ -93,8 +94,8 @@ public class StatisticsDeepMathIntegrationTests
     // VARIANCE (sample variance, divides by n-1)
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Variance_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task Variance_HandCalculation()
     {
         // values = [2, 4, 6, 8, 10], mean = 6
         // deviations: -4, -2, 0, 2, 4
@@ -105,8 +106,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(10.0, result, Tol);
     }
 
-    [Fact]
-    public void Variance_AllSame()
+    [Fact(Timeout = 120000)]
+    public async Task Variance_AllSame()
     {
         // All same values → variance = 0
         var values = V(5, 5, 5, 5);
@@ -114,8 +115,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void Variance_TwoElements()
+    [Fact(Timeout = 120000)]
+    public async Task Variance_TwoElements()
     {
         // [0, 10], mean = 5, deviations: -5, 5, squared: 25, 25 → sum=50, /1 = 50
         var values = V(0, 10);
@@ -123,16 +124,16 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(50.0, result, Tol);
     }
 
-    [Fact]
-    public void Variance_SingleElement_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Variance_SingleElement_ReturnsZero()
     {
         var values = V(42);
         double result = StatisticsHelper<double>.CalculateVariance(values, 42.0);
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void Variance_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Variance_NonNegative()
     {
         // Variance must always be >= 0
         var values = V(-5, -3, 0, 2, 7, 100);
@@ -145,8 +146,8 @@ public class StatisticsDeepMathIntegrationTests
     // STANDARD DEVIATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void StandardDeviation_IsSqrtOfVariance()
+    [Fact(Timeout = 120000)]
+    public async Task StandardDeviation_IsSqrtOfVariance()
     {
         double[] data = { 2, 4, 6, 8, 10 };
         double variance = StatisticsHelper<double>.CalculateVariance(data);
@@ -154,8 +155,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(variance), stddev, Tol);
     }
 
-    [Fact]
-    public void StandardDeviation_AllSame()
+    [Fact(Timeout = 120000)]
+    public async Task StandardDeviation_AllSame()
     {
         double result = StatisticsHelper<double>.CalculateStandardDeviation(new double[] { 7, 7, 7, 7 });
         Assert.Equal(0.0, result, Tol);
@@ -165,8 +166,8 @@ public class StatisticsDeepMathIntegrationTests
     // MSE (Mean Squared Error)
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void MSE_PerfectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_PerfectPrediction()
     {
         var actual = new double[] { 1, 2, 3, 4, 5 };
         var predicted = new double[] { 1, 2, 3, 4, 5 };
@@ -174,8 +175,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void MSE_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_HandCalculation()
     {
         // actual = [1, 2, 3], predicted = [1.5, 2.5, 3.5]
         // errors: -0.5, -0.5, -0.5, squared: 0.25, 0.25, 0.25
@@ -186,8 +187,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tol);
     }
 
-    [Fact]
-    public void MSE_SymmetricInErrors()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_SymmetricInErrors()
     {
         // MSE should be the same whether we overpredict or underpredict
         var actual = new double[] { 0, 0, 0 };
@@ -198,8 +199,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(mseOver, mseUnder, Tol);
     }
 
-    [Fact]
-    public void MSE_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_NonNegative()
     {
         var actual = new double[] { 1, 5, -3, 0 };
         var predicted = new double[] { 2, 3, -1, 1 };
@@ -211,8 +212,8 @@ public class StatisticsDeepMathIntegrationTests
     // QUANTILES
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Quantiles_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task Quantiles_HandCalculation()
     {
         // Data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         // Using linear interpolation method:
@@ -226,8 +227,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(9.25, q3, Tol);
     }
 
-    [Fact]
-    public void Quantiles_Q1_LessThanOrEqual_Median_LessThanOrEqual_Q3()
+    [Fact(Timeout = 120000)]
+    public async Task Quantiles_Q1_LessThanOrEqual_Median_LessThanOrEqual_Q3()
     {
         var data = V(10, 3, 7, 1, 15, 8, 2, 9, 4, 6);
         var (q1, q3) = StatisticsHelper<double>.CalculateQuantiles(data);
@@ -236,8 +237,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.True(median <= q3, $"Median ({median}) should be <= Q3 ({q3})");
     }
 
-    [Fact]
-    public void Quantiles_IQR_Equals_Q3_Minus_Q1()
+    [Fact(Timeout = 120000)]
+    public async Task Quantiles_IQR_Equals_Q3_Minus_Q1()
     {
         var data = V(1, 3, 5, 7, 9, 11, 13, 15);
         var (q1, q3) = StatisticsHelper<double>.CalculateQuantiles(data);
@@ -249,8 +250,8 @@ public class StatisticsDeepMathIntegrationTests
     // SKEWNESS AND KURTOSIS
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void SkewnessKurtosis_SymmetricData_ZeroSkewness()
+    [Fact(Timeout = 120000)]
+    public async Task SkewnessKurtosis_SymmetricData_ZeroSkewness()
     {
         // Symmetric data about mean should have zero skewness
         var values = V(-3, -2, -1, 0, 1, 2, 3);
@@ -260,8 +261,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, skewness, 1e-10);
     }
 
-    [Fact]
-    public void SkewnessKurtosis_RightSkewedData()
+    [Fact(Timeout = 120000)]
+    public async Task SkewnessKurtosis_RightSkewedData()
     {
         // Data skewed to the right (positive skewness)
         var values = V(1, 1, 1, 2, 2, 3, 10);
@@ -272,8 +273,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.True(skewness > 0, $"Expected positive skewness, got {skewness}");
     }
 
-    [Fact]
-    public void SkewnessKurtosis_LeftSkewedData()
+    [Fact(Timeout = 120000)]
+    public async Task SkewnessKurtosis_LeftSkewedData()
     {
         // Data skewed to the left (negative skewness)
         var values = V(-10, -3, -2, -1, -1, -1, 0);
@@ -284,8 +285,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.True(skewness < 0, $"Expected negative skewness, got {skewness}");
     }
 
-    [Fact]
-    public void SkewnessKurtosis_NormalLikeData_KurtosisNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task SkewnessKurtosis_NormalLikeData_KurtosisNearZero()
     {
         // For data approximating a normal distribution, excess kurtosis should be near 0
         // Using a relatively uniform-like symmetric dataset
@@ -302,45 +303,45 @@ public class StatisticsDeepMathIntegrationTests
     // BASIC STATS INTEGRATION (via internal constructor)
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void BasicStats_Mean_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Mean_HandCalculation()
     {
         // [10, 20, 30, 40, 50] → mean = 30
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(10, 20, 30, 40, 50) });
         Assert.Equal(30.0, stats.Mean, Tol);
     }
 
-    [Fact]
-    public void BasicStats_MinMax()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_MinMax()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(5, -3, 8, 1, 0) });
         Assert.Equal(-3.0, stats.Min, Tol);
         Assert.Equal(8.0, stats.Max, Tol);
     }
 
-    [Fact]
-    public void BasicStats_Count()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Count()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(1, 2, 3, 4, 5, 6) });
         Assert.Equal(6, stats.N);
     }
 
-    [Fact]
-    public void BasicStats_Median_OddCount()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Median_OddCount()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(9, 1, 5, 3, 7) });
         Assert.Equal(5.0, stats.Median, Tol);
     }
 
-    [Fact]
-    public void BasicStats_Median_EvenCount()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Median_EvenCount()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(7, 1, 5, 3) });
         Assert.Equal(4.0, stats.Median, Tol);
     }
 
-    [Fact]
-    public void BasicStats_Variance_IsPopulationVariance()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Variance_IsPopulationVariance()
     {
         // [2, 4, 6, 8, 10], mean=6, deviations: -4,-2,0,2,4, SS=40
         // BasicStats uses population variance (divides by n): 40/5 = 8
@@ -348,31 +349,31 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(8.0, stats.Variance, Tol);
     }
 
-    [Fact]
-    public void BasicStats_StdDev_IsSqrtVariance()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_StdDev_IsSqrtVariance()
     {
         // StdDev = sqrt(population variance) = sqrt(8)
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(2, 4, 6, 8, 10) });
         Assert.Equal(Math.Sqrt(8.0), stats.StandardDeviation, Tol);
     }
 
-    [Fact]
-    public void BasicStats_IQR_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_IQR_HandCalculation()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double>
             { Values = V(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) });
         Assert.Equal(stats.ThirdQuartile - stats.FirstQuartile, stats.InterquartileRange, Tol);
     }
 
-    [Fact]
-    public void BasicStats_SymmetricSkewnessZero()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_SymmetricSkewnessZero()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(-3, -2, -1, 0, 1, 2, 3) });
         Assert.Equal(0.0, stats.Skewness, 1e-10);
     }
 
-    [Fact]
-    public void BasicStats_Empty_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Empty_AllZeros()
     {
         var stats = BasicStats<double>.Empty();
         Assert.Equal(0, stats.N);
@@ -380,8 +381,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, stats.Variance, Tol);
     }
 
-    [Fact]
-    public void BasicStats_GetMetric_Mean()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_GetMetric_Mean()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(10, 20, 30) });
         Assert.Equal(stats.Mean, stats.GetMetric(MetricType.Mean), Tol);
@@ -390,8 +391,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(stats.Max, stats.GetMetric(MetricType.Max), Tol);
     }
 
-    [Fact]
-    public void BasicStats_HasMetric_AllBasicMetricsAvailable()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_HasMetric_AllBasicMetricsAvailable()
     {
         var stats = BasicStats<double>.Empty();
         Assert.True(stats.HasMetric(MetricType.Mean));
@@ -412,8 +413,8 @@ public class StatisticsDeepMathIntegrationTests
     // CROSS-VALIDATION IDENTITIES
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Stats_MeanMinMax_Ordering()
+    [Fact(Timeout = 120000)]
+    public async Task Stats_MeanMinMax_Ordering()
     {
         // For any data: min <= mean <= max (when all values are non-negative)
         // More generally: min <= median <= max
@@ -426,8 +427,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.True(stats.Median <= stats.Max, $"Median ({stats.Median}) should be <= Max ({stats.Max})");
     }
 
-    [Fact]
-    public void Stats_VarianceZero_AllSame()
+    [Fact(Timeout = 120000)]
+    public async Task Stats_VarianceZero_AllSame()
     {
         var stats = new BasicStats<double>(new BasicStatsInputs<double> { Values = V(7, 7, 7, 7, 7) });
         Assert.Equal(0.0, stats.Variance, Tol);
@@ -436,8 +437,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(7.0, stats.Median, Tol);
     }
 
-    [Fact]
-    public void Stats_ScalingProperty()
+    [Fact(Timeout = 120000)]
+    public async Task Stats_ScalingProperty()
     {
         // If we multiply all data by c, mean scales by c, variance scales by c^2
         var data = V(1, 2, 3, 4, 5);
@@ -450,8 +451,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(2 * stats1.StandardDeviation, stats2.StandardDeviation, Tol);
     }
 
-    [Fact]
-    public void Stats_ShiftingProperty()
+    [Fact(Timeout = 120000)]
+    public async Task Stats_ShiftingProperty()
     {
         // If we add constant c to all data, mean shifts by c, variance unchanged
         var data = V(1, 2, 3, 4, 5);
@@ -468,8 +469,8 @@ public class StatisticsDeepMathIntegrationTests
     // ERROR STATS INTEGRATION
     // ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void ErrorStats_PerfectPredictions_ZeroErrors()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_PerfectPredictions_ZeroErrors()
     {
         var actual = V(1, 2, 3, 4, 5);
         var predicted = V(1, 2, 3, 4, 5);
@@ -486,8 +487,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, errorStats.MeanBiasError, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_MAE_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_MAE_HandCalculation()
     {
         // actual = [1, 2, 3], predicted = [2, 3, 5]
         // errors: |1-2|=1, |2-3|=1, |3-5|=2
@@ -504,8 +505,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(4.0 / 3.0, errorStats.MAE, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_MSE_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_MSE_HandCalculation()
     {
         // actual = [1, 2, 3], predicted = [2, 3, 5]
         // squared errors: 1, 1, 4
@@ -522,8 +523,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(2.0, errorStats.MSE, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_RMSE_IsSqrtMSE()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_RMSE_IsSqrtMSE()
     {
         var actual = V(1, 2, 3, 4);
         var predicted = V(1.5, 2.5, 3.5, 4.5);
@@ -537,8 +538,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(errorStats.MSE), errorStats.RMSE, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_MeanBiasError_OverPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_MeanBiasError_OverPrediction()
     {
         // All predictions are 1 higher than actual → MeanBiasError = +1
         // Convention: predicted - actual = +1 for each
@@ -554,8 +555,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(1.0, errorStats.MeanBiasError, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_MaxError_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_MaxError_HandCalculation()
     {
         // actual = [1, 2, 3], predicted = [1, 2, 10]
         // errors: 0, 0, 7 → MaxError = 7
@@ -571,8 +572,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(7.0, errorStats.MaxError, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_MSE_GreaterThanOrEqual_MAE_Squared()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_MSE_GreaterThanOrEqual_MAE_Squared()
     {
         // By Jensen's inequality: MSE >= MAE^2
         var actual = V(1, 2, 3, 4, 5);
@@ -589,8 +590,8 @@ public class StatisticsDeepMathIntegrationTests
             $"MSE ({errorStats.MSE}) should be >= MAE^2 ({maeSquared})");
     }
 
-    [Fact]
-    public void ErrorStats_Ordering_MAE_RMSE_MaxError()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Ordering_MAE_RMSE_MaxError()
     {
         // MAE <= RMSE <= MaxError (always)
         var actual = V(0, 0, 0, 0, 0);
@@ -608,8 +609,8 @@ public class StatisticsDeepMathIntegrationTests
             $"RMSE ({errorStats.RMSE}) should be <= MaxError ({errorStats.MaxError})");
     }
 
-    [Fact]
-    public void ErrorStats_RSS_Is_N_Times_MSE()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_RSS_Is_N_Times_MSE()
     {
         // RSS = sum of squared errors, MSE = RSS/n
         var actual = V(1, 2, 3, 4, 5);
@@ -624,8 +625,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(actual.Length * errorStats.MSE, errorStats.RSS, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_Empty_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Empty_AllZeros()
     {
         var errorStats = ErrorStats<double>.Empty();
         Assert.Equal(0.0, errorStats.MAE, Tol);
@@ -633,8 +634,8 @@ public class StatisticsDeepMathIntegrationTests
         Assert.Equal(0.0, errorStats.RMSE, Tol);
     }
 
-    [Fact]
-    public void ErrorStats_DurbinWatson_Range()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_DurbinWatson_Range()
     {
         // Durbin-Watson statistic should be in [0, 4]
         var actual = V(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
@@ -652,8 +653,8 @@ public class StatisticsDeepMathIntegrationTests
             $"DW ({errorStats.DurbinWatsonStatistic}) should be <= 4");
     }
 
-    [Fact]
-    public void ErrorStats_SMAPE_Range()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_SMAPE_Range()
     {
         // SMAPE should be in [0, 200] (or [0, 2] depending on normalization)
         var actual = V(1, 2, 3, 4, 5);
@@ -669,8 +670,8 @@ public class StatisticsDeepMathIntegrationTests
             $"SMAPE ({errorStats.SMAPE}) should be >= 0");
     }
 
-    [Fact]
-    public void ErrorStats_Aliases_Match()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Aliases_Match()
     {
         var actual = V(1, 2, 3);
         var predicted = V(1.5, 2.5, 3.5);

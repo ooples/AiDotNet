@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Schedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
 
@@ -10,8 +11,8 @@ public class DDIMSchedulerTests
 {
     #region Construction Tests
 
-    [Fact]
-    public void Constructor_WithValidConfig_CreatesScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidConfig_CreatesScheduler()
     {
         // Arrange
         var config = SchedulerConfig<double>.CreateDefault();
@@ -24,8 +25,8 @@ public class DDIMSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
-    public void Constructor_WithNullConfig_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(null!));
@@ -35,8 +36,8 @@ public class DDIMSchedulerTests
 
     #region SetTimesteps Tests
 
-    [Fact]
-    public void SetTimesteps_WithValidSteps_ProducesDescendingSequence()
+    [Fact(Timeout = 120000)]
+    public async Task SetTimesteps_WithValidSteps_ProducesDescendingSequence()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -86,8 +87,8 @@ public class DDIMSchedulerTests
         Assert.Throws<ArgumentOutOfRangeException>(() => scheduler.SetTimesteps(invalidSteps));
     }
 
-    [Fact]
-    public void SetTimesteps_FirstTimestepIsNearTrainTimesteps()
+    [Fact(Timeout = 120000)]
+    public async Task SetTimesteps_FirstTimestepIsNearTrainTimesteps()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -101,8 +102,8 @@ public class DDIMSchedulerTests
             $"First timestep should be close to max, was {scheduler.Timesteps[0]}");
     }
 
-    [Fact]
-    public void SetTimesteps_LastTimestepIsNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task SetTimesteps_LastTimestepIsNearZero()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -120,8 +121,8 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Deterministic (eta=0)
 
-    [Fact]
-    public void Step_DeterministicWithEtaZero_ReturnsFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task Step_DeterministicWithEtaZero_ReturnsFiniteValues()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -144,8 +145,8 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
-    public void Step_DeterministicWithEtaZero_IsDeterministic()
+    [Fact(Timeout = 120000)]
+    public async Task Step_DeterministicWithEtaZero_IsDeterministic()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -171,8 +172,8 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Stochastic (eta > 0)
 
-    [Fact]
-    public void Step_StochasticWithEtaPositive_DiffersFromDeterministic()
+    [Fact(Timeout = 120000)]
+    public async Task Step_StochasticWithEtaPositive_DiffersFromDeterministic()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -201,8 +202,8 @@ public class DDIMSchedulerTests
         Assert.True(anyDiff, "Stochastic step should differ from deterministic step");
     }
 
-    [Fact]
-    public void Step_WithNoiseProvided_UsesProvidedNoise()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithNoiseProvided_UsesProvidedNoise()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -236,8 +237,8 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Clipping
 
-    [Fact]
-    public void Step_WithClipSampleEnabled_ClipsToRange()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithClipSampleEnabled_ClipsToRange()
     {
         // Arrange
         var config = new SchedulerConfig<double>(
@@ -265,8 +266,8 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Validation
 
-    [Fact]
-    public void Step_WithNullModelOutput_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithNullModelOutput_ThrowsArgumentNullException()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -278,8 +279,8 @@ public class DDIMSchedulerTests
             scheduler.Step(null!, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
-    public void Step_WithNullSample_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithNullSample_ThrowsArgumentNullException()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -291,8 +292,8 @@ public class DDIMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], null!, 0.0));
     }
 
-    [Fact]
-    public void Step_WithMismatchedLengths_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithMismatchedLengths_ThrowsArgumentException()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -305,8 +306,8 @@ public class DDIMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
-    public void Step_WithInvalidTimestep_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithInvalidTimestep_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(
@@ -324,8 +325,8 @@ public class DDIMSchedulerTests
 
     #region AddNoise Tests
 
-    [Fact]
-    public void AddNoise_WithValidInputs_ReturnsNoisyVector()
+    [Fact(Timeout = 120000)]
+    public async Task AddNoise_WithValidInputs_ReturnsNoisyVector()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -349,8 +350,8 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
-    public void AddNoise_AtTimestepZero_ReturnsOriginalWithMinimalChange()
+    [Fact(Timeout = 120000)]
+    public async Task AddNoise_AtTimestepZero_ReturnsOriginalWithMinimalChange()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -370,8 +371,8 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
-    public void AddNoise_AtHighTimestep_AddsMoreNoise()
+    [Fact(Timeout = 120000)]
+    public async Task AddNoise_AtHighTimestep_AddsMoreNoise()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -400,8 +401,8 @@ public class DDIMSchedulerTests
 
     #region GetAlphaCumulativeProduct Tests
 
-    [Fact]
-    public void GetAlphaCumulativeProduct_ReturnsDecreasingValues()
+    [Fact(Timeout = 120000)]
+    public async Task GetAlphaCumulativeProduct_ReturnsDecreasingValues()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -418,8 +419,8 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
-    public void GetAlphaCumulativeProduct_AtTimestepZero_IsNearOne()
+    [Fact(Timeout = 120000)]
+    public async Task GetAlphaCumulativeProduct_AtTimestepZero_IsNearOne()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -436,8 +437,8 @@ public class DDIMSchedulerTests
 
     #region State Management Tests
 
-    [Fact]
-    public void GetState_ReturnsNonEmptyDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task GetState_ReturnsNonEmptyDictionary()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -452,8 +453,8 @@ public class DDIMSchedulerTests
         Assert.True(state.ContainsKey("train_timesteps"));
     }
 
-    [Fact]
-    public void LoadState_RestoresTimesteps()
+    [Fact(Timeout = 120000)]
+    public async Task LoadState_RestoresTimesteps()
     {
         // Arrange
         var scheduler1 = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -474,8 +475,8 @@ public class DDIMSchedulerTests
 
     #region Integration Tests
 
-    [Fact]
-    public void FullDenoisingLoop_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task FullDenoisingLoop_ProducesFiniteResults()
     {
         // Arrange
         var scheduler = new DDIMScheduler<double>(SchedulerConfig<double>.CreateDefault());

@@ -2,6 +2,7 @@ using AiDotNet.Distributions;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Distributions;
 
@@ -60,8 +61,8 @@ public class DistributionsDeepMathIntegrationTests
     //  NORMAL DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Normal_Pdf_AtMean_EqualsExpectedPeak()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Pdf_AtMean_EqualsExpectedPeak()
     {
         // PDF at mean = 1 / (sigma * sqrt(2*pi))
         var dist = new NormalDistribution<double>(3.0, 4.0); // mean=3, variance=4 => sigma=2
@@ -70,8 +71,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(expected, pdf, Tolerance);
     }
 
-    [Fact]
-    public void Normal_Pdf_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Pdf_Symmetry()
     {
         var dist = new NormalDistribution<double>(5.0, 9.0); // mean=5, variance=9
         double left = dist.Pdf(2.0);  // 5 - 3
@@ -79,24 +80,24 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(left, right, Tolerance);
     }
 
-    [Fact]
-    public void Normal_Cdf_AtMean_IsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Cdf_AtMean_IsHalf()
     {
         var dist = new NormalDistribution<double>(5.0, 2.0);
         double cdf = dist.Cdf(5.0);
         Assert.Equal(0.5, cdf, Tolerance);
     }
 
-    [Fact]
-    public void Normal_StandardCdf_At196_Approximately975()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_StandardCdf_At196_Approximately975()
     {
         var dist = new NormalDistribution<double>(0.0, 1.0);
         double cdf = dist.Cdf(1.96);
         Assert.Equal(0.975, cdf, 1e-3); // Erf approximation has ~1.5e-7 max error
     }
 
-    [Fact]
-    public void Normal_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_LogPdf_ConsistentWithPdf()
     {
         var dist = new NormalDistribution<double>(2.0, 3.0);
         double x = 4.5;
@@ -105,8 +106,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(logOfPdf, logPdf, Tolerance);
     }
 
-    [Fact]
-    public void Normal_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_InverseCdf_Roundtrip()
     {
         var dist = new NormalDistribution<double>(1.0, 4.0);
         double[] probs = { 0.1, 0.25, 0.5, 0.75, 0.9 };
@@ -118,8 +119,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Normal_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_GradLogPdf_MatchesNumerical()
     {
         var dist = new NormalDistribution<double>(2.0, 3.0);
         double x = 4.5;
@@ -130,8 +131,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[1], analyticalGrad[1], LooseTolerance); // grad w.r.t. variance
     }
 
-    [Fact]
-    public void Normal_FisherInformation_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_FisherInformation_HandValues()
     {
         // Fisher Information for Normal(mean, variance):
         // I = [[1/variance, 0], [0, 1/(2*variance^2)]]
@@ -144,8 +145,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(0.03125, fisher[1, 1], Tolerance); // 1/(2*16) = 1/32
     }
 
-    [Fact]
-    public void Normal_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Pdf_IntegratesToOne()
     {
         // Numerical integration via trapezoidal rule
         var dist = new NormalDistribution<double>(2.0, 3.0);
@@ -164,8 +165,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-4);
     }
 
-    [Fact]
-    public void Normal_CdfDerivative_MatchesPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_CdfDerivative_MatchesPdf()
     {
         // d/dx CDF(x) = PDF(x)
         var dist = new NormalDistribution<double>(1.0, 2.0);
@@ -176,8 +177,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(pdf, numericalDerivative, 1e-4);
     }
 
-    [Fact]
-    public void Normal_Mean_And_Variance_MatchParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Mean_And_Variance_MatchParameters()
     {
         var dist = new NormalDistribution<double>(5.0, 7.0);
         Assert.Equal(5.0, dist.Mean, Tolerance);
@@ -188,8 +189,8 @@ public class DistributionsDeepMathIntegrationTests
     //  EXPONENTIAL DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Exponential_Pdf_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Pdf_HandValues()
     {
         // PDF(x) = rate * exp(-rate * x)
         var dist = new ExponentialDistribution<double>(2.0);
@@ -197,8 +198,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(2.0 * Math.Exp(-2.0), dist.Pdf(1.0), Tolerance); // 2*e^(-2) = 0.27067...
     }
 
-    [Fact]
-    public void Exponential_Cdf_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Cdf_HandValues()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         Assert.Equal(0.0, dist.Cdf(0.0), Tolerance);
@@ -206,8 +207,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0 - Math.Exp(-4.0), dist.Cdf(2.0), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_Memoryless_Property()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Memoryless_Property()
     {
         // P(X > s+t | X > s) = P(X > t)
         // Equivalently: 1 - CDF(s+t) = (1 - CDF(s)) * (1 - CDF(t))
@@ -219,24 +220,24 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(survivalSPlusT, survivalS * survivalT, Tolerance);
     }
 
-    [Fact]
-    public void Exponential_Mean_And_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Mean_And_Variance()
     {
         var dist = new ExponentialDistribution<double>(3.0);
         Assert.Equal(1.0 / 3.0, dist.Mean, Tolerance);
         Assert.Equal(1.0 / 9.0, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Exponential_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_LogPdf_ConsistentWithPdf()
     {
         var dist = new ExponentialDistribution<double>(2.5);
         double x = 1.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_InverseCdf_Roundtrip()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         double[] probs = { 0.1, 0.25, 0.5, 0.75, 0.9 };
@@ -248,8 +249,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Exponential_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_GradLogPdf_MatchesNumerical()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         double x = 1.5;
@@ -262,8 +263,8 @@ public class DistributionsDeepMathIntegrationTests
     //  GAMMA DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Gamma_Shape1_EqualsExponential()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_Shape1_EqualsExponential()
     {
         // Gamma(1, rate) = Exponential(rate)
         var gamma = new GammaDistribution<double>(1.0, 2.0);
@@ -277,16 +278,16 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Gamma_Mean_And_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_Mean_And_Variance()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0); // shape=3, rate=2
         Assert.Equal(1.5, dist.Mean, Tolerance); // 3/2
         Assert.Equal(0.75, dist.Variance, Tolerance); // 3/4
     }
 
-    [Fact]
-    public void Gamma_Pdf_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_Pdf_HandValue()
     {
         // Gamma(2, 1) at x=1: PDF = 1^(2-1) * e^(-1) / Gamma(2) = 1 * e^(-1) / 1 = e^(-1)
         var dist = new GammaDistribution<double>(2.0, 1.0);
@@ -294,16 +295,16 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1.0), pdf, Tolerance); // 0.36788...
     }
 
-    [Fact]
-    public void Gamma_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_LogPdf_ConsistentWithPdf()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
         double x = 2.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void Gamma_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_Pdf_IntegratesToOne()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
         double sum = 0;
@@ -321,8 +322,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-3);
     }
 
-    [Fact]
-    public void Gamma_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_GradLogPdf_MatchesNumerical()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
         double x = 2.0;
@@ -333,8 +334,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[1], analyticalGrad[1], LooseTolerance); // rate
     }
 
-    [Fact]
-    public void Gamma_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_InverseCdf_Roundtrip()
     {
         var dist = new GammaDistribution<double>(2.0, 1.0);
         double[] probs = { 0.1, 0.5, 0.9 };
@@ -350,8 +351,8 @@ public class DistributionsDeepMathIntegrationTests
     //  BETA DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Beta_Uniform_When_Alpha1_Beta1()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Uniform_When_Alpha1_Beta1()
     {
         var dist = new BetaDistribution<double>(1.0, 1.0);
         // Beta(1,1) = Uniform[0,1], PDF = 1 everywhere
@@ -362,8 +363,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Beta_Cdf_LinearFor_Alpha1_Beta1()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Cdf_LinearFor_Alpha1_Beta1()
     {
         var dist = new BetaDistribution<double>(1.0, 1.0);
         // CDF of Uniform = x
@@ -374,15 +375,15 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Beta_Mean_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Mean_HandValue()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
         Assert.Equal(2.0 / 7.0, dist.Mean, Tolerance); // alpha/(alpha+beta)
     }
 
-    [Fact]
-    public void Beta_Variance_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Variance_HandValue()
     {
         // Var = alpha*beta / ((alpha+beta)^2 * (alpha+beta+1))
         var dist = new BetaDistribution<double>(2.0, 5.0);
@@ -390,8 +391,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(expected, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Beta_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Symmetry()
     {
         // Beta(a,b).PDF(x) = Beta(b,a).PDF(1-x)
         var distAB = new BetaDistribution<double>(2.0, 5.0);
@@ -404,8 +405,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Beta_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Pdf_IntegratesToOne()
     {
         var dist = new BetaDistribution<double>(2.0, 3.0);
         double sum = 0;
@@ -423,8 +424,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-3);
     }
 
-    [Fact]
-    public void Beta_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_GradLogPdf_MatchesNumerical()
     {
         var dist = new BetaDistribution<double>(3.0, 4.0);
         double x = 0.4;
@@ -435,8 +436,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[1], analyticalGrad[1], LooseTolerance); // beta
     }
 
-    [Fact]
-    public void Beta_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_InverseCdf_Roundtrip()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
         double[] probs = { 0.1, 0.5, 0.9 };
@@ -448,8 +449,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Beta_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_LogPdf_ConsistentWithPdf()
     {
         var dist = new BetaDistribution<double>(3.0, 2.0);
         double x = 0.6;
@@ -460,38 +461,38 @@ public class DistributionsDeepMathIntegrationTests
     //  LAPLACE DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Laplace_Pdf_AtLocation_EqualsExpectedPeak()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Pdf_AtLocation_EqualsExpectedPeak()
     {
         // PDF at location = 1/(2*scale)
         var dist = new LaplaceDistribution<double>(3.0, 2.0);
         Assert.Equal(0.25, dist.Pdf(3.0), Tolerance); // 1/(2*2)
     }
 
-    [Fact]
-    public void Laplace_Pdf_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Pdf_Symmetry()
     {
         var dist = new LaplaceDistribution<double>(3.0, 2.0);
         Assert.Equal(dist.Pdf(1.0), dist.Pdf(5.0), Tolerance); // symmetric around 3
     }
 
-    [Fact]
-    public void Laplace_Cdf_AtLocation_IsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Cdf_AtLocation_IsHalf()
     {
         var dist = new LaplaceDistribution<double>(5.0, 3.0);
         Assert.Equal(0.5, dist.Cdf(5.0), Tolerance);
     }
 
-    [Fact]
-    public void Laplace_Mean_And_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Mean_And_Variance()
     {
         var dist = new LaplaceDistribution<double>(3.0, 2.0);
         Assert.Equal(3.0, dist.Mean, Tolerance);
         Assert.Equal(8.0, dist.Variance, Tolerance); // 2 * scale^2 = 2*4 = 8
     }
 
-    [Fact]
-    public void Laplace_Cdf_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Cdf_HandValues()
     {
         // CDF: x < location: 0.5 * exp((x-loc)/scale)
         // CDF: x >= location: 1 - 0.5 * exp(-(x-loc)/scale)
@@ -500,16 +501,16 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0 - 0.5 * Math.Exp(-2.0), dist.Cdf(2.0), Tolerance);
     }
 
-    [Fact]
-    public void Laplace_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_LogPdf_ConsistentWithPdf()
     {
         var dist = new LaplaceDistribution<double>(1.0, 2.0);
         double x = 4.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void Laplace_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_InverseCdf_Roundtrip()
     {
         var dist = new LaplaceDistribution<double>(2.0, 3.0);
         double[] probs = { 0.1, 0.25, 0.5, 0.75, 0.9 };
@@ -521,8 +522,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Laplace_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_GradLogPdf_MatchesNumerical()
     {
         var dist = new LaplaceDistribution<double>(2.0, 3.0);
         double x = 5.0;
@@ -533,8 +534,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[1], analyticalGrad[1], LooseTolerance);
     }
 
-    [Fact]
-    public void Laplace_FisherInformation_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_FisherInformation_HandValues()
     {
         // I = [[1/b^2, 0], [0, 1/b^2]]
         var dist = new LaplaceDistribution<double>(0.0, 3.0);
@@ -549,8 +550,8 @@ public class DistributionsDeepMathIntegrationTests
     //  POISSON DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Poisson_Pmf_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_Pmf_HandValues()
     {
         // P(X=k) = lambda^k * e^(-lambda) / k!
         var dist = new PoissonDistribution<double>(3.0);
@@ -568,8 +569,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(27.0 / 6.0 * Math.Exp(-3.0), dist.Pmf(3), Tolerance);
     }
 
-    [Fact]
-    public void Poisson_Pmf_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_Pmf_SumsToOne()
     {
         var dist = new PoissonDistribution<double>(5.0);
         double sum = 0;
@@ -580,15 +581,15 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-6);
     }
 
-    [Fact]
-    public void Poisson_Mean_Equals_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_Mean_Equals_Variance()
     {
         var dist = new PoissonDistribution<double>(7.5);
         Assert.Equal(dist.Mean, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Poisson_Cdf_Consistency()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_Cdf_Consistency()
     {
         // CDF(k) = sum_{i=0}^{k} PMF(i)
         var dist = new PoissonDistribution<double>(4.0);
@@ -604,8 +605,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Poisson_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_GradLogPdf_MatchesNumerical()
     {
         var dist = new PoissonDistribution<double>(4.0);
         double x = 3.0; // k=3
@@ -618,8 +619,8 @@ public class DistributionsDeepMathIntegrationTests
     //  WEIBULL DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void Weibull_Shape1_EqualsExponential()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_Shape1_EqualsExponential()
     {
         // Weibull(1, scale) = Exponential(1/scale)
         var weibull = new WeibullDistribution<double>(1.0, 2.0);
@@ -633,8 +634,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Weibull_Cdf_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_Cdf_HandValues()
     {
         // CDF = 1 - exp(-(x/scale)^shape)
         var dist = new WeibullDistribution<double>(2.0, 3.0);
@@ -643,8 +644,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(expected, dist.Cdf(x), Tolerance);
     }
 
-    [Fact]
-    public void Weibull_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_InverseCdf_Roundtrip()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
         double[] probs = { 0.1, 0.5, 0.9 };
@@ -656,8 +657,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Weibull_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_Pdf_IntegratesToOne()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
         double sum = 0;
@@ -675,16 +676,16 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-3);
     }
 
-    [Fact]
-    public void Weibull_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_LogPdf_ConsistentWithPdf()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
         double x = 2.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void Weibull_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_GradLogPdf_MatchesNumerical()
     {
         var dist = new WeibullDistribution<double>(2.0, 3.0);
         double x = 2.5;
@@ -699,23 +700,23 @@ public class DistributionsDeepMathIntegrationTests
     //  STUDENT-T DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void StudentT_Pdf_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_Pdf_Symmetry()
     {
         var dist = new StudentTDistribution<double>(2.0, 1.0, 5.0);
         Assert.Equal(dist.Pdf(0.0), dist.Pdf(4.0), Tolerance); // symmetric around 2.0
         Assert.Equal(dist.Pdf(1.0), dist.Pdf(3.0), Tolerance);
     }
 
-    [Fact]
-    public void StudentT_Cdf_AtLocation_IsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_Cdf_AtLocation_IsHalf()
     {
         var dist = new StudentTDistribution<double>(3.0, 2.0, 10.0);
         Assert.Equal(0.5, dist.Cdf(3.0), 1e-3);
     }
 
-    [Fact]
-    public void StudentT_HighDf_ApproachesNormal()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_HighDf_ApproachesNormal()
     {
         // With large df, Student-t approaches Normal
         var studentT = new StudentTDistribution<double>(0.0, 1.0, 1000.0);
@@ -728,8 +729,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StudentT_Mean_And_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_Mean_And_Variance()
     {
         var dist = new StudentTDistribution<double>(3.0, 2.0, 5.0);
         Assert.Equal(3.0, dist.Mean, Tolerance);
@@ -737,16 +738,16 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(4.0 * 5.0 / 3.0, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void StudentT_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_LogPdf_ConsistentWithPdf()
     {
         var dist = new StudentTDistribution<double>(0.0, 1.0, 5.0);
         double x = 2.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void StudentT_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_GradLogPdf_MatchesNumerical()
     {
         var dist = new StudentTDistribution<double>(1.0, 2.0, 5.0);
         double x = 3.0;
@@ -758,8 +759,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[2], analyticalGrad[2], LooseTolerance); // df
     }
 
-    [Fact]
-    public void StudentT_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_Pdf_IntegratesToOne()
     {
         var dist = new StudentTDistribution<double>(0.0, 1.0, 3.0);
         double sum = 0;
@@ -781,8 +782,8 @@ public class DistributionsDeepMathIntegrationTests
     //  LOGNORMAL DISTRIBUTION
     // ============================================================
 
-    [Fact]
-    public void LogNormal_Mean_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Mean_HandValue()
     {
         // Mean = exp(mu + sigma^2/2)
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
@@ -790,8 +791,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(expected, dist.Mean, Tolerance);
     }
 
-    [Fact]
-    public void LogNormal_Variance_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Variance_HandValue()
     {
         // Var = (exp(sigma^2) - 1) * exp(2*mu + sigma^2)
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
@@ -800,8 +801,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(expected, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void LogNormal_Pdf_RelatedToNormal()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Pdf_RelatedToNormal()
     {
         // LogNormal PDF(x) = NormalPDF(log(x)) / x
         var logNorm = new LogNormalDistribution<double>(0.0, 1.0);
@@ -815,8 +816,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogNormal_Cdf_RelatedToNormalCdf()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Cdf_RelatedToNormalCdf()
     {
         // LogNormal CDF(x) = Normal_CDF((log(x) - mu) / sigma)
         var logNorm = new LogNormalDistribution<double>(1.0, 0.5);
@@ -827,16 +828,16 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(stdNormal.Cdf(z), logNorm.Cdf(x), LooseTolerance);
     }
 
-    [Fact]
-    public void LogNormal_LogPdf_ConsistentWithPdf()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_LogPdf_ConsistentWithPdf()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         double x = 2.0;
         Assert.Equal(Math.Log(dist.Pdf(x)), dist.LogPdf(x), Tolerance);
     }
 
-    [Fact]
-    public void LogNormal_InverseCdf_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_InverseCdf_Roundtrip()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         double[] probs = { 0.1, 0.5, 0.9 };
@@ -848,8 +849,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogNormal_GradLogPdf_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_GradLogPdf_MatchesNumerical()
     {
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
         double x = 3.0;
@@ -860,8 +861,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(numericalGrad[1], analyticalGrad[1], LooseTolerance); // sigma
     }
 
-    [Fact]
-    public void LogNormal_Pdf_IntegratesToOne()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Pdf_IntegratesToOne()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         double sum = 0;
@@ -883,8 +884,8 @@ public class DistributionsDeepMathIntegrationTests
     //  CROSS-DISTRIBUTION IDENTITIES
     // ============================================================
 
-    [Fact]
-    public void CrossDistribution_NormalVariance1_CdfSymmetry()
+    [Fact(Timeout = 120000)]
+    public async Task CrossDistribution_NormalVariance1_CdfSymmetry()
     {
         // For standard Normal: CDF(x) + CDF(-x) = 1
         var dist = new NormalDistribution<double>(0.0, 1.0);
@@ -896,8 +897,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CrossDistribution_ExponentialSurvivalFunction()
+    [Fact(Timeout = 120000)]
+    public async Task CrossDistribution_ExponentialSurvivalFunction()
     {
         // For Exponential: S(x) = 1 - CDF(x) = exp(-rate*x)
         var dist = new ExponentialDistribution<double>(2.0);
@@ -910,8 +911,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CrossDistribution_GammaScaling()
+    [Fact(Timeout = 120000)]
+    public async Task CrossDistribution_GammaScaling()
     {
         // If X ~ Gamma(shape, rate), then cX ~ Gamma(shape, rate/c)
         // So Gamma(3,2).CDF(x) should relate to Gamma(3,1).CDF(x*2/1) kind of...
@@ -926,8 +927,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(gamma1.Cdf(x), gamma2.Cdf(2.0 * x), 1e-3);
     }
 
-    [Fact]
-    public void CrossDistribution_LaplaceCdf_HandVerification()
+    [Fact(Timeout = 120000)]
+    public async Task CrossDistribution_LaplaceCdf_HandVerification()
     {
         // Standard Laplace CDF at x:
         // x < 0: 0.5 * exp(x)
@@ -943,8 +944,8 @@ public class DistributionsDeepMathIntegrationTests
     //  FISHER INFORMATION - POSITIVE DEFINITENESS
     // ============================================================
 
-    [Fact]
-    public void FisherInformation_AllDistributions_PositiveDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task FisherInformation_AllDistributions_PositiveDiagonal()
     {
         // Fisher information diagonal entries should be positive
         var distributions = new (string name, Func<Matrix<double>> getFisher)[]
@@ -968,8 +969,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FisherInformation_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task FisherInformation_Symmetric()
     {
         // Fisher information should be symmetric
         var distributions = new (string name, Func<Matrix<double>> getFisher)[]
@@ -997,8 +998,8 @@ public class DistributionsDeepMathIntegrationTests
     //  EDGE CASES AND NUMERICAL STABILITY
     // ============================================================
 
-    [Fact]
-    public void Normal_Cdf_ExtremeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Cdf_ExtremeValues()
     {
         var dist = new NormalDistribution<double>(0.0, 1.0);
         // CDF at very negative should be near 0
@@ -1010,31 +1011,31 @@ public class DistributionsDeepMathIntegrationTests
         Assert.True(cdfRight > 0.99 && cdfRight <= 1.0, $"CDF(6) = {cdfRight} should be near 1");
     }
 
-    [Fact]
-    public void Exponential_Pdf_NegativeInput_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Pdf_NegativeInput_IsZero()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         Assert.Equal(0.0, dist.Pdf(-1.0), Tolerance);
         Assert.Equal(0.0, dist.Cdf(-1.0), Tolerance);
     }
 
-    [Fact]
-    public void Gamma_Pdf_NegativeInput_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_Pdf_NegativeInput_IsZero()
     {
         var dist = new GammaDistribution<double>(3.0, 2.0);
         Assert.Equal(0.0, dist.Pdf(-1.0), Tolerance);
     }
 
-    [Fact]
-    public void Beta_Pdf_OutOfRange_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Pdf_OutOfRange_IsZero()
     {
         var dist = new BetaDistribution<double>(2.0, 3.0);
         Assert.Equal(0.0, dist.Pdf(-0.5), Tolerance);
         Assert.Equal(0.0, dist.Pdf(1.5), Tolerance);
     }
 
-    [Fact]
-    public void LogNormal_Pdf_NegativeInput_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Pdf_NegativeInput_IsZero()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         Assert.Equal(0.0, dist.Pdf(-1.0), Tolerance);
@@ -1044,8 +1045,8 @@ public class DistributionsDeepMathIntegrationTests
     //  CDF MONOTONICITY
     // ============================================================
 
-    [Fact]
-    public void AllContinuousDistributions_Cdf_IsMonotone()
+    [Fact(Timeout = 120000)]
+    public async Task AllContinuousDistributions_Cdf_IsMonotone()
     {
         var distributions = new (string name, Func<double, double> cdf, double lo, double hi)[]
         {
@@ -1075,8 +1076,8 @@ public class DistributionsDeepMathIntegrationTests
     //  SAMPLING STATISTICS
     // ============================================================
 
-    [Fact]
-    public void Normal_SampleMean_ApproachesTheoreticalMean()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_SampleMean_ApproachesTheoreticalMean()
     {
         var dist = new NormalDistribution<double>(5.0, 4.0);
         var rng = new Random(42);
@@ -1090,8 +1091,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(5.0, sampleMean, 0.1);
     }
 
-    [Fact]
-    public void Exponential_SampleMean_ApproachesTheoreticalMean()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_SampleMean_ApproachesTheoreticalMean()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         var rng = new Random(42);
@@ -1105,8 +1106,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(0.5, sampleMean, 0.05);
     }
 
-    [Fact]
-    public void Beta_Samples_InUnitInterval()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Samples_InUnitInterval()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
         var rng = new Random(42);
@@ -1117,8 +1118,8 @@ public class DistributionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Poisson_SampleMean_ApproachesLambda()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_SampleMean_ApproachesLambda()
     {
         var dist = new PoissonDistribution<double>(5.0);
         var rng = new Random(42);
@@ -1136,8 +1137,8 @@ public class DistributionsDeepMathIntegrationTests
     //  CLONE CONSISTENCY
     // ============================================================
 
-    [Fact]
-    public void Clone_AllDistributions_ProduceSameResults()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_AllDistributions_ProduceSameResults()
     {
         var distributions = new (string name, ISamplingDistribution<double> dist)[]
         {
@@ -1167,16 +1168,16 @@ public class DistributionsDeepMathIntegrationTests
     //  SPECIFIC HAND-CALCULATED REGRESSION TESTS
     // ============================================================
 
-    [Fact]
-    public void Normal_StandardNormal_Pdf_At0_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_StandardNormal_Pdf_At0_HandValue()
     {
         // Standard Normal PDF at 0 = 1/sqrt(2*pi) ≈ 0.398942280401
         var dist = new NormalDistribution<double>(0.0, 1.0);
         Assert.Equal(1.0 / Math.Sqrt(2.0 * Math.PI), dist.Pdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_FisherInformation_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_FisherInformation_HandValue()
     {
         // I = 1/rate^2
         var dist = new ExponentialDistribution<double>(3.0);
@@ -1184,8 +1185,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(1.0 / 9.0, fisher[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void Gamma_FisherInformation_OffDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_FisherInformation_OffDiagonal()
     {
         // I[0,1] = I[1,0] = -1/beta
         var dist = new GammaDistribution<double>(3.0, 2.0);
@@ -1194,8 +1195,8 @@ public class DistributionsDeepMathIntegrationTests
         Assert.Equal(-0.5, fisher[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void Weibull_FisherInformation_ScaleScaleDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_FisherInformation_ScaleScaleDiagonal()
     {
         // I[scale, scale] = k^2/lambda^2
         var dist = new WeibullDistribution<double>(2.0, 3.0);

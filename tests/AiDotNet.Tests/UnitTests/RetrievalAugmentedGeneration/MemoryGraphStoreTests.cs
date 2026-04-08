@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -30,8 +31,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_InitializesEmptyStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_InitializesEmptyStore()
         {
             // Arrange & Act
             var store = new MemoryGraphStore<double>();
@@ -45,8 +46,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddNode Tests
 
-        [Fact]
-        public void AddNode_WithValidNode_IncreasesNodeCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithValidNode_IncreasesNodeCount()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.NodeCount);
         }
 
-        [Fact]
-        public void AddNode_WithNullNode_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithNullNode_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -69,8 +70,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddNode(null!));
         }
 
-        [Fact]
-        public void AddNode_WithDuplicateId_UpdatesExistingNode()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithDuplicateId_UpdatesExistingNode()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Alice Updated", retrieved.GetProperty<string>("name"));
         }
 
-        [Fact]
-        public void AddNode_WithMultipleLabels_IndexesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithMultipleLabels_IndexesCorrectly()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddEdge Tests
 
-        [Fact]
-        public void AddEdge_WithValidEdge_IncreasesEdgeCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithValidEdge_IncreasesEdgeCount()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.EdgeCount);
         }
 
-        [Fact]
-        public void AddEdge_WithNullEdge_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithNullEdge_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -140,8 +141,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddEdge(null!));
         }
 
-        [Fact]
-        public void AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Source node 'nonexistent' does not exist", exception.Message);
         }
 
-        [Fact]
-        public void AddEdge_WithNonexistentTargetNode_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithNonexistentTargetNode_ThrowsInvalidOperationException()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNode Tests
 
-        [Fact]
-        public void GetNode_WithExistingId_ReturnsNode()
+        [Fact(Timeout = 60000)]
+        public async Task GetNode_WithExistingId_ReturnsNode()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -189,8 +190,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("PERSON", retrieved.Label);
         }
 
-        [Fact]
-        public void GetNode_WithNonexistentId_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetNode_WithNonexistentId_ReturnsNull()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetEdge Tests
 
-        [Fact]
-        public void GetEdge_WithExistingId_ReturnsEdge()
+        [Fact(Timeout = 60000)]
+        public async Task GetEdge_WithExistingId_ReturnsEdge()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("node2", retrieved.TargetId);
         }
 
-        [Fact]
-        public void GetEdge_WithNonexistentId_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetEdge_WithNonexistentId_ReturnsNull()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveNode Tests
 
-        [Fact]
-        public void RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("node1"));
         }
 
-        [Fact]
-        public void RemoveNode_WithNonexistentNode_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_WithNonexistentNode_ReturnsFalse()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -275,8 +276,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(result);
         }
 
-        [Fact]
-        public void RemoveNode_RemovesAllConnectedEdges()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_RemovesAllConnectedEdges()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -305,8 +306,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetEdge(edge2.Id));
         }
 
-        [Fact]
-        public void RemoveNode_RemovesFromLabelIndex()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_RemovesFromLabelIndex()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -328,8 +329,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveEdge Tests
 
-        [Fact]
-        public void RemoveEdge_WithExistingEdge_RemovesEdgeAndReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveEdge_WithExistingEdge_RemovesEdgeAndReturnsTrue()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -349,8 +350,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetEdge(edge.Id));
         }
 
-        [Fact]
-        public void RemoveEdge_WithNonexistentEdge_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveEdge_WithNonexistentEdge_ReturnsFalse()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -362,8 +363,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(result);
         }
 
-        [Fact]
-        public void RemoveEdge_DoesNotRemoveNodes()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveEdge_DoesNotRemoveNodes()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -387,8 +388,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetOutgoingEdges Tests
 
-        [Fact]
-        public void GetOutgoingEdges_WithExistingEdges_ReturnsCorrectEdges()
+        [Fact(Timeout = 60000)]
+        public async Task GetOutgoingEdges_WithExistingEdges_ReturnsCorrectEdges()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -415,8 +416,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(outgoing, e => e.Id == edge2.Id);
         }
 
-        [Fact]
-        public void GetOutgoingEdges_WithNoEdges_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetOutgoingEdges_WithNoEdges_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -430,8 +431,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(outgoing);
         }
 
-        [Fact]
-        public void GetOutgoingEdges_WithNonexistentNode_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetOutgoingEdges_WithNonexistentNode_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -447,8 +448,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetIncomingEdges Tests
 
-        [Fact]
-        public void GetIncomingEdges_WithExistingEdges_ReturnsCorrectEdges()
+        [Fact(Timeout = 60000)]
+        public async Task GetIncomingEdges_WithExistingEdges_ReturnsCorrectEdges()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -475,8 +476,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(incoming, e => e.Id == edge2.Id);
         }
 
-        [Fact]
-        public void GetIncomingEdges_WithNoEdges_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetIncomingEdges_WithNoEdges_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -490,8 +491,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(incoming);
         }
 
-        [Fact]
-        public void GetIncomingEdges_WithNonexistentNode_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetIncomingEdges_WithNonexistentNode_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -507,8 +508,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNodesByLabel Tests
 
-        [Fact]
-        public void GetNodesByLabel_WithMatchingNodes_ReturnsCorrectNodes()
+        [Fact(Timeout = 60000)]
+        public async Task GetNodesByLabel_WithMatchingNodes_ReturnsCorrectNodes()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -528,8 +529,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(persons, n => n.Id == "person2");
         }
 
-        [Fact]
-        public void GetNodesByLabel_WithNoMatches_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetNodesByLabel_WithNoMatches_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -543,8 +544,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(companies);
         }
 
-        [Fact]
-        public void GetNodesByLabel_WithNonexistentLabel_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetNodesByLabel_WithNonexistentLabel_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -560,8 +561,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetAllNodes Tests
 
-        [Fact]
-        public void GetAllNodes_WithMultipleNodes_ReturnsAllNodes()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllNodes_WithMultipleNodes_ReturnsAllNodes()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -582,8 +583,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(allNodes, n => n.Id == "node3");
         }
 
-        [Fact]
-        public void GetAllNodes_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllNodes_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -599,8 +600,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetAllEdges Tests
 
-        [Fact]
-        public void GetAllEdges_WithMultipleEdges_ReturnsAllEdges()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllEdges_WithMultipleEdges_ReturnsAllEdges()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -628,8 +629,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(allEdges, e => e.Id == edge3.Id);
         }
 
-        [Fact]
-        public void GetAllEdges_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllEdges_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -645,8 +646,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllNodesAndEdges()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllNodesAndEdges()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -667,8 +668,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(store.GetAllEdges());
         }
 
-        [Fact]
-        public void Clear_OnEmptyStore_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_OnEmptyStore_DoesNotThrow()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();
@@ -683,8 +684,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Integration Tests
 
-        [Fact]
-        public void ComplexGraph_WithMultipleOperations_MaintainsConsistency()
+        [Fact(Timeout = 60000)]
+        public async Task ComplexGraph_WithMultipleOperations_MaintainsConsistency()
         {
             // Arrange
             var store = new MemoryGraphStore<double>();

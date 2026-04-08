@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LossFunctions;
 
@@ -15,8 +16,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region CTCLoss Tests
 
-    [Fact]
-    public void CTCLoss_BasicLossComputation_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_BasicLossComputation_ReturnsPositiveLoss()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0, inputsAreLogProbs: true);
@@ -46,8 +47,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss > 0, "CTC loss should be positive for non-trivial sequences");
     }
 
-    [Fact]
-    public void CTCLoss_HighProbabilityPath_ReturnsLowerLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_HighProbabilityPath_ReturnsLowerLoss()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0, inputsAreLogProbs: true);
@@ -93,8 +94,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(lossHigh < lossLow, "High probability path should have lower loss");
     }
 
-    [Fact]
-    public void CTCLoss_BlankTokenHandling_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_BlankTokenHandling_WorksCorrectly()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0, inputsAreLogProbs: true);
@@ -124,8 +125,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsInfinity(loss), "CTC loss should not be infinity");
     }
 
-    [Fact]
-    public void CTCLoss_Gradient_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_Gradient_ReturnsCorrectShape()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0, inputsAreLogProbs: true);
@@ -156,8 +157,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(logProbs.Shape[2], gradient.Shape[2]); // classes
     }
 
-    [Fact]
-    public void CTCLoss_InvalidInputs_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_InvalidInputs_ThrowsArgumentException()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0);
@@ -173,15 +174,15 @@ public class AdvancedLossFunctionsIntegrationTests
             ctcLoss.CalculateLoss(logProbs, targets, inputLengths, targetLengths));
     }
 
-    [Fact]
-    public void CTCLoss_NegativeBlankIndex_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_NegativeBlankIndex_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => new CTCLoss<double>(blankIndex: -1));
     }
 
-    [Fact]
-    public void CTCLossAdapter_BasicUsage_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLossAdapter_BasicUsage_ReturnsPositiveLoss()
     {
         // Arrange
         int numClasses = 4;
@@ -211,8 +212,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region NoiseContrastiveEstimationLoss Tests
 
-    [Fact]
-    public void NCELoss_BasicComputation_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_BasicComputation_ReturnsPositiveLoss()
     {
         // Arrange
         int numNoiseSamples = 5;
@@ -239,8 +240,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "NCE loss should not be NaN");
     }
 
-    [Fact]
-    public void NCELoss_HighTargetLowNoise_ReturnsLowLoss()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_HighTargetLowNoise_ReturnsLowLoss()
     {
         // Arrange
         int numNoiseSamples = 5;
@@ -277,8 +278,8 @@ public class AdvancedLossFunctionsIntegrationTests
             "High target / low noise should have lower loss than low target / high noise");
     }
 
-    [Fact]
-    public void NCELoss_Gradient_ReturnsCorrectShapes()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_Gradient_ReturnsCorrectShapes()
     {
         // Arrange
         int numNoiseSamples = 5;
@@ -303,8 +304,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(noiseLogits.Columns, noiseGradient.Columns);
     }
 
-    [Fact]
-    public void NCELoss_VaryingNoiseSamples_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_VaryingNoiseSamples_WorksCorrectly()
     {
         // Arrange & Act & Assert
         foreach (int numNoiseSamples in new[] { 1, 5, 10, 20 })
@@ -328,8 +329,8 @@ public class AdvancedLossFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void NCELoss_StandardInterface_ThrowsNotSupportedException()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_StandardInterface_ThrowsNotSupportedException()
     {
         // Arrange
         var nceLoss = new NoiseContrastiveEstimationLoss<double>();
@@ -341,8 +342,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Throws<NotSupportedException>(() => nceLoss.CalculateDerivative(predicted, actual));
     }
 
-    [Fact]
-    public void NCELoss_DimensionMismatch_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_DimensionMismatch_ThrowsArgumentException()
     {
         // Arrange
         var nceLoss = new NoiseContrastiveEstimationLoss<double>(5);
@@ -357,8 +358,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region PerceptualLoss Tests
 
-    [Fact]
-    public void PerceptualLoss_IdenticalImages_ReturnsZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptualLoss_IdenticalImages_ReturnsZeroLoss()
     {
         // Arrange
         // Simple feature extractor that returns the image as a single feature vector
@@ -397,8 +398,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void PerceptualLoss_DifferentImages_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptualLoss_DifferentImages_ReturnsPositiveLoss()
     {
         // Arrange
         Func<Matrix<double>, Vector<Vector<double>>> featureExtractor = (img) =>
@@ -438,8 +439,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss > 0, "Perceptual loss should be positive for different images");
     }
 
-    [Fact]
-    public void PerceptualLoss_MultipleFeatureLayers_WeightsAppliedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptualLoss_MultipleFeatureLayers_WeightsAppliedCorrectly()
     {
         // Arrange
         // Feature extractor that returns two layers of features
@@ -473,8 +474,8 @@ public class AdvancedLossFunctionsIntegrationTests
             "Equal weights should give higher loss than first-only weights");
     }
 
-    [Fact]
-    public void PerceptualLoss_StandardInterface_ThrowsNotSupportedException()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptualLoss_StandardInterface_ThrowsNotSupportedException()
     {
         // Arrange
         Func<Matrix<double>, Vector<Vector<double>>> featureExtractor = (img) =>
@@ -489,8 +490,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateDerivative(predicted, actual));
     }
 
-    [Fact]
-    public void PerceptualLoss_NullFeatureExtractor_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptualLoss_NullFeatureExtractor_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -501,8 +502,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region QuantumLoss Tests
 
-    [Fact]
-    public void QuantumLoss_IdenticalStates_ReturnsZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_IdenticalStates_ReturnsZeroLoss()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -517,8 +518,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void QuantumLoss_OrthogonalStates_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_OrthogonalStates_ReturnsPositiveLoss()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -541,8 +542,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void QuantumLoss_SuperpositionStates_ReturnsCorrectLoss()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_SuperpositionStates_ReturnsCorrectLoss()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -562,8 +563,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss < 1, "Non-orthogonal states should have loss less than 1");
     }
 
-    [Fact]
-    public void QuantumLoss_Gradient_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_Gradient_ReturnsCorrectShape()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -579,8 +580,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(predicted.Length, gradient.Length);
     }
 
-    [Fact]
-    public void QuantumLoss_ComplexAmplitudes_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_ComplexAmplitudes_HandledCorrectly()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -597,8 +598,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void QuantumLoss_DimensionMismatch_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_DimensionMismatch_ThrowsArgumentException()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();
@@ -613,8 +614,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region RotationPredictionLoss Tests
 
-    [Fact]
-    public void RotationPredictionLoss_TensorInput_Creates4RotationsPerImage()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_TensorInput_Creates4RotationsPerImage()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -637,8 +638,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4, augmentedY.Shape[1]); // 4-class one-hot
     }
 
-    [Fact]
-    public void RotationPredictionLoss_MatrixInput_Creates4RotationsPerImage()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_MatrixInput_Creates4RotationsPerImage()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -663,8 +664,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4, augmentedY.Columns); // 4-class one-hot
     }
 
-    [Fact]
-    public void RotationPredictionLoss_0DegreeRotation_PreservesImage()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_0DegreeRotation_PreservesImage()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -685,8 +686,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4.0, augmentedX[0, 1, 1, 0], Tolerance);
     }
 
-    [Fact]
-    public void RotationPredictionLoss_180DegreeRotation_FlipsImage()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_180DegreeRotation_FlipsImage()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -708,8 +709,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(1.0, augmentedX[2, 1, 1, 0], Tolerance);
     }
 
-    [Fact]
-    public void RotationPredictionLoss_OneHotLabels_CorrectlyEncoded()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_OneHotLabels_CorrectlyEncoded()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -738,8 +739,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(1.0, augmentedY[3, 3], Tolerance);
     }
 
-    [Fact]
-    public void RotationPredictionLoss_NonSquareMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -752,8 +753,8 @@ public class AdvancedLossFunctionsIntegrationTests
             rotationLoss.CreateTask<Matrix<double>, Matrix<double>>(input));
     }
 
-    [Fact]
-    public void RotationPredictionLoss_TooFewDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_TooFewDimensions_ThrowsArgumentException()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -766,8 +767,8 @@ public class AdvancedLossFunctionsIntegrationTests
             rotationLoss.CreateTask<Tensor<double>, Tensor<double>>(input));
     }
 
-    [Fact]
-    public void RotationPredictionLoss_MatrixToVectorOutput_ReturnsClassIndices()
+    [Fact(Timeout = 120000)]
+    public async Task RotationPredictionLoss_MatrixToVectorOutput_ReturnsClassIndices()
     {
         // Arrange
         var rotationLoss = new RotationPredictionLoss<double>();
@@ -789,8 +790,8 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void CTCLoss_SingleCharacterTarget_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CTCLoss_SingleCharacterTarget_WorksCorrectly()
     {
         // Arrange
         var ctcLoss = new CTCLoss<double>(blankIndex: 0, inputsAreLogProbs: true);
@@ -814,8 +815,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void NCELoss_SingleSample_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NCELoss_SingleSample_WorksCorrectly()
     {
         // Arrange
         var nceLoss = new NoiseContrastiveEstimationLoss<double>(3);
@@ -833,8 +834,8 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
-    public void QuantumLoss_NormalizedState_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLoss_NormalizedState_WorksCorrectly()
     {
         // Arrange
         var quantumLoss = new QuantumLoss<double>();

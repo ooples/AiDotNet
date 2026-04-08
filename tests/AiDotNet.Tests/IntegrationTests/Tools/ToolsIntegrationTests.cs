@@ -1,6 +1,7 @@
 using AiDotNet.Tools;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Tools;
 
@@ -13,24 +14,24 @@ public class ToolsIntegrationTests
 {
     #region CalculatorTool Tests
 
-    [Fact]
-    public void CalculatorTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Name_ReturnsCorrectName()
     {
         var tool = new CalculatorTool();
 
         Assert.Equal("Calculator", tool.Name);
     }
 
-    [Fact]
-    public void CalculatorTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Description_IsNotEmpty()
     {
         var tool = new CalculatorTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_SimpleAddition()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_SimpleAddition()
     {
         var tool = new CalculatorTool();
 
@@ -39,8 +40,8 @@ public class ToolsIntegrationTests
         Assert.Equal("4", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_SimpleSubtraction()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_SimpleSubtraction()
     {
         var tool = new CalculatorTool();
 
@@ -49,8 +50,8 @@ public class ToolsIntegrationTests
         Assert.Equal("7", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_SimpleMultiplication()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_SimpleMultiplication()
     {
         var tool = new CalculatorTool();
 
@@ -59,8 +60,8 @@ public class ToolsIntegrationTests
         Assert.Equal("20", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_SimpleDivision()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_SimpleDivision()
     {
         var tool = new CalculatorTool();
 
@@ -69,8 +70,8 @@ public class ToolsIntegrationTests
         Assert.Equal("5", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_DecimalResult()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_DecimalResult()
     {
         var tool = new CalculatorTool();
 
@@ -79,8 +80,8 @@ public class ToolsIntegrationTests
         Assert.Equal("2.5", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_ComplexExpression()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_ComplexExpression()
     {
         var tool = new CalculatorTool();
 
@@ -89,8 +90,8 @@ public class ToolsIntegrationTests
         Assert.Equal("27", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_NestedParentheses()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_NestedParentheses()
     {
         var tool = new CalculatorTool();
 
@@ -99,8 +100,8 @@ public class ToolsIntegrationTests
         Assert.Equal("15", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_NegativeNumbers()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_NegativeNumbers()
     {
         var tool = new CalculatorTool();
 
@@ -109,8 +110,8 @@ public class ToolsIntegrationTests
         Assert.Equal("5", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_DecimalInput()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_DecimalInput()
     {
         var tool = new CalculatorTool();
 
@@ -120,8 +121,8 @@ public class ToolsIntegrationTests
         Assert.True(result == "6" || result == "6.0", $"Expected '6' or '6.0' but got '{result}'");
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_LargeNumber()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_LargeNumber()
     {
         var tool = new CalculatorTool();
 
@@ -131,8 +132,8 @@ public class ToolsIntegrationTests
         Assert.Equal("1000000", result);
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_DivisionByZero_ReturnsSpecialValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_DivisionByZero_ReturnsSpecialValue()
     {
         var tool = new CalculatorTool();
 
@@ -144,8 +145,8 @@ public class ToolsIntegrationTests
             $"Expected error or infinity but got '{result}'");
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_InvalidSyntax_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_InvalidSyntax_ReturnsError()
     {
         var tool = new CalculatorTool();
 
@@ -154,8 +155,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new CalculatorTool();
 
@@ -164,8 +165,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void CalculatorTool_Execute_NonMathInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorTool_Execute_NonMathInput_ReturnsError()
     {
         var tool = new CalculatorTool();
 
@@ -178,24 +179,24 @@ public class ToolsIntegrationTests
 
     #region DataAnalysisTool Tests
 
-    [Fact]
-    public void DataAnalysisTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Name_ReturnsCorrectName()
     {
         var tool = new DataAnalysisTool();
 
         Assert.Equal("DataAnalysisTool", tool.Name);
     }
 
-    [Fact]
-    public void DataAnalysisTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Description_IsNotEmpty()
     {
         var tool = new DataAnalysisTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_ValidDataset_ReturnsAnalysis()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_ValidDataset_ReturnsAnalysis()
     {
         var tool = new DataAnalysisTool();
         var input = JsonConvert.SerializeObject(new
@@ -224,8 +225,8 @@ public class ToolsIntegrationTests
         Assert.Contains("analysis", result.ToLower());
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_SmallDataset_IncludesWarning()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_SmallDataset_IncludesWarning()
     {
         var tool = new DataAnalysisTool();
         var input = JsonConvert.SerializeObject(new
@@ -253,8 +254,8 @@ public class ToolsIntegrationTests
         // Small datasets should trigger warnings about sample size
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_MissingValues_DetectsMissingData()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_MissingValues_DetectsMissingData()
     {
         var tool = new DataAnalysisTool();
         var input = JsonConvert.SerializeObject(new
@@ -280,8 +281,8 @@ public class ToolsIntegrationTests
         Assert.Contains("missing", result.ToLower());
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_ClassificationWithDistribution_AnalyzesBalance()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_ClassificationWithDistribution_AnalyzesBalance()
     {
         var tool = new DataAnalysisTool();
         var input = JsonConvert.SerializeObject(new
@@ -311,8 +312,8 @@ public class ToolsIntegrationTests
         Assert.Contains("imbalanc", result.ToLower()); // "imbalance" or "imbalanced"
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_HighCorrelations_DetectsMulticollinearity()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_HighCorrelations_DetectsMulticollinearity()
     {
         var tool = new DataAnalysisTool();
         var input = JsonConvert.SerializeObject(new
@@ -344,8 +345,8 @@ public class ToolsIntegrationTests
         Assert.Contains("correlation", result.ToLower());
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new DataAnalysisTool();
 
@@ -354,8 +355,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void DataAnalysisTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task DataAnalysisTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new DataAnalysisTool();
 
@@ -368,24 +369,24 @@ public class ToolsIntegrationTests
 
     #region CrossValidationTool Tests
 
-    [Fact]
-    public void CrossValidationTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Name_ReturnsCorrectName()
     {
         var tool = new CrossValidationTool();
 
         Assert.Equal("CrossValidationTool", tool.Name);
     }
 
-    [Fact]
-    public void CrossValidationTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Description_IsNotEmpty()
     {
         var tool = new CrossValidationTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_StandardRegression_ReturnsStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_StandardRegression_ReturnsStrategy()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -406,8 +407,8 @@ public class ToolsIntegrationTests
         Assert.Contains("fold", result.ToLower());
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_TimeSeries_RecommendsTimeSeriesSplit()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_TimeSeries_RecommendsTimeSeriesSplit()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -427,8 +428,8 @@ public class ToolsIntegrationTests
         Assert.Contains("time", result.ToLower());
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_GroupedData_RecommendsGroupKFold()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_GroupedData_RecommendsGroupKFold()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -448,8 +449,8 @@ public class ToolsIntegrationTests
         Assert.Contains("group", result.ToLower());
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_VerySmallDataset_RecommendsLoocv()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_VerySmallDataset_RecommendsLoocv()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -469,8 +470,8 @@ public class ToolsIntegrationTests
         // Very small datasets should recommend Leave-One-Out or similar
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_ImbalancedClassification_RecommendsStratified()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_ImbalancedClassification_RecommendsStratified()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -490,8 +491,8 @@ public class ToolsIntegrationTests
         Assert.Contains("stratif", result.ToLower()); // "stratified"
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_LargeDatasetLowBudget_RecommendsHoldout()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_LargeDatasetLowBudget_RecommendsHoldout()
     {
         var tool = new CrossValidationTool();
         var input = JsonConvert.SerializeObject(new
@@ -511,8 +512,8 @@ public class ToolsIntegrationTests
         // Large datasets with low budget should get different recommendations
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new CrossValidationTool();
 
@@ -521,8 +522,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void CrossValidationTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new CrossValidationTool();
 
@@ -535,24 +536,24 @@ public class ToolsIntegrationTests
 
     #region FeatureImportanceTool Tests
 
-    [Fact]
-    public void FeatureImportanceTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Name_ReturnsCorrectName()
     {
         var tool = new FeatureImportanceTool();
 
         Assert.Equal("FeatureImportanceTool", tool.Name);
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Description_IsNotEmpty()
     {
         var tool = new FeatureImportanceTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Execute_ValidInput_ReturnsAnalysis()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Execute_ValidInput_ReturnsAnalysis()
     {
         var tool = new FeatureImportanceTool();
         var input = JsonConvert.SerializeObject(new
@@ -592,8 +593,8 @@ public class ToolsIntegrationTests
         Assert.Contains("importance", result.ToLower());
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Execute_HighCorrelatedFeatures_DetectsMulticollinearity()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Execute_HighCorrelatedFeatures_DetectsMulticollinearity()
     {
         var tool = new FeatureImportanceTool();
         var input = JsonConvert.SerializeObject(new
@@ -625,8 +626,8 @@ public class ToolsIntegrationTests
         Assert.Contains("correl", result.ToLower()); // correlation/correlated
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Execute_LowImportanceFeatures_SuggestsRemoval()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Execute_LowImportanceFeatures_SuggestsRemoval()
     {
         var tool = new FeatureImportanceTool();
         var input = JsonConvert.SerializeObject(new
@@ -658,8 +659,8 @@ public class ToolsIntegrationTests
         // Should recommend removing or investigating low importance features
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new FeatureImportanceTool();
 
@@ -668,8 +669,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void FeatureImportanceTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new FeatureImportanceTool();
 
@@ -682,24 +683,24 @@ public class ToolsIntegrationTests
 
     #region HyperparameterTool Tests
 
-    [Fact]
-    public void HyperparameterTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Name_ReturnsCorrectName()
     {
         var tool = new HyperparameterTool();
 
         Assert.Equal("HyperparameterTool", tool.Name);
     }
 
-    [Fact]
-    public void HyperparameterTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Description_IsNotEmpty()
     {
         var tool = new HyperparameterTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_RandomForest_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_RandomForest_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -718,8 +719,8 @@ public class ToolsIntegrationTests
         Assert.Contains("n_estimators", result.ToLower());
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_GradientBoosting_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_GradientBoosting_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -738,8 +739,8 @@ public class ToolsIntegrationTests
         Assert.Contains("learning_rate", result.ToLower());
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_NeuralNetwork_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_NeuralNetwork_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -758,8 +759,8 @@ public class ToolsIntegrationTests
         // Should contain neural network specific params
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_SVM_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_SVM_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -777,8 +778,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_LinearRegression_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_LinearRegression_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -796,8 +797,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_DecisionTree_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_DecisionTree_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -816,8 +817,8 @@ public class ToolsIntegrationTests
         Assert.Contains("max_depth", result.ToLower());
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_KNN_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_KNN_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -836,8 +837,8 @@ public class ToolsIntegrationTests
         Assert.Contains("n_neighbors", result.ToLower());
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_XGBoost_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_XGBoost_ReturnsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -855,8 +856,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_SmallDataset_AdjustsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_SmallDataset_AdjustsRecommendations()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -874,8 +875,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_UnknownModelType_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_UnknownModelType_HandlesGracefully()
     {
         var tool = new HyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -893,8 +894,8 @@ public class ToolsIntegrationTests
         // Should handle unknown model types gracefully
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new HyperparameterTool();
 
@@ -903,8 +904,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void HyperparameterTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new HyperparameterTool();
 
@@ -917,24 +918,24 @@ public class ToolsIntegrationTests
 
     #region RegularizationTool Tests
 
-    [Fact]
-    public void RegularizationTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Name_ReturnsCorrectName()
     {
         var tool = new RegularizationTool();
 
         Assert.Equal("RegularizationTool", tool.Name);
     }
 
-    [Fact]
-    public void RegularizationTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Description_IsNotEmpty()
     {
         var tool = new RegularizationTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_NeuralNetworkOverfitting_RecommendsRegularization()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_NeuralNetworkOverfitting_RecommendsRegularization()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -955,8 +956,8 @@ public class ToolsIntegrationTests
         Assert.Contains("dropout", result.ToLower());
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_LinearModelOverfitting_RecommendsL1L2()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_LinearModelOverfitting_RecommendsL1L2()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -977,8 +978,8 @@ public class ToolsIntegrationTests
         // Should recommend L1/L2 regularization
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_RandomForestOverfitting_RecommendsTreeConstraints()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_RandomForestOverfitting_RecommendsTreeConstraints()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -998,8 +999,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_GradientBoostingOverfitting_RecommendsEarlyStopping()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_GradientBoostingOverfitting_RecommendsEarlyStopping()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -1020,8 +1021,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_SVMOverfitting_RecommendsParameterTuning()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_SVMOverfitting_RecommendsParameterTuning()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -1043,8 +1044,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_NotOverfitting_GivesAppropriateAdvice()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_NotOverfitting_GivesAppropriateAdvice()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -1064,8 +1065,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_MildOverfitting_GivesModerateRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_MildOverfitting_GivesModerateRecommendations()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -1085,8 +1086,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_HighDimensionalData_GivesSpecificAdvice()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_HighDimensionalData_GivesSpecificAdvice()
     {
         var tool = new RegularizationTool();
         var input = JsonConvert.SerializeObject(new
@@ -1106,8 +1107,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new RegularizationTool();
 
@@ -1116,8 +1117,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void RegularizationTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task RegularizationTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new RegularizationTool();
 
@@ -1130,24 +1131,24 @@ public class ToolsIntegrationTests
 
     #region ModelSelectionTool Tests
 
-    [Fact]
-    public void ModelSelectionTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Name_ReturnsCorrectName()
     {
         var tool = new ModelSelectionTool();
 
         Assert.Equal("ModelSelectionTool", tool.Name);
     }
 
-    [Fact]
-    public void ModelSelectionTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Description_IsNotEmpty()
     {
         var tool = new ModelSelectionTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_SmallRegressionDataset_RecommendsSimpleModel()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_SmallRegressionDataset_RecommendsSimpleModel()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1169,8 +1170,8 @@ public class ToolsIntegrationTests
         // Should recommend simple models like linear regression
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_LargeClassificationDataset_RecommendsComplexModel()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_LargeClassificationDataset_RecommendsComplexModel()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1192,8 +1193,8 @@ public class ToolsIntegrationTests
         // Should recommend ensemble or deep learning models
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_DataWithOutliers_RecommendsRobustModel()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_DataWithOutliers_RecommendsRobustModel()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1215,8 +1216,8 @@ public class ToolsIntegrationTests
         // Should mention outlier-robust approaches
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_InterpretabilityRequired_RecommendsSimplerModel()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_InterpretabilityRequired_RecommendsSimplerModel()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1238,8 +1239,8 @@ public class ToolsIntegrationTests
         // Should prioritize interpretable models
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_LowComputationalBudget_RecommendsEfficientModel()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_LowComputationalBudget_RecommendsEfficientModel()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1260,8 +1261,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_DataWithMissingValues_ConsidersMissingHandling()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_DataWithMissingValues_ConsidersMissingHandling()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1283,8 +1284,8 @@ public class ToolsIntegrationTests
         // Should recommend models that handle missing values or mention imputation
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_HighDimensionalData_RecommendsAppropriateModels()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_HighDimensionalData_RecommendsAppropriateModels()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1305,8 +1306,8 @@ public class ToolsIntegrationTests
         Assert.False(result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase), $"Got error: {result}");
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_ModerateDataset_RecommendsMultipleOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_ModerateDataset_RecommendsMultipleOptions()
     {
         var tool = new ModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1328,8 +1329,8 @@ public class ToolsIntegrationTests
         // Should provide multiple model options
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new ModelSelectionTool();
 
@@ -1338,8 +1339,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void ModelSelectionTool_Execute_InvalidJson_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSelectionTool_Execute_InvalidJson_ReturnsError()
     {
         var tool = new ModelSelectionTool();
 
@@ -1352,24 +1353,24 @@ public class ToolsIntegrationTests
 
     #region ThreeDHyperparameterTool Tests
 
-    [Fact]
-    public void ThreeDHyperparameterTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDHyperparameterTool_Name_ReturnsCorrectName()
     {
         var tool = new ThreeDHyperparameterTool();
 
         Assert.Equal("ThreeDHyperparameterTool", tool.Name);
     }
 
-    [Fact]
-    public void ThreeDHyperparameterTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDHyperparameterTool_Description_IsNotEmpty()
     {
         var tool = new ThreeDHyperparameterTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void ThreeDHyperparameterTool_Execute_ValidInput_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDHyperparameterTool_Execute_ValidInput_ReturnsRecommendations()
     {
         var tool = new ThreeDHyperparameterTool();
         var input = JsonConvert.SerializeObject(new
@@ -1387,8 +1388,8 @@ public class ToolsIntegrationTests
         // Should return recommendations for 3D model hyperparameters
     }
 
-    [Fact]
-    public void ThreeDHyperparameterTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDHyperparameterTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new ThreeDHyperparameterTool();
 
@@ -1401,24 +1402,24 @@ public class ToolsIntegrationTests
 
     #region ThreeDModelSelectionTool Tests
 
-    [Fact]
-    public void ThreeDModelSelectionTool_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDModelSelectionTool_Name_ReturnsCorrectName()
     {
         var tool = new ThreeDModelSelectionTool();
 
         Assert.Equal("ThreeDModelSelectionTool", tool.Name);
     }
 
-    [Fact]
-    public void ThreeDModelSelectionTool_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDModelSelectionTool_Description_IsNotEmpty()
     {
         var tool = new ThreeDModelSelectionTool();
 
         Assert.False(string.IsNullOrWhiteSpace(tool.Description));
     }
 
-    [Fact]
-    public void ThreeDModelSelectionTool_Execute_ValidInput_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDModelSelectionTool_Execute_ValidInput_ReturnsRecommendations()
     {
         var tool = new ThreeDModelSelectionTool();
         var input = JsonConvert.SerializeObject(new
@@ -1437,8 +1438,8 @@ public class ToolsIntegrationTests
         // Should return 3D model selection recommendations
     }
 
-    [Fact]
-    public void ThreeDModelSelectionTool_Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ThreeDModelSelectionTool_Execute_EmptyInput_ReturnsError()
     {
         var tool = new ThreeDModelSelectionTool();
 
@@ -1451,8 +1452,8 @@ public class ToolsIntegrationTests
 
     #region ToolBase Helper Methods Tests (via DataAnalysisTool)
 
-    [Fact]
-    public void ToolBase_Execute_NullInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ToolBase_Execute_NullInput_ReturnsError()
     {
         var tool = new DataAnalysisTool();
 
@@ -1461,8 +1462,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void ToolBase_Execute_WhitespaceInput_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task ToolBase_Execute_WhitespaceInput_ReturnsError()
     {
         var tool = new DataAnalysisTool();
 
@@ -1471,8 +1472,8 @@ public class ToolsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
-    public void ToolBase_Execute_MalformedJson_ReturnsJsonError()
+    [Fact(Timeout = 120000)]
+    public async Task ToolBase_Execute_MalformedJson_ReturnsJsonError()
     {
         var tool = new DataAnalysisTool();
 

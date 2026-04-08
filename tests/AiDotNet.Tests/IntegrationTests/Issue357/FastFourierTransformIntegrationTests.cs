@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Issue357;
 
@@ -15,8 +16,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Forward Transform
 
-    [Fact]
-    public void FFT_Forward_ConstantSignal_HasOnlyDCComponent()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_ConstantSignal_HasOnlyDCComponent()
     {
         // A constant signal should have all energy in the DC (first) component
         var fft = new FastFourierTransform<double>();
@@ -35,8 +36,8 @@ public class FastFourierTransformIntegrationTests
         }
     }
 
-    [Fact]
-    public void FFT_Forward_AlternatingSignal_HasOnlyNyquistComponent()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_AlternatingSignal_HasOnlyNyquistComponent()
     {
         // Signal alternating between +1 and -1 has all energy at Nyquist frequency
         var fft = new FastFourierTransform<double>();
@@ -52,8 +53,8 @@ public class FastFourierTransformIntegrationTests
         Assert.True(spectrum[nyquist].Magnitude > 0);
     }
 
-    [Fact]
-    public void FFT_Forward_SinglePulse_HasFlatMagnitudeSpectrum()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_SinglePulse_HasFlatMagnitudeSpectrum()
     {
         // A single pulse (impulse) should have equal magnitude across all frequencies
         var fft = new FastFourierTransform<double>();
@@ -90,8 +91,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Inverse Transform
 
-    [Fact]
-    public void FFT_Inverse_DCOnlySpectrum_ProducesConstantSignal()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Inverse_DCOnlySpectrum_ProducesConstantSignal()
     {
         var fft = new FastFourierTransform<double>();
         var spectrum = new Vector<Complex<double>>(4);
@@ -113,8 +114,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Round-Trip (Forward then Inverse)
 
-    [Fact]
-    public void FFT_RoundTrip_PreservesSignal()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_RoundTrip_PreservesSignal()
     {
         var fft = new FastFourierTransform<double>();
         var original = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -128,8 +129,8 @@ public class FastFourierTransformIntegrationTests
         }
     }
 
-    [Fact]
-    public void FFT_RoundTrip_SinusoidalSignal_PreservesSignal()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_RoundTrip_SinusoidalSignal_PreservesSignal()
     {
         var fft = new FastFourierTransform<double>();
         int n = 16;
@@ -179,8 +180,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Parseval's Theorem
 
-    [Fact]
-    public void FFT_ParsevalsTheorem_EnergyPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_ParsevalsTheorem_EnergyPreserved()
     {
         // Parseval's theorem: sum(|x[n]|^2) = (1/N) * sum(|X[k]|^2)
         var fft = new FastFourierTransform<double>();
@@ -210,8 +211,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Linearity
 
-    [Fact]
-    public void FFT_Linearity_SumOfSignalsEqualsSumOfTransforms()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Linearity_SumOfSignalsEqualsSumOfTransforms()
     {
         var fft = new FastFourierTransform<double>();
         var signal1 = new Vector<double>(new double[] { 1, 2, 3, 4 });
@@ -238,8 +239,8 @@ public class FastFourierTransformIntegrationTests
         }
     }
 
-    [Fact]
-    public void FFT_Linearity_ScaledSignalEqualsScaledTransform()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Linearity_ScaledSignalEqualsScaledTransform()
     {
         var fft = new FastFourierTransform<double>();
         double scale = 3.0;
@@ -268,8 +269,8 @@ public class FastFourierTransformIntegrationTests
 
     #region Conjugate Symmetry for Real Signals
 
-    [Fact]
-    public void FFT_RealSignal_HasConjugateSymmetry()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_RealSignal_HasConjugateSymmetry()
     {
         // For real signals: X[k] = conj(X[N-k])
         var fft = new FastFourierTransform<double>();

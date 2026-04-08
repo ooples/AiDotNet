@@ -9,8 +9,8 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class VideoBenchmarkTests
 {
-    [Fact]
-    public void Kinetics400Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Kinetics400Options_DefaultValues()
     {
         var options = new Kinetics400DataLoaderOptions();
         Assert.Equal(16, options.FramesPerVideo);
@@ -19,31 +19,31 @@ public class VideoBenchmarkTests
         Assert.True(options.Normalize);
     }
 
-    [Fact]
-    public void Hmdb51Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Hmdb51Options_DefaultValues()
     {
         var options = new Hmdb51DataLoaderOptions();
         Assert.Equal(16, options.FramesPerVideo);
         Assert.Equal(1, options.SplitNumber);
     }
 
-    [Fact]
-    public void Ucf101Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Ucf101Options_DefaultValues()
     {
         var options = new Ucf101DataLoaderOptions();
         Assert.Equal(16, options.FramesPerVideo);
         Assert.Equal(1, options.SplitNumber);
     }
 
-    [Fact]
-    public void SomethingSomethingV2Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SomethingSomethingV2Options_DefaultValues()
     {
         var options = new SomethingSomethingV2DataLoaderOptions();
         Assert.Equal(16, options.FramesPerVideo);
         Assert.Equal(224, options.FrameWidth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Kinetics400DataLoader_LoadsFrameData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "k400_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -88,8 +88,8 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact]
-    public void TemporalSegmentSampler_SamplesCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalSegmentSampler_SamplesCorrectCount()
     {
         var sampler = new TemporalSegmentSampler(seed: 42);
         int[] indices = sampler.SampleFrameIndices(100, 8);
@@ -101,8 +101,8 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact]
-    public void DenseSampler_SamplesUniformly()
+    [Fact(Timeout = 120000)]
+    public async Task DenseSampler_SamplesUniformly()
     {
         var sampler = new DenseSampler();
         int[] indices = sampler.SampleFrameIndices(100, 10);
@@ -116,8 +116,8 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact]
-    public void SlowFastSampler_ProducesDualRateIndices()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFastSampler_ProducesDualRateIndices()
     {
         var sampler = new SlowFastSampler(alpha: 4);
         int[] indices = sampler.SampleFrameIndices(64, 8);
@@ -131,8 +131,8 @@ public class VideoBenchmarkTests
         }
     }
 
-    [Fact]
-    public void TemporalJitterAugmentation_TypeExists()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalJitterAugmentation_TypeExists()
     {
         var type = typeof(AiDotNet.Data.Transforms.TemporalJitterAugmentation<double>);
         Assert.NotNull(type);

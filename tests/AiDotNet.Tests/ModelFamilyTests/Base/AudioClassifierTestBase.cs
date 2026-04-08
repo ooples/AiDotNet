@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class AudioClassifierTestBase : AudioNNModelTestBase
 {
-    [Fact]
-    public void ClassOutput_ShouldBeNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ClassOutput_ShouldBeNonNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -26,8 +27,8 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
         }
     }
 
-    [Fact]
-    public void SilenceClassification_ShouldNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task SilenceClassification_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var silence = CreateConstantTensor(InputShape, 0.0);

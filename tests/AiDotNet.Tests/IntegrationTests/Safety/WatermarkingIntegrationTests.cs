@@ -3,6 +3,7 @@ using AiDotNet.Safety.Watermarking;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -15,8 +16,8 @@ public class WatermarkingIntegrationTests
 {
     #region TextWatermarker Tests
 
-    [Fact]
-    public void TextWatermarker_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task TextWatermarker_DetectsWatermark()
     {
         var watermarker = new TextWatermarker<double>();
         var findings = watermarker.EvaluateText(
@@ -25,8 +26,8 @@ public class WatermarkingIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void TextWatermarker_ShortText_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task TextWatermarker_ShortText_HandlesGracefully()
     {
         var watermarker = new TextWatermarker<double>();
         var findings = watermarker.EvaluateText("Short text");
@@ -38,8 +39,8 @@ public class WatermarkingIntegrationTests
 
     #region SamplingWatermarker Tests
 
-    [Fact]
-    public void Sampling_DetectsWatermarkPattern()
+    [Fact(Timeout = 120000)]
+    public async Task Sampling_DetectsWatermarkPattern()
     {
         var watermarker = new SamplingWatermarker<double>();
         var score = watermarker.DetectWatermark(
@@ -48,8 +49,8 @@ public class WatermarkingIntegrationTests
         Assert.True(score >= 0 && score <= 1);
     }
 
-    [Fact]
-    public void Sampling_CustomVocabSize_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Sampling_CustomVocabSize_Works()
     {
         var watermarker = new SamplingWatermarker<double>(
             watermarkStrength: 0.7, vocabSize: 10000, greenListFraction: 0.3);
@@ -63,8 +64,8 @@ public class WatermarkingIntegrationTests
 
     #region LexicalWatermarker Tests
 
-    [Fact]
-    public void Lexical_DetectsWatermarkPattern()
+    [Fact(Timeout = 120000)]
+    public async Task Lexical_DetectsWatermarkPattern()
     {
         var watermarker = new LexicalWatermarker<double>();
         var score = watermarker.DetectWatermark(
@@ -77,8 +78,8 @@ public class WatermarkingIntegrationTests
 
     #region SyntacticWatermarker Tests
 
-    [Fact]
-    public void Syntactic_DetectsWatermarkPattern()
+    [Fact(Timeout = 120000)]
+    public async Task Syntactic_DetectsWatermarkPattern()
     {
         var watermarker = new SyntacticWatermarker<double>();
         var score = watermarker.DetectWatermark(
@@ -91,8 +92,8 @@ public class WatermarkingIntegrationTests
 
     #region ImageWatermarker Tests
 
-    [Fact]
-    public void ImageWatermarker_ProcessesTensor()
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_ProcessesTensor()
     {
         var watermarker = new ImageWatermarker<double>();
         var tensor = CreateRandomImageTensor(3, 16, 16);
@@ -105,8 +106,8 @@ public class WatermarkingIntegrationTests
 
     #region FrequencyImageWatermarker Tests
 
-    [Fact]
-    public void FrequencyImage_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task FrequencyImage_DetectsWatermark()
     {
         var watermarker = new FrequencyImageWatermarker<double>();
         var tensor = CreateRandomImageTensor(3, 32, 32);
@@ -119,8 +120,8 @@ public class WatermarkingIntegrationTests
 
     #region NeuralImageWatermarker Tests
 
-    [Fact]
-    public void NeuralImage_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralImage_DetectsWatermark()
     {
         var watermarker = new NeuralImageWatermarker<double>();
         var tensor = CreateRandomImageTensor(3, 32, 32);
@@ -133,8 +134,8 @@ public class WatermarkingIntegrationTests
 
     #region InvisibleImageWatermarker Tests
 
-    [Fact]
-    public void InvisibleImage_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task InvisibleImage_DetectsWatermark()
     {
         var watermarker = new InvisibleImageWatermarker<double>();
         var tensor = CreateRandomImageTensor(3, 32, 32);
@@ -143,8 +144,8 @@ public class WatermarkingIntegrationTests
         Assert.True(score >= 0 && score <= 1);
     }
 
-    [Fact]
-    public void InvisibleImage_CustomStrength_Works()
+    [Fact(Timeout = 120000)]
+    public async Task InvisibleImage_CustomStrength_Works()
     {
         var watermarker = new InvisibleImageWatermarker<double>(watermarkStrength: 0.1);
         var tensor = CreateRandomImageTensor(3, 16, 16);
@@ -157,8 +158,8 @@ public class WatermarkingIntegrationTests
 
     #region AudioWatermarker Tests
 
-    [Fact]
-    public void AudioWatermarker_ProcessesAudio()
+    [Fact(Timeout = 120000)]
+    public async Task AudioWatermarker_ProcessesAudio()
     {
         var watermarker = new AudioWatermarker<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -171,8 +172,8 @@ public class WatermarkingIntegrationTests
 
     #region SpectralAudioWatermarker Tests
 
-    [Fact]
-    public void SpectralAudio_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralAudio_DetectsWatermark()
     {
         var watermarker = new SpectralAudioWatermarker<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -185,8 +186,8 @@ public class WatermarkingIntegrationTests
 
     #region AudioSealWatermarker Tests
 
-    [Fact]
-    public void AudioSeal_DetectsWatermark()
+    [Fact(Timeout = 120000)]
+    public async Task AudioSeal_DetectsWatermark()
     {
         var watermarker = new AudioSealWatermarker<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -195,8 +196,8 @@ public class WatermarkingIntegrationTests
         Assert.True(score >= 0 && score <= 1);
     }
 
-    [Fact]
-    public void AudioSeal_CustomSegmentSize_Works()
+    [Fact(Timeout = 120000)]
+    public async Task AudioSeal_CustomSegmentSize_Works()
     {
         var watermarker = new AudioSealWatermarker<double>(
             watermarkStrength: 0.7, segmentSamples: 2048);
@@ -210,8 +211,8 @@ public class WatermarkingIntegrationTests
 
     #region WatermarkDetector (Composite) Tests
 
-    [Fact]
-    public void Detector_TextAnalysis_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Detector_TextAnalysis_ProcessesWithoutError()
     {
         var detector = new WatermarkDetector<double>();
         var findings = detector.EvaluateText(
@@ -224,8 +225,8 @@ public class WatermarkingIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllTextWatermarkers_SameText_ProduceScores()
+    [Fact(Timeout = 120000)]
+    public async Task AllTextWatermarkers_SameText_ProduceScores()
     {
         var text = "A moderately long piece of text that is suitable for watermark detection analysis";
 
@@ -238,8 +239,8 @@ public class WatermarkingIntegrationTests
         Assert.True(syntactic >= 0 && syntactic <= 1);
     }
 
-    [Fact]
-    public void AllImageWatermarkers_SameTensor_ProduceScores()
+    [Fact(Timeout = 120000)]
+    public async Task AllImageWatermarkers_SameTensor_ProduceScores()
     {
         var tensor = CreateRandomImageTensor(3, 32, 32);
 
@@ -252,8 +253,8 @@ public class WatermarkingIntegrationTests
         Assert.True(invisible >= 0 && invisible <= 1);
     }
 
-    [Fact]
-    public void AllAudioWatermarkers_SameAudio_ProduceScores()
+    [Fact(Timeout = 120000)]
+    public async Task AllAudioWatermarkers_SameAudio_ProduceScores()
     {
         var audio = GenerateSineWave(16000, 440.0, 16000);
 

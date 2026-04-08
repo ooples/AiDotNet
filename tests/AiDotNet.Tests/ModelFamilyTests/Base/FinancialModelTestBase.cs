@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -18,8 +19,8 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // must always be finite. NaN/Inf in financial output is catastrophic.
     // =====================================================
 
-    [Fact]
-    public void FinancialPredictions_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task FinancialPredictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -41,8 +42,8 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // A financial model that ignores its input data is useless.
     // =====================================================
 
-    [Fact]
-    public void DifferentMarketData_DifferentPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task DifferentMarketData_DifferentPredictions()
     {
         var network = CreateNetwork();
 
@@ -73,8 +74,8 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // cause catastrophic trading decisions.
     // =====================================================
 
-    [Fact]
-    public void Output_ShouldBeBounded()
+    [Fact(Timeout = 60000)]
+    public async Task Output_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -94,8 +95,8 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     // A market with no data/activity is a valid edge case.
     // =====================================================
 
-    [Fact]
-    public void ZeroInput_ShouldNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var zeroInput = CreateConstantTensor(InputShape, 0.0);

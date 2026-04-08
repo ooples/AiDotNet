@@ -2,6 +2,7 @@ using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Serving.ContinuousBatching;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Serving;
 
@@ -12,8 +13,8 @@ public class ContinuousBatchingTests
 {
     #region SequenceState Tests
 
-    [Fact]
-    public void SequenceState_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_InitializesCorrectly()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -36,8 +37,8 @@ public class ContinuousBatchingTests
         Assert.False(state.PrefillComplete);
     }
 
-    [Fact]
-    public void SequenceState_AppendToken_UpdatesState()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_AppendToken_UpdatesState()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -59,8 +60,8 @@ public class ContinuousBatchingTests
         Assert.Equal(-3.5, state.CumulativeLogProb, 5);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_MaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_ShouldStop_MaxLength()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -80,8 +81,8 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.MaxLength, state.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_EndOfSequence()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_ShouldStop_EndOfSequence()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -100,8 +101,8 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.EndOfSequence, state.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_StopToken()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_ShouldStop_StopToken()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -121,8 +122,8 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.StopToken, state.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_Complete_SetsStatus()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_Complete_SetsStatus()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -140,8 +141,8 @@ public class ContinuousBatchingTests
         Assert.NotNull(state.CompletedAt);
     }
 
-    [Fact]
-    public void SequenceState_Cancel_SetsStatus()
+    [Fact(Timeout = 60000)]
+    public async Task SequenceState_Cancel_SetsStatus()
     {
         // Arrange
         var request = new GenerationRequest<float>
@@ -163,8 +164,8 @@ public class ContinuousBatchingTests
 
     #region BatchScheduler Tests
 
-    [Fact]
-    public void BatchScheduler_AddSequence_AddsToQueue()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_AddSequence_AddsToQueue()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 4 });
@@ -182,8 +183,8 @@ public class ContinuousBatchingTests
         Assert.Equal(0, scheduler.RunningCount);
     }
 
-    [Fact]
-    public void BatchScheduler_ScheduleNextBatch_ReturnsSequences()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_ScheduleNextBatch_ReturnsSequences()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 4 });
@@ -205,8 +206,8 @@ public class ContinuousBatchingTests
         Assert.Equal(3, scheduler.RunningCount);
     }
 
-    [Fact]
-    public void BatchScheduler_ScheduleNextBatch_RespectsMaxBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_ScheduleNextBatch_RespectsMaxBatchSize()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 2 });
@@ -228,8 +229,8 @@ public class ContinuousBatchingTests
         Assert.Equal(2, scheduler.RunningCount);
     }
 
-    [Fact]
-    public void BatchScheduler_ScheduleNextBatch_AssignsBatchIndices()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_ScheduleNextBatch_AssignsBatchIndices()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 4 });
@@ -252,8 +253,8 @@ public class ContinuousBatchingTests
         }
     }
 
-    [Fact]
-    public void BatchScheduler_PriorityScheduling_HighPriorityFirst()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_PriorityScheduling_HighPriorityFirst()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig
@@ -284,8 +285,8 @@ public class ContinuousBatchingTests
         Assert.Equal(10, batch[0].Priority);
     }
 
-    [Fact]
-    public void BatchScheduler_CompleteSequence_RemovesFromRunning()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_CompleteSequence_RemovesFromRunning()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 4 });
@@ -303,8 +304,8 @@ public class ContinuousBatchingTests
         Assert.Equal(0, scheduler.RunningCount);
     }
 
-    [Fact]
-    public void BatchScheduler_PreemptSequence_MovesToPreempted()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_PreemptSequence_MovesToPreempted()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig
@@ -328,8 +329,8 @@ public class ContinuousBatchingTests
         Assert.Equal(SequenceStatus.Paused, batch[0].Status);
     }
 
-    [Fact]
-    public void BatchScheduler_ResumePreempted_PrioritizesPreempted()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_ResumePreempted_PrioritizesPreempted()
     {
         // Arrange
         var config = new BatchSchedulerConfig
@@ -366,8 +367,8 @@ public class ContinuousBatchingTests
         Assert.Equal(first.SequenceId, batch[0].SequenceId);
     }
 
-    [Fact]
-    public void BatchScheduler_GetStatistics_ReturnsCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task BatchScheduler_GetStatistics_ReturnsCorrectValues()
     {
         // Arrange
         var scheduler = new BatchScheduler<float>(new BatchSchedulerConfig { MaxBatchSize = 4 });
@@ -394,8 +395,8 @@ public class ContinuousBatchingTests
 
     #region ContinuousBatcher Tests
 
-    [Fact]
-    public void ContinuousBatcher_Creation_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcher_Creation_Succeeds()
     {
         // Arrange & Act
         using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
@@ -408,8 +409,8 @@ public class ContinuousBatchingTests
         Assert.Equal(0, batcher.PendingRequestCount);
     }
 
-    [Fact]
-    public void ContinuousBatcher_Step_ProcessesSequences()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcher_Step_ProcessesSequences()
     {
         // Arrange
         var config = new ContinuousBatcherConfig
@@ -451,8 +452,8 @@ public class ContinuousBatchingTests
         Assert.True(tokensGenerated >= 0);
     }
 
-    [Fact]
-    public void ContinuousBatcher_GetStatistics_ReturnsValidData()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcher_GetStatistics_ReturnsValidData()
     {
         // Arrange
         using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
@@ -469,7 +470,7 @@ public class ContinuousBatchingTests
         Assert.Equal(0, stats.TotalRequestsProcessed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ContinuousBatcher_StartStop_Works()
     {
         // Arrange
@@ -489,7 +490,7 @@ public class ContinuousBatchingTests
         Assert.False(isNowRunning);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ContinuousBatcher_GenerateAsync_ReturnsCancellableTask()
     {
         // Arrange
@@ -518,8 +519,8 @@ public class ContinuousBatchingTests
 
     #region Configuration Tests
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_ReturnsCorrectConfig()
+    [Fact(Timeout = 60000)]
+    public async Task BatchSchedulerConfig_ForModel_ReturnsCorrectConfig()
     {
         // Act
         var llama7b = BatchSchedulerConfig.ForModel("llama-7b");
@@ -534,8 +535,8 @@ public class ContinuousBatchingTests
         Assert.True(llama70b.MaxBatchSize <= 4); // Reduced for large model
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_ForModel_ReturnsCorrectConfig()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcherConfig_ForModel_ReturnsCorrectConfig()
     {
         // Act
         var config = ContinuousBatcherConfig.ForModel("llama-7b");
@@ -545,8 +546,8 @@ public class ContinuousBatchingTests
         Assert.Equal(32, config.SchedulerConfig.NumHeads);
     }
 
-    [Fact]
-    public void GenerationRequest_DefaultValues_AreReasonable()
+    [Fact(Timeout = 60000)]
+    public async Task GenerationRequest_DefaultValues_AreReasonable()
     {
         // Arrange & Act
         var request = new GenerationRequest<float>();
@@ -564,8 +565,8 @@ public class ContinuousBatchingTests
 
     #region Event Tests
 
-    [Fact]
-    public void ContinuousBatcher_SequenceCompleted_EventFires()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcher_SequenceCompleted_EventFires()
     {
         // Arrange
         var config = new ContinuousBatcherConfig

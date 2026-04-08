@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -48,8 +49,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidPath_CreatesStoreAndDirectory()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidPath_CreatesStoreAndDirectory()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -63,22 +64,22 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, store.EdgeCount);
         }
 
-        [Fact]
-        public void Constructor_WithNullPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullPath_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(null!));
         }
 
-        [Fact]
-        public void Constructor_WithEmptyPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyPath_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(""));
         }
 
-        [Fact]
-        public void Constructor_CreatesRequiredFiles()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_CreatesRequiredFiles()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddNode Tests
 
-        [Fact]
-        public void AddNode_WithValidNode_IncreasesNodeCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithValidNode_IncreasesNodeCount()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -114,8 +115,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.NodeCount);
         }
 
-        [Fact]
-        public void AddNode_WithNullNode_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithNullNode_ThrowsArgumentNullException()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -125,8 +126,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddNode(null!));
         }
 
-        [Fact]
-        public void AddNode_WithProperties_PersistsProperties()
+        [Fact(Timeout = 60000)]
+        public async Task AddNode_WithProperties_PersistsProperties()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddEdge Tests
 
-        [Fact]
-        public void AddEdge_WithValidEdge_IncreasesEdgeCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithValidEdge_IncreasesEdgeCount()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.EdgeCount);
         }
 
-        [Fact]
-        public void AddEdge_WithNullEdge_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithNullEdge_ThrowsArgumentNullException()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddEdge(null!));
         }
 
-        [Fact]
-        public void AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNode Tests
 
-        [Fact]
-        public void GetNode_WithExistingId_ReturnsNode()
+        [Fact(Timeout = 60000)]
+        public async Task GetNode_WithExistingId_ReturnsNode()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -221,8 +222,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("PERSON", retrieved.Label);
         }
 
-        [Fact]
-        public void GetNode_WithNonexistentId_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetNode_WithNonexistentId_ReturnsNull()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -239,8 +240,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Persistence Tests
 
-        [Fact]
-        public void Persistence_NodesAndEdges_SurviveRestart()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_NodesAndEdges_SurviveRestart()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -287,8 +288,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Persistence_LabelIndices_RebuildCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_LabelIndices_RebuildCorrectly()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -312,8 +313,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Persistence_EdgeIndices_RebuildCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_EdgeIndices_RebuildCorrectly()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -346,8 +347,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveNode Tests
 
-        [Fact]
-        public void RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -364,8 +365,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("node1"));
         }
 
-        [Fact]
-        public void RemoveNode_RemovesAllConnectedEdges()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_RemovesAllConnectedEdges()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -395,8 +396,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetEdge(edge2.Id));
         }
 
-        [Fact]
-        public void RemoveNode_Persists_AfterReload()
+        [Fact(Timeout = 60000)]
+        public async Task RemoveNode_Persists_AfterReload()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -422,8 +423,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllNodesAndEdges()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllNodesAndEdges()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -445,8 +446,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(store.GetAllEdges());
         }
 
-        [Fact]
-        public void Clear_DeletesDataFiles()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_DeletesDataFiles()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -469,8 +470,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Integration Tests
 
-        [Fact]
-        public void ComplexGraph_WithMultipleOperations_MaintainsConsistency()
+        [Fact(Timeout = 60000)]
+        public async Task ComplexGraph_WithMultipleOperations_MaintainsConsistency()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -524,8 +525,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void LargeGraph_WithHundredsOfNodes_PerformsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task LargeGraph_WithHundredsOfNodes_PerformsCorrectly()
         {
             // Arrange
             var storagePath = GetTestStoragePath();
@@ -575,8 +576,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region KnowledgeGraph Integration Test
 
-        [Fact]
-        public void KnowledgeGraph_WithFileGraphStore_PersistsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task KnowledgeGraph_WithFileGraphStore_PersistsCorrectly()
         {
             // Arrange
             var storagePath = GetTestStoragePath();

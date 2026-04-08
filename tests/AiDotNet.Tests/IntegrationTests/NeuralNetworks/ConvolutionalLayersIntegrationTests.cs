@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -17,8 +18,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact]
-    public void ConvolutionalLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: 3 channels, 8x8 image, 16 filters, 3x3 kernel
         var layer = new ConvolutionalLayer<double>(
@@ -40,8 +41,8 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_Forward_WithStride2_ReducesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Forward_WithStride2_ReducesDimensions()
     {
         // Arrange: stride=2 should halve the spatial dimensions
         var layer = new ConvolutionalLayer<double>(
@@ -60,8 +61,8 @@ public class ConvolutionalLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new ConvolutionalLayer<double>(
@@ -83,8 +84,8 @@ public class ConvolutionalLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ConvolutionalLayer_LargeKernel_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_LargeKernel_ProducesValidOutput()
     {
         // Arrange: 5x5 kernel
         var layer = new ConvolutionalLayer<double>(
@@ -107,8 +108,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Conv3DLayer Tests
 
-    [Fact]
-    public void Conv3DLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Conv3DLayer_Forward_ProducesValidOutput()
     {
         // Arrange: 3D convolution for volumetric data (e.g., video, medical imaging)
         // Input: [channels, depth, height, width]
@@ -135,8 +136,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region DilatedConvolutionalLayer Tests
 
-    [Fact]
-    public void DilatedConvolutionalLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: dilation=2 increases receptive field without increasing parameters
         // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
@@ -158,8 +159,8 @@ public class ConvolutionalLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void DilatedConvolutionalLayer_LargeDilation_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_LargeDilation_ProducesValidOutput()
     {
         // Arrange: dilation=4 for very large receptive field
         IActivationFunction<double> relu = new ReLUActivation<double>();
@@ -182,8 +183,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region DepthwiseSeparableConvolutionalLayer Tests
 
-    [Fact]
-    public void DepthwiseSeparableConvolutionalLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: efficient convolution used in MobileNet
         // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
@@ -209,8 +210,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region SeparableConvolutionalLayer Tests
 
-    [Fact]
-    public void SeparableConvolutionalLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange - inputShape is [batch, height, width, channels]
         int[] inputShape = [1, 8, 8, 3];
@@ -234,8 +235,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region SubpixelConvolutionalLayer Tests
 
-    [Fact]
-    public void SubpixelConvolutionalLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SubpixelConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: upscale by 2x (commonly used for super-resolution)
         // Constructor: (inputDepth, outputDepth, upscaleFactor, kernelSize, inputHeight, inputWidth, activation)
@@ -263,8 +264,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void ConvolutionalLayer_SingleChannel_SingleFilter_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_SingleChannel_SingleFilter_Works()
     {
         // Arrange: minimal configuration
         var layer = new ConvolutionalLayer<double>(
@@ -283,8 +284,8 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_NoPadding_ReducesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_NoPadding_ReducesDimensions()
     {
         // Arrange: without padding, 3x3 kernel reduces each dimension by 2
         var layer = new ConvolutionalLayer<double>(
@@ -302,8 +303,8 @@ public class ConvolutionalLayersIntegrationTests
         Assert.Equal(6, output.Shape[2]);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_ManyFilters_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ManyFilters_Works()
     {
         // Arrange: 64 filters as commonly used in CNNs
         var layer = new ConvolutionalLayer<double>(
@@ -324,8 +325,8 @@ public class ConvolutionalLayersIntegrationTests
 
     #region Activation Function Tests
 
-    [Fact]
-    public void ConvolutionalLayer_WithReLU_ProducesNonNegativeOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
         IActivationFunction<double> relu = new ReLUActivation<double>();
@@ -345,8 +346,8 @@ public class ConvolutionalLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ConvolutionalLayer_WithTanh_ProducesOutputInRange()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_WithTanh_ProducesOutputInRange()
     {
         // Arrange
         IActivationFunction<double> tanh = new TanhActivation<double>();

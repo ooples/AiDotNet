@@ -1,6 +1,7 @@
 using AiDotNet.Inference;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
@@ -73,8 +74,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Basic Append and Retrieve
     // ============================
 
-    [Fact]
-    public void Append_SingleToken_RetrievesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Append_SingleToken_RetrievesCorrectly()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8);
         var keys = CreateKVTensor(1, 1, 1, 2, 3.14);
@@ -89,8 +90,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(2.71, cachedValues[new[] { 0, 0, 0, 1 }], Tolerance);
     }
 
-    [Fact]
-    public void Append_MultipleTokens_AccumulatesInCache()
+    [Fact(Timeout = 120000)]
+    public async Task Append_MultipleTokens_AccumulatesInCache()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8);
 
@@ -112,8 +113,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(20.0, cachedValues[new[] { 0, 0, 1, 0 }], Tolerance);
     }
 
-    [Fact]
-    public void Append_IdentifiableValues_PreservesOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Append_IdentifiableValues_PreservesOrder()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 2, headDim: 3, maxSeqLen: 8);
 
@@ -140,8 +141,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Sequence Length Tracking
     // ============================
 
-    [Fact]
-    public void SequenceLength_IncreasesWithEachAppend()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceLength_IncreasesWithEachAppend()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
 
@@ -163,8 +164,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(5, cache.GetSequenceLength(0));
     }
 
-    [Fact]
-    public void CurrentLength_MatchesSequenceLength()
+    [Fact(Timeout = 120000)]
+    public async Task CurrentLength_MatchesSequenceLength()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
         var k = CreateKVTensor(1, 1, 1, 2, 1.0);
@@ -179,8 +180,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Multi-Layer Tests
     // ============================
 
-    [Fact]
-    public void MultiLayer_IndependentCaches()
+    [Fact(Timeout = 120000)]
+    public async Task MultiLayer_IndependentCaches()
     {
         var cache = CreateCache(numLayers: 3, numHeads: 1, headDim: 2, maxSeqLen: 8);
 
@@ -205,8 +206,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Truncation Tests
     // ============================
 
-    [Fact]
-    public void Truncate_ReducesSequenceLength()
+    [Fact(Timeout = 120000)]
+    public async Task Truncate_ReducesSequenceLength()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
 
@@ -229,8 +230,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(3, keys.Shape[2]);
     }
 
-    [Fact]
-    public void Truncate_ToZero_Clears()
+    [Fact(Timeout = 120000)]
+    public async Task Truncate_ToZero_Clears()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
 
@@ -247,8 +248,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Clear Tests
     // ============================
 
-    [Fact]
-    public void Clear_ResetsAllSequenceLengths()
+    [Fact(Timeout = 120000)]
+    public async Task Clear_ResetsAllSequenceLengths()
     {
         var cache = CreateCache(numLayers: 2, numHeads: 1, headDim: 2, maxSeqLen: 16);
 
@@ -264,8 +265,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(0, cache.CurrentLength);
     }
 
-    [Fact]
-    public void Clear_ResetsStatistics()
+    [Fact(Timeout = 120000)]
+    public async Task Clear_ResetsStatistics()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
         var k = CreateKVTensor(1, 1, 1, 2, 1.0);
@@ -283,8 +284,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Statistics and Memory Tests
     // ============================
 
-    [Fact]
-    public void CacheMisses_CountsNewTokens()
+    [Fact(Timeout = 120000)]
+    public async Task CacheMisses_CountsNewTokens()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
         var k = CreateKVTensor(1, 1, 1, 2, 1.0);
@@ -299,8 +300,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(4, cache.CacheMisses); // 1 + 3 = 4 total new tokens
     }
 
-    [Fact]
-    public void CacheHits_CountsRetrievals()
+    [Fact(Timeout = 120000)]
+    public async Task CacheHits_CountsRetrievals()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
         var k = CreateKVTensor(1, 1, 3, 2, 1.0);
@@ -315,8 +316,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.True(cache.CacheHits > hitsAfterAppend);
     }
 
-    [Fact]
-    public void EstimateMemoryBytes_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMemoryBytes_HandComputed()
     {
         // 2 layers, 4 heads, maxSeq=16, headDim=8, batch=1
         // Elements per layer = 1 * 4 * 16 * 8 = 512
@@ -334,8 +335,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(8192, config.EstimateMemoryBytes());
     }
 
-    [Fact]
-    public void EstimateMemoryBytes_Float16_HalvesMemory()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMemoryBytes_Float16_HalvesMemory()
     {
         var configFp32 = new KVCacheConfig
         {
@@ -353,8 +354,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(configFp32.EstimateMemoryBytes() / 2, configFp16.EstimateMemoryBytes());
     }
 
-    [Fact]
-    public void EstimateMemoryBytes_Int8_QuartersMemory()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMemoryBytes_Int8_QuartersMemory()
     {
         var configFp32 = new KVCacheConfig
         {
@@ -372,8 +373,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(configFp32.EstimateMemoryBytes() / 4, configInt8.EstimateMemoryBytes());
     }
 
-    [Fact]
-    public void EstimateMemory_ScalesLinearlyWithBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMemory_ScalesLinearlyWithBatchSize()
     {
         var config1 = new KVCacheConfig
         {
@@ -388,8 +389,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(config1.EstimateMemoryBytes() * 4, config4.EstimateMemoryBytes());
     }
 
-    [Fact]
-    public void EstimateMemory_ScalesLinearlyWithLayers()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMemory_ScalesLinearlyWithLayers()
     {
         var config2 = new KVCacheConfig
         {
@@ -408,8 +409,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Sliding Window Tests
     // ============================
 
-    [Fact]
-    public void SlidingWindow_EvictsOldestTokens()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_EvictsOldestTokens()
     {
         var cache = CreateCache(
             numLayers: 1, numHeads: 1, headDim: 2,
@@ -435,8 +436,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.True(cache.Evictions > 0);
     }
 
-    [Fact]
-    public void SlidingWindow_EvictionCountIsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_EvictionCountIsCorrect()
     {
         var cache = CreateCache(
             numLayers: 1, numHeads: 1, headDim: 2,
@@ -465,8 +466,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Batch State Copying
     // ============================
 
-    [Fact]
-    public void CopyBatchState_DuplicatesData()
+    [Fact(Timeout = 120000)]
+    public async Task CopyBatchState_DuplicatesData()
     {
         var cache = CreateCache(
             numLayers: 1, numHeads: 1, headDim: 2,
@@ -502,8 +503,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Overflow Protection
     // ============================
 
-    [Fact]
-    public void Append_Overflow_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Append_Overflow_ThrowsException()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 3);
 
@@ -518,8 +519,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => cache.Append(0, k1, v1));
     }
 
-    [Fact]
-    public void InvalidLayerIndex_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidLayerIndex_ThrowsException()
     {
         var cache = CreateCache(numLayers: 2, numHeads: 1, headDim: 2, maxSeqLen: 8);
         var k = CreateKVTensor(1, 1, 1, 2, 1.0);
@@ -533,8 +534,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Model Configuration Presets
     // ============================
 
-    [Fact]
-    public void ForModel_GPT2_CorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ForModel_GPT2_CorrectDimensions()
     {
         var config = KVCacheConfig.ForModel("gpt2");
         Assert.Equal(12, config.NumLayers);
@@ -543,8 +544,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(1024, config.MaxSequenceLength);
     }
 
-    [Fact]
-    public void ForModel_Llama7B_CorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ForModel_Llama7B_CorrectDimensions()
     {
         var config = KVCacheConfig.ForModel("llama-7b");
         Assert.Equal(32, config.NumLayers);
@@ -554,8 +555,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.Equal(CacheDataType.Float16, config.DataType);
     }
 
-    [Fact]
-    public void ForModel_Llama70B_UsesSlidingWindow()
+    [Fact(Timeout = 120000)]
+    public async Task ForModel_Llama70B_UsesSlidingWindow()
     {
         var config = KVCacheConfig.ForModel("llama-70b");
         Assert.True(config.UseSlidingWindow);
@@ -566,8 +567,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // GetStatistics Tests
     // ============================
 
-    [Fact]
-    public void GetStatistics_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetStatistics_ContainsExpectedKeys()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8);
         var stats = cache.GetStatistics();
@@ -580,8 +581,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
         Assert.True(stats.ContainsKey("MaxMemoryMB"));
     }
 
-    [Fact]
-    public void GetStatistics_HitRate_ComputedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GetStatistics_HitRate_ComputedCorrectly()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
         var k = CreateKVTensor(1, 1, 3, 2, 1.0);
@@ -597,8 +598,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Lazy Allocation Tests
     // ============================
 
-    [Fact]
-    public void LazyAllocation_AllocatesOnFirstAppend()
+    [Fact(Timeout = 120000)]
+    public async Task LazyAllocation_AllocatesOnFirstAppend()
     {
         var cache = CreateCache(numLayers: 2, numHeads: 1, headDim: 2, maxSeqLen: 8, preAllocate: false);
 
@@ -618,8 +619,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Multi-Head Attention Tests
     // ============================
 
-    [Fact]
-    public void MultiHead_IndependentPerHead()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHead_IndependentPerHead()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 3, headDim: 2, maxSeqLen: 8);
 
@@ -643,8 +644,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // MaxLength Property
     // ============================
 
-    [Fact]
-    public void MaxLength_MatchesConfig()
+    [Fact(Timeout = 120000)]
+    public async Task MaxLength_MatchesConfig()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 42);
         Assert.Equal(42, cache.MaxLength);
@@ -654,8 +655,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Clear Individual Batch
     // ============================
 
-    [Fact]
-    public void ClearBatch_OnlyClearsSpecifiedBatch()
+    [Fact(Timeout = 120000)]
+    public async Task ClearBatch_OnlyClearsSpecifiedBatch()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8, maxBatchSize: 2);
 
@@ -679,8 +680,8 @@ public class InferenceKVCacheDeepMathIntegrationTests
     // Truncation with Specific Batch
     // ============================
 
-    [Fact]
-    public void Truncate_NegativeLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Truncate_NegativeLength_Throws()
     {
         var cache = CreateCache(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8);
         Assert.Throws<ArgumentOutOfRangeException>(() => cache.Truncate(-1));

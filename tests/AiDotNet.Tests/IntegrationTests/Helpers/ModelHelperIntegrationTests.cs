@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -11,8 +12,8 @@ public class ModelHelperIntegrationTests
 {
     #region CreateDefaultModelData Tests - Matrix/Vector
 
-    [Fact]
-    public void CreateDefaultModelData_MatrixVector_ReturnsEmptyStructures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModelData_MatrixVector_ReturnsEmptyStructures()
     {
         var (x, y, predictions) = ModelHelper<double, Matrix<double>, Vector<double>>.CreateDefaultModelData();
 
@@ -25,8 +26,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(0, predictions.Length);
     }
 
-    [Fact]
-    public void CreateDefaultModelData_FloatMatrixVector_ReturnsEmptyStructures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModelData_FloatMatrixVector_ReturnsEmptyStructures()
     {
         var (x, y, predictions) = ModelHelper<float, Matrix<float>, Vector<float>>.CreateDefaultModelData();
 
@@ -39,8 +40,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateDefaultModelData Tests - Tensor
 
-    [Fact]
-    public void CreateDefaultModelData_TensorTensor_ReturnsEmptyStructures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModelData_TensorTensor_ReturnsEmptyStructures()
     {
         var (x, y, predictions) = ModelHelper<double, Tensor<double>, Tensor<double>>.CreateDefaultModelData();
 
@@ -53,8 +54,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateDefaultModelData Tests - Vector/Vector
 
-    [Fact]
-    public void CreateDefaultModelData_VectorVector_ReturnsEmptyStructures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModelData_VectorVector_ReturnsEmptyStructures()
     {
         var (x, y, predictions) = ModelHelper<double, Vector<double>, Vector<double>>.CreateDefaultModelData();
 
@@ -69,8 +70,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateDefaultModel Tests - Matrix/Vector
 
-    [Fact]
-    public void CreateDefaultModel_MatrixVector_ReturnsVectorModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModel_MatrixVector_ReturnsVectorModel()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateDefaultModel();
 
@@ -78,8 +79,8 @@ public class ModelHelperIntegrationTests
         // VectorModel is the expected type for Matrix<T> -> Vector<T>
     }
 
-    [Fact]
-    public void CreateDefaultModel_FloatMatrixVector_ReturnsVectorModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModel_FloatMatrixVector_ReturnsVectorModel()
     {
         var model = ModelHelper<float, Matrix<float>, Vector<float>>.CreateDefaultModel();
 
@@ -90,8 +91,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateDefaultModel Tests - Tensor
 
-    [Fact]
-    public void CreateDefaultModel_TensorTensor_ReturnsNeuralNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModel_TensorTensor_ReturnsNeuralNetwork()
     {
         var model = ModelHelper<double, Tensor<double>, Tensor<double>>.CreateDefaultModel();
 
@@ -103,8 +104,8 @@ public class ModelHelperIntegrationTests
 
     #region GetColumnVectors Tests - Matrix
 
-    [Fact]
-    public void GetColumnVectors_Matrix_ExtractsSingleColumn()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Matrix_ExtractsSingleColumn()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -122,8 +123,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(7, columns[0][2]);
     }
 
-    [Fact]
-    public void GetColumnVectors_Matrix_ExtractsMultipleColumns()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Matrix_ExtractsMultipleColumns()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -144,8 +145,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(7, columns[1][1]);
     }
 
-    [Fact]
-    public void GetColumnVectors_Matrix_AllColumns()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Matrix_AllColumns()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -161,8 +162,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(30, columns[2][0]);
     }
 
-    [Fact]
-    public void GetColumnVectors_Matrix_EmptyIndices()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Matrix_EmptyIndices()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -175,8 +176,8 @@ public class ModelHelperIntegrationTests
         Assert.Empty(columns);
     }
 
-    [Fact]
-    public void GetColumnVectors_Matrix_Float()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Matrix_Float()
     {
         var matrix = new Matrix<float>(new float[,]
         {
@@ -195,8 +196,8 @@ public class ModelHelperIntegrationTests
 
     #region GetColumnVectors Tests - Tensor
 
-    [Fact]
-    public void GetColumnVectors_Tensor2D_ExtractsSingleColumn()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Tensor2D_ExtractsSingleColumn()
     {
         var tensor = new Tensor<double>(new int[] { 3, 4 });
         // Fill tensor: row 0 = [1,2,3,4], row 1 = [5,6,7,8], row 2 = [9,10,11,12]
@@ -213,8 +214,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(10, columns[0][2]);
     }
 
-    [Fact]
-    public void GetColumnVectors_Tensor2D_ExtractsMultipleColumns()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Tensor2D_ExtractsMultipleColumns()
     {
         var tensor = new Tensor<double>(new int[] { 2, 3 });
         tensor[0, 0] = 1; tensor[0, 1] = 2; tensor[0, 2] = 3;
@@ -229,8 +230,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(6, columns[1][1]);
     }
 
-    [Fact]
-    public void GetColumnVectors_Tensor1D_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Tensor1D_ThrowsArgumentException()
     {
         var tensor = new Tensor<double>(new int[] { 5 }); // 1D tensor
 
@@ -238,8 +239,8 @@ public class ModelHelperIntegrationTests
             ModelHelper<double, Tensor<double>, Tensor<double>>.GetColumnVectors(tensor, new[] { 0 }));
     }
 
-    [Fact]
-    public void GetColumnVectors_Tensor_InvalidIndex_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Tensor_InvalidIndex_ThrowsException()
     {
         var tensor = new Tensor<double>(new int[] { 2, 3 });
 
@@ -247,8 +248,8 @@ public class ModelHelperIntegrationTests
             ModelHelper<double, Tensor<double>, Tensor<double>>.GetColumnVectors(tensor, new[] { 5 }));
     }
 
-    [Fact]
-    public void GetColumnVectors_Tensor_NegativeIndex_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_Tensor_NegativeIndex_ThrowsException()
     {
         var tensor = new Tensor<double>(new int[] { 2, 3 });
 
@@ -260,8 +261,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateRandomModelWithFeatures Tests - Vector Model
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_VectorModel_ReturnsModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_VectorModel_ReturnsModel()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 2 },
@@ -271,8 +272,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_VectorModel_Float()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_VectorModel_Float()
     {
         var model = ModelHelper<float, Matrix<float>, Vector<float>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 1, 3 },
@@ -282,8 +283,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_VectorModel_AllFeaturesActive()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_VectorModel_AllFeaturesActive()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 1, 2, 3, 4 },
@@ -293,8 +294,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_VectorModel_SingleFeature()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_VectorModel_SingleFeature()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0 },
@@ -304,8 +305,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_VectorModel_NoActiveFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_VectorModel_NoActiveFeatures()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: Array.Empty<int>(),
@@ -319,8 +320,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateRandomModelWithFeatures Tests - Expression Tree
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_ExpressionTree_ReturnsModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_ExpressionTree_ReturnsModel()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 1 },
@@ -331,8 +332,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_ExpressionTree_DepthOne()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_ExpressionTree_DepthOne()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0 },
@@ -343,8 +344,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_ExpressionTree_DeepTree()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_ExpressionTree_DeepTree()
     {
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 1, 2 },
@@ -355,8 +356,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_ExpressionTree_NoActiveFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_ExpressionTree_NoActiveFeatures()
     {
         // Should still work, creating tree with only constants
         var model = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
@@ -372,8 +373,8 @@ public class ModelHelperIntegrationTests
 
     #region CreateRandomModelWithFeatures Tests - Neural Network
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_NeuralNetwork_ReturnsModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_NeuralNetwork_ReturnsModel()
     {
         var model = ModelHelper<double, Tensor<double>, Tensor<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 1, 2 },
@@ -382,8 +383,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_NeuralNetwork_SingleFeature()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_NeuralNetwork_SingleFeature()
     {
         var model = ModelHelper<double, Tensor<double>, Tensor<double>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0 },
@@ -392,8 +393,8 @@ public class ModelHelperIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_NeuralNetwork_Float()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_NeuralNetwork_Float()
     {
         var model = ModelHelper<float, Tensor<float>, Tensor<float>>.CreateRandomModelWithFeatures(
             activeFeatures: new[] { 0, 2, 4 },
@@ -406,31 +407,31 @@ public class ModelHelperIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void CreateDefaultModelData_UnsupportedTypes_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModelData_UnsupportedTypes_ThrowsInvalidOperationException()
     {
         // Using string as TInput which is unsupported
         Assert.Throws<InvalidOperationException>(() =>
             ModelHelper<double, string, string>.CreateDefaultModelData());
     }
 
-    [Fact]
-    public void CreateDefaultModel_UnsupportedTypes_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultModel_UnsupportedTypes_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
             ModelHelper<double, string, string>.CreateDefaultModel());
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_UnsupportedTypes_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_UnsupportedTypes_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
             ModelHelper<double, string, string>.CreateRandomModelWithFeatures(
                 new[] { 0 }, 5));
     }
 
-    [Fact]
-    public void GetColumnVectors_NullInput_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_NullInput_ThrowsException()
     {
         // Test behavior with null matrix
         Matrix<double>? nullMatrix = null;
@@ -443,8 +444,8 @@ public class ModelHelperIntegrationTests
 
     #region Reproducibility Tests
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_DifferentCalls_ProducesDifferentModels()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_DifferentCalls_ProducesDifferentModels()
     {
         // Due to randomness, multiple calls should (likely) produce different models
         var model1 = ModelHelper<double, Matrix<double>, Vector<double>>.CreateRandomModelWithFeatures(
@@ -467,8 +468,8 @@ public class ModelHelperIntegrationTests
 
     #region Large Scale Tests
 
-    [Fact]
-    public void GetColumnVectors_LargeMatrix_ExtractsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_LargeMatrix_ExtractsCorrectly()
     {
         int rows = 1000;
         int cols = 100;
@@ -500,8 +501,8 @@ public class ModelHelperIntegrationTests
         Assert.Equal(99, columns[2][0]); // First row, column 99
     }
 
-    [Fact]
-    public void CreateRandomModelWithFeatures_ManyFeatures_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task CreateRandomModelWithFeatures_ManyFeatures_Succeeds()
     {
         var activeFeatures = Enumerable.Range(0, 50).ToArray();
 

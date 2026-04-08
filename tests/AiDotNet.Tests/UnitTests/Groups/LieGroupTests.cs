@@ -1,13 +1,14 @@
 using AiDotNet.Tensors.Groups;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Groups;
 
 public class LieGroupTests
 {
-    [Fact]
-    public void So3_ExpLog_IdentityRoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task So3_ExpLog_IdentityRoundTrip()
     {
         var group = new So3Group<double>();
         var zero = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
@@ -23,8 +24,8 @@ public class LieGroupTests
         Assert.Equal(0.0, log[2], precision: 12);
     }
 
-    [Fact]
-    public void Su2_ExpLog_IdentityRoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task Su2_ExpLog_IdentityRoundTrip()
     {
         var group = new Su2Group<double>();
         var zero = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
@@ -41,8 +42,8 @@ public class LieGroupTests
         Assert.Equal(0.0, log[2], precision: 12);
     }
 
-    [Fact]
-    public void Se3_ExpLog_IdentityRoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task Se3_ExpLog_IdentityRoundTrip()
     {
         var group = new Se3Group<double>();
         var zero = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });

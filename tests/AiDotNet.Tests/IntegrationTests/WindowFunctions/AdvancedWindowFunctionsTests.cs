@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.WindowFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.WindowFunctions;
 
@@ -17,8 +18,8 @@ public class AdvancedWindowFunctionsTests
 
     #region All Windows - Size and Symmetry Tests
 
-    [Fact]
-    public void AllWindows_Create_CorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task AllWindows_Create_CorrectSize()
     {
         var windows = new IWindowFunction<double>[]
         {
@@ -51,8 +52,8 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
-    public void AllWindows_Create_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task AllWindows_Create_NoNaN()
     {
         var windows = new IWindowFunction<double>[]
         {
@@ -89,8 +90,8 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
-    public void SymmetricWindows_Create_AreSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task SymmetricWindows_Create_AreSymmetric()
     {
         // These windows should produce symmetric output
         var windows = new IWindowFunction<double>[]
@@ -122,8 +123,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Hamming Window Tests
 
-    [Fact]
-    public void HammingWindow_PeakAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_PeakAtCenter()
     {
         var window = new HammingWindow<double>();
         var result = window.Create(32);
@@ -137,8 +138,8 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
-    public void HammingWindow_EdgeValues_NotZero()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_EdgeValues_NotZero()
     {
         // Hamming window edges are ~0.08, not zero
         var window = new HammingWindow<double>();
@@ -146,8 +147,8 @@ public class AdvancedWindowFunctionsTests
         Assert.True(result[0] > 0.05);
     }
 
-    [Fact]
-    public void HammingWindow_GetWindowFunctionType_ReturnsHamming()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_GetWindowFunctionType_ReturnsHamming()
     {
         var window = new HammingWindow<double>();
         Assert.Equal(WindowFunctionType.Hamming, window.GetWindowFunctionType());
@@ -157,16 +158,16 @@ public class AdvancedWindowFunctionsTests
 
     #region Hanning Window Tests
 
-    [Fact]
-    public void HanningWindow_EdgeValues_ApproachZero()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_EdgeValues_ApproachZero()
     {
         var window = new HanningWindow<double>();
         var result = window.Create(64);
         Assert.True(result[0] < 0.01);
     }
 
-    [Fact]
-    public void HanningWindow_CenterValue_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_CenterValue_IsOne()
     {
         var window = new HanningWindow<double>();
         var result = window.Create(33); // odd for exact center
@@ -177,16 +178,16 @@ public class AdvancedWindowFunctionsTests
 
     #region Blackman Window Tests
 
-    [Fact]
-    public void BlackmanWindow_EdgeValues_NearZero()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanWindow_EdgeValues_NearZero()
     {
         var window = new BlackmanWindow<double>();
         var result = window.Create(64);
         Assert.True(Math.Abs(result[0]) < 0.01);
     }
 
-    [Fact]
-    public void BlackmanWindow_NarrowerMainLobeThanHanning()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanWindow_NarrowerMainLobeThanHanning()
     {
         // Blackman has lower sidelobes but wider main lobe
         var blackman = new BlackmanWindow<double>();
@@ -201,8 +202,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Kaiser Window Tests
 
-    [Fact]
-    public void KaiserWindow_Create_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task KaiserWindow_Create_AllPositive()
     {
         var window = new KaiserWindow<double>();
         var result = window.Create(64);
@@ -216,8 +217,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Gaussian Window Tests
 
-    [Fact]
-    public void GaussianWindow_PeakAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_PeakAtCenter()
     {
         var window = new GaussianWindow<double>();
         var result = window.Create(33);
@@ -234,8 +235,8 @@ public class AdvancedWindowFunctionsTests
         Assert.Equal(16, maxIdx);
     }
 
-    [Fact]
-    public void GaussianWindow_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_AllPositive()
     {
         var window = new GaussianWindow<double>();
         var result = window.Create(64);
@@ -249,16 +250,16 @@ public class AdvancedWindowFunctionsTests
 
     #region Bartlett Window Tests
 
-    [Fact]
-    public void BartlettWindow_EdgeValues_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettWindow_EdgeValues_AreZero()
     {
         var window = new BartlettWindow<double>();
         var result = window.Create(64);
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void BartlettWindow_PeakAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettWindow_PeakAtCenter()
     {
         var window = new BartlettWindow<double>();
         var result = window.Create(33);
@@ -269,8 +270,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Triangular Window Tests
 
-    [Fact]
-    public void TriangularWindow_Create_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TriangularWindow_Create_AllNonNegative()
     {
         var window = new TriangularWindow<double>();
         var result = window.Create(64);
@@ -284,16 +285,16 @@ public class AdvancedWindowFunctionsTests
 
     #region Welch Window Tests
 
-    [Fact]
-    public void WelchWindow_EdgeValues_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task WelchWindow_EdgeValues_AreZero()
     {
         var window = new WelchWindow<double>();
         var result = window.Create(64);
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void WelchWindow_CenterValue_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task WelchWindow_CenterValue_IsOne()
     {
         var window = new WelchWindow<double>();
         var result = window.Create(33);
@@ -304,8 +305,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Tukey Window Tests
 
-    [Fact]
-    public void TukeyWindow_Create_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TukeyWindow_Create_AllNonNegative()
     {
         var window = new TukeyWindow<double>();
         var result = window.Create(64);
@@ -319,8 +320,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Parzen Window Tests
 
-    [Fact]
-    public void ParzenWindow_Create_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ParzenWindow_Create_AllNonNegative()
     {
         var window = new ParzenWindow<double>();
         var result = window.Create(64);
@@ -334,8 +335,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Poisson Window Tests
 
-    [Fact]
-    public void PoissonWindow_Create_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_Create_AllPositive()
     {
         var window = new PoissonWindow<double>();
         var result = window.Create(64);
@@ -349,8 +350,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Bohman Window Tests
 
-    [Fact]
-    public void BohmanWindow_EdgeValues_NearZero()
+    [Fact(Timeout = 120000)]
+    public async Task BohmanWindow_EdgeValues_NearZero()
     {
         var window = new BohmanWindow<double>();
         var result = window.Create(64);
@@ -361,8 +362,8 @@ public class AdvancedWindowFunctionsTests
 
     #region FlatTop Window Tests
 
-    [Fact]
-    public void FlatTopWindow_CenterValue_ApproximatelyOne()
+    [Fact(Timeout = 120000)]
+    public async Task FlatTopWindow_CenterValue_ApproximatelyOne()
     {
         var window = new FlatTopWindow<double>();
         var result = window.Create(33);
@@ -374,8 +375,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Lanczos Window Tests
 
-    [Fact]
-    public void LanczosWindow_Create_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LanczosWindow_Create_AllNonNegative()
     {
         var window = new LanczosWindow<double>();
         var result = window.Create(64);
@@ -390,8 +391,8 @@ public class AdvancedWindowFunctionsTests
 
     #region Size 1 and Size 2 Edge Cases
 
-    [Fact]
-    public void AllWindows_SizeOne_ReturnsOneElement()
+    [Fact(Timeout = 120000)]
+    public async Task AllWindows_SizeOne_ReturnsOneElement()
     {
         var windows = new IWindowFunction<double>[]
         {

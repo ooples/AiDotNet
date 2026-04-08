@@ -4,13 +4,14 @@ using AiDotNet.Tokenization.CodeTokenization;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Tokenization
 {
     public class CodeTokenizerTests
     {
-        [Fact]
-        public void Tokenize_SplitsCamelCaseIdentifiers()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_SplitsCamelCaseIdentifiers()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -28,8 +29,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("name", tokens);
         }
 
-        [Fact]
-        public void Tokenize_SplitsSnakeCaseIdentifiers()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_SplitsSnakeCaseIdentifiers()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -47,8 +48,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("name", tokens);
         }
 
-        [Fact]
-        public void Tokenize_RecognizesCSharpKeywords()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_RecognizesCSharpKeywords()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("return", tokens);
         }
 
-        [Fact]
-        public void Tokenize_RecognizesPythonKeywords()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_RecognizesPythonKeywords()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -89,8 +90,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("import", tokens);
         }
 
-        [Fact]
-        public void CodeBertTokenizer_EncodesCodeAndNL()
+        [Fact(Timeout = 60000)]
+        public async Task CodeBertTokenizer_EncodesCodeAndNL()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -112,8 +113,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains(1, result.TokenTypeIds); // Code segment
         }
 
-        [Fact]
-        public void CodeBertTokenizer_EncodesCodeOnly()
+        [Fact(Timeout = 60000)]
+        public async Task CodeBertTokenizer_EncodesCodeOnly()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");

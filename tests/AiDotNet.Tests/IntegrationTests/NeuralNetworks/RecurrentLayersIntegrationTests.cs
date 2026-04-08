@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -16,8 +17,8 @@ public class RecurrentLayersIntegrationTests
 
     #region GRULayer Tests
 
-    [Fact]
-    public void GRULayer_ForwardPass_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -35,8 +36,8 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void GRULayer_ForwardPass_ReturnSequences_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ForwardPass_ReturnSequences_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -57,16 +58,16 @@ public class RecurrentLayersIntegrationTests
 
 
 
-    [Fact]
-    public void GRULayer_SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_SupportsTraining_ReturnsTrue()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new GRULayer<double>(10, 8, false, tanh);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void GRULayer_GetParameters_ReturnsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_GetParameters_ReturnsParameters()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new GRULayer<double>(10, 8, false, tanh);
@@ -75,8 +76,8 @@ public class RecurrentLayersIntegrationTests
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
     }
 
-    [Fact]
-    public void GRULayer_LongSequence_RemainsNumericallyStable()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_LongSequence_RemainsNumericallyStable()
     {
         // Arrange
         int batchSize = 2, timeSteps = 50, inputSize = 10, hiddenSize = 8;
@@ -97,8 +98,8 @@ public class RecurrentLayersIntegrationTests
 
     #region LSTMLayer Tests
 
-    [Fact]
-    public void LSTMLayer_ForwardPass_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -116,8 +117,8 @@ public class RecurrentLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void LSTMLayer_GetParameters_ReturnsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_GetParameters_ReturnsParameters()
     {
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -127,8 +128,8 @@ public class RecurrentLayersIntegrationTests
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
     }
 
-    [Fact]
-    public void LSTMLayer_LongSequence_RemainsNumericallyStable()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_LongSequence_RemainsNumericallyStable()
     {
         // Arrange
         int batchSize = 2, timeSteps = 50, inputSize = 10, hiddenSize = 8;
@@ -146,8 +147,8 @@ public class RecurrentLayersIntegrationTests
         Assert.True(output.Max().maxVal < 100.0, "Values exploded in long sequence");
     }
 
-    [Fact]
-    public void LSTMLayer_SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_SupportsTraining_ReturnsTrue()
     {
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -159,8 +160,8 @@ public class RecurrentLayersIntegrationTests
 
     #region BidirectionalLayer Tests
 
-    [Fact]
-    public void BidirectionalLayer_WithGRU_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_WithGRU_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -178,8 +179,8 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void BidirectionalLayer_WithLSTM_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_WithLSTM_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -203,8 +204,8 @@ public class RecurrentLayersIntegrationTests
 
     #region RecurrentLayer Base Tests
 
-    [Fact]
-    public void RecurrentLayer_ForwardPass_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
@@ -225,8 +226,8 @@ public class RecurrentLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void GRULayer_ZeroInput_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ZeroInput_HandlesGracefully()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
@@ -241,8 +242,8 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void LSTMLayer_ZeroInput_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ZeroInput_HandlesGracefully()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
@@ -257,8 +258,8 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void GRULayer_LargeInputValues_RemainsStable()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_LargeInputValues_RemainsStable()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
@@ -273,8 +274,8 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void LSTMLayer_LargeInputValues_RemainsStable()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_LargeInputValues_RemainsStable()
     {
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
@@ -289,8 +290,8 @@ public class RecurrentLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void GRULayer_BatchSizeOne_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_BatchSizeOne_WorksCorrectly()
     {
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
@@ -303,8 +304,8 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(batchSize, output.Shape[0]);
     }
 
-    [Fact]
-    public void LSTMLayer_BatchSizeOne_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_BatchSizeOne_WorksCorrectly()
     {
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         int[] inputShape = [batchSize, timeSteps, inputSize];
@@ -322,8 +323,8 @@ public class RecurrentLayersIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void GRULayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_Clone_CreatesIndependentCopy()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var original = new GRULayer<double>(10, 8, false, tanh);
@@ -341,8 +342,8 @@ public class RecurrentLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void LSTMLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_Clone_CreatesIndependentCopy()
     {
         int[] inputShape = [2, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();

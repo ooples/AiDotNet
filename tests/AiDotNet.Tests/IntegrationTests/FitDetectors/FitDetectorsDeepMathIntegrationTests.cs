@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FitDetectors;
 
@@ -15,8 +16,8 @@ public class FitDetectorsDeepMathIntegrationTests
     // FitType Enum Coverage
     // ============================
 
-    [Fact]
-    public void FitType_HasFifteenValues()
+    [Fact(Timeout = 120000)]
+    public async Task FitType_HasFifteenValues()
     {
         var values = (((FitType[])Enum.GetValues(typeof(FitType))));
         Assert.Equal(15, values.Length);
@@ -71,8 +72,8 @@ public class FitDetectorsDeepMathIntegrationTests
             "Train-test gap should typically be non-negative or small");
     }
 
-    [Fact]
-    public void FitMath_OverfitDetection_LargeGapIndicatesOverfit()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_OverfitDetection_LargeGapIndicatesOverfit()
     {
         double trainAccuracy = 0.99;
         double testAccuracy = 0.60;
@@ -82,8 +83,8 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.True(gap > 0.20, $"Gap of {gap} should indicate overfitting");
     }
 
-    [Fact]
-    public void FitMath_UnderfitDetection_BothLowIndicatesUnderfit()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_UnderfitDetection_BothLowIndicatesUnderfit()
     {
         double trainAccuracy = 0.55;
         double testAccuracy = 0.52;
@@ -123,8 +124,8 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.True(upper >= mean);
     }
 
-    [Fact]
-    public void FitMath_CrossValidation_HighVarianceIndicatesInstability()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_CrossValidation_HighVarianceIndicatesInstability()
     {
         double[] foldScores = { 0.95, 0.60, 0.88, 0.55, 0.92 };
         double mean = foldScores.Average();
@@ -162,8 +163,8 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FitMath_ResidualNormality_SkewnessAndKurtosis()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_ResidualNormality_SkewnessAndKurtosis()
     {
         // For normally distributed residuals:
         // Skewness should be near 0, Kurtosis near 3
@@ -282,8 +283,8 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.Equal(expectedAdjusted, adjustedRSquared, 1e-2);
     }
 
-    [Fact]
-    public void FitMath_AdjustedRSquared_AlwaysLessOrEqualToRSquared()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_AdjustedRSquared_AlwaysLessOrEqualToRSquared()
     {
         double rSquared = 0.85;
         int n = 50;
@@ -318,8 +319,8 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FitMath_AIC_LowerIsBetter()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_AIC_LowerIsBetter()
     {
         int n = 100;
         double logLikelihood = -200.0;
@@ -336,8 +337,8 @@ public class FitDetectorsDeepMathIntegrationTests
     // Learning Curve Analysis
     // ============================
 
-    [Fact]
-    public void FitMath_LearningCurve_OverfitPattern()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_LearningCurve_OverfitPattern()
     {
         // Overfit: train score stays high, test score stays low
         double[] trainSizes = { 10, 20, 50, 100, 200 };
@@ -351,8 +352,8 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FitMath_LearningCurve_GoodFitPattern()
+    [Fact(Timeout = 120000)]
+    public async Task FitMath_LearningCurve_GoodFitPattern()
     {
         // Good fit: train and test converge
         double[] trainScores = { 0.95, 0.93, 0.91, 0.90, 0.89 };

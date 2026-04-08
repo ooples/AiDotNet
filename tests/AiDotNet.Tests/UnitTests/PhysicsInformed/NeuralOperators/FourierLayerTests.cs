@@ -1,13 +1,14 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.PhysicsInformed.NeuralOperators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class FourierLayerTests
 {
-    [Fact]
-    public void FourierLayer_IdentityWeightsPreserveConstantInput()
+    [Fact(Timeout = 60000)]
+    public async Task FourierLayer_IdentityWeightsPreserveConstantInput()
     {
         var layer = new FourierLayer<double>(
             width: 1,
@@ -45,8 +46,8 @@ public class FourierLayerTests
         }
     }
 
-    [Fact]
-    public void FourierLayer_ChannelMixingSwapsConstantChannels()
+    [Fact(Timeout = 60000)]
+    public async Task FourierLayer_ChannelMixingSwapsConstantChannels()
     {
         var layer = new FourierLayer<double>(
             width: 2,

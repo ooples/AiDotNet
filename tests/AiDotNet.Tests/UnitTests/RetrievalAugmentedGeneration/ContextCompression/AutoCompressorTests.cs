@@ -5,6 +5,7 @@ using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompression
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var compressor = new AutoCompressor<double>();
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(compressor);
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var compressor = new AutoCompressor<double>(maxOutputLength: 1000, compressionRatio: 0.7);
@@ -32,48 +33,48 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotNull(compressor);
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxOutputLength_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxOutputLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new AutoCompressor<double>(maxOutputLength: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeMaxOutputLength_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeMaxOutputLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new AutoCompressor<double>(maxOutputLength: -100));
         }
 
-        [Fact]
-        public void Constructor_WithZeroCompressionRatio_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroCompressionRatio_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeCompressionRatio_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeCompressionRatio_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: -0.5));
         }
 
-        [Fact]
-        public void Constructor_WithCompressionRatioGreaterThanOne_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCompressionRatioGreaterThanOne_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 1.5));
         }
 
-        [Fact]
-        public void Constructor_WithCompressionRatioEqualToOne_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCompressionRatioEqualToOne_CreatesInstance()
         {
             // Arrange & Act
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 1.0);
@@ -86,8 +87,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Basic Functionality Tests
 
-        [Fact]
-        public void Compress_WithValidDocuments_ReturnsCompressedDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidDocuments_ReturnsCompressedDocuments()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0.5);
@@ -102,8 +103,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(documents.Count, result.Count);
         }
 
-        [Fact]
-        public void Compress_WithNullDocuments_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullDocuments_ThrowsArgumentNullException()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -114,8 +115,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(null, query));
         }
 
-        [Fact]
-        public void Compress_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, null));
         }
 
-        [Fact]
-        public void Compress_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -138,8 +139,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, string.Empty));
         }
 
-        [Fact]
-        public void Compress_WithWhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithWhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -150,8 +151,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 compressor.Compress(documents, "   "));
         }
 
-        [Fact]
-        public void Compress_WithEmptyDocumentList_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyDocumentList_ReturnsEmptyList()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Compression Quality Tests
 
-        [Fact]
-        public void Compress_ReducesDocumentSize()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ReducesDocumentSize()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 300, compressionRatio: 0.5);
@@ -185,8 +186,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertCompressed(documents, result, allowEqual: true);
         }
 
-        [Fact]
-        public void Compress_RespectsMaxOutputLength()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_RespectsMaxOutputLength()
         {
             // Arrange
             var maxLength = 200;
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 $"Compressed length {result[0].Content.Length} should be <= {maxLength}");
         }
 
-        [Fact]
-        public void Compress_WithLowCompressionRatio_RetainsFewSentences()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithLowCompressionRatio_RetainsFewSentences()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 1000, compressionRatio: 0.3);
@@ -221,8 +222,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.True(result[0].Content.Length < document.Content.Length);
         }
 
-        [Fact]
-        public void Compress_WithHighCompressionRatio_RetainsMoreContent()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithHighCompressionRatio_RetainsMoreContent()
         {
             // Arrange
             var lowCompressor = new AutoCompressor<double>(maxOutputLength: 2000, compressionRatio: 0.3);
@@ -241,8 +242,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 "Higher compression ratio should produce longer or equal output");
         }
 
-        [Fact]
-        public void Compress_PrioritizesQueryRelevantContent()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_PrioritizesQueryRelevantContent()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 150, compressionRatio: 0.4);
@@ -264,8 +265,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
                 content.Contains("neural"));
         }
 
-        [Fact]
-        public void Compress_PreservesMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_PreservesMetadata()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -279,8 +280,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertMetadataPreserved(documents, result);
         }
 
-        [Fact]
-        public void Compress_PreservesRelevanceScores()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_PreservesRelevanceScores()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -294,8 +295,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             AssertRelevanceScoresPreserved(documents, result);
         }
 
-        [Fact]
-        public void Compress_PreservesDocumentIds()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_PreservesDocumentIds()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -316,8 +317,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Edge Cases Tests
 
-        [Fact]
-        public void Compress_WithEmptyDocument_ReturnsEmptyContent()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyDocument_ReturnsEmptyContent()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -335,8 +336,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithWhitespaceOnlyDocument_ReturnsEmptyContent()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithWhitespaceOnlyDocument_ReturnsEmptyContent()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.Equal(string.Empty, result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithSingleSentence_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithSingleSentence_HandlesCorrectly()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0.5);
@@ -373,8 +374,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithVeryLargeDocument_CompressesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithVeryLargeDocument_CompressesSuccessfully()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0.3);
@@ -391,8 +392,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithUnicodeContent_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithUnicodeContent_HandlesCorrectly()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -408,8 +409,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithSpecialCharacters_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithSpecialCharacters_HandlesCorrectly()
         {
             // Arrange
             var compressor = new AutoCompressor<double>();
@@ -425,8 +426,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEmpty(result[0].Content);
         }
 
-        [Fact]
-        public void Compress_WithMultipleDocuments_ProcessesAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithMultipleDocuments_ProcessesAllDocuments()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 300, compressionRatio: 0.5);
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact]
-        public void Compress_WithDocumentSmallerThanMaxLength_MayReturnOriginal()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithDocumentSmallerThanMaxLength_MayReturnOriginal()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 1000, compressionRatio: 0.9);
@@ -469,8 +470,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Sentence Scoring Tests
 
-        [Fact]
-        public void Compress_PrioritizesEarlySentences()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_PrioritizesEarlySentences()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 100, compressionRatio: 0.3);
@@ -488,8 +489,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             // Early sentences with query terms should be prioritized
         }
 
-        [Fact]
-        public void Compress_ScoresBasedOnQueryMatch()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ScoresBasedOnQueryMatch()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 200, compressionRatio: 0.5);
@@ -515,8 +516,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Integration Tests
 
-        [Fact]
-        public void Compress_WithDifferentCompressionRatios_ProducesExpectedLengths()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithDifferentCompressionRatios_ProducesExpectedLengths()
         {
             // Arrange
             var documents = CreateSampleDocuments();
@@ -540,8 +541,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact]
-        public void Compress_WithDifferentMaxLengths_RespectsBounds()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithDifferentMaxLengths_RespectsBounds()
         {
             // Arrange
             var largeDoc = CreateLargeDocument("large");
@@ -560,8 +561,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact]
-        public void Compress_WithDifferentQueries_ProducesDifferentResults()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithDifferentQueries_ProducesDifferentResults()
         {
             // Arrange
             // Use a single document with distinct sentences for each query
@@ -583,8 +584,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             Assert.NotEqual(result1[0].Content, result2[0].Content);
         }
 
-        [Fact]
-        public void Compress_MultipleInvocations_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_MultipleInvocations_ProducesSameResults()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0.5);
@@ -603,8 +604,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             }
         }
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compressor = new AutoCompressor<float>(maxOutputLength: 500, compressionRatio: 0.5f);
@@ -630,8 +631,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
         #region Performance Tests
 
-        [Fact]
-        public void Compress_With100KBDocument_CompletesInReasonableTime()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_With100KBDocument_CompletesInReasonableTime()
         {
             // Arrange
             var compressor = new AutoCompressor<double>(maxOutputLength: 500, compressionRatio: 0.3);

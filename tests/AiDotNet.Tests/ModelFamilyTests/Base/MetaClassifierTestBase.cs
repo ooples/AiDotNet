@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class MetaClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
-    public void MetaPredictions_ShouldBeValidLabels()
+    [Fact(Timeout = 60000)]
+    public async Task MetaPredictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -28,8 +29,8 @@ public abstract class MetaClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact]
-    public void MetaClassifier_ShouldBeDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task MetaClassifier_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

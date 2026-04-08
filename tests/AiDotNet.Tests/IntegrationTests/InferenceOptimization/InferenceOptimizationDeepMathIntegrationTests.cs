@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.Core;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.InferenceOptimization;
 
@@ -81,8 +82,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Graph Construction Tests
     // ============================
 
-    [Fact]
-    public void EmptyGraph_HasNoNodes()
+    [Fact(Timeout = 120000)]
+    public async Task EmptyGraph_HasNoNodes()
     {
         var graph = new OptimizationGraph<double>();
 
@@ -91,8 +92,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Empty(graph.OutputNodes);
     }
 
-    [Fact]
-    public void AddNode_IncreasesNodeCount()
+    [Fact(Timeout = 120000)]
+    public async Task AddNode_IncreasesNodeCount()
     {
         var graph = new OptimizationGraph<double>();
         var node = CreateNode("test");
@@ -102,8 +103,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Single(graph.Nodes);
     }
 
-    [Fact]
-    public void AddNode_InputType_TrackedAsInput()
+    [Fact(Timeout = 120000)]
+    public async Task AddNode_InputType_TrackedAsInput()
     {
         var graph = new OptimizationGraph<double>();
         var input = CreateNode("input", OperationType.Input);
@@ -114,8 +115,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Contains(input, graph.InputNodes);
     }
 
-    [Fact]
-    public void AddNode_OutputType_TrackedAsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AddNode_OutputType_TrackedAsOutput()
     {
         var graph = new OptimizationGraph<double>();
         var output = CreateNode("output", OperationType.Output);
@@ -126,8 +127,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Contains(output, graph.OutputNodes);
     }
 
-    [Fact]
-    public void AddNode_DuplicateId_NotAdded()
+    [Fact(Timeout = 120000)]
+    public async Task AddNode_DuplicateId_NotAdded()
     {
         var graph = new OptimizationGraph<double>();
         var node = CreateNode("test");
@@ -138,8 +139,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Single(graph.Nodes);
     }
 
-    [Fact]
-    public void AddNode_NullNode_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AddNode_NullNode_Throws()
     {
         var graph = new OptimizationGraph<double>();
         Assert.Throws<ArgumentNullException>(() => graph.AddNode(null!));
@@ -149,8 +150,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Chain Graph Tests
     // ============================
 
-    [Fact]
-    public void ChainGraph_NodeCount()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_NodeCount()
     {
         var graph = CreateChainGraph();
 
@@ -159,8 +160,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Single(graph.OutputNodes);
     }
 
-    [Fact]
-    public void ChainGraph_TopologicalOrder_InputFirst()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_TopologicalOrder_InputFirst()
     {
         var graph = CreateChainGraph();
         var order = graph.GetTopologicalOrder();
@@ -177,8 +178,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.True(reluIdx < outputIdx);
     }
 
-    [Fact]
-    public void ChainGraph_Validates()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Validates()
     {
         var graph = CreateChainGraph();
         Assert.True(graph.Validate());
@@ -188,8 +189,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Diamond Graph Tests
     // ============================
 
-    [Fact]
-    public void DiamondGraph_NodeCount()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_NodeCount()
     {
         var graph = CreateDiamondGraph();
 
@@ -198,8 +199,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Single(graph.OutputNodes);
     }
 
-    [Fact]
-    public void DiamondGraph_TopologicalOrder_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_TopologicalOrder_Valid()
     {
         var graph = CreateDiamondGraph();
         var order = graph.GetTopologicalOrder();
@@ -224,8 +225,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.True(mergeIdx < outputIdx);
     }
 
-    [Fact]
-    public void DiamondGraph_Validates()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_Validates()
     {
         var graph = CreateDiamondGraph();
         Assert.True(graph.Validate());
@@ -235,8 +236,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Node Connection Tests
     // ============================
 
-    [Fact]
-    public void AddInput_CreatesEdgeBothWays()
+    [Fact(Timeout = 120000)]
+    public async Task AddInput_CreatesEdgeBothWays()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -247,8 +248,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Contains(b, a.Outputs);
     }
 
-    [Fact]
-    public void AddInput_DuplicateIgnored()
+    [Fact(Timeout = 120000)]
+    public async Task AddInput_DuplicateIgnored()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -260,8 +261,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Single(a.Outputs);
     }
 
-    [Fact]
-    public void RemoveInput_CleansUpBothWays()
+    [Fact(Timeout = 120000)]
+    public async Task RemoveInput_CleansUpBothWays()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -273,8 +274,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Empty(a.Outputs);
     }
 
-    [Fact]
-    public void ReplaceInput_SwapsEdge()
+    [Fact(Timeout = 120000)]
+    public async Task ReplaceInput_SwapsEdge()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -289,8 +290,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.DoesNotContain(c, a.Outputs);
     }
 
-    [Fact]
-    public void AddInput_NullNode_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AddInput_NullNode_Throws()
     {
         var node = CreateNode("test");
         Assert.Throws<ArgumentNullException>(() => node.AddInput(null!));
@@ -300,8 +301,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Node Query Tests
     // ============================
 
-    [Fact]
-    public void HasConsumers_WithOutputs_True()
+    [Fact(Timeout = 120000)]
+    public async Task HasConsumers_WithOutputs_True()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -311,15 +312,15 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.True(a.HasConsumers());
     }
 
-    [Fact]
-    public void HasConsumers_WithoutOutputs_False()
+    [Fact(Timeout = 120000)]
+    public async Task HasConsumers_WithoutOutputs_False()
     {
         var a = CreateNode("a");
         Assert.False(a.HasConsumers());
     }
 
-    [Fact]
-    public void ConsumerCount_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task ConsumerCount_HandVerified()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -335,8 +336,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // FindNode Tests
     // ============================
 
-    [Fact]
-    public void FindNodeById_ExistingNode_Found()
+    [Fact(Timeout = 120000)]
+    public async Task FindNodeById_ExistingNode_Found()
     {
         var graph = new OptimizationGraph<double>();
         var node = CreateNode("test");
@@ -348,23 +349,23 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal("test", found.Name);
     }
 
-    [Fact]
-    public void FindNodeById_NonExisting_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task FindNodeById_NonExisting_ReturnsNull()
     {
         var graph = new OptimizationGraph<double>();
         var found = graph.FindNodeById("nonexistent");
         Assert.Null(found);
     }
 
-    [Fact]
-    public void FindNodeById_NullId_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FindNodeById_NullId_Throws()
     {
         var graph = new OptimizationGraph<double>();
         Assert.Throws<ArgumentNullException>(() => graph.FindNodeById(null!));
     }
 
-    [Fact]
-    public void FindNodesByName_ExistingName_Found()
+    [Fact(Timeout = 120000)]
+    public async Task FindNodesByName_ExistingName_Found()
     {
         var graph = new OptimizationGraph<double>();
         var node1 = CreateNode("conv1", OperationType.Convolution);
@@ -377,8 +378,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal(2, found.Count);
     }
 
-    [Fact]
-    public void FindNodesByName_NonExisting_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task FindNodesByName_NonExisting_Empty()
     {
         var graph = new OptimizationGraph<double>();
         var found = graph.FindNodesByName("nonexistent");
@@ -389,8 +390,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Remove Node Tests
     // ============================
 
-    [Fact]
-    public void RemoveNode_DecreasesCount()
+    [Fact(Timeout = 120000)]
+    public async Task RemoveNode_DecreasesCount()
     {
         var graph = new OptimizationGraph<double>();
         var node = CreateNode("test");
@@ -402,8 +403,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Empty(graph.Nodes);
     }
 
-    [Fact]
-    public void RemoveNode_CleansUpConnections()
+    [Fact(Timeout = 120000)]
+    public async Task RemoveNode_CleansUpConnections()
     {
         var graph = new OptimizationGraph<double>();
         var a = CreateNode("a", OperationType.Input);
@@ -427,8 +428,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Graph Statistics Tests
     // ============================
 
-    [Fact]
-    public void Statistics_ChainGraph_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task Statistics_ChainGraph_HandVerified()
     {
         var graph = CreateChainGraph();
         var stats = graph.GetStatistics();
@@ -439,8 +440,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal(0, stats.FusedNodes);
     }
 
-    [Fact]
-    public void Statistics_DiamondGraph_OperationCounts()
+    [Fact(Timeout = 120000)]
+    public async Task Statistics_DiamondGraph_OperationCounts()
     {
         var graph = CreateDiamondGraph();
         var stats = graph.GetStatistics();
@@ -459,8 +460,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal(1, stats.OperationTypeCounts[OperationType.Output]);
     }
 
-    [Fact]
-    public void Statistics_WithFusedNode()
+    [Fact(Timeout = 120000)]
+    public async Task Statistics_WithFusedNode()
     {
         var graph = new OptimizationGraph<double>();
         var node = CreateNode("fused", OperationType.MatMul);
@@ -476,8 +477,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Node Clone Tests
     // ============================
 
-    [Fact]
-    public void Clone_CopiesProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_CopiesProperties()
     {
         var original = CreateNode("conv1", OperationType.Convolution);
         original.OutputShape = new[] { 32, 28, 28 };
@@ -493,8 +494,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.False(clone.CanEliminate);
     }
 
-    [Fact]
-    public void Clone_NoSharedConnections()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_NoSharedConnections()
     {
         var a = CreateNode("a");
         var b = CreateNode("b");
@@ -511,8 +512,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Graph Clone Tests
     // ============================
 
-    [Fact]
-    public void GraphClone_PreservesStructure()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClone_PreservesStructure()
     {
         var original = CreateChainGraph();
         var clone = (OptimizationGraph<double>)original.Clone();
@@ -522,8 +523,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal(original.OutputNodes.Count, clone.OutputNodes.Count);
     }
 
-    [Fact]
-    public void GraphClone_TopologicalOrderPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClone_TopologicalOrderPreserved()
     {
         var original = CreateChainGraph();
         var clone = (OptimizationGraph<double>)original.Clone();
@@ -532,8 +533,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Equal(4, cloneOrder.Count);
     }
 
-    [Fact]
-    public void GraphClone_IsIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClone_IsIndependent()
     {
         var original = CreateChainGraph();
         var clone = (OptimizationGraph<double>)original.Clone();
@@ -550,15 +551,15 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Validation Tests
     // ============================
 
-    [Fact]
-    public void Validate_EmptyGraph_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EmptyGraph_Valid()
     {
         var graph = new OptimizationGraph<double>();
         Assert.True(graph.Validate());
     }
 
-    [Fact]
-    public void Validate_DisconnectedNode_Invalid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_DisconnectedNode_Invalid()
     {
         var graph = new OptimizationGraph<double>();
         var input = CreateNode("input", OperationType.Input);
@@ -571,8 +572,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.False(graph.Validate());
     }
 
-    [Fact]
-    public void Validate_ConstantNodes_AllowedDisconnected()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ConstantNodes_AllowedDisconnected()
     {
         var graph = new OptimizationGraph<double>();
         var input = CreateNode("input", OperationType.Input);
@@ -589,8 +590,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Node Default Properties Tests
     // ============================
 
-    [Fact]
-    public void NewNode_DefaultProperties()
+    [Fact(Timeout = 120000)]
+    public async Task NewNode_DefaultProperties()
     {
         var node = new OptimizationNode<double>();
 
@@ -615,8 +616,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // Graph Topology Invariants
     // ============================
 
-    [Fact]
-    public void TopologicalOrder_EveryNodePrecedesItsConsumers()
+    [Fact(Timeout = 120000)]
+    public async Task TopologicalOrder_EveryNodePrecedesItsConsumers()
     {
         var graph = CreateDiamondGraph();
         var order = graph.GetTopologicalOrder();
@@ -636,8 +637,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void TopologicalOrder_AllNodesIncluded()
+    [Fact(Timeout = 120000)]
+    public async Task TopologicalOrder_AllNodesIncluded()
     {
         var graph = CreateChainGraph();
         var order = graph.GetTopologicalOrder();
@@ -649,8 +650,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
             Assert.Contains(node.Id, orderIds);
     }
 
-    [Fact]
-    public void Edges_AreBidirectional()
+    [Fact(Timeout = 120000)]
+    public async Task Edges_AreBidirectional()
     {
         // For every node, if B is in A.Outputs, then A should be in B.Inputs
         var graph = CreateDiamondGraph();
@@ -669,8 +670,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
     // ToString Tests
     // ============================
 
-    [Fact]
-    public void Node_ToString_ContainsInfo()
+    [Fact(Timeout = 120000)]
+    public async Task Node_ToString_ContainsInfo()
     {
         var node = CreateNode("conv1", OperationType.Convolution);
         node.OutputShape = new[] { 32, 28, 28 };
@@ -680,8 +681,8 @@ public class InferenceOptimizationDeepMathIntegrationTests
         Assert.Contains("Convolution", str);
     }
 
-    [Fact]
-    public void Graph_ToString_ContainsInfo()
+    [Fact(Timeout = 120000)]
+    public async Task Graph_ToString_ContainsInfo()
     {
         var graph = CreateChainGraph();
         var str = graph.ToString();

@@ -7,6 +7,7 @@ using AiDotNet.Finance.Forecasting.Neural;
 using AiDotNet.Finance.Forecasting.Transformers;
 using AiDotNet.Finance.Risk;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Finance;
 
@@ -36,8 +37,8 @@ public class FinanceAutoMLIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void FinancialModelFactory_RejectsUnsupportedModels()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialModelFactory_RejectsUnsupportedModels()
     {
         var architecture = FinanceTestHelpers.CreateArchitecture<double>(inputSize: 4, outputSize: 4);
         var factory = new FinancialModelFactory<double>(architecture);

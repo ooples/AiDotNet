@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Regression;
 using AiDotNet.Regression.MixedEffects;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -94,8 +95,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region M5ModelTree
 
-    [Fact]
-    public void M5ModelTree_FitsNonLinearData_BetterThanLinear()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_FitsNonLinearData_BetterThanLinear()
     {
         var (x, y) = CreateNonLinearData(100, seed: 42);
 
@@ -108,8 +109,8 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"M5ModelTree R²={r2:F4} should be > 0.5 on quadratic data");
     }
 
-    [Fact]
-    public void M5ModelTree_LeafModelsAreLinear()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_LeafModelsAreLinear()
     {
         // M5 should use linear models at leaves, so it should handle both
         // piecewise linear and non-linear relationships
@@ -127,8 +128,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region SuperLearner
 
-    [Fact]
-    public void SuperLearner_FitsLinearData_AtLeastAsGoodAsBestBase()
+    [Fact(Timeout = 120000)]
+    public async Task SuperLearner_FitsLinearData_AtLeastAsGoodAsBestBase()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, 1.0, -0.5 }, intercept: 3.0, noise: 0.5, seed: 42);
 
@@ -141,8 +142,8 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"SuperLearner R²={r2:F4} should be > 0.5 (at least as good as best base)");
     }
 
-    [Fact]
-    public void SuperLearner_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task SuperLearner_OutputLengthMatchesInput()
     {
         var (x, y) = CreateLinearData(50, new[] { 1.0 }, intercept: 0, noise: 0.1, seed: 42);
 
@@ -161,8 +162,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region GeneralizedAdditiveModel
 
-    [Fact]
-    public void GAM_FitsNonLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task GAM_FitsNonLinearData_ReasonableR2()
     {
         var (x, y) = CreateNonLinearData(80, seed: 42);
 
@@ -175,8 +176,8 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(r2 > 0.3, $"GAM R²={r2:F4} should be > 0.3 on non-linear data");
     }
 
-    [Fact]
-    public void GAM_CapturesAdditiveStructure()
+    [Fact(Timeout = 120000)]
+    public async Task GAM_CapturesAdditiveStructure()
     {
         // y = f1(x1) + f2(x2) — GAM should capture additive effects
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0 }, intercept: 0, noise: 0.3, seed: 42);
@@ -193,8 +194,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region MixedEffectsModel
 
-    [Fact]
-    public void LinearMixedModel_FitsData_PredictionsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task LinearMixedModel_FitsData_PredictionsFinite()
     {
         // Create data with 2 fixed-effect features + 1 grouping column (col 2)
         // y = 2*x1 - x2 + 3 + group_effect + noise
@@ -227,8 +228,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region DeepHit (Survival)
 
-    [Fact]
-    public void DeepHit_TrainsAndPredicts_OutputsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task DeepHit_TrainsAndPredicts_OutputsFinite()
     {
         // DeepHit is a survival analysis model — uses time-to-event data
         var (x, y) = CreateLinearData(60, new[] { 1.0, 0.5 }, intercept: 2.0, noise: 0.3, seed: 42);
@@ -248,8 +249,8 @@ public class AdvancedRegressionIntegrationTests
 
     #region DeepSurv (Survival)
 
-    [Fact]
-    public void DeepSurv_TrainsAndPredicts_OutputsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task DeepSurv_TrainsAndPredicts_OutputsFinite()
     {
         var (x, y) = CreateLinearData(60, new[] { 1.0, -0.5 }, intercept: 3.0, noise: 0.3, seed: 42);
         for (int i = 0; i < y.Length; i++)
@@ -263,8 +264,8 @@ public class AdvancedRegressionIntegrationTests
         Assert.Equal(x.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void DeepSurv_HigherRisk_HigherPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task DeepSurv_HigherRisk_HigherPrediction()
     {
         // Create data where higher x values → shorter survival
         var random = new Random(42);
@@ -314,24 +315,24 @@ public class AdvancedRegressionIntegrationTests
         Assert.True(AllFinite(predictions), $"{name} produced NaN/Infinity predictions");
     }
 
-    [Fact]
-    public void M5ModelTree_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new M5ModelTree<double>(), "M5ModelTree");
 
-    [Fact]
-    public void SuperLearner_CrossCutting_FinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SuperLearner_CrossCutting_FinitePredictions()
         => AssertOutputLengthAndFinite(new SuperLearner<double>(), "SuperLearner");
 
-    [Fact]
-    public void GAM_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task GAM_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new GeneralizedAdditiveModel<double>(), "GAM");
 
-    [Fact]
-    public void DeepHit_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepHit_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new DeepHit<double>(), "DeepHit");
 
-    [Fact]
-    public void DeepSurv_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepSurv_OutputLengthMatchesInput()
         => AssertOutputLengthAndFinite(new DeepSurv<double>(), "DeepSurv");
 
     #endregion

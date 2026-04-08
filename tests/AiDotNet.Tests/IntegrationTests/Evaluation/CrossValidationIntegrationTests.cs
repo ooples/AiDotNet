@@ -1,5 +1,6 @@
 using AiDotNet.Evaluation.CrossValidation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -16,8 +17,8 @@ public class CrossValidationIntegrationTests
 
     #region KFoldStrategy
 
-    [Fact]
-    public void KFold_DefaultK5_Produces5Splits()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_DefaultK5_Produces5Splits()
     {
         var strategy = new KFoldStrategy<double>();
         Assert.Equal(5, strategy.NumSplits);
@@ -27,8 +28,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void KFold_EachFoldCoversAllData()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_EachFoldCoversAllData()
     {
         var strategy = new KFoldStrategy<double>(k: 5, shuffle: false);
         var splits = strategy.Split(DataSize).ToList();
@@ -42,8 +43,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_ValidationSizesRoughlyEqual()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_ValidationSizesRoughlyEqual()
     {
         var strategy = new KFoldStrategy<double>(k: 5);
         var splits = strategy.Split(DataSize).ToList();
@@ -56,8 +57,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_NoOverlapBetweenTrainAndVal()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_NoOverlapBetweenTrainAndVal()
     {
         var strategy = new KFoldStrategy<double>(k: 5, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
@@ -69,30 +70,30 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_K10_Produces10Splits()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_K10_Produces10Splits()
     {
         var strategy = new KFoldStrategy<double>(k: 10);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(10, splits.Count);
     }
 
-    [Fact]
-    public void KFold_InvalidK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_InvalidK_Throws()
     {
         Assert.Throws<ArgumentException>(() => new KFoldStrategy<double>(k: 1));
         Assert.Throws<ArgumentException>(() => new KFoldStrategy<double>(k: 0));
     }
 
-    [Fact]
-    public void KFold_DataSizeLessThanK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_DataSizeLessThanK_Throws()
     {
         var strategy = new KFoldStrategy<double>(k: 5);
         Assert.Throws<ArgumentException>(() => strategy.Split(3).ToList());
     }
 
-    [Fact]
-    public void KFold_SeededReproducible()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_SeededReproducible()
     {
         var s1 = new KFoldStrategy<double>(k: 5, shuffle: true, randomSeed: 42);
         var s2 = new KFoldStrategy<double>(k: 5, shuffle: true, randomSeed: 42);
@@ -107,8 +108,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_Description_ContainsInfo()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_Description_ContainsInfo()
     {
         var strategy = new KFoldStrategy<double>(k: 5, shuffle: true);
         Assert.Contains("5-fold", strategy.Description);
@@ -119,21 +120,21 @@ public class CrossValidationIntegrationTests
 
     #region StratifiedKFoldStrategy
 
-    [Fact]
-    public void StratifiedKFold_DefaultK5_Produces5Splits()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_DefaultK5_Produces5Splits()
     {
         var strategy = new StratifiedKFoldStrategy<double>(k: 5);
         Assert.Equal(5, strategy.NumSplits);
     }
 
-    [Fact]
-    public void StratifiedKFold_InvalidK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_InvalidK_Throws()
     {
         Assert.Throws<ArgumentException>(() => new StratifiedKFoldStrategy<double>(k: 1));
     }
 
-    [Fact]
-    public void StratifiedKFold_WithLabels_NoOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_WithLabels_NoOverlap()
     {
         var strategy = new StratifiedKFoldStrategy<double>(k: 5, randomSeed: 42);
         var labels = new double[DataSize];
@@ -153,8 +154,8 @@ public class CrossValidationIntegrationTests
 
     #region LeaveOneOutStrategy
 
-    [Fact]
-    public void LeaveOneOut_ProducesNSplits()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOut_ProducesNSplits()
     {
         var strategy = new LeaveOneOutStrategy<double>();
         var splits = strategy.Split(10).ToList();
@@ -163,8 +164,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal("LeaveOneOut", strategy.Name);
     }
 
-    [Fact]
-    public void LeaveOneOut_ValidationIsOneElement()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOut_ValidationIsOneElement()
     {
         var strategy = new LeaveOneOutStrategy<double>();
         var splits = strategy.Split(10).ToList();
@@ -176,8 +177,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void LeaveOneOut_EachSampleValidatedOnce()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOut_EachSampleValidatedOnce()
     {
         var strategy = new LeaveOneOutStrategy<double>();
         var splits = strategy.Split(10).ToList();
@@ -186,8 +187,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(Enumerable.Range(0, 10).ToArray(), validatedIndices);
     }
 
-    [Fact]
-    public void LeaveOneOut_TooFewSamples_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOut_TooFewSamples_Throws()
     {
         var strategy = new LeaveOneOutStrategy<double>();
         Assert.Throws<ArgumentException>(() => strategy.Split(1).ToList());
@@ -197,15 +198,15 @@ public class CrossValidationIntegrationTests
 
     #region LeavePOutStrategy
 
-    [Fact]
-    public void LeavePOut_Default_P2()
+    [Fact(Timeout = 120000)]
+    public async Task LeavePOut_Default_P2()
     {
         var strategy = new LeavePOutStrategy<double>(p: 2);
         Assert.Equal("Leave-2-Out", strategy.Name);
     }
 
-    [Fact]
-    public void LeavePOut_ValidationSizeIsP()
+    [Fact(Timeout = 120000)]
+    public async Task LeavePOut_ValidationSizeIsP()
     {
         var strategy = new LeavePOutStrategy<double>(p: 2, maxFolds: 10);
         var splits = strategy.Split(10).ToList();
@@ -217,8 +218,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void LeavePOut_InvalidP_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LeavePOut_InvalidP_Throws()
     {
         Assert.Throws<ArgumentException>(() => new LeavePOutStrategy<double>(p: 0));
     }
@@ -227,15 +228,15 @@ public class CrossValidationIntegrationTests
 
     #region ShuffleSplitStrategy
 
-    [Fact]
-    public void ShuffleSplit_DefaultProduces10Splits()
+    [Fact(Timeout = 120000)]
+    public async Task ShuffleSplit_DefaultProduces10Splits()
     {
         var strategy = new ShuffleSplitStrategy<double>();
         Assert.Equal(10, strategy.NumSplits);
     }
 
-    [Fact]
-    public void ShuffleSplit_TestSizeApproximatelyCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ShuffleSplit_TestSizeApproximatelyCorrect()
     {
         var strategy = new ShuffleSplitStrategy<double>(numSplits: 5, testSize: 0.2, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
@@ -248,15 +249,15 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void ShuffleSplit_InvalidTestSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ShuffleSplit_InvalidTestSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ShuffleSplitStrategy<double>(testSize: 0.0));
         Assert.Throws<ArgumentException>(() => new ShuffleSplitStrategy<double>(testSize: 1.0));
     }
 
-    [Fact]
-    public void ShuffleSplit_InvalidNumSplits_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ShuffleSplit_InvalidNumSplits_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ShuffleSplitStrategy<double>(numSplits: 0));
     }
@@ -265,23 +266,23 @@ public class CrossValidationIntegrationTests
 
     #region RepeatedKFoldStrategy
 
-    [Fact]
-    public void RepeatedKFold_ProducesKTimesRSplits()
+    [Fact(Timeout = 120000)]
+    public async Task RepeatedKFold_ProducesKTimesRSplits()
     {
         var strategy = new RepeatedKFoldStrategy<double>(k: 5, repetitions: 3, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(15, splits.Count); // 5 * 3
     }
 
-    [Fact]
-    public void RepeatedKFold_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RepeatedKFold_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new RepeatedKFoldStrategy<double>(k: 1));
         Assert.Throws<ArgumentException>(() => new RepeatedKFoldStrategy<double>(k: 5, repetitions: 0));
     }
 
-    [Fact]
-    public void RepeatedKFold_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task RepeatedKFold_Properties()
     {
         var strategy = new RepeatedKFoldStrategy<double>(k: 5, repetitions: 10);
         Assert.Equal(50, strategy.NumSplits);
@@ -292,23 +293,23 @@ public class CrossValidationIntegrationTests
 
     #region BootstrapStrategy
 
-    [Fact]
-    public void Bootstrap_DefaultProduces100Splits()
+    [Fact(Timeout = 120000)]
+    public async Task Bootstrap_DefaultProduces100Splits()
     {
         var strategy = new BootstrapStrategy<double>();
         Assert.Equal(100, strategy.NumSplits);
     }
 
-    [Fact]
-    public void Bootstrap_ProducesCorrectSplitCount()
+    [Fact(Timeout = 120000)]
+    public async Task Bootstrap_ProducesCorrectSplitCount()
     {
         var strategy = new BootstrapStrategy<double>(numBootstraps: 10, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(10, splits.Count);
     }
 
-    [Fact]
-    public void Bootstrap_TrainSizeEqualsDataSize()
+    [Fact(Timeout = 120000)]
+    public async Task Bootstrap_TrainSizeEqualsDataSize()
     {
         var strategy = new BootstrapStrategy<double>(numBootstraps: 5, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
@@ -322,8 +323,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Bootstrap_InvalidNumBootstraps_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Bootstrap_InvalidNumBootstraps_Throws()
     {
         Assert.Throws<ArgumentException>(() => new BootstrapStrategy<double>(numBootstraps: 0));
     }
@@ -332,24 +333,24 @@ public class CrossValidationIntegrationTests
 
     #region MonteCarloStrategy
 
-    [Fact]
-    public void MonteCarlo_ProducesCorrectSplitCount()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarlo_ProducesCorrectSplitCount()
     {
         var strategy = new MonteCarloStrategy<double>(nIterations: 20, testSize: 0.2, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(20, splits.Count);
     }
 
-    [Fact]
-    public void MonteCarlo_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarlo_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MonteCarloStrategy<double>(nIterations: 0));
         Assert.Throws<ArgumentException>(() => new MonteCarloStrategy<double>(testSize: 0.0));
         Assert.Throws<ArgumentException>(() => new MonteCarloStrategy<double>(testSize: 1.0));
     }
 
-    [Fact]
-    public void MonteCarlo_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarlo_Properties()
     {
         var strategy = new MonteCarloStrategy<double>(nIterations: 50);
         Assert.Equal(50, strategy.NumSplits);
@@ -360,16 +361,16 @@ public class CrossValidationIntegrationTests
 
     #region TimeSeriesSplitStrategy
 
-    [Fact]
-    public void TimeSeriesSplit_ProducesCorrectSplits()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_ProducesCorrectSplits()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 5);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void TimeSeriesSplit_TrainingSizeGrows()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_TrainingSizeGrows()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 5);
         var splits = strategy.Split(DataSize).ToList();
@@ -381,8 +382,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_TrainBeforeValidation()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_TrainBeforeValidation()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3);
         var splits = strategy.Split(DataSize).ToList();
@@ -397,14 +398,14 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_InvalidNumSplits_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_InvalidNumSplits_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TimeSeriesSplitStrategy<double>(numSplits: 1));
     }
 
-    [Fact]
-    public void TimeSeriesSplit_WithGap_GreaterThanZero()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_WithGap_GreaterThanZero()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3, gap: 5);
         var splits = strategy.Split(DataSize).ToList();
@@ -419,8 +420,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_NegativeGap_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_NegativeGap_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TimeSeriesSplitStrategy<double>(gap: -1));
     }
@@ -429,16 +430,16 @@ public class CrossValidationIntegrationTests
 
     #region SlidingWindowStrategy
 
-    [Fact]
-    public void SlidingWindow_ProducesSplits()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_ProducesSplits()
     {
         var strategy = new SlidingWindowStrategy<double>(windowSize: 20, testSize: 5);
         var splits = strategy.Split(DataSize).ToList();
         Assert.True(splits.Count > 0);
     }
 
-    [Fact]
-    public void SlidingWindow_TrainSizeEqualsWindow()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_TrainSizeEqualsWindow()
     {
         var strategy = new SlidingWindowStrategy<double>(windowSize: 20, testSize: 5);
         var splits = strategy.Split(DataSize).ToList();
@@ -450,8 +451,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void SlidingWindow_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new SlidingWindowStrategy<double>(windowSize: 0, testSize: 5));
         Assert.Throws<ArgumentException>(() => new SlidingWindowStrategy<double>(windowSize: 20, testSize: 0));
@@ -461,16 +462,16 @@ public class CrossValidationIntegrationTests
 
     #region BlockedKFoldStrategy
 
-    [Fact]
-    public void BlockedKFold_ProducesCorrectSplits()
+    [Fact(Timeout = 120000)]
+    public async Task BlockedKFold_ProducesCorrectSplits()
     {
         var strategy = new BlockedKFoldStrategy<double>(nFolds: 5);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void BlockedKFold_NoOverlapBetweenTrainAndVal()
+    [Fact(Timeout = 120000)]
+    public async Task BlockedKFold_NoOverlapBetweenTrainAndVal()
     {
         var strategy = new BlockedKFoldStrategy<double>(nFolds: 5, gapSize: 2);
         var splits = strategy.Split(DataSize).ToList();
@@ -482,8 +483,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void BlockedKFold_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BlockedKFold_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new BlockedKFoldStrategy<double>(nFolds: 1));
         Assert.Throws<ArgumentException>(() => new BlockedKFoldStrategy<double>(gapSize: -1));
@@ -493,16 +494,16 @@ public class CrossValidationIntegrationTests
 
     #region PurgedKFoldStrategy
 
-    [Fact]
-    public void PurgedKFold_ProducesCorrectSplits()
+    [Fact(Timeout = 120000)]
+    public async Task PurgedKFold_ProducesCorrectSplits()
     {
         var strategy = new PurgedKFoldStrategy<double>(k: 5);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void PurgedKFold_NoOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task PurgedKFold_NoOverlap()
     {
         var strategy = new PurgedKFoldStrategy<double>(k: 5, purgeGap: 3);
         var splits = strategy.Split(DataSize).ToList();
@@ -514,8 +515,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void PurgedKFold_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PurgedKFold_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new PurgedKFoldStrategy<double>(k: 1));
         Assert.Throws<ArgumentException>(() => new PurgedKFoldStrategy<double>(purgeGap: -1));
@@ -525,8 +526,8 @@ public class CrossValidationIntegrationTests
 
     #region GroupKFoldStrategy
 
-    [Fact]
-    public void GroupKFold_ProducesSplits()
+    [Fact(Timeout = 120000)]
+    public async Task GroupKFold_ProducesSplits()
     {
         var groups = new int[DataSize];
         for (int i = 0; i < DataSize; i++) groups[i] = i % 10; // 10 groups
@@ -536,8 +537,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void GroupKFold_SameGroupNotInTrainAndVal()
+    [Fact(Timeout = 120000)]
+    public async Task GroupKFold_SameGroupNotInTrainAndVal()
     {
         var groups = new int[DataSize];
         for (int i = 0; i < DataSize; i++) groups[i] = i % 10;
@@ -554,8 +555,8 @@ public class CrossValidationIntegrationTests
         }
     }
 
-    [Fact]
-    public void GroupKFold_NullGroups_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task GroupKFold_NullGroups_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new GroupKFoldStrategy<double>(null));
     }
@@ -564,8 +565,8 @@ public class CrossValidationIntegrationTests
 
     #region StratifiedGroupKFoldStrategy
 
-    [Fact]
-    public void StratifiedGroupKFold_ProducesSplits()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedGroupKFold_ProducesSplits()
     {
         var groups = new int[DataSize];
         for (int i = 0; i < DataSize; i++) groups[i] = i % 10;
@@ -578,8 +579,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void StratifiedGroupKFold_InvalidFolds_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedGroupKFold_InvalidFolds_Throws()
     {
         Assert.Throws<ArgumentException>(() => new StratifiedGroupKFoldStrategy<double>(nFolds: 1));
     }
@@ -588,23 +589,23 @@ public class CrossValidationIntegrationTests
 
     #region NestedCVStrategy
 
-    [Fact]
-    public void NestedCV_ProducesSplits()
+    [Fact(Timeout = 120000)]
+    public async Task NestedCV_ProducesSplits()
     {
         var strategy = new NestedCVStrategy<double>(outerFolds: 3, innerFolds: 2, randomSeed: 42);
         var splits = strategy.Split(DataSize).ToList();
         Assert.Equal(3, splits.Count);
     }
 
-    [Fact]
-    public void NestedCV_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task NestedCV_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new NestedCVStrategy<double>(outerFolds: 1));
         Assert.Throws<ArgumentException>(() => new NestedCVStrategy<double>(innerFolds: 1));
     }
 
-    [Fact]
-    public void NestedCV_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task NestedCV_Properties()
     {
         var strategy = new NestedCVStrategy<double>(outerFolds: 5, innerFolds: 3);
         Assert.Equal(5, strategy.NumSplits);
@@ -615,8 +616,8 @@ public class CrossValidationIntegrationTests
 
     #region CVFold Struct
 
-    [Fact]
-    public void CVFold_Properties_SetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CVFold_Properties_SetCorrectly()
     {
         var fold = new CVFold<double>
         {
@@ -630,8 +631,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(2, fold.ValidationSize);
     }
 
-    [Fact]
-    public void CVFold_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CVFold_DefaultValues()
     {
         var fold = new CVFold<double>();
         Assert.Equal(0, fold.FoldIndex);
@@ -643,8 +644,8 @@ public class CrossValidationIntegrationTests
 
     #region Cross-Strategy Tests
 
-    [Fact]
-    public void AllStrategies_Float_Work()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_Float_Work()
     {
         // Verify all strategies work with float type
         var kfold = new KFoldStrategy<float>(k: 3);
@@ -656,8 +657,8 @@ public class CrossValidationIntegrationTests
         Assert.Equal(5, looSplits.Count);
     }
 
-    [Fact]
-    public void AllStrategies_NoOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_NoOverlap()
     {
         // Test that train and validation never overlap for basic strategies
         var strategies = new ICrossValidationStrategy<double>[]

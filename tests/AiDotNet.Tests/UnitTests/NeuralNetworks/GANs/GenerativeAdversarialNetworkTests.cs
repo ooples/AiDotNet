@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNetTests.UnitTests.NeuralNetworks.GANs.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.GANs;
 
@@ -16,8 +17,8 @@ public class GenerativeAdversarialNetworkTests
 {
     #region Base GAN Tests
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -32,8 +33,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(gan.Discriminator);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -49,8 +50,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroBatchSize_ReturnsEmptyTensor()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroBatchSize_ReturnsEmptyTensor()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -65,8 +66,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(2, noise.Shape.Length);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroNoiseSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroNoiseSize_ThrowsException()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -77,8 +78,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => gan.GenerateRandomNoiseTensor(4, 0));
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -92,8 +93,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(metadata);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GetDiagnostics_ReturnsDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GetDiagnostics_ReturnsDictionary()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -107,8 +108,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(diagnostics);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_EnableGradientPenalty_SetsFlag()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_EnableGradientPenalty_SetsFlag()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -123,8 +124,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(gan);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_EnableFeatureMatching_SetsFlag()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_EnableFeatureMatching_SetsFlag()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -143,8 +144,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region DCGAN Tests
 
-    [Fact]
-    public void DCGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange & Act
         var dcgan = new DCGAN<double>(
@@ -159,8 +160,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
-    public void DCGAN_Constructor_WithCustomFeatureMaps_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_Constructor_WithCustomFeatureMaps_InitializesCorrectly()
     {
         // Arrange & Act
         var dcgan = new DCGAN<double>(
@@ -177,8 +178,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
-    public void DCGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
         var dcgan = new DCGAN<double>(100, 3, 32, 32);
@@ -192,8 +193,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
-    public void DCGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var dcgan = new DCGAN<double>(100, 3, 32, 32);
@@ -209,8 +210,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region InfoGAN Tests
 
-    [Fact]
-    public void InfoGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -231,8 +232,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(infogan.Discriminator);
     }
 
-    [Fact]
-    public void InfoGAN_GenerateRandomNoiseTensor_WithValidBatchSize_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GenerateRandomNoiseTensor_WithValidBatchSize_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -249,8 +250,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
-    public void InfoGAN_GenerateRandomNoiseTensor_WithInvalidBatchSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GenerateRandomNoiseTensor_WithInvalidBatchSize_ThrowsException()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -263,8 +264,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => infogan.GenerateRandomNoiseTensor(-1, 100));
     }
 
-    [Fact]
-    public void InfoGAN_GenerateRandomNoiseTensor_WithInvalidNoiseSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GenerateRandomNoiseTensor_WithInvalidNoiseSize_ThrowsException()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -277,8 +278,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => infogan.GenerateRandomNoiseTensor(4, -1));
     }
 
-    [Fact]
-    public void InfoGAN_GenerateRandomLatentCodes_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GenerateRandomLatentCodes_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -295,8 +296,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(10, codes.Shape[1]); // latentCodeSize = 10
     }
 
-    [Fact]
-    public void InfoGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -315,8 +316,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region Pix2Pix Tests
 
-    [Fact]
-    public void Pix2Pix_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Pix_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -334,8 +335,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(pix2pix.Discriminator);
     }
 
-    [Fact]
-    public void Pix2Pix_Constructor_WithCustomL1Lambda_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Pix_Constructor_WithCustomL1Lambda_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -352,8 +353,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(pix2pix);
     }
 
-    [Fact]
-    public void Pix2Pix_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Pix_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -371,8 +372,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region SAGAN Tests
 
-    [Fact]
-    public void SAGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SAGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -394,8 +395,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(128, sagan.LatentSize);
     }
 
-    [Fact]
-    public void SAGAN_Constructor_WithConditionalGeneration_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SAGAN_Constructor_WithConditionalGeneration_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -416,8 +417,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(10, sagan.NumClasses);
     }
 
-    [Fact]
-    public void SAGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task SAGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -435,8 +436,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region WGAN Tests
 
-    [Fact]
-    public void WGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -454,8 +455,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgan.Critic);
     }
 
-    [Fact]
-    public void WGAN_Constructor_WithCustomClipValue_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_Constructor_WithCustomClipValue_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -472,8 +473,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgan);
     }
 
-    [Fact]
-    public void WGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -489,8 +490,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
-    public void WGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -508,8 +509,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region WGANGP Tests
 
-    [Fact]
-    public void WGANGP_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -527,8 +528,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgangp.Critic);
     }
 
-    [Fact]
-    public void WGANGP_Constructor_WithCustomGradientPenalty_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_Constructor_WithCustomGradientPenalty_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -545,8 +546,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgangp);
     }
 
-    [Fact]
-    public void WGANGP_GenerateRandomNoiseTensor_WithValidParameters_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_GenerateRandomNoiseTensor_WithValidParameters_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -562,8 +563,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
-    public void WGANGP_GenerateRandomNoiseTensor_WithMinimalBatchSize_ReturnsTensor()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_GenerateRandomNoiseTensor_WithMinimalBatchSize_ReturnsTensor()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -578,8 +579,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(2, noise.Shape.Length);
     }
 
-    [Fact]
-    public void WGANGP_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -597,8 +598,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region StyleGAN Tests
 
-    [Fact]
-    public void StyleGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var mappingArch = CreateThreeDimensionalMappingArchitecture();
@@ -621,8 +622,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(stylegan.Discriminator);
     }
 
-    [Fact]
-    public void StyleGAN_GenerateRandomLatentCodes_WithValidBatchSize_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_GenerateRandomLatentCodes_WithValidBatchSize_ReturnsCorrectShape()
     {
         // Arrange
         var mappingArch = CreateThreeDimensionalMappingArchitecture();
@@ -640,8 +641,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(512, latentCodes.Shape[1]);
     }
 
-    [Fact]
-    public void StyleGAN_GenerateRandomLatentCodes_WithSingleSample_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_GenerateRandomLatentCodes_WithSingleSample_ReturnsCorrectShape()
     {
         // Arrange
         var mappingArch = CreateThreeDimensionalMappingArchitecture();
@@ -659,8 +660,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(256, latentCodes.Shape[1]);
     }
 
-    [Fact]
-    public void StyleGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var mappingArch = CreateThreeDimensionalMappingArchitecture();
@@ -680,8 +681,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region CycleGAN Tests
 
-    [Fact]
-    public void CycleGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CycleGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genAtoBArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -705,8 +706,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cyclegan.DiscriminatorB);
     }
 
-    [Fact]
-    public void CycleGAN_Constructor_WithCustomLambdas_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CycleGAN_Constructor_WithCustomLambdas_InitializesCorrectly()
     {
         // Arrange
         var genAtoBArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -728,8 +729,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cyclegan);
     }
 
-    [Fact]
-    public void CycleGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task CycleGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genAtoBArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -749,8 +750,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region ConditionalGAN Tests
 
-    [Fact]
-    public void ConditionalGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -769,8 +770,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cgan.Discriminator);
     }
 
-    [Fact]
-    public void ConditionalGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -785,8 +786,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(4, noise.Shape[0]);
     }
 
-    [Fact]
-    public void ConditionalGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -804,8 +805,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region ACGAN Tests
 
-    [Fact]
-    public void ACGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ACGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -824,8 +825,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(acgan.Discriminator);
     }
 
-    [Fact]
-    public void ACGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ACGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -840,8 +841,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(4, noise.Shape[0]);
     }
 
-    [Fact]
-    public void ACGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task ACGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -859,8 +860,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region BigGAN Tests
 
-    [Fact]
-    public void BigGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BigGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -883,8 +884,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(biggan.Discriminator);
     }
 
-    [Fact]
-    public void BigGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task BigGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -902,8 +903,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region ProgressiveGAN Tests
 
-    [Fact]
-    public void ProgressiveGAN_Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ProgressiveGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -923,8 +924,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(proggan.Discriminator);
     }
 
-    [Fact]
-    public void ProgressiveGAN_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task ProgressiveGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -963,8 +964,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(noiseSize, noise.Shape[1]);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_NoiseValuesAreInExpectedRange()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_NoiseValuesAreInExpectedRange()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
@@ -992,8 +993,8 @@ public class GenerativeAdversarialNetworkTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void DCGAN_WithFloatType_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_WithFloatType_InitializesCorrectly()
     {
         // Arrange & Act
         var dcgan = new DCGAN<float>(100, 3, 32, 32);
@@ -1004,8 +1005,8 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_WithFloatType_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_WithFloatType_InitializesCorrectly()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitectureFloat();

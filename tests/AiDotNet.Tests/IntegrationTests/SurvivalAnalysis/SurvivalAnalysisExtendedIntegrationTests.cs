@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.SurvivalAnalysis;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SurvivalAnalysis;
 
@@ -73,8 +74,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region KaplanMeierEstimator Tests
 
-    [Fact]
-    public void KaplanMeier_HandCalculated_SurvivalCurve()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_HandCalculated_SurvivalCurve()
     {
         // Hand calculation for simple data:
         // t=1: n=10 at risk, d=1 event → S(1) = (10-1)/10 = 0.9
@@ -101,8 +102,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(0.24609375, survProbs[4], 6);      // S(9) = 0.4921875 * 1/2
     }
 
-    [Fact]
-    public void KaplanMeier_SurvivalIsMonotoneDecreasing()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_SurvivalIsMonotoneDecreasing()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -118,8 +119,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaplanMeier_SurvivalAtTimeZero_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_SurvivalAtTimeZero_IsOne()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -132,8 +133,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(1.0, survival[0], Tolerance);
     }
 
-    [Fact]
-    public void KaplanMeier_NumberAtRisk_Decreases()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_NumberAtRisk_Decreases()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -153,8 +154,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(10, atRisk[0]);
     }
 
-    [Fact]
-    public void KaplanMeier_NumberEvents_AllOne()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_NumberEvents_AllOne()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -170,8 +171,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaplanMeier_SameForAllSubjects()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_SameForAllSubjects()
     {
         // KM is non-parametric - all subjects get the same curve
         var (x, times, events) = CreateSimpleSurvivalData();
@@ -194,8 +195,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaplanMeier_HazardRatio_AllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_HazardRatio_AllOnes()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -213,8 +214,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaplanMeier_NoCensoring_AllEvents()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_NoCensoring_AllEvents()
     {
         // When all observations are events, survival decreases at each time
         int n = 5;
@@ -248,8 +249,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region NelsonAalenEstimator Tests
 
-    [Fact]
-    public void NelsonAalen_HandCalculated_CumulativeHazard()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_HandCalculated_CumulativeHazard()
     {
         // For same data as KM:
         // H(1) = 1/10 = 0.1
@@ -272,8 +273,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(0.225 + 1.0 / 6 + 0.25 + 0.5, cumHazard[4], 5);
     }
 
-    [Fact]
-    public void NelsonAalen_CumulativeHazard_IsMonotoneIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_CumulativeHazard_IsMonotoneIncreasing()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var na = new NelsonAalenEstimator<double>();
@@ -289,8 +290,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void NelsonAalen_SurvivalFromHazard_Relationship()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_SurvivalFromHazard_Relationship()
     {
         // S(t) = exp(-H(t))
         var (x, times, events) = CreateSimpleSurvivalData();
@@ -311,8 +312,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void NelsonAalen_Variance_IsMonotoneIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_Variance_IsMonotoneIncreasing()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var na = new NelsonAalenEstimator<double>();
@@ -328,8 +329,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void NelsonAalen_HandCalculated_Variance()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_HandCalculated_Variance()
     {
         // Var(H(t)) = sum d(t)/n(t)^2
         // Var(H(1)) = 1/100 = 0.01
@@ -349,8 +350,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(1.0 / 100 + 1.0 / 64 + 1.0 / 36, variance[2], 5);
     }
 
-    [Fact]
-    public void NelsonAalen_CumulativeHazardAtTimeZero_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_CumulativeHazardAtTimeZero_IsZero()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var na = new NelsonAalenEstimator<double>();
@@ -365,8 +366,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region CoxProportionalHazards Tests
 
-    [Fact]
-    public void Cox_PositiveRiskFactor_PositiveCoefficient()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_PositiveRiskFactor_PositiveCoefficient()
     {
         // When higher x1 → shorter survival (higher risk), beta1 should be positive
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
@@ -384,8 +385,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
             $"Risk factor coefficient should be positive, got {coefficients[0]}");
     }
 
-    [Fact]
-    public void Cox_HazardRatio_HigherRiskSubject()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_HazardRatio_HigherRiskSubject()
     {
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
         var cox = new CoxProportionalHazards<double>(
@@ -410,8 +411,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
             $"High risk HR ({hrHigh[0]}) should be > low risk HR ({hrLow[0]})");
     }
 
-    [Fact]
-    public void Cox_SurvivalProbability_HighRiskLowerSurvival()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_SurvivalProbability_HighRiskLowerSurvival()
     {
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
         var cox = new CoxProportionalHazards<double>(
@@ -435,8 +436,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
             $"High risk survival ({survHigh[0, 0]}) should be < low risk ({survLow[0, 0]})");
     }
 
-    [Fact]
-    public void Cox_HazardRatio_ExponentialOfLinearPredictor()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_HazardRatio_ExponentialOfLinearPredictor()
     {
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
         var cox = new CoxProportionalHazards<double>(
@@ -456,8 +457,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(expectedHR, hr[0], 4);
     }
 
-    [Fact]
-    public void Cox_FeatureHazardRatios_ExponentialOfCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_FeatureHazardRatios_ExponentialOfCoefficients()
     {
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
         var cox = new CoxProportionalHazards<double>(
@@ -475,8 +476,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void Cox_L2Regularization_ShrinkCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_L2Regularization_ShrinkCoefficients()
     {
         var (x, times, events) = CreateCovariateData(100, 0.5, 42);
 
@@ -509,8 +510,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region WeibullAFT Tests
 
-    [Fact]
-    public void WeibullAFT_FitDoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_FitDoesNotThrow()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -519,8 +520,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void WeibullAFT_ShapeScaleRelationship()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_ShapeScaleRelationship()
     {
         // Shape = 1/Scale
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
@@ -532,8 +533,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(1.0 / scale, shape, 6);
     }
 
-    [Fact]
-    public void WeibullAFT_SurvivalInZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_SurvivalInZeroOneRange()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -556,8 +557,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeibullAFT_SurvivalDecreases_OverTime()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_SurvivalDecreases_OverTime()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -580,8 +581,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeibullAFT_MedianSurvivalTime_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_MedianSurvivalTime_IsPositive()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -601,8 +602,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeibullAFT_ParameterRoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_ParameterRoundTrip()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -620,8 +621,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region LogNormalAFT Tests
 
-    [Fact]
-    public void LogNormalAFT_FitDoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_FitDoesNotThrow()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 200);
@@ -630,8 +631,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void LogNormalAFT_SurvivalInZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_SurvivalInZeroOneRange()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 200);
@@ -654,8 +655,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogNormalAFT_MedianSurvivalTime_ExpOfMu()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_MedianSurvivalTime_ExpOfMu()
     {
         // For log-normal, median = exp(mu) where mu is the linear predictor
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
@@ -680,8 +681,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(expectedMedian, median[0], 4);
     }
 
-    [Fact]
-    public void LogNormalAFT_ParameterRoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_ParameterRoundTrip()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 200);
@@ -693,8 +694,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(model.Scale, parameters[1], Tolerance);
     }
 
-    [Fact]
-    public void LogNormalAFT_SurvivalDecreases_LargeTime()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_SurvivalDecreases_LargeTime()
     {
         var (x, times, events) = CreateCovariateData(80, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 300);
@@ -719,8 +720,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region RandomSurvivalForest Tests
 
-    [Fact]
-    public void RSF_FitDoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_FitDoesNotThrow()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new RandomSurvivalForest<double>(
@@ -730,8 +731,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void RSF_SurvivalInZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_SurvivalInZeroOneRange()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new RandomSurvivalForest<double>(
@@ -755,8 +756,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void RSF_SurvivalDecreases_OverTime()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_SurvivalDecreases_OverTime()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new RandomSurvivalForest<double>(
@@ -780,8 +781,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void RSF_DifferentSubjects_DifferentSurvival()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_DifferentSubjects_DifferentSurvival()
     {
         // Unlike KM, RSF should give different curves for different features
         var (x, times, events) = CreateCovariateData(80, 0.5, 42);
@@ -805,29 +806,29 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.True(survProbs[1, 0] >= 0.0 && survProbs[1, 0] <= 1.0);
     }
 
-    [Fact]
-    public void RSF_InvalidNumTrees_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_InvalidNumTrees_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new RandomSurvivalForest<double>(numTrees: 0));
     }
 
-    [Fact]
-    public void RSF_InvalidMaxDepth_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_InvalidMaxDepth_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new RandomSurvivalForest<double>(maxDepth: 0));
     }
 
-    [Fact]
-    public void RSF_InvalidMinSamplesLeaf_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_InvalidMinSamplesLeaf_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new RandomSurvivalForest<double>(minSamplesLeaf: 0));
     }
 
-    [Fact]
-    public void RSF_MedianSurvivalTime_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task RSF_MedianSurvivalTime_IsPositive()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new RandomSurvivalForest<double>(
@@ -847,8 +848,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact]
-    public void AllModels_SurvivalStartsNearOne()
+    [Fact(Timeout = 120000)]
+    public async Task AllModels_SurvivalStartsNearOne()
     {
         var (x, times, events) = CreateCovariateData(60, 0.3, 42);
         var queryTimes = new Vector<double>(1) { [0] = 0.01 }; // Very early time
@@ -885,8 +886,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
             $"LogNormal survival at t=0.01 should be in (0,1]: {lnSurv[0, 0]}");
     }
 
-    [Fact]
-    public void KM_And_NA_SurvivalAgreement()
+    [Fact(Timeout = 120000)]
+    public async Task KM_And_NA_SurvivalAgreement()
     {
         // Both KM and NA are non-parametric, so their survival estimates should be similar
         // (not identical, as they use different formulas)
@@ -913,8 +914,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllModels_SurvivalDecreases_LargeTime()
+    [Fact(Timeout = 120000)]
+    public async Task AllModels_SurvivalDecreases_LargeTime()
     {
         var (x, times, events) = CreateCovariateData(80, 0.3, 42);
 
@@ -956,8 +957,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region Interface and Serialization Tests
 
-    [Fact]
-    public void KaplanMeier_Serialize_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_Serialize_Roundtrip()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var km = new KaplanMeierEstimator<double>();
@@ -975,8 +976,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void NelsonAalen_Serialize_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_Serialize_Roundtrip()
     {
         var (x, times, events) = CreateSimpleSurvivalData();
         var na = new NelsonAalenEstimator<double>();
@@ -997,8 +998,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeibullAFT_Serialize_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_Serialize_Roundtrip()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new WeibullAFT<double>(maxIterations: 200);
@@ -1012,8 +1013,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.Equal(model.Scale, model2.Scale, 4);
     }
 
-    [Fact]
-    public void LogNormalAFT_Serialize_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_Serialize_Roundtrip()
     {
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 200);
@@ -1031,8 +1032,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region Fit Method Variant Tests
 
-    [Fact]
-    public void KaplanMeier_FitWithVectorEvents()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_FitWithVectorEvents()
     {
         // Test the Fit(times, events, features?) overload that uses Vector<T> events
         int n = 10;
@@ -1054,8 +1055,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         Assert.True(survProbs.Length > 0);
     }
 
-    [Fact]
-    public void NelsonAalen_FitWithVectorEvents()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_FitWithVectorEvents()
     {
         int n = 10;
         var times = new Vector<double>(n);
@@ -1078,8 +1079,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void KaplanMeier_AllCensored_SurvivalIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_AllCensored_SurvivalIsOne()
     {
         int n = 5;
         var x = new Matrix<double>(n, 1);
@@ -1105,8 +1106,8 @@ public class SurvivalAnalysisExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void Cox_ZeroFeatures_HazardRatioIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_ZeroFeatures_HazardRatioIsOne()
     {
         var (x, times, events) = CreateCovariateData(50, 0.5, 42);
         var cox = new CoxProportionalHazards<double>(

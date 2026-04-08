@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Performance;
 
@@ -17,8 +18,8 @@ namespace AiDotNet.Tests.Performance;
 [Trait("Category", "Performance")]
 public class Phase2GateTests
 {
-    [Fact]
-    public void TensorPool_Rent_ReturnsValidTensor()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_Rent_ReturnsValidTensor()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 64, 64 };
@@ -34,8 +35,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_Return_AddsTensorToPool()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_Return_AddsTensorToPool()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 32, 32 };
@@ -49,8 +50,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_ReusesTensors()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_ReusesTensors()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 32, 32 };
@@ -68,8 +69,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_ClearsReturnedTensors()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_ClearsReturnedTensors()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 10, 10 };
@@ -94,8 +95,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_IsThreadSafe()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
         var exceptions = new ConcurrentBag<Exception>();
@@ -128,8 +129,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_RentReturn_IsFast()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_RentReturn_IsFast()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
         var shape = new[] { 64, 64 };
@@ -158,8 +159,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_RespectsMaxPoolSize()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_RespectsMaxPoolSize()
     {
         // Create a very small pool (1 MB)
         var pool = new TensorPool<float>(maxPoolSizeMB: 1);
@@ -177,8 +178,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void TensorPool_Clear_RemovesAllTensors()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_Clear_RemovesAllTensors()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 32, 32 };
@@ -200,8 +201,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void PooledTensor_AutoReturnsOnDispose()
+    [Fact(Timeout = 60000)]
+    public async Task PooledTensor_AutoReturnsOnDispose()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 16, 16 };
@@ -218,8 +219,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void InitializationStrategy_Lazy_HasCorrectProperties()
+    [Fact(Timeout = 60000)]
+    public async Task InitializationStrategy_Lazy_HasCorrectProperties()
     {
         var strategy = InitializationStrategies<float>.Lazy;
 
@@ -227,8 +228,8 @@ public class Phase2GateTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void InitializationStrategy_Eager_HasCorrectProperties()
+    [Fact(Timeout = 60000)]
+    public async Task InitializationStrategy_Eager_HasCorrectProperties()
     {
         var strategy = InitializationStrategies<float>.Eager;
 
@@ -236,8 +237,8 @@ public class Phase2GateTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void InitializationStrategy_Zero_HasCorrectProperties()
+    [Fact(Timeout = 60000)]
+    public async Task InitializationStrategy_Zero_HasCorrectProperties()
     {
         var strategy = InitializationStrategies<float>.Zero;
 
@@ -245,8 +246,8 @@ public class Phase2GateTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void InitializationStrategy_Zero_InitializesToZero()
+    [Fact(Timeout = 60000)]
+    public async Task InitializationStrategy_Zero_InitializesToZero()
     {
         var strategy = InitializationStrategies<float>.Zero;
         var weights = new Tensor<float>(new[] { 10, 10 });
@@ -277,8 +278,8 @@ public class Phase2GateTests
         }
     }
 
-    [Fact]
-    public void InitializationStrategy_Eager_InitializesWithXavier()
+    [Fact(Timeout = 60000)]
+    public async Task InitializationStrategy_Eager_InitializesWithXavier()
     {
         var strategy = InitializationStrategies<float>.Eager;
         var weights = new Tensor<float>(new[] { 100, 100 });
@@ -304,8 +305,8 @@ public class Phase2GateTests
         Assert.True(hasNonZero, "Xavier initialization should produce non-zero weights");
     }
 
-    [Fact]
-    public void TensorPool_ReducesAllocations()
+    [Fact(Timeout = 60000)]
+    public async Task TensorPool_ReducesAllocations()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
         var shape = new[] { 64, 64 };
@@ -342,8 +343,8 @@ public class Phase2GateTests
         pool.Dispose();
     }
 
-    [Fact]
-    public void DenseLayer_LazyInit_IsNotInitializedAfterConstruction()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
         var layer = new DenseLayer<float>(100, 50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
@@ -351,8 +352,8 @@ public class Phase2GateTests
         Assert.False(layer.IsInitialized);
     }
 
-    [Fact]
-    public void DenseLayer_LazyInit_IsInitializedAfterForward()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_LazyInit_IsInitializedAfterForward()
     {
         var layer = new DenseLayer<float>(100, 50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
@@ -366,8 +367,8 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void DenseLayer_EagerInit_IsInitializedImmediately()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_EagerInit_IsInitializedImmediately()
     {
         var layer = new DenseLayer<float>(100, 50,
             initializationStrategy: InitializationStrategies<float>.Eager);
@@ -375,16 +376,16 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void DenseLayer_DefaultInit_IsInitializedImmediately()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_DefaultInit_IsInitializedImmediately()
     {
         var layer = new DenseLayer<float>(100, 50);
 
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void DenseLayer_LazyInit_ConstructsFaster()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_LazyInit_ConstructsFaster()
     {
         const int inputSize = 1000;
         const int outputSize = 1000;
@@ -413,8 +414,8 @@ public class Phase2GateTests
             $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
     }
 
-    [Fact]
-    public void DenseLayer_LazyInit_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_LazyInit_ProducesCorrectOutput()
     {
         var eagerLayer = new DenseLayer<float>(10, 5,
             initializationStrategy: InitializationStrategies<float>.Zero);
@@ -437,8 +438,8 @@ public class Phase2GateTests
         Assert.True(lazyLayer.IsInitialized);
     }
 
-    [Fact]
-    public void DenseLayer_LazyInit_ThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task DenseLayer_LazyInit_ThreadSafe()
     {
         var layer = new DenseLayer<float>(100, 50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
@@ -463,8 +464,8 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_LazyInit_IsNotInitializedAfterConstruction()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
@@ -474,8 +475,8 @@ public class Phase2GateTests
         Assert.False(layer.IsInitialized);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_LazyInit_IsInitializedAfterForward()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_LazyInit_IsInitializedAfterForward()
     {
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
@@ -491,8 +492,8 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_EagerInit_IsInitializedImmediately()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_EagerInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
@@ -502,8 +503,8 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
@@ -512,8 +513,8 @@ public class Phase2GateTests
         Assert.True(layer.IsInitialized);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_LazyInit_ConstructsFaster()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_LazyInit_ConstructsFaster()
     {
         const int inputDepth = 64;
         const int inputHeight = 64;
@@ -547,8 +548,8 @@ public class Phase2GateTests
             $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
     }
 
-    [Fact]
-    public void ConvolutionalLayer_LazyInit_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ConvolutionalLayer_LazyInit_ProducesValidOutput()
     {
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,

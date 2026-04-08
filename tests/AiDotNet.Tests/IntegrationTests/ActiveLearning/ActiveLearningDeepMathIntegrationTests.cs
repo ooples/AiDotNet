@@ -33,7 +33,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Softmax verification (shared by all strategies)
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Softmax_UniformLogits_ProducesUniformProbabilities()
     {
@@ -48,7 +48,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(Math.Log(3.0), scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Softmax_DominantLogit_ProducesNearOneProbability()
     {
@@ -65,7 +65,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.True(scores[0] < 0.001, $"LC score {scores[0]} should be near 0 for dominant logit");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Softmax_NumericalStability_LargeLogitsDoNotOverflow()
     {
@@ -96,7 +96,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Entropy scoring: H = -Σ (p+ε) * log(p+ε)
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_HandCalculated_ThreeClassUniform()
     {
@@ -113,7 +113,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_HandCalculated_TwoClassLogits()
     {
@@ -136,7 +136,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_CertainPrediction_NearZero()
     {
@@ -149,7 +149,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.True(scores[0] < 0.001, $"Entropy {scores[0]} should be near 0 for near-certain prediction");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_MultipleSamples_CorrectScorePerSample()
     {
@@ -171,7 +171,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expectedUniform, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_SelectTopScoring_ReturnsHighestEntropyIndices()
     {
@@ -192,7 +192,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Margin scoring: 1 - (P_top1 - P_top2)
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Margin_HandCalculated_UniformDistribution()
     {
@@ -207,7 +207,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(1.0, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Margin_HandCalculated_TwoClassLogits()
     {
@@ -229,7 +229,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Margin_DominantPrediction_ScoreNearZero()
     {
@@ -243,7 +243,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.True(scores[0] < 0.01, $"Margin score {scores[0]} should be near 0 for dominant prediction");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Margin_ThreeClassWithTwoTied_ScoreIsOne()
     {
@@ -262,7 +262,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Least Confidence: 1 - max(p)
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void LeastConfidence_HandCalculated_Uniform()
     {
@@ -276,7 +276,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void LeastConfidence_HandCalculated_TwoClass()
     {
@@ -295,7 +295,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void LeastConfidence_BinaryUniform_ScoreIsHalf()
     {
@@ -313,7 +313,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Strategy comparison: same logits, different scores
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void AllStrategies_UniformLogits_AllMaximal()
     {
@@ -333,7 +333,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, lcScores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void AllStrategies_SkewedLogits_ConsistentOrdering()
     {
@@ -361,7 +361,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // BALD: I(y;θ|x) = H(ȳ) - E[H(y_i)]
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BALD_ScoreIsNonNegative()
     {
@@ -375,7 +375,7 @@ public class ActiveLearningDeepMathIntegrationTests
             $"BALD score {scores[0]} should be non-negative (Jensen's inequality)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BALD_NameIncludesMCSamples()
     {
@@ -383,7 +383,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal("BALD-MC15", bald.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void BALD_MultiSample_ScoresAreFinite()
     {
@@ -405,7 +405,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // InformationDensity: ID = Uncertainty * AvgSim^β
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void InformationDensity_CosineSimilarity_HandCalculated()
     {
@@ -427,7 +427,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expectedEntropy, scores[0], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void InformationDensity_RBFSimilarity_HandCalculated()
     {
@@ -449,7 +449,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void InformationDensity_InverseEuclidean_HandCalculated()
     {
@@ -470,7 +470,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void InformationDensity_BetaExponent_ScalesCorrectly()
     {
@@ -496,7 +496,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expectedRatio, ratio, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void InformationDensity_ThreeSamples_CosineSimilarityHandCalculated()
     {
@@ -531,7 +531,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Selection and statistics
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SelectSamples_ReturnsCorrectBatchSize()
     {
@@ -544,7 +544,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(selected.Distinct().Count(), selected.Length); // All unique
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SelectSamples_BatchSizeExceedsPool_ReturnsAll()
     {
@@ -555,7 +555,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(2, selected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void GetSelectionStatistics_AfterCompute_ReturnsCorrectStats()
     {
@@ -576,7 +576,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(mean, stats["MeanScore"], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_FourClassUniform_MaximumEntropy()
     {
@@ -592,7 +592,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(expected, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void LeastConfidence_FourClassUniform_ScoreIs075()
     {
@@ -605,7 +605,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(0.75, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Margin_FourClassAllEqual_ScoreIsOne()
     {
@@ -618,7 +618,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.Equal(1.0, scores[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void UseBatchDiversity_CanBeSetAndRetrieved()
     {
@@ -637,7 +637,7 @@ public class ActiveLearningDeepMathIntegrationTests
         Assert.True(lc.UseBatchDiversity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void StrategyNames_AreCorrect()
     {
@@ -650,7 +650,7 @@ public class ActiveLearningDeepMathIntegrationTests
     // Entropy mathematical properties
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void Entropy_Monotonicity_MoreClassesHigherMaxEntropy()
     {

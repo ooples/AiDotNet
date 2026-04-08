@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,8 +18,8 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // should produce finite output, not NaN or exceptions.
     // =====================================================
 
-    [Fact]
-    public void EmptyInput_ShouldNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
@@ -39,8 +40,8 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // Same input shape should always produce same output shape.
     // =====================================================
 
-    [Fact]
-    public void OutputDimensionality_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task OutputDimensionality_Consistent()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -59,8 +60,8 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // different representations. A model ignoring content is broken.
     // =====================================================
 
-    [Fact]
-    public void DifferentDocuments_DifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentDocuments_DifferentOutputs()
     {
         var network = CreateNetwork();
 
@@ -89,8 +90,8 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // Doubling input values should not cause overflow.
     // =====================================================
 
-    [Fact]
-    public void LargerInput_ShouldNotExplode()
+    [Fact(Timeout = 120000)]
+    public async Task LargerInput_ShouldNotExplode()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

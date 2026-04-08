@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
@@ -10,8 +11,8 @@ public class ConfusionMatrixTests
 {
     #region Binary Classification Tests (Backward Compatibility)
 
-    [Fact]
-    public void BinaryConstructor_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_InitializesCorrectly()
     {
         // Arrange & Act
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -24,8 +25,8 @@ public class ConfusionMatrixTests
         Assert.Equal(2, matrix.ClassCount);
     }
 
-    [Fact]
-    public void BinaryConstructor_AccuracyCalculation()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_AccuracyCalculation()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -38,8 +39,8 @@ public class ConfusionMatrixTests
         Assert.Equal(30.0 / 38.0, accuracy, precision: 10);
     }
 
-    [Fact]
-    public void BinaryConstructor_PrecisionCalculation()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_PrecisionCalculation()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -52,8 +53,8 @@ public class ConfusionMatrixTests
         Assert.Equal(10.0 / 15.0, precision, precision: 10);
     }
 
-    [Fact]
-    public void BinaryConstructor_RecallCalculation()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_RecallCalculation()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -66,8 +67,8 @@ public class ConfusionMatrixTests
         Assert.Equal(10.0 / 13.0, recall, precision: 10);
     }
 
-    [Fact]
-    public void BinaryConstructor_F1ScoreCalculation()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_F1ScoreCalculation()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -84,8 +85,8 @@ public class ConfusionMatrixTests
         Assert.Equal(expectedF1, f1, precision: 10);
     }
 
-    [Fact]
-    public void BinaryConstructor_SpecificityCalculation()
+    [Fact(Timeout = 60000)]
+    public async Task BinaryConstructor_SpecificityCalculation()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(10, 20, 5, 3);
@@ -102,8 +103,8 @@ public class ConfusionMatrixTests
 
     #region Multi-Class Constructor Tests
 
-    [Fact]
-    public void DimensionConstructor_InitializesWithZeros()
+    [Fact(Timeout = 60000)]
+    public async Task DimensionConstructor_InitializesWithZeros()
     {
         // Arrange & Act
         var matrix = new ConfusionMatrix<double>(3);
@@ -123,8 +124,8 @@ public class ConfusionMatrixTests
         }
     }
 
-    [Fact]
-    public void DimensionConstructor_ThrowsForInvalidDimension()
+    [Fact(Timeout = 60000)]
+    public async Task DimensionConstructor_ThrowsForInvalidDimension()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new ConfusionMatrix<double>(1));
@@ -136,8 +137,8 @@ public class ConfusionMatrixTests
 
     #region Increment Method Tests
 
-    [Fact]
-    public void Increment_UpdatesMatrixCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Increment_UpdatesMatrixCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -155,8 +156,8 @@ public class ConfusionMatrixTests
         Assert.Equal(1.0, matrix[2, 1]);  // Misclassification
     }
 
-    [Fact]
-    public void Increment_ThrowsForInvalidPredictedClass()
+    [Fact(Timeout = 60000)]
+    public async Task Increment_ThrowsForInvalidPredictedClass()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -166,8 +167,8 @@ public class ConfusionMatrixTests
         Assert.Throws<ArgumentOutOfRangeException>(() => matrix.Increment(3, 0));
     }
 
-    [Fact]
-    public void Increment_ThrowsForInvalidActualClass()
+    [Fact(Timeout = 60000)]
+    public async Task Increment_ThrowsForInvalidActualClass()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -181,8 +182,8 @@ public class ConfusionMatrixTests
 
     #region Per-Class Metrics Tests
 
-    [Fact]
-    public void GetTruePositives_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetTruePositives_ReturnsCorrectValue()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -199,8 +200,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, tp1);
     }
 
-    [Fact]
-    public void GetFalsePositives_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetFalsePositives_ReturnsCorrectValue()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -218,8 +219,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, fp1);  // No false positives for class 1
     }
 
-    [Fact]
-    public void GetFalseNegatives_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetFalseNegatives_ReturnsCorrectValue()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -237,8 +238,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, fn1);  // No false negatives for class 1
     }
 
-    [Fact]
-    public void GetTrueNegatives_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetTrueNegatives_ReturnsCorrectValue()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -262,8 +263,8 @@ public class ConfusionMatrixTests
 
     #region Overall Metrics Tests
 
-    [Fact]
-    public void GetAccuracy_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetAccuracy_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -281,8 +282,8 @@ public class ConfusionMatrixTests
         Assert.Equal(3.0 / 5.0, accuracy, precision: 10);
     }
 
-    [Fact]
-    public void GetAccuracy_ReturnsZeroForEmptyMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task GetAccuracy_ReturnsZeroForEmptyMatrix()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -298,8 +299,8 @@ public class ConfusionMatrixTests
 
     #region Per-Class Precision/Recall/F1 Tests
 
-    [Fact]
-    public void GetPrecision_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetPrecision_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -316,8 +317,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.5, precision0, precision: 10);
     }
 
-    [Fact]
-    public void GetRecall_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetRecall_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -334,8 +335,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.5, recall0, precision: 10);
     }
 
-    [Fact]
-    public void GetF1Score_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetF1Score_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -358,8 +359,8 @@ public class ConfusionMatrixTests
 
     #region Macro Average Tests
 
-    [Fact]
-    public void GetMacroPrecision_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetMacroPrecision_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -380,8 +381,8 @@ public class ConfusionMatrixTests
         Assert.Equal(5.0 / 6.0, macroPrecision, precision: 10);
     }
 
-    [Fact]
-    public void GetMacroRecall_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetMacroRecall_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -402,8 +403,8 @@ public class ConfusionMatrixTests
         Assert.Equal(5.0 / 6.0, macroRecall, precision: 10);
     }
 
-    [Fact]
-    public void GetMacroF1Score_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetMacroF1Score_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -430,8 +431,8 @@ public class ConfusionMatrixTests
 
     #region Micro Average Tests
 
-    [Fact]
-    public void GetMicroPrecision_EqualsAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task GetMicroPrecision_EqualsAccuracy()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -449,8 +450,8 @@ public class ConfusionMatrixTests
         Assert.Equal(accuracy, microPrecision);
     }
 
-    [Fact]
-    public void GetMicroRecall_EqualsAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task GetMicroRecall_EqualsAccuracy()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -468,8 +469,8 @@ public class ConfusionMatrixTests
         Assert.Equal(accuracy, microRecall);
     }
 
-    [Fact]
-    public void GetMicroF1Score_EqualsAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task GetMicroF1Score_EqualsAccuracy()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -491,8 +492,8 @@ public class ConfusionMatrixTests
 
     #region Weighted Average Tests
 
-    [Fact]
-    public void GetWeightedPrecision_AccountsForClassImbalance()
+    [Fact(Timeout = 60000)]
+    public async Task GetWeightedPrecision_AccountsForClassImbalance()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -515,8 +516,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.8, weightedPrecision, precision: 10);
     }
 
-    [Fact]
-    public void GetWeightedRecall_AccountsForClassImbalance()
+    [Fact(Timeout = 60000)]
+    public async Task GetWeightedRecall_AccountsForClassImbalance()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -537,8 +538,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.8, weightedRecall, precision: 10);
     }
 
-    [Fact]
-    public void GetWeightedF1Score_AccountsForClassImbalance()
+    [Fact(Timeout = 60000)]
+    public async Task GetWeightedF1Score_AccountsForClassImbalance()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -580,8 +581,8 @@ public class ConfusionMatrixTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Precision_ReturnsZeroWhenNoPositivePredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Precision_ReturnsZeroWhenNoPositivePredictions()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -594,8 +595,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, precision0);
     }
 
-    [Fact]
-    public void Recall_ReturnsZeroWhenNoActualPositives()
+    [Fact(Timeout = 60000)]
+    public async Task Recall_ReturnsZeroWhenNoActualPositives()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -608,8 +609,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, recall0);
     }
 
-    [Fact]
-    public void F1Score_ReturnsZeroWhenPrecisionAndRecallAreZero()
+    [Fact(Timeout = 60000)]
+    public async Task F1Score_ReturnsZeroWhenPrecisionAndRecallAreZero()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -626,8 +627,8 @@ public class ConfusionMatrixTests
 
     #region Integration Test
 
-    [Fact]
-    public void IntegrationTest_ThreeClassProblem()
+    [Fact(Timeout = 60000)]
+    public async Task IntegrationTest_ThreeClassProblem()
     {
         // Arrange - Simulating a digit classifier for digits 0, 1, 2
         var matrix = new ConfusionMatrix<double>(3);
@@ -684,8 +685,8 @@ public class ConfusionMatrixTests
 
     #region Matthews Correlation Coefficient Tests
 
-    [Fact]
-    public void GetMatthewsCorrelationCoefficient_BinaryPerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetMatthewsCorrelationCoefficient_BinaryPerfectPrediction_ReturnsOne()
     {
         // Arrange - Perfect binary classification
         var matrix = new ConfusionMatrix<double>(10, 10, 0, 0);
@@ -697,8 +698,8 @@ public class ConfusionMatrixTests
         Assert.Equal(1.0, mcc, precision: 10);
     }
 
-    [Fact]
-    public void GetMatthewsCorrelationCoefficient_BinaryTotalDisagreement_ReturnsNegativeOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetMatthewsCorrelationCoefficient_BinaryTotalDisagreement_ReturnsNegativeOne()
     {
         // Arrange - Complete reversal: all positives predicted as negative and vice versa
         var matrix = new ConfusionMatrix<double>(0, 0, 10, 10);
@@ -710,8 +711,8 @@ public class ConfusionMatrixTests
         Assert.Equal(-1.0, mcc, precision: 10);
     }
 
-    [Fact]
-    public void GetMatthewsCorrelationCoefficient_RandomPrediction_ReturnsNearZero()
+    [Fact(Timeout = 60000)]
+    public async Task GetMatthewsCorrelationCoefficient_RandomPrediction_ReturnsNearZero()
     {
         // Arrange - Balanced random-like predictions
         var matrix = new ConfusionMatrix<double>(5, 5, 5, 5);
@@ -723,8 +724,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, mcc, precision: 10);
     }
 
-    [Fact]
-    public void GetMatthewsCorrelationCoefficient_MultiClass_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetMatthewsCorrelationCoefficient_MultiClass_CalculatesCorrectly()
     {
         // Arrange - 3-class problem with good predictions
         var matrix = new ConfusionMatrix<double>(3);
@@ -745,8 +746,8 @@ public class ConfusionMatrixTests
         Assert.True(mcc <= 1.0);
     }
 
-    [Fact]
-    public void GetMatthewsCorrelationCoefficient_EmptyMatrix_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task GetMatthewsCorrelationCoefficient_EmptyMatrix_ReturnsZero()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -762,8 +763,8 @@ public class ConfusionMatrixTests
 
     #region Cohen's Kappa Tests
 
-    [Fact]
-    public void GetCohenKappa_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetCohenKappa_PerfectAgreement_ReturnsOne()
     {
         // Arrange - All predictions are correct
         var matrix = new ConfusionMatrix<double>(3);
@@ -778,8 +779,8 @@ public class ConfusionMatrixTests
         Assert.Equal(1.0, kappa, precision: 10);
     }
 
-    [Fact]
-    public void GetCohenKappa_RandomAgreement_ReturnsNearZero()
+    [Fact(Timeout = 60000)]
+    public async Task GetCohenKappa_RandomAgreement_ReturnsNearZero()
     {
         // Arrange - Uniform distribution (random chance)
         var matrix = new ConfusionMatrix<double>(2);
@@ -796,8 +797,8 @@ public class ConfusionMatrixTests
         Assert.True(Math.Abs(kappa) < 0.1);
     }
 
-    [Fact]
-    public void GetCohenKappa_SubstantialAgreement_ReturnsHighValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetCohenKappa_SubstantialAgreement_ReturnsHighValue()
     {
         // Arrange - Most predictions correct with some errors
         var matrix = new ConfusionMatrix<double>(2);
@@ -814,8 +815,8 @@ public class ConfusionMatrixTests
         Assert.True(kappa > 0.8);
     }
 
-    [Fact]
-    public void GetCohenKappa_EmptyMatrix_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task GetCohenKappa_EmptyMatrix_ReturnsZero()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -827,8 +828,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, kappa);
     }
 
-    [Fact]
-    public void GetCohenKappa_MultiClass_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetCohenKappa_MultiClass_CalculatesCorrectly()
     {
         // Arrange - 3-class problem
         var matrix = new ConfusionMatrix<double>(3);
@@ -851,8 +852,8 @@ public class ConfusionMatrixTests
 
     #region Hamming Loss Tests
 
-    [Fact]
-    public void GetHammingLoss_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task GetHammingLoss_PerfectPredictions_ReturnsZero()
     {
         // Arrange - All predictions correct
         var matrix = new ConfusionMatrix<double>(3);
@@ -867,8 +868,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, hammingLoss, precision: 10);
     }
 
-    [Fact]
-    public void GetHammingLoss_AllWrongPredictions_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetHammingLoss_AllWrongPredictions_ReturnsOne()
     {
         // Arrange - All predictions wrong
         var matrix = new ConfusionMatrix<double>(2);
@@ -882,8 +883,8 @@ public class ConfusionMatrixTests
         Assert.Equal(1.0, hammingLoss, precision: 10);
     }
 
-    [Fact]
-    public void GetHammingLoss_HalfCorrect_ReturnsPointFive()
+    [Fact(Timeout = 60000)]
+    public async Task GetHammingLoss_HalfCorrect_ReturnsPointFive()
     {
         // Arrange - Half correct, half wrong
         var matrix = new ConfusionMatrix<double>(2);
@@ -899,8 +900,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.5, hammingLoss, precision: 10);
     }
 
-    [Fact]
-    public void GetHammingLoss_EqualsOneMinusAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task GetHammingLoss_EqualsOneMinusAccuracy()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(3);
@@ -922,8 +923,8 @@ public class ConfusionMatrixTests
 
     #region Jaccard Score Tests
 
-    [Fact]
-    public void GetJaccardScore_PerfectPredictions_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetJaccardScore_PerfectPredictions_ReturnsOne()
     {
         // Arrange - Perfect predictions
         var matrix = new ConfusionMatrix<double>(2);
@@ -937,8 +938,8 @@ public class ConfusionMatrixTests
         Assert.Equal(1.0, jaccard, precision: 10);
     }
 
-    [Fact]
-    public void GetJaccardScore_PerClass_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetJaccardScore_PerClass_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -958,8 +959,8 @@ public class ConfusionMatrixTests
         Assert.Equal(8.0 / 12.0, jaccard0, precision: 10);
     }
 
-    [Fact]
-    public void GetJaccardScore_MacroAveraged_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetJaccardScore_MacroAveraged_CalculatesCorrectly()
     {
         // Arrange
         var matrix = new ConfusionMatrix<double>(2);
@@ -983,8 +984,8 @@ public class ConfusionMatrixTests
         Assert.Equal(expected, macroJaccard, precision: 10);
     }
 
-    [Fact]
-    public void GetJaccardScore_ZeroDenominator_ReturnsZeroForClass()
+    [Fact(Timeout = 60000)]
+    public async Task GetJaccardScore_ZeroDenominator_ReturnsZeroForClass()
     {
         // Arrange - Class with no predictions and no actual samples
         var matrix = new ConfusionMatrix<double>(3);
@@ -997,8 +998,8 @@ public class ConfusionMatrixTests
         Assert.Equal(0.0, jaccard2);
     }
 
-    [Fact]
-    public void GetJaccardScore_MultiClass_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GetJaccardScore_MultiClass_CalculatesCorrectly()
     {
         // Arrange - 3-class problem
         var matrix = new ConfusionMatrix<double>(3);

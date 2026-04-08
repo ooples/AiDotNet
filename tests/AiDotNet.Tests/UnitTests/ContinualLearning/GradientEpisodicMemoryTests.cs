@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 
@@ -13,8 +14,8 @@ public class GradientEpisodicMemoryTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_DefaultParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultParameters_InitializesCorrectly()
     {
         // Arrange & Act
         var gem = new GradientEpisodicMemory<double>();
@@ -26,8 +27,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
-    public void Constructor_CustomMemorySize_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CustomMemorySize_InitializesCorrectly()
     {
         // Arrange & Act
         var gem = new GradientEpisodicMemory<double>(memorySize: 128);
@@ -37,8 +38,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
-    public void Constructor_CustomMargin_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CustomMargin_InitializesCorrectly()
     {
         // Arrange
         double customMargin = 0.8;
@@ -50,8 +51,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(customMargin, gem.Margin);
     }
 
-    [Fact]
-    public void Constructor_CustomLambda_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CustomLambda_InitializesCorrectly()
     {
         // Arrange
         double customLambda = 2.0;
@@ -63,8 +64,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(customLambda, gem.Lambda);
     }
 
-    [Fact]
-    public void Constructor_AllCustomParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AllCustomParameters_InitializesCorrectly()
     {
         // Arrange
         int memorySize = 64;
@@ -84,8 +85,8 @@ public class GradientEpisodicMemoryTests
 
     #region Property Tests
 
-    [Fact]
-    public void Lambda_SetValue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Lambda_SetValue_UpdatesCorrectly()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -98,8 +99,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(newLambda, gem.Lambda);
     }
 
-    [Fact]
-    public void Margin_SetValue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Margin_SetValue_UpdatesCorrectly()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -112,8 +113,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(newMargin, gem.Margin);
     }
 
-    [Fact]
-    public void TaskCount_AfterAddingTasks_ReflectsCorrectCount()
+    [Fact(Timeout = 60000)]
+    public async Task TaskCount_AfterAddingTasks_ReflectsCorrectCount()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -132,8 +133,8 @@ public class GradientEpisodicMemoryTests
 
     #region BeforeTask Tests
 
-    [Fact]
-    public void BeforeTask_WithValidNetwork_ExecutesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task BeforeTask_WithValidNetwork_ExecutesWithoutError()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -143,8 +144,8 @@ public class GradientEpisodicMemoryTests
         gem.BeforeTask(network, taskId: 0);
     }
 
-    [Fact]
-    public void BeforeTask_AfterPreviousTask_UpdatesReferenceGradients()
+    [Fact(Timeout = 60000)]
+    public async Task BeforeTask_AfterPreviousTask_UpdatesReferenceGradients()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -166,8 +167,8 @@ public class GradientEpisodicMemoryTests
 
     #region AfterTask Tests
 
-    [Fact]
-    public void AfterTask_FirstTask_StoresEpisodicMemory()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_FirstTask_StoresEpisodicMemory()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -182,8 +183,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(1, gem.TaskCount);
     }
 
-    [Fact]
-    public void AfterTask_NullNetwork_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -194,8 +195,8 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(null!, (inputs, targets), taskId: 0));
     }
 
-    [Fact]
-    public void AfterTask_NullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_NullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -206,8 +207,8 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (null!, targets), taskId: 0));
     }
 
-    [Fact]
-    public void AfterTask_NullTargets_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_NullTargets_ThrowsArgumentNullException()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -218,8 +219,8 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (inputs, null!), taskId: 0));
     }
 
-    [Fact]
-    public void AfterTask_MultipleTasks_StoresMultipleEpisodicMemories()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_MultipleTasks_StoresMultipleEpisodicMemories()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -237,8 +238,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(2, gem.TaskCount);
     }
 
-    [Fact]
-    public void AfterTask_LargeDataset_SamplesDownToMemorySize()
+    [Fact(Timeout = 60000)]
+    public async Task AfterTask_LargeDataset_SamplesDownToMemorySize()
     {
         // Arrange
         int memorySize = 10;
@@ -258,8 +259,8 @@ public class GradientEpisodicMemoryTests
 
     #region ComputeLoss Tests
 
-    [Fact]
-    public void ComputeLoss_AlwaysReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_AlwaysReturnsZero()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -284,8 +285,8 @@ public class GradientEpisodicMemoryTests
 
     #region ModifyGradients Tests
 
-    [Fact]
-    public void ModifyGradients_BeforeAnyTask_ReturnsUnmodifiedGradients()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_BeforeAnyTask_ReturnsUnmodifiedGradients()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -307,8 +308,8 @@ public class GradientEpisodicMemoryTests
         }
     }
 
-    [Fact]
-    public void ModifyGradients_AfterTask_MayModifyGradientsBasedOnConstraints()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_AfterTask_MayModifyGradientsBasedOnConstraints()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -331,8 +332,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(gradients.Length, modifiedGradients.Length);
     }
 
-    [Fact]
-    public void ModifyGradients_NullNetwork_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -342,8 +343,8 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(null!, gradients));
     }
 
-    [Fact]
-    public void ModifyGradients_NullGradients_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_NullGradients_ThrowsArgumentNullException()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -353,8 +354,8 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(network, null!));
     }
 
-    [Fact]
-    public void ModifyGradients_ConflictingGradient_ProjectsToSatisfyConstraint()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_ConflictingGradient_ProjectsToSatisfyConstraint()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>(margin: 0.0); // Zero margin for easier testing
@@ -382,8 +383,8 @@ public class GradientEpisodicMemoryTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_AfterTasks_ClearsAllStoredData()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_AfterTasks_ClearsAllStoredData()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -402,8 +403,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
-    public void Reset_BeforeAnyTask_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_BeforeAnyTask_DoesNotThrow()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -413,8 +414,8 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
-    public void Reset_ThenModifyGradients_ReturnsUnmodified()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ThenModifyGradients_ReturnsUnmodified()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>();
@@ -445,8 +446,8 @@ public class GradientEpisodicMemoryTests
 
     #region Integration Tests
 
-    [Fact]
-    public void GEM_CompleteWorkflow_ExecutesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task GEM_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
         var gem = new GradientEpisodicMemory<double>(memorySize: 10, margin: 0.5, lambda: 1.0);

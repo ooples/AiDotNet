@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FitDetectors;
 
@@ -101,8 +102,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region DefaultFitDetector Tests
 
-    [Fact]
-    public void DefaultFitDetector_Constructor_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_Constructor_InitializesSuccessfully()
     {
         // Act
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -111,8 +112,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_WithGoodFitData_ReturnsGoodFitOrValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_WithGoodFitData_ReturnsGoodFitOrValidResult()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -127,8 +128,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_WithOverfitData_DetectsOverfitOrHighVariance()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_WithOverfitData_DetectsOverfitOrHighVariance()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -146,8 +147,8 @@ public class BasicFitDetectorIntegrationTests
             $"Expected Overfit, HighVariance, or Unstable but got {result.FitType}");
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_WithUnderfitData_DetectsUnderfitOrHighBias()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_WithUnderfitData_DetectsUnderfitOrHighBias()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -166,8 +167,8 @@ public class BasicFitDetectorIntegrationTests
             $"Expected Underfit, HighBias, PoorFit, or VeryPoorFit but got {result.FitType}");
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_ReturnsConfidenceLevelBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_ReturnsConfidenceLevelBetweenZeroAndOne()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -181,8 +182,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.True(result.ConfidenceLevel <= 1.0, "Confidence level should be <= 1");
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_ReturnsRecommendationsList()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_ReturnsRecommendationsList()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -195,8 +196,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_IsConsistentAcrossMultipleCalls()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_IsConsistentAcrossMultipleCalls()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -214,8 +215,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region HoldoutValidationFitDetector Tests
 
-    [Fact]
-    public void HoldoutValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task HoldoutValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new HoldoutValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -224,8 +225,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void HoldoutValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task HoldoutValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new HoldoutValidationFitDetectorOptions
@@ -241,8 +242,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void HoldoutValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task HoldoutValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new HoldoutValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -257,8 +258,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void HoldoutValidationFitDetector_DetectFit_WithOverfitData_DetectsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task HoldoutValidationFitDetector_DetectFit_WithOverfitData_DetectsIssue()
     {
         // Arrange
         var detector = new HoldoutValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -276,8 +277,8 @@ public class BasicFitDetectorIntegrationTests
             $"Expected problematic fit type for overfit data, got {result.FitType}");
     }
 
-    [Fact]
-    public void HoldoutValidationFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task HoldoutValidationFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new HoldoutValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -295,8 +296,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region KFoldCrossValidationFitDetector Tests
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new KFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -305,8 +306,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new KFoldCrossValidationFitDetectorOptions
@@ -325,8 +326,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new KFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -342,8 +343,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotEmpty(result.Recommendations);
     }
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_DetectFit_IncludesMetricsInRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_DetectFit_IncludesMetricsInRecommendations()
     {
         // Arrange
         var detector = new KFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -356,8 +357,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.Contains(result.Recommendations, r => r.Contains("R2") || r.Contains("Validation"));
     }
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_DetectFit_WithHighVarianceData_DetectsVariance()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_DetectFit_WithHighVarianceData_DetectsVariance()
     {
         // Arrange
         var detector = new KFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -380,8 +381,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region CrossValidationFitDetector Tests
 
-    [Fact]
-    public void CrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new CrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -390,8 +391,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void CrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new CrossValidationFitDetectorOptions
@@ -407,8 +408,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void CrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new CrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -422,8 +423,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
     }
 
-    [Fact]
-    public void CrossValidationFitDetector_DetectFit_ReturnsValidConfidenceAndRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task CrossValidationFitDetector_DetectFit_ReturnsValidConfidenceAndRecommendations()
     {
         // Arrange
         var detector = new CrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -442,8 +443,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region BootstrapFitDetector Tests
 
-    [Fact]
-    public void BootstrapFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new BootstrapFitDetector<double, Matrix<double>, Vector<double>>();
@@ -452,8 +453,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void BootstrapFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new BootstrapFitDetectorOptions
@@ -469,8 +470,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void BootstrapFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new BootstrapFitDetector<double, Matrix<double>, Vector<double>>();
@@ -485,8 +486,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void BootstrapFitDetector_DetectFit_WithUnderfitData_DetectsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapFitDetector_DetectFit_WithUnderfitData_DetectsIssue()
     {
         // Arrange
         var detector = new BootstrapFitDetector<double, Matrix<double>, Vector<double>>();
@@ -510,8 +511,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region JackknifeFitDetector Tests
 
-    [Fact]
-    public void JackknifeFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new JackknifeFitDetector<double, Matrix<double>, Vector<double>>();
@@ -520,8 +521,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void JackknifeFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new JackknifeFitDetectorOptions
@@ -537,8 +538,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void JackknifeFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new JackknifeFitDetector<double, Matrix<double>, Vector<double>>();
@@ -553,8 +554,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void JackknifeFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new JackknifeFitDetector<double, Matrix<double>, Vector<double>>();
@@ -572,8 +573,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region StratifiedKFoldCrossValidationFitDetector Tests
 
-    [Fact]
-    public void StratifiedKFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFoldCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new StratifiedKFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -582,8 +583,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void StratifiedKFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFoldCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new StratifiedKFoldCrossValidationFitDetectorOptions
@@ -599,8 +600,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void StratifiedKFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFoldCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new StratifiedKFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -615,8 +616,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void StratifiedKFoldCrossValidationFitDetector_DetectFit_ReturnsNonEmptyRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFoldCrossValidationFitDetector_DetectFit_ReturnsNonEmptyRecommendations()
     {
         // Arrange
         var detector = new StratifiedKFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -633,8 +634,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region TimeSeriesCrossValidationFitDetector Tests
 
-    [Fact]
-    public void TimeSeriesCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesCrossValidationFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new TimeSeriesCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -643,8 +644,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void TimeSeriesCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesCrossValidationFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new TimeSeriesCrossValidationFitDetectorOptions
@@ -659,8 +660,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void TimeSeriesCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesCrossValidationFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new TimeSeriesCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();
@@ -678,8 +679,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact]
-    public void AllBasicDetectors_WithSameData_ProduceValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllBasicDetectors_WithSameData_ProduceValidResults()
     {
         // Arrange
         var evaluationData = CreateGoodFitData();
@@ -705,8 +706,8 @@ public class BasicFitDetectorIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllBasicDetectors_WithOverfitData_DetectProblems()
+    [Fact(Timeout = 120000)]
+    public async Task AllBasicDetectors_WithOverfitData_DetectProblems()
     {
         // Arrange
         var evaluationData = CreateOverfitData();
@@ -740,8 +741,8 @@ public class BasicFitDetectorIntegrationTests
 
     #region AdditionalInfo Dictionary Tests
 
-    [Fact]
-    public void DefaultFitDetector_DetectFit_AdditionalInfoIsNotNull()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange
         var detector = new DefaultFitDetector<double, Matrix<double>, Vector<double>>();
@@ -754,8 +755,8 @@ public class BasicFitDetectorIntegrationTests
         Assert.NotNull(result.AdditionalInfo);
     }
 
-    [Fact]
-    public void KFoldCrossValidationFitDetector_DetectFit_AdditionalInfoIsNotNull()
+    [Fact(Timeout = 120000)]
+    public async Task KFoldCrossValidationFitDetector_DetectFit_AdditionalInfoIsNotNull()
     {
         // Arrange
         var detector = new KFoldCrossValidationFitDetector<double, Matrix<double>, Vector<double>>();

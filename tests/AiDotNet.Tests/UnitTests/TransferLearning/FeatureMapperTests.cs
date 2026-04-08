@@ -2,13 +2,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TransferLearning.FeatureMapping;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TransferLearning;
 
 public class FeatureMapperTests
 {
-    [Fact]
-    public void LinearFeatureMapper_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LinearFeatureMapper_InitializesCorrectly()
     {
         // Arrange & Act
         var mapper = new LinearFeatureMapper<double>();
@@ -17,8 +18,8 @@ public class FeatureMapperTests
         Assert.False(mapper.IsTrained);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_TrainsSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task LinearFeatureMapper_TrainsSuccessfully()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -47,8 +48,8 @@ public class FeatureMapperTests
         Assert.True(mapper.GetMappingConfidence() <= 1.0);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_MapToTarget_WorksAfterTraining()
+    [Fact(Timeout = 60000)]
+    public async Task LinearFeatureMapper_MapToTarget_WorksAfterTraining()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -86,8 +87,8 @@ public class FeatureMapperTests
         Assert.Equal(3, mapped.Columns);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_ThrowsWhenNotTrained()
+    [Fact(Timeout = 60000)]
+    public async Task LinearFeatureMapper_ThrowsWhenNotTrained()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();

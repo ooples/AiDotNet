@@ -3,6 +3,7 @@ using Xunit;
 
 // Alias to avoid conflict with AiDotNet.DataVersionControl namespace
 using DVC = AiDotNet.DataVersioning.DataVersionControl;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DataVersioning;
 
@@ -47,8 +48,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DatasetInfo: Defaults
     // ============================
 
-    [Fact]
-    public void DatasetInfo_Defaults_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetInfo_Defaults_Empty()
     {
         var info = new DatasetInfo();
         Assert.Equal(string.Empty, info.DatasetId);
@@ -106,8 +107,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataFileInfo: Defaults
     // ============================
 
-    [Fact]
-    public void DataFileInfo_Defaults_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task DataFileInfo_Defaults_Empty()
     {
         var info = new DataFileInfo();
         Assert.Equal(string.Empty, info.RelativePath);
@@ -119,8 +120,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionDiff: Computed Properties
     // ============================
 
-    [Fact]
-    public void DataVersionDiff_SizeDelta_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionDiff_SizeDelta_Correct()
     {
         var diff = new DataVersionDiff
         {
@@ -131,8 +132,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(500, diff.SizeDelta);
     }
 
-    [Fact]
-    public void DataVersionDiff_SizeDelta_Negative()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionDiff_SizeDelta_Negative()
     {
         var diff = new DataVersionDiff
         {
@@ -143,8 +144,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(-1000, diff.SizeDelta);
     }
 
-    [Fact]
-    public void DataVersionDiff_Summary_IncludesAllCategories()
+    [Fact(Timeout = 120000)]
+    public async Task DataVersionDiff_Summary_IncludesAllCategories()
     {
         var diff = new DataVersionDiff();
         diff.FilesAdded.Add(new DataFileInfo { RelativePath = "new.txt" });
@@ -165,8 +166,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataLineage: Defaults
     // ============================
 
-    [Fact]
-    public void DataLineage_Defaults_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task DataLineage_Defaults_Empty()
     {
         var lineage = new DataLineage();
         Assert.Equal(string.Empty, lineage.DatasetId);
@@ -181,8 +182,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Create Dataset
     // ============================
 
-    [Fact]
-    public void DVC_CreateDataset_ReturnsNonEmptyId()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CreateDataset_ReturnsNonEmptyId()
     {
         var storageDir = Path.Combine(_testDir, "storage1");
         using var dvc = new DVC(storageDir);
@@ -192,8 +193,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(12, id.Length); // GenerateId returns 12-char GUID substring
     }
 
-    [Fact]
-    public void DVC_CreateDataset_EmptyName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CreateDataset_EmptyName_Throws()
     {
         var storageDir = Path.Combine(_testDir, "storage2");
         using var dvc = new DVC(storageDir);
@@ -201,8 +202,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => dvc.CreateDataset(""));
     }
 
-    [Fact]
-    public void DVC_CreateDataset_DuplicateName_ReturnsSameId()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CreateDataset_DuplicateName_ReturnsSameId()
     {
         var storageDir = Path.Combine(_testDir, "storage3");
         using var dvc = new DVC(storageDir);
@@ -213,8 +214,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(id1, id2);
     }
 
-    [Fact]
-    public void DVC_CreateDataset_CaseInsensitiveName()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CreateDataset_CaseInsensitiveName()
     {
         var storageDir = Path.Combine(_testDir, "storage4");
         using var dvc = new DVC(storageDir);
@@ -225,8 +226,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(id1, id2);
     }
 
-    [Fact]
-    public void DVC_CreateDataset_WithMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CreateDataset_WithMetadata()
     {
         var storageDir = Path.Combine(_testDir, "storage5");
         using var dvc = new DVC(storageDir);
@@ -237,8 +238,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(id));
     }
 
-    [Fact]
-    public void DVC_ListDatasets_ReturnsCreated()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_ListDatasets_ReturnsCreated()
     {
         var storageDir = Path.Combine(_testDir, "storage6");
         using var dvc = new DVC(storageDir);
@@ -254,8 +255,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Add Version
     // ============================
 
-    [Fact]
-    public void DVC_AddVersion_SingleFile_ReturnsVersion()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_SingleFile_ReturnsVersion()
     {
         var storageDir = Path.Combine(_testDir, "storage7");
         using var dvc = new DVC(storageDir);
@@ -274,8 +275,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(64, version.ContentHash.Length); // SHA-256 hex = 64 chars
     }
 
-    [Fact]
-    public void DVC_AddVersion_EmptyDatasetId_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_EmptyDatasetId_Throws()
     {
         var storageDir = Path.Combine(_testDir, "storage8");
         using var dvc = new DVC(storageDir);
@@ -283,8 +284,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => dvc.AddVersion("", "/some/path"));
     }
 
-    [Fact]
-    public void DVC_AddVersion_NonExistentPath_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_NonExistentPath_Throws()
     {
         var storageDir = Path.Combine(_testDir, "storage9");
         using var dvc = new DVC(storageDir);
@@ -293,8 +294,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => dvc.AddVersion(datasetId, "/nonexistent/path"));
     }
 
-    [Fact]
-    public void DVC_AddVersion_ContentDeduplication()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_ContentDeduplication()
     {
         var storageDir = Path.Combine(_testDir, "storage10");
         using var dvc = new DVC(storageDir);
@@ -310,8 +311,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(v1.ContentHash, v2.ContentHash);
     }
 
-    [Fact]
-    public void DVC_AddVersion_DifferentContent_DifferentVersions()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_DifferentContent_DifferentVersions()
     {
         var storageDir = Path.Combine(_testDir, "storage11");
         using var dvc = new DVC(storageDir);
@@ -330,8 +331,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(2, v2.VersionNumber);
     }
 
-    [Fact]
-    public void DVC_AddVersion_VersionId_Is12CharHashPrefix()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_VersionId_Is12CharHashPrefix()
     {
         var storageDir = Path.Combine(_testDir, "storage12");
         using var dvc = new DVC(storageDir);
@@ -348,8 +349,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Get Version
     // ============================
 
-    [Fact]
-    public void DVC_GetVersion_Latest_ReturnsNewest()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetVersion_Latest_ReturnsNewest()
     {
         var storageDir = Path.Combine(_testDir, "storage13");
         using var dvc = new DVC(storageDir);
@@ -366,8 +367,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(v2.VersionId, latest.VersionId);
     }
 
-    [Fact]
-    public void DVC_GetVersion_ByExactId()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetVersion_ByExactId()
     {
         var storageDir = Path.Combine(_testDir, "storage14");
         using var dvc = new DVC(storageDir);
@@ -380,8 +381,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(v1.VersionId, retrieved.VersionId);
     }
 
-    [Fact]
-    public void DVC_GetVersion_ByNumber()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetVersion_ByNumber()
     {
         var storageDir = Path.Combine(_testDir, "storage15");
         using var dvc = new DVC(storageDir);
@@ -395,8 +396,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(v1.VersionId, retrieved.VersionId);
     }
 
-    [Fact]
-    public void DVC_GetVersion_NonExistent_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetVersion_NonExistent_Throws()
     {
         var storageDir = Path.Combine(_testDir, "storage16");
         using var dvc = new DVC(storageDir);
@@ -412,8 +413,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: List Versions
     // ============================
 
-    [Fact]
-    public void DVC_ListVersions_OrderedDescending()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_ListVersions_OrderedDescending()
     {
         var storageDir = Path.Combine(_testDir, "storage17");
         using var dvc = new DVC(storageDir);
@@ -439,8 +440,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: GetDataPath
     // ============================
 
-    [Fact]
-    public void DVC_GetDataPath_ReturnsValidPath()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetDataPath_ReturnsValidPath()
     {
         var storageDir = Path.Combine(_testDir, "storage18");
         using var dvc = new DVC(storageDir);
@@ -457,8 +458,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Compare Versions
     // ============================
 
-    [Fact]
-    public void DVC_CompareVersions_AddedFile()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CompareVersions_AddedFile()
     {
         var storageDir = Path.Combine(_testDir, "storage19");
         using var dvc = new DVC(storageDir);
@@ -479,8 +480,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.True(diff.FilesAdded.Count > 0 || diff.FilesModified.Count > 0);
     }
 
-    [Fact]
-    public void DVC_CompareVersions_ModifiedFile()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CompareVersions_ModifiedFile()
     {
         var storageDir = Path.Combine(_testDir, "storage20");
         using var dvc = new DVC(storageDir);
@@ -498,8 +499,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal("data.txt", diff.FilesModified[0].before.RelativePath);
     }
 
-    [Fact]
-    public void DVC_CompareVersions_IdenticalContent()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_CompareVersions_IdenticalContent()
     {
         var storageDir = Path.Combine(_testDir, "storage21");
         using var dvc = new DVC(storageDir);
@@ -520,8 +521,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Delete
     // ============================
 
-    [Fact]
-    public void DVC_DeleteVersion_RemovesFromList()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_DeleteVersion_RemovesFromList()
     {
         var storageDir = Path.Combine(_testDir, "storage22");
         using var dvc = new DVC(storageDir);
@@ -538,8 +539,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Single(versions);
     }
 
-    [Fact]
-    public void DVC_DeleteDataset_RemovesEverything()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_DeleteDataset_RemovesEverything()
     {
         var storageDir = Path.Combine(_testDir, "storage23");
         using var dvc = new DVC(storageDir);
@@ -557,8 +558,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Lineage
     // ============================
 
-    [Fact]
-    public void DVC_RecordLineage_RetrievableViaGetLineage()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_RecordLineage_RetrievableViaGetLineage()
     {
         var storageDir = Path.Combine(_testDir, "storage24");
         using var dvc = new DVC(storageDir);
@@ -587,8 +588,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.NotNull(lineage.Parameters);
     }
 
-    [Fact]
-    public void DVC_GetLineage_NoLineage_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_GetLineage_NoLineage_ReturnsEmpty()
     {
         var storageDir = Path.Combine(_testDir, "storage25");
         using var dvc = new DVC(storageDir);
@@ -603,8 +604,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Null(lineage.Transformation);
     }
 
-    [Fact]
-    public void DVC_RecursiveLineage_TracksUpstream()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_RecursiveLineage_TracksUpstream()
     {
         var storageDir = Path.Combine(_testDir, "storage26");
         using var dvc = new DVC(storageDir);
@@ -639,8 +640,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Hashing
     // ============================
 
-    [Fact]
-    public void DVC_SameContent_SameHash()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_SameContent_SameHash()
     {
         var storageDir = Path.Combine(_testDir, "storage27");
         using var dvc = new DVC(storageDir);
@@ -655,8 +656,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
         Assert.Equal(v1.ContentHash, v2.ContentHash);
     }
 
-    [Fact]
-    public void DVC_DifferentContent_DifferentHash()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_DifferentContent_DifferentHash()
     {
         var storageDir = Path.Combine(_testDir, "storage28");
         using var dvc = new DVC(storageDir);
@@ -676,8 +677,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: StorageDirectory
     // ============================
 
-    [Fact]
-    public void DVC_StorageDirectory_ReturnsConfiguredPath()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_StorageDirectory_ReturnsConfiguredPath()
     {
         var storageDir = Path.Combine(_testDir, "custom_storage");
         using var dvc = new DVC(storageDir);
@@ -689,8 +690,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Directory Source
     // ============================
 
-    [Fact]
-    public void DVC_AddVersion_Directory_TracksAllFiles()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_AddVersion_Directory_TracksAllFiles()
     {
         var storageDir = Path.Combine(_testDir, "storage29");
         using var dvc = new DVC(storageDir);
@@ -713,8 +714,8 @@ public class DataVersioningDeepMathIntegrationTests : IDisposable
     // DataVersionControl: Delete lineage cleanup
     // ============================
 
-    [Fact]
-    public void DVC_DeleteDataset_CleansUpLineage()
+    [Fact(Timeout = 120000)]
+    public async Task DVC_DeleteDataset_CleansUpLineage()
     {
         var storageDir = Path.Combine(_testDir, "storage30");
         using var dvc = new DVC(storageDir);

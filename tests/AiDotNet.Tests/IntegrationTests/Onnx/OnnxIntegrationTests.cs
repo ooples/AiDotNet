@@ -1,5 +1,6 @@
 using AiDotNet.Onnx;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Onnx;
 
@@ -13,8 +14,8 @@ public class OnnxIntegrationTests
 {
     #region OnnxModelOptions - Defaults
 
-    [Fact]
-    public void OnnxModelOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_DefaultValues()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(OnnxExecutionProvider.Auto, options.ExecutionProvider);
@@ -32,8 +33,8 @@ public class OnnxIntegrationTests
         Assert.Equal(OnnxLogLevel.Warning, options.LogLevel);
     }
 
-    [Fact]
-    public void OnnxModelOptions_FallbackProviders_HasDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_FallbackProviders_HasDefaults()
     {
         var options = new OnnxModelOptions();
         Assert.NotNull(options.FallbackProviders);
@@ -42,8 +43,8 @@ public class OnnxIntegrationTests
         Assert.Contains(OnnxExecutionProvider.Cpu, options.FallbackProviders);
     }
 
-    [Fact]
-    public void OnnxModelOptions_CustomOptions_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_CustomOptions_Empty()
     {
         var options = new OnnxModelOptions();
         Assert.NotNull(options.CustomOptions);
@@ -54,8 +55,8 @@ public class OnnxIntegrationTests
 
     #region OnnxModelOptions - Factory Methods
 
-    [Fact]
-    public void OnnxModelOptions_ForCpu_SetsProvider()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForCpu_SetsProvider()
     {
         var options = OnnxModelOptions.ForCpu();
         Assert.Equal(OnnxExecutionProvider.Cpu, options.ExecutionProvider);
@@ -63,15 +64,15 @@ public class OnnxIntegrationTests
         Assert.True(options.IntraOpNumThreads > 0);
     }
 
-    [Fact]
-    public void OnnxModelOptions_ForCpu_CustomThreads()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForCpu_CustomThreads()
     {
         var options = OnnxModelOptions.ForCpu(threads: 4);
         Assert.Equal(4, options.IntraOpNumThreads);
     }
 
-    [Fact]
-    public void OnnxModelOptions_ForCuda_SetsProvider()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForCuda_SetsProvider()
     {
         var options = OnnxModelOptions.ForCuda();
         Assert.Equal(OnnxExecutionProvider.Cuda, options.ExecutionProvider);
@@ -79,15 +80,15 @@ public class OnnxIntegrationTests
         Assert.Contains(OnnxExecutionProvider.Cpu, options.FallbackProviders);
     }
 
-    [Fact]
-    public void OnnxModelOptions_ForCuda_CustomDevice()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForCuda_CustomDevice()
     {
         var options = OnnxModelOptions.ForCuda(deviceId: 1);
         Assert.Equal(1, options.GpuDeviceId);
     }
 
-    [Fact]
-    public void OnnxModelOptions_ForDirectML_SetsProvider()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForDirectML_SetsProvider()
     {
         var options = OnnxModelOptions.ForDirectML();
         Assert.Equal(OnnxExecutionProvider.DirectML, options.ExecutionProvider);
@@ -95,8 +96,8 @@ public class OnnxIntegrationTests
         Assert.Contains(OnnxExecutionProvider.Cpu, options.FallbackProviders);
     }
 
-    [Fact]
-    public void OnnxModelOptions_ForTensorRT_SetsProvider()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_ForTensorRT_SetsProvider()
     {
         var options = OnnxModelOptions.ForTensorRT();
         Assert.Equal(OnnxExecutionProvider.TensorRT, options.ExecutionProvider);
@@ -108,8 +109,8 @@ public class OnnxIntegrationTests
 
     #region OnnxModelOptions - Mutable Properties
 
-    [Fact]
-    public void OnnxModelOptions_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelOptions_SetProperties()
     {
         var options = new OnnxModelOptions
         {
@@ -141,8 +142,8 @@ public class OnnxIntegrationTests
 
     #region OnnxModelMetadata
 
-    [Fact]
-    public void OnnxModelMetadata_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelMetadata_DefaultValues()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Equal(string.Empty, metadata.ModelName);
@@ -157,8 +158,8 @@ public class OnnxIntegrationTests
         Assert.Empty(metadata.CustomMetadata);
     }
 
-    [Fact]
-    public void OnnxModelMetadata_InitProperties()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelMetadata_InitProperties()
     {
         var metadata = new OnnxModelMetadata
         {
@@ -180,8 +181,8 @@ public class OnnxIntegrationTests
         Assert.Equal("main_graph", metadata.GraphName);
     }
 
-    [Fact]
-    public void OnnxModelMetadata_WithInputsAndOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelMetadata_WithInputsAndOutputs()
     {
         var inputs = new List<AiDotNet.Interfaces.IOnnxTensorInfo>
         {
@@ -204,8 +205,8 @@ public class OnnxIntegrationTests
         Assert.Equal("output", metadata.Outputs[0].Name);
     }
 
-    [Fact]
-    public void OnnxModelMetadata_CustomMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelMetadata_CustomMetadata()
     {
         var custom = new Dictionary<string, string>
         {
@@ -222,8 +223,8 @@ public class OnnxIntegrationTests
 
     #region OnnxTensorInfo
 
-    [Fact]
-    public void OnnxTensorInfo_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_DefaultValues()
     {
         var info = new OnnxTensorInfo();
         Assert.Equal(string.Empty, info.Name);
@@ -231,8 +232,8 @@ public class OnnxIntegrationTests
         Assert.Equal("float", info.ElementType);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_SetProperties()
     {
         var info = new OnnxTensorInfo
         {
@@ -246,36 +247,36 @@ public class OnnxIntegrationTests
         Assert.Equal("int64", info.ElementType);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_HasDynamicShape_True()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_HasDynamicShape_True()
     {
         var info = new OnnxTensorInfo { Shape = new[] { -1, 3, 224, 224 } };
         Assert.True(info.HasDynamicShape);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_HasDynamicShape_False()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_HasDynamicShape_False()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 1, 3, 224, 224 } };
         Assert.False(info.HasDynamicShape);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_TotalElements_StaticShape()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_TotalElements_StaticShape()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 1, 3, 224, 224 } };
         Assert.Equal(1L * 3 * 224 * 224, info.TotalElements);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_TotalElements_DynamicShape_ReturnsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_TotalElements_DynamicShape_ReturnsMinusOne()
     {
         var info = new OnnxTensorInfo { Shape = new[] { -1, 3, 224, 224 } };
         Assert.Equal(-1L, info.TotalElements);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_ToString_StaticShape()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_ToString_StaticShape()
     {
         var info = new OnnxTensorInfo { Name = "output", Shape = new[] { 1, 10 }, ElementType = "float" };
         var str = info.ToString();
@@ -285,8 +286,8 @@ public class OnnxIntegrationTests
         Assert.Contains("10", str);
     }
 
-    [Fact]
-    public void OnnxTensorInfo_ToString_DynamicShape_UsesQuestionMark()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorInfo_ToString_DynamicShape_UsesQuestionMark()
     {
         var info = new OnnxTensorInfo { Name = "x", Shape = new[] { -1, 512 }, ElementType = "int64" };
         var str = info.ToString();
@@ -298,56 +299,56 @@ public class OnnxIntegrationTests
 
     #region OnnxTensorConverter - GetOnnxTypeName
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Float()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Float()
     {
         Assert.Equal("float", OnnxTensorConverter.GetOnnxTypeName(typeof(float)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Double()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Double()
     {
         Assert.Equal("double", OnnxTensorConverter.GetOnnxTypeName(typeof(double)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Int32()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Int32()
     {
         Assert.Equal("int32", OnnxTensorConverter.GetOnnxTypeName(typeof(int)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Int64()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Int64()
     {
         Assert.Equal("int64", OnnxTensorConverter.GetOnnxTypeName(typeof(long)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Byte()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Byte()
     {
         Assert.Equal("uint8", OnnxTensorConverter.GetOnnxTypeName(typeof(byte)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_Bool()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_Bool()
     {
         Assert.Equal("bool", OnnxTensorConverter.GetOnnxTypeName(typeof(bool)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_String()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_String()
     {
         Assert.Equal("string", OnnxTensorConverter.GetOnnxTypeName(typeof(string)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_UnknownType()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_UnknownType()
     {
         Assert.Equal("unknown", OnnxTensorConverter.GetOnnxTypeName(typeof(decimal)));
     }
 
-    [Fact]
-    public void OnnxTensorConverter_GetOnnxTypeName_AllIntTypes()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxTensorConverter_GetOnnxTypeName_AllIntTypes()
     {
         Assert.Equal("int16", OnnxTensorConverter.GetOnnxTypeName(typeof(short)));
         Assert.Equal("int8", OnnxTensorConverter.GetOnnxTypeName(typeof(sbyte)));
@@ -360,8 +361,8 @@ public class OnnxIntegrationTests
 
     #region OnnxExecutionProvider Enum
 
-    [Fact]
-    public void OnnxExecutionProvider_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxExecutionProvider_HasExpectedValues()
     {
         Assert.Equal(0, (int)OnnxExecutionProvider.Cpu);
         Assert.Equal(1, (int)OnnxExecutionProvider.Cuda);
@@ -378,8 +379,8 @@ public class OnnxIntegrationTests
 
     #region GraphOptimizationLevel Enum
 
-    [Fact]
-    public void GraphOptimizationLevel_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task GraphOptimizationLevel_HasExpectedValues()
     {
         Assert.Equal(0, (int)GraphOptimizationLevel.None);
         Assert.Equal(1, (int)GraphOptimizationLevel.Basic);
@@ -391,8 +392,8 @@ public class OnnxIntegrationTests
 
     #region OnnxLogLevel Enum
 
-    [Fact]
-    public void OnnxLogLevel_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxLogLevel_HasExpectedValues()
     {
         Assert.Equal(0, (int)OnnxLogLevel.Verbose);
         Assert.Equal(1, (int)OnnxLogLevel.Info);
@@ -405,8 +406,8 @@ public class OnnxIntegrationTests
 
     #region OnnxModelRepositories
 
-    [Fact]
-    public void OnnxModelRepositories_Whisper_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelRepositories_Whisper_HasExpectedValues()
     {
         Assert.Equal("openai/whisper-tiny", OnnxModelRepositories.Whisper.Tiny);
         Assert.Equal("openai/whisper-base", OnnxModelRepositories.Whisper.Base);
@@ -415,15 +416,15 @@ public class OnnxIntegrationTests
         Assert.Equal("openai/whisper-large-v3", OnnxModelRepositories.Whisper.Large);
     }
 
-    [Fact]
-    public void OnnxModelRepositories_Tts_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelRepositories_Tts_HasExpectedValues()
     {
         Assert.Equal("microsoft/speecht5_tts", OnnxModelRepositories.Tts.FastSpeech2);
         Assert.Equal("facebook/hifigan", OnnxModelRepositories.Tts.HiFiGan);
     }
 
-    [Fact]
-    public void OnnxModelRepositories_AudioGen_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelRepositories_AudioGen_HasExpectedValues()
     {
         Assert.Equal("facebook/audiogen-medium", OnnxModelRepositories.AudioGen.Small);
         Assert.Equal("facebook/musicgen-small", OnnxModelRepositories.AudioGen.MusicGenSmall);
@@ -433,15 +434,15 @@ public class OnnxIntegrationTests
 
     #region OnnxModelDownloader - Construction and Cache
 
-    [Fact]
-    public void OnnxModelDownloader_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_DefaultConstruction_DoesNotThrow()
     {
         using var downloader = new OnnxModelDownloader(Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N")));
         Assert.NotNull(downloader);
     }
 
-    [Fact]
-    public void OnnxModelDownloader_GetCachedPath_ReturnsNullForMissing()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_GetCachedPath_ReturnsNullForMissing()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         using var downloader = new OnnxModelDownloader(cacheDir);
@@ -449,8 +450,8 @@ public class OnnxIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public void OnnxModelDownloader_GetCacheSize_ReturnsZeroForEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_GetCacheSize_ReturnsZeroForEmpty()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         using var downloader = new OnnxModelDownloader(cacheDir);
@@ -458,8 +459,8 @@ public class OnnxIntegrationTests
         Assert.Equal(0L, size);
     }
 
-    [Fact]
-    public void OnnxModelDownloader_ListCachedModels_EmptyForNewCache()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_ListCachedModels_EmptyForNewCache()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         using var downloader = new OnnxModelDownloader(cacheDir);
@@ -467,16 +468,16 @@ public class OnnxIntegrationTests
         Assert.Empty(models);
     }
 
-    [Fact]
-    public void OnnxModelDownloader_ClearCache_DoesNotThrowOnEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_ClearCache_DoesNotThrowOnEmpty()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         using var downloader = new OnnxModelDownloader(cacheDir);
         downloader.ClearCache();
     }
 
-    [Fact]
-    public void OnnxModelDownloader_Dispose_CanCallMultipleTimes()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_Dispose_CanCallMultipleTimes()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         var downloader = new OnnxModelDownloader(cacheDir);
@@ -484,7 +485,7 @@ public class OnnxIntegrationTests
         downloader.Dispose(); // Should not throw
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OnnxModelDownloader_DownloadAsync_NullModelId_Throws()
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
@@ -492,8 +493,8 @@ public class OnnxIntegrationTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => downloader.DownloadAsync(null!));
     }
 
-    [Fact]
-    public void OnnxModelDownloader_HuggingFaceBaseUrl_IsSet()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelDownloader_HuggingFaceBaseUrl_IsSet()
     {
         Assert.Equal("https://huggingface.co", OnnxModelDownloader.HuggingFaceBaseUrl);
     }
@@ -502,26 +503,26 @@ public class OnnxIntegrationTests
 
     #region OnnxModel - Validation
 
-    [Fact]
-    public void OnnxModel_NullPath_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModel_NullPath_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelPath: null!));
     }
 
-    [Fact]
-    public void OnnxModel_EmptyPath_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModel_EmptyPath_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelPath: ""));
     }
 
-    [Fact]
-    public void OnnxModel_NonexistentFile_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModel_NonexistentFile_Throws()
     {
         Assert.Throws<FileNotFoundException>(() => new OnnxModel<float>(modelPath: "/nonexistent/model.onnx"));
     }
 
-    [Fact]
-    public void OnnxModel_NullBytes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModel_NullBytes_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelBytes: null!));
     }

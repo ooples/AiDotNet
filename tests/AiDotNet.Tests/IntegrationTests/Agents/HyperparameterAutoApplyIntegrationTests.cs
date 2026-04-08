@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.Agents;
 
@@ -19,8 +20,8 @@ public class HyperparameterAutoApplyIntegrationTests
 {
     #region Full Pipeline: Parse -> Registry -> Apply to Real Models
 
-    [Fact]
-    public void FullPipeline_DecisionTree_JsonResponse_AppliesMaxDepthAndMinSamples()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_DecisionTree_JsonResponse_AppliesMaxDepthAndMinSamples()
     {
         // Arrange: Simulate an LLM response with JSON hyperparameters
         var llmResponse = @"Based on your dataset analysis, I recommend:
@@ -53,8 +54,8 @@ These values should prevent overfitting while capturing the key patterns.";
         Assert.Empty(result.Failed);
     }
 
-    [Fact]
-    public void FullPipeline_GradientBoosting_MarkdownResponse_AppliesTreeAndBoostingParams()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_GradientBoosting_MarkdownResponse_AppliesTreeAndBoostingParams()
     {
         // Arrange: Simulate an LLM response with markdown bold hyperparameters
         var llmResponse = @"For your gradient boosting model, I recommend:
@@ -84,8 +85,8 @@ These values should prevent overfitting while capturing the key patterns.";
         Assert.Empty(result.Skipped);
     }
 
-    [Fact]
-    public void FullPipeline_RandomForest_ColonResponse_AppliesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_RandomForest_ColonResponse_AppliesParameters()
     {
         // Arrange: Simulate an LLM response with colon-separated hyperparameters
         var llmResponse = @"Recommended settings for your random forest:
@@ -110,8 +111,8 @@ min_samples_split: 10";
         Assert.Equal(10, options.MinSamplesSplit);
     }
 
-    [Fact]
-    public void FullPipeline_KNN_AppliesKParameter()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_KNN_AppliesKParameter()
     {
         // Arrange
         var llmResponse = @"```json
@@ -134,8 +135,8 @@ min_samples_split: 10";
         Assert.Equal(123, options.Seed);
     }
 
-    [Fact]
-    public void FullPipeline_SVR_AppliesCAndEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_SVR_AppliesCAndEpsilon()
     {
         // Arrange
         var llmResponse = @"```json
@@ -162,8 +163,8 @@ min_samples_split: 10";
 
     #region IConfigurableModel: Verify GetOptions Returns Live Options
 
-    [Fact]
-    public void GetOptions_DecisionTree_ReturnsMutableOptions()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_DecisionTree_ReturnsMutableOptions()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5 };
@@ -183,8 +184,8 @@ min_samples_split: 10";
         Assert.Equal(20, options.MaxDepth); // Original options should reflect the change
     }
 
-    [Fact]
-    public void GetOptions_GradientBoosting_WithExplicitOptions_ReturnsDerivedType()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_GradientBoosting_WithExplicitOptions_ReturnsDerivedType()
     {
         // Arrange: Pass explicit options so base and derived both have the same object
         var options = new GradientBoostingRegressionOptions
@@ -206,8 +207,8 @@ min_samples_split: 10";
         Assert.Equal(0.1, gbOptions.LearningRate);
     }
 
-    [Fact]
-    public void GetOptions_RandomForest_WithExplicitOptions_ReturnsDerivedType()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_RandomForest_WithExplicitOptions_ReturnsDerivedType()
     {
         var options = new RandomForestRegressionOptions
         {
@@ -224,8 +225,8 @@ min_samples_split: 10";
         Assert.Equal(200, rfOptions.NumberOfTrees);
     }
 
-    [Fact]
-    public void GetOptions_KNN_WithExplicitOptions_ReturnsDerivedType()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_KNN_WithExplicitOptions_ReturnsDerivedType()
     {
         var options = new KNearestNeighborsOptions { K = 3 };
         var model = new KNearestNeighborsRegression<double>(options);
@@ -241,8 +242,8 @@ min_samples_split: 10";
 
     #region GetOptions Bug Detection: Null Options Constructor
 
-    [Fact]
-    public void GetOptions_GradientBoosting_WithNullOptions_ReturnsModelOptions()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_GradientBoosting_WithNullOptions_ReturnsModelOptions()
     {
         // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
         // The base class creates default options in this case.
@@ -258,8 +259,8 @@ min_samples_split: 10";
         Assert.Equal(42, returnedOptions.Seed);
     }
 
-    [Fact]
-    public void GetOptions_KNN_WithNullOptions_ReturnsModelOptions()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_KNN_WithNullOptions_ReturnsModelOptions()
     {
         // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
         var model = new KNearestNeighborsRegression<double>(null);
@@ -278,8 +279,8 @@ min_samples_split: 10";
 
     #region Validation Warnings Through Full Pipeline
 
-    [Fact]
-    public void FullPipeline_OutOfRangeValues_GeneratesWarningsButStillApplies()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_OutOfRangeValues_GeneratesWarningsButStillApplies()
     {
         var llmResponse = @"```json
 {""n_estimators"": 50000, ""max_depth"": 200}
@@ -308,8 +309,8 @@ min_samples_split: 10";
 
     #region Mixed Known and Unknown Parameters Through Pipeline
 
-    [Fact]
-    public void FullPipeline_MixedParameters_ReportsAppliedAndSkipped()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_MixedParameters_ReportsAppliedAndSkipped()
     {
         var llmResponse = @"```json
 {
@@ -344,8 +345,8 @@ min_samples_split: 10";
 
     #region Type Conversion Through Pipeline
 
-    [Fact]
-    public void FullPipeline_StringValuesFromParser_ConvertedToCorrectTypes()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_StringValuesFromParser_ConvertedToCorrectTypes()
     {
         // Colon-separated parsing extracts values as typed via InferTypedValue
         var llmResponse = @"Settings:
@@ -371,8 +372,8 @@ n_estimators: 150";
         Assert.Equal(150, options.NumberOfTrees);
     }
 
-    [Fact]
-    public void FullPipeline_DoubleValuesForIntProperties_ConvertedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_DoubleValuesForIntProperties_ConvertedCorrectly()
     {
         // JSON parser may return doubles for integer values when they have decimal points
         var llmResponse = @"```json
@@ -393,8 +394,8 @@ n_estimators: 150";
         Assert.Equal(200, options.NumberOfTrees);
     }
 
-    [Fact]
-    public void FullPipeline_IntValuesForDoubleProperties_ConvertedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_IntValuesForDoubleProperties_ConvertedCorrectly()
     {
         // LLM might say learning_rate: 1 (int) when the property expects double
         var llmResponse = @"```json
@@ -419,8 +420,8 @@ n_estimators: 150";
 
     #region Seed Application Across Model Families
 
-    [Fact]
-    public void FullPipeline_SeedApplied_AcrossModelFamilies()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_SeedApplied_AcrossModelFamilies()
     {
         var llmResponse = @"```json
 {""random_seed"": 42}
@@ -459,8 +460,8 @@ n_estimators: 150";
 
     #region Result Summary Reporting
 
-    [Fact]
-    public void FullPipeline_ResultSummary_ContainsAllSections()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_ResultSummary_ContainsAllSections()
     {
         var llmResponse = @"```json
 {
@@ -496,8 +497,8 @@ n_estimators: 150";
 
     #region Registry-to-Options Property Name Verification
 
-    [Fact]
-    public void Registry_RandomForest_AllRegisteredAliases_MapToRealProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_RandomForest_AllRegisteredAliases_MapToRealProperties()
     {
         // Verify that every alias registered for RandomForest actually maps to a real property
         // on RandomForestRegressionOptions (or its parent DecisionTreeOptions)
@@ -526,8 +527,8 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
-    public void Registry_GradientBoosting_AllRegisteredAliases_MapToRealProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_GradientBoosting_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
         var optionsType = typeof(GradientBoostingRegressionOptions);
@@ -554,8 +555,8 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
-    public void Registry_KNN_AllRegisteredAliases_MapToRealProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_KNN_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
         var optionsType = typeof(KNearestNeighborsOptions);
@@ -578,8 +579,8 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
-    public void Registry_SVR_AllRegisteredAliases_MapToRealProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_SVR_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
         var optionsType = typeof(SupportVectorRegressionOptions);
@@ -607,8 +608,8 @@ n_estimators: 150";
 
     #region Realistic LLM Response Formats
 
-    [Fact]
-    public void FullPipeline_VerboseLLMResponse_ExtractsParametersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_VerboseLLMResponse_ExtractsParametersCorrectly()
     {
         // Simulate a realistic verbose LLM response with surrounding prose
         var llmResponse = @"# Hyperparameter Recommendations
@@ -657,8 +658,8 @@ performance and adjusting if needed.";
         Assert.Empty(result.Failed);
     }
 
-    [Fact]
-    public void FullPipeline_MarkdownOnlyResponse_ExtractsParametersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_MarkdownOnlyResponse_ExtractsParametersCorrectly()
     {
         var llmResponse = @"Here are my tuning recommendations:
 
@@ -688,22 +689,22 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region AgentAssistanceOptions Integration
 
-    [Fact]
-    public void AgentAssistanceOptions_EnableAutoApply_DefaultsToFalse()
+    [Fact(Timeout = 120000)]
+    public async Task AgentAssistanceOptions_EnableAutoApply_DefaultsToFalse()
     {
         var options = new AgentAssistanceOptions();
         Assert.False(options.EnableAutoApplyHyperparameters);
     }
 
-    [Fact]
-    public void AgentAssistanceOptions_ComprehensivePreset_EnablesAutoApply()
+    [Fact(Timeout = 120000)]
+    public async Task AgentAssistanceOptions_ComprehensivePreset_EnablesAutoApply()
     {
         var options = AgentAssistanceOptions.Comprehensive;
         Assert.True(options.EnableAutoApplyHyperparameters);
     }
 
-    [Fact]
-    public void AgentAssistanceOptions_Clone_PreservesAutoApplySetting()
+    [Fact(Timeout = 120000)]
+    public async Task AgentAssistanceOptions_Clone_PreservesAutoApplySetting()
     {
         var original = new AgentAssistanceOptions { EnableAutoApplyHyperparameters = true };
         var clone = original.Clone();
@@ -715,8 +716,8 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region AgentRecommendation Integration
 
-    [Fact]
-    public void AgentRecommendation_StoresHyperparameterResult()
+    [Fact(Timeout = 120000)]
+    public async Task AgentRecommendation_StoresHyperparameterResult()
     {
         var recommendation = new AgentRecommendation<double, double[], double>
         {
@@ -746,8 +747,8 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region Edge Cases: Empty and No-Op Scenarios
 
-    [Fact]
-    public void FullPipeline_EmptyLLMResponse_NoChangesToModel()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_EmptyLLMResponse_NoChangesToModel()
     {
         var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
         var model = new RandomForestRegression<double>(options);
@@ -764,8 +765,8 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         Assert.Equal(10, options.MaxDepth);
     }
 
-    [Fact]
-    public void FullPipeline_ProseOnlyResponse_NoChangesToModel()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_ProseOnlyResponse_NoChangesToModel()
     {
         var llmResponse = "The model looks good as configured. I don't recommend any changes to the hyperparameters at this time.";
 
@@ -786,8 +787,8 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region Scientific Notation and Special Values
 
-    [Fact]
-    public void FullPipeline_ScientificNotation_ParsedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_ScientificNotation_ParsedCorrectly()
     {
         var llmResponse = @"```json
 {""learning_rate"": 1e-3}

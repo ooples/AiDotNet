@@ -1,5 +1,6 @@
 using AiDotNet.NeuralNetworks.SyntheticData;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 
@@ -16,8 +17,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // ColumnDataType Enum
     // ============================
 
-    [Fact]
-    public void ColumnDataType_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnDataType_HasExpectedValues()
     {
         var values = (((ColumnDataType[])Enum.GetValues(typeof(ColumnDataType))));
         Assert.Equal(3, values.Length);
@@ -36,8 +37,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // ColumnMetadata: Construction
     // ============================
 
-    [Fact]
-    public void ColumnMetadata_Construction_ContinuousColumn()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Construction_ContinuousColumn()
     {
         var col = new ColumnMetadata("Age", ColumnDataType.Continuous);
         Assert.Equal("Age", col.Name);
@@ -48,8 +49,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.False(col.IsCategorical);
     }
 
-    [Fact]
-    public void ColumnMetadata_Construction_DiscreteColumn()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Construction_DiscreteColumn()
     {
         var col = new ColumnMetadata("Count", ColumnDataType.Discrete);
         Assert.Equal(ColumnDataType.Discrete, col.DataType);
@@ -57,8 +58,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.False(col.IsCategorical);
     }
 
-    [Fact]
-    public void ColumnMetadata_Construction_CategoricalColumn()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Construction_CategoricalColumn()
     {
         var categories = new[] { "Red", "Green", "Blue" };
         var col = new ColumnMetadata("Color", ColumnDataType.Categorical, categories);
@@ -71,23 +72,23 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal("Blue", col.Categories[2]);
     }
 
-    [Fact]
-    public void ColumnMetadata_Construction_NullCategories_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Construction_NullCategories_Empty()
     {
         var col = new ColumnMetadata("X", ColumnDataType.Continuous, null);
         Assert.Empty(col.Categories);
         Assert.Equal(0, col.NumCategories);
     }
 
-    [Fact]
-    public void ColumnMetadata_Construction_ColumnIndex()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Construction_ColumnIndex()
     {
         var col = new ColumnMetadata("X", ColumnDataType.Continuous, columnIndex: 5);
         Assert.Equal(5, col.ColumnIndex);
     }
 
-    [Fact]
-    public void ColumnMetadata_DefaultStatistics()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_DefaultStatistics()
     {
         var col = new ColumnMetadata("X", ColumnDataType.Continuous);
         Assert.Equal(0.0, col.Min);
@@ -96,8 +97,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(1.0, col.Std); // Default Std is 1.0
     }
 
-    [Fact]
-    public void ColumnMetadata_SetStatistics()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_SetStatistics()
     {
         var col = new ColumnMetadata("X", ColumnDataType.Continuous);
         col.Min = -5.0;
@@ -115,8 +116,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // ColumnMetadata: Clone
     // ============================
 
-    [Fact]
-    public void ColumnMetadata_Clone_CopiesAllFields()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Clone_CopiesAllFields()
     {
         var original = new ColumnMetadata("Age", ColumnDataType.Continuous, columnIndex: 3)
         {
@@ -137,8 +138,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(original.Std, clone.Std);
     }
 
-    [Fact]
-    public void ColumnMetadata_Clone_IsIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Clone_IsIndependent()
     {
         var original = new ColumnMetadata("Age", ColumnDataType.Continuous)
         {
@@ -154,8 +155,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(100.0, original.Max);
     }
 
-    [Fact]
-    public void ColumnMetadata_Clone_CategoricalPreservesCategories()
+    [Fact(Timeout = 120000)]
+    public async Task ColumnMetadata_Clone_CategoricalPreservesCategories()
     {
         var categories = new[] { "A", "B", "C" };
         var original = new ColumnMetadata("Cat", ColumnDataType.Categorical, categories);
@@ -172,8 +173,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: VGM (Variational Gaussian Mixture) Normalization
     // ============================
 
-    [Fact]
-    public void SyntheticMath_VGM_ModeSpecificNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_VGM_ModeSpecificNormalization()
     {
         // CTGAN uses VGM to normalize continuous columns:
         // 1. Fit a GMM with K modes
@@ -204,8 +205,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(expectedWidth, width);
     }
 
-    [Fact]
-    public void SyntheticMath_OneHotEncoding_Width()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_OneHotEncoding_Width()
     {
         // Categorical column with K categories produces K-dimensional one-hot vector
         int numCategories = 5;
@@ -262,8 +263,8 @@ public class SyntheticDataDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SyntheticMath_DiffusionAlphaCumprod_Decreases()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_DiffusionAlphaCumprod_Decreases()
     {
         // alpha_t = 1 - beta_t
         // alpha_bar_t = product(alpha_i, i=1..t)
@@ -293,8 +294,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.True(alphasCumprod[T - 1] < 0.5, "Alpha cumprod at final t should be small");
     }
 
-    [Fact]
-    public void SyntheticMath_DiffusionForwardProcess()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_DiffusionForwardProcess()
     {
         // Forward process: x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon
         double x0 = 5.0;
@@ -317,8 +318,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(1.0, varContribution, 1e-10);
     }
 
-    [Fact]
-    public void SyntheticMath_DiffusionMSELoss()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_DiffusionMSELoss()
     {
         // MSE loss between predicted and actual noise
         double[] predicted = { 0.5, -0.3, 0.8, 0.1 };
@@ -340,8 +341,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: CTGAN Conditional Vector
     // ============================
 
-    [Fact]
-    public void SyntheticMath_ConditionalVector_Width()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_ConditionalVector_Width()
     {
         // Conditional vector width = sum of categories across all categorical columns
         int[] categoriesPerColumn = { 5, 3, 10 }; // 3 categorical columns
@@ -349,8 +350,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(18, condWidth);
     }
 
-    [Fact]
-    public void SyntheticMath_ConditionalVector_OneHotPerColumn()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_ConditionalVector_OneHotPerColumn()
     {
         // Each column's section of the conditional vector is one-hot
         int[] categoriesPerColumn = { 3, 4 };
@@ -373,8 +374,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: Data Quality Metrics
     // ============================
 
-    [Fact]
-    public void SyntheticMath_WassersteinDistance_SameDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_WassersteinDistance_SameDistribution()
     {
         // 1D Wasserstein distance between identical sorted distributions = 0
         double[] real = { 1, 2, 3, 4, 5 };
@@ -429,8 +430,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(expectedKL, kl, 1e-2);
     }
 
-    [Fact]
-    public void SyntheticMath_KLDivergence_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_KLDivergence_NonNegative()
     {
         // Gibbs' inequality: KL divergence is always >= 0
         double[] p = { 0.3, 0.5, 0.2 };
@@ -478,8 +479,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: Column Statistics
     // ============================
 
-    [Fact]
-    public void SyntheticMath_ZScoreNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_ZScoreNormalization()
     {
         double[] data = { 10, 20, 30, 40, 50 };
         double mean = data.Average();  // 30
@@ -492,8 +493,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(1.0, normalizedStd, 1e-10);
     }
 
-    [Fact]
-    public void SyntheticMath_MinMaxNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_MinMaxNormalization()
     {
         double[] data = { 10, 20, 30, 40, 50 };
         double min = data.Min();
@@ -509,8 +510,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: GAN Training Metrics
     // ============================
 
-    [Fact]
-    public void SyntheticMath_GeneratorLoss_BinaryCrossEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_GeneratorLoss_BinaryCrossEntropy()
     {
         // Generator loss: -log(D(G(z)))
         // Generator wants D(G(z)) -> 1 (fool discriminator)
@@ -521,8 +522,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.True(gLoss < 1.0, "Good discriminator output should give small loss");
     }
 
-    [Fact]
-    public void SyntheticMath_DiscriminatorLoss_BinaryCrossEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_DiscriminatorLoss_BinaryCrossEntropy()
     {
         // Discriminator loss: -[log(D(real)) + log(1 - D(G(z)))]
         double dReal = 0.9;  // Correctly identifies real as real
@@ -552,8 +553,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: TVAE (Variational Autoencoder)
     // ============================
 
-    [Fact]
-    public void SyntheticMath_VAE_ReparameterizationTrick()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_VAE_ReparameterizationTrick()
     {
         // z = mu + sigma * epsilon, where epsilon ~ N(0, 1)
         double mu = 2.0;
@@ -568,8 +569,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.Equal(mu + Math.Exp(0.25) * 0.7, z, 1e-10);
     }
 
-    [Fact]
-    public void SyntheticMath_VAE_KLDivergence_FromStandardNormal()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_VAE_KLDivergence_FromStandardNormal()
     {
         // KL(q(z|x) || p(z)) where q = N(mu, sigma^2) and p = N(0, 1)
         // KL = -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
@@ -589,8 +590,8 @@ public class SyntheticDataDeepMathIntegrationTests
     // Synthetic Data Math: Category Frequency Matching
     // ============================
 
-    [Fact]
-    public void SyntheticMath_CategoryFrequency_JensenShannonDivergence()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_CategoryFrequency_JensenShannonDivergence()
     {
         // JSD = 0.5 * KL(P || M) + 0.5 * KL(Q || M) where M = 0.5 * (P + Q)
         double[] p = { 0.3, 0.5, 0.2 }; // Real distribution
@@ -613,8 +614,8 @@ public class SyntheticDataDeepMathIntegrationTests
         Assert.True(jsd <= Math.Log(2) + 1e-10, "JSD must be <= ln(2)");
     }
 
-    [Fact]
-    public void SyntheticMath_CategoryFrequency_IdenticalDistributions()
+    [Fact(Timeout = 120000)]
+    public async Task SyntheticMath_CategoryFrequency_IdenticalDistributions()
     {
         double[] p = { 0.3, 0.5, 0.2 };
         double[] q = { 0.3, 0.5, 0.2 };

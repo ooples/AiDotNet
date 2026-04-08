@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Encoding;
 
@@ -31,8 +32,8 @@ public class Utf8EncodingTests
     /// Ensures no UTF-8 replacement characters exist in source files.
     /// The replacement character (U+FFFD) indicates encoding corruption.
     /// </summary>
-    [Fact]
-    public void SourceFiles_ShouldNotContainReplacementCharacter()
+    [Fact(Timeout = 60000)]
+    public async Task SourceFiles_ShouldNotContainReplacementCharacter()
     {
         var rootDir = GetRepositoryRoot();
         var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)

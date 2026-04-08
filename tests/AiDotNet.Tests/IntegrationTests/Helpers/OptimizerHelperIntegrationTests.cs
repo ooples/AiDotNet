@@ -5,6 +5,7 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Results;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -15,8 +16,8 @@ public class OptimizerHelperIntegrationTests
 {
     #region SelectFeatures Tests - Matrix with Indices
 
-    [Fact]
-    public void SelectFeatures_Matrix_SingleFeature_ReturnsCorrectColumn()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_SingleFeature_ReturnsCorrectColumn()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -35,8 +36,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(10, result[2, 0]);
     }
 
-    [Fact]
-    public void SelectFeatures_Matrix_MultipleFeatures_ReturnsCorrectColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_MultipleFeatures_ReturnsCorrectColumns()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -55,8 +56,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(7, result[1, 1]);
     }
 
-    [Fact]
-    public void SelectFeatures_Matrix_AllFeatures_ReturnsSameShape()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_AllFeatures_ReturnsSameShape()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -71,8 +72,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void SelectFeatures_Matrix_ReorderedFeatures_ReordersColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_ReorderedFeatures_ReordersColumns()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -87,8 +88,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(2, result[0, 2]); // Originally column 1
     }
 
-    [Fact]
-    public void SelectFeatures_Matrix_Float_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_Float_WorksCorrectly()
     {
         var matrix = new Matrix<float>(new float[,]
         {
@@ -105,8 +106,8 @@ public class OptimizerHelperIntegrationTests
 
     #region SelectFeatures Tests - Tensor with Indices
 
-    [Fact]
-    public void SelectFeatures_Tensor2D_SingleFeature_ReturnsCorrectColumn()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Tensor2D_SingleFeature_ReturnsCorrectColumn()
     {
         var tensor = new Tensor<double>(new[] { 2, 4 });
         tensor[0, 0] = 1; tensor[0, 1] = 2; tensor[0, 2] = 3; tensor[0, 3] = 4;
@@ -121,8 +122,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(7, result[1, 0]);
     }
 
-    [Fact]
-    public void SelectFeatures_Tensor2D_MultipleFeatures_ReturnsCorrectColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Tensor2D_MultipleFeatures_ReturnsCorrectColumns()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         tensor[0, 0] = 1; tensor[0, 1] = 2; tensor[0, 2] = 3;
@@ -137,8 +138,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3, result[0, 1]);
     }
 
-    [Fact]
-    public void SelectFeatures_Tensor1D_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Tensor1D_ThrowsArgumentException()
     {
         var tensor = new Tensor<double>(new[] { 5 }); // 1D tensor
 
@@ -151,8 +152,8 @@ public class OptimizerHelperIntegrationTests
 
     #region SelectFeatures Tests - With Vector Features
 
-    [Fact]
-    public void SelectFeatures_MatrixWithVectors_CreatesNewMatrixFromColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_MatrixWithVectors_CreatesNewMatrixFromColumns()
     {
         var col1 = new Vector<double>(new[] { 1.0, 4.0, 7.0 });
         var col2 = new Vector<double>(new[] { 3.0, 6.0, 9.0 });
@@ -169,8 +170,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3.0, result[0, 1]);
     }
 
-    [Fact]
-    public void SelectFeatures_TensorWithVectors_CreatesTensorFromColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_TensorWithVectors_CreatesTensorFromColumns()
     {
         var col1 = new Vector<double>(new[] { 1.0, 2.0 });
         var col2 = new Vector<double>(new[] { 3.0, 4.0 });
@@ -185,8 +186,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(2, result.Shape[1]);
     }
 
-    [Fact]
-    public void SelectFeatures_WithVectors_EmptyList_ReturnsEmptyResult()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_WithVectors_EmptyList_ReturnsEmptyResult()
     {
         var selectedFeatures = new List<Vector<double>>();
         var dummyTensor = new Tensor<double>(new[] { 2, 2 });
@@ -198,8 +199,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(0, result.Shape[1]);
     }
 
-    [Fact]
-    public void SelectFeatures_WithVectors_MismatchedLengths_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_WithVectors_MismatchedLengths_ThrowsException()
     {
         var col1 = new Vector<double>(new[] { 1.0, 2.0 });
         var col2 = new Vector<double>(new[] { 3.0, 4.0, 5.0 }); // Different length
@@ -216,8 +217,8 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateOptimizationInputData Tests
 
-    [Fact]
-    public void CreateOptimizationInputData_MatrixVector_CreatesValidObject()
+    [Fact(Timeout = 120000)]
+    public async Task CreateOptimizationInputData_MatrixVector_CreatesValidObject()
     {
         var xTrain = new Matrix<double>(10, 5);
         var yTrain = new Vector<double>(10);
@@ -238,8 +239,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(yTest, result.YTest);
     }
 
-    [Fact]
-    public void CreateOptimizationInputData_TensorTensor_CreatesValidObject()
+    [Fact(Timeout = 120000)]
+    public async Task CreateOptimizationInputData_TensorTensor_CreatesValidObject()
     {
         var xTrain = new Tensor<double>(new[] { 10, 5 });
         var yTrain = new Tensor<double>(new[] { 10, 1 });
@@ -256,8 +257,8 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(yTrain, result.YTrain);
     }
 
-    [Fact]
-    public void CreateOptimizationInputData_Float_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CreateOptimizationInputData_Float_WorksCorrectly()
     {
         var xTrain = new Matrix<float>(5, 3);
         var yTrain = new Vector<float>(5);
@@ -276,8 +277,8 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateDatasetResult Tests
 
-    [Fact]
-    public void CreateDatasetResult_WithNullStats_UsesEmptyStats()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetResult_WithNullStats_UsesEmptyStats()
     {
         var predictions = new Vector<double>(5);
         var features = new Matrix<double>(5, 3);
@@ -299,8 +300,8 @@ public class OptimizerHelperIntegrationTests
         Assert.NotNull(result.PredictionStats);
     }
 
-    [Fact]
-    public void CreateDatasetResult_WithValidStats_PreservesStats()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDatasetResult_WithValidStats_PreservesStats()
     {
         var predictions = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var features = new Matrix<double>(3, 2);
@@ -323,8 +324,8 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateOptimizationResult Tests
 
-    [Fact]
-    public void CreateOptimizationResult_CreatesValidResultObject()
+    [Fact(Timeout = 120000)]
+    public async Task CreateOptimizationResult_CreatesValidResultObject()
     {
         var bestSolution = new VectorModel<double>(new Vector<double>(new[] { 0.5, 0.3, 0.2 }));
         var bestFitness = 0.95;
@@ -371,8 +372,8 @@ public class OptimizerHelperIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void SelectFeatures_Matrix_EmptyList_ReturnsEmptyMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_EmptyList_ReturnsEmptyMatrix()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -387,16 +388,16 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(0, result.Columns);
     }
 
-    [Fact]
-    public void SelectFeatures_UnsupportedType_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_UnsupportedType_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             OptimizerHelper<double, string, string>.SelectFeatures(
                 "invalid", new List<int> { 0 }));
     }
 
-    [Fact]
-    public void SelectFeatures_Matrix_LargeDataset_PerformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Matrix_LargeDataset_PerformsCorrectly()
     {
         int rows = 1000;
         int cols = 100;

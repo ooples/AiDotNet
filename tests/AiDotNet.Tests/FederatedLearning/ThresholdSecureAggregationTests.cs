@@ -1,12 +1,13 @@
 using AiDotNet.FederatedLearning.Privacy;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class ThresholdSecureAggregationTests
 {
-    [Fact]
-    public void MasksCancel_ForStructuredUpdates()
+    [Fact(Timeout = 60000)]
+    public async Task MasksCancel_ForStructuredUpdates()
     {
         var secureAggregation = new ThresholdSecureAggregation<double>(parameterCount: 3, randomSeed: 123);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2 });
@@ -43,8 +44,8 @@ public class ThresholdSecureAggregationTests
         Assert.Equal(18.0, sum["b"][1], precision: 12);
     }
 
-    [Fact]
-    public void AggregateSumSecurely_Succeeds_WithUnmaskingDropout_ForStructuredUpdates()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateSumSecurely_Succeeds_WithUnmaskingDropout_ForStructuredUpdates()
     {
         var secureAggregation = new ThresholdSecureAggregation<double>(parameterCount: 3, randomSeed: 42);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2 });

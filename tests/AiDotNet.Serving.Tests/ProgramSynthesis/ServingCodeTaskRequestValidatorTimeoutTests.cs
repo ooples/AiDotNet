@@ -5,13 +5,14 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public sealed class ServingCodeTaskRequestValidatorTimeoutTests
 {
-    [Fact]
-    public void TryValidate_RejectsMaxWallClockMillisecondsAboveTierLimit()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_RejectsMaxWallClockMillisecondsAboveTierLimit()
     {
         var options = Options.Create(new ServingProgramSynthesisOptions
         {

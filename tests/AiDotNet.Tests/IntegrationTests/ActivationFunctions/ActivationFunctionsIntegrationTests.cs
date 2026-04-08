@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ActivationFunctions;
 
@@ -15,8 +16,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Sigmoid Activation Tests
 
-    [Fact]
-    public void SigmoidActivation_Activate_ReturnsValueBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task SigmoidActivation_Activate_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
         var sigmoid = new SigmoidActivation<double>();
@@ -28,8 +29,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void SigmoidActivation_ActivatePositive_ApproachesOne()
+    [Fact(Timeout = 120000)]
+    public async Task SigmoidActivation_ActivatePositive_ApproachesOne()
     {
         // Arrange
         var sigmoid = new SigmoidActivation<double>();
@@ -42,8 +43,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result <= 1.0);
     }
 
-    [Fact]
-    public void SigmoidActivation_ActivateNegative_ApproachesZero()
+    [Fact(Timeout = 120000)]
+    public async Task SigmoidActivation_ActivateNegative_ApproachesZero()
     {
         // Arrange
         var sigmoid = new SigmoidActivation<double>();
@@ -56,8 +57,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void SigmoidActivation_Derivative_MaximumAtZero()
+    [Fact(Timeout = 120000)]
+    public async Task SigmoidActivation_Derivative_MaximumAtZero()
     {
         // Arrange
         var sigmoid = new SigmoidActivation<double>();
@@ -73,8 +74,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(derivativeAtNegative < derivativeAtZero);
     }
 
-    [Fact]
-    public void SigmoidActivation_ActivateVector_ProcessesAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task SigmoidActivation_ActivateVector_ProcessesAllElements()
     {
         // Arrange
         var sigmoid = new SigmoidActivation<double>();
@@ -94,8 +95,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region ReLU Activation Tests
 
-    [Fact]
-    public void ReLUActivation_ActivatePositive_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -107,8 +108,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ReLUActivation_ActivateNegative_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_ActivateNegative_ReturnsZero()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -120,8 +121,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ReLUActivation_ActivateZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -133,8 +134,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ReLUActivation_DerivativePositive_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_DerivativePositive_ReturnsOne()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -146,8 +147,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ReLUActivation_DerivativeNegative_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_DerivativeNegative_ReturnsZero()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -159,8 +160,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ReLUActivation_ActivateVector_ProcessesAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task ReLUActivation_ActivateVector_ProcessesAllElements()
     {
         // Arrange
         var relu = new ReLUActivation<double>();
@@ -182,8 +183,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Tanh Activation Tests
 
-    [Fact]
-    public void TanhActivation_ActivateZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -195,8 +196,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TanhActivation_ActivatePositive_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_ActivatePositive_ReturnsPositive()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -209,8 +210,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact]
-    public void TanhActivation_ActivateNegative_ReturnsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_ActivateNegative_ReturnsNegative()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -223,8 +224,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > -1.0);
     }
 
-    [Fact]
-    public void TanhActivation_LargePositive_ApproachesOne()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_LargePositive_ApproachesOne()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -236,8 +237,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > 0.99);
     }
 
-    [Fact]
-    public void TanhActivation_LargeNegative_ApproachesMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_LargeNegative_ApproachesMinusOne()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -249,8 +250,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result < -0.99);
     }
 
-    [Fact]
-    public void TanhActivation_Derivative_MaximumAtZero()
+    [Fact(Timeout = 120000)]
+    public async Task TanhActivation_Derivative_MaximumAtZero()
     {
         // Arrange
         var tanh = new TanhActivation<double>();
@@ -266,8 +267,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Softmax Activation Tests
 
-    [Fact]
-    public void SoftmaxActivation_ActivateVector_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task SoftmaxActivation_ActivateVector_SumsToOne()
     {
         // Arrange
         var softmax = new SoftmaxActivation<double>();
@@ -285,8 +286,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void SoftmaxActivation_ActivateVector_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task SoftmaxActivation_ActivateVector_AllPositive()
     {
         // Arrange
         var softmax = new SoftmaxActivation<double>();
@@ -302,8 +303,8 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void SoftmaxActivation_LargestInputHasLargestOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SoftmaxActivation_LargestInputHasLargestOutput()
     {
         // Arrange
         var softmax = new SoftmaxActivation<double>();
@@ -321,8 +322,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region LeakyReLU Activation Tests
 
-    [Fact]
-    public void LeakyReLUActivation_ActivatePositive_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
         var leakyRelu = new LeakyReLUActivation<double>(0.01);
@@ -334,8 +335,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void LeakyReLUActivation_ActivateNegative_ReturnsScaledInput()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLUActivation_ActivateNegative_ReturnsScaledInput()
     {
         // Arrange
         var leakyRelu = new LeakyReLUActivation<double>(0.1);
@@ -347,8 +348,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(-0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void LeakyReLUActivation_DerivativeNegative_ReturnsAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLUActivation_DerivativeNegative_ReturnsAlpha()
     {
         // Arrange
         var leakyRelu = new LeakyReLUActivation<double>(0.2);
@@ -364,8 +365,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region ELU Activation Tests
 
-    [Fact]
-    public void ELUActivation_ActivatePositive_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task ELUActivation_ActivatePositive_ReturnsInput()
     {
         // Arrange
         var elu = new ELUActivation<double>(1.0);
@@ -377,8 +378,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ELUActivation_ActivateNegative_ReturnsExponential()
+    [Fact(Timeout = 120000)]
+    public async Task ELUActivation_ActivateNegative_ReturnsExponential()
     {
         // Arrange
         var elu = new ELUActivation<double>(1.0);
@@ -391,8 +392,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > -1.0);
     }
 
-    [Fact]
-    public void ELUActivation_LargeNegative_ApproachesMinusAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task ELUActivation_LargeNegative_ApproachesMinusAlpha()
     {
         // Arrange
         var elu = new ELUActivation<double>(1.0);
@@ -409,8 +410,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region GELU Activation Tests
 
-    [Fact]
-    public void GELUActivation_ActivateZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GELUActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
         var gelu = new GELUActivation<double>();
@@ -422,8 +423,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void GELUActivation_ActivatePositive_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GELUActivation_ActivatePositive_ReturnsPositive()
     {
         // Arrange
         var gelu = new GELUActivation<double>();
@@ -435,8 +436,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
-    public void GELUActivation_LargePositive_ApproachesInput()
+    [Fact(Timeout = 120000)]
+    public async Task GELUActivation_LargePositive_ApproachesInput()
     {
         // Arrange
         var gelu = new GELUActivation<double>();
@@ -452,8 +453,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region HardSigmoid Activation Tests
 
-    [Fact]
-    public void HardSigmoidActivation_ActivateZero_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task HardSigmoidActivation_ActivateZero_ReturnsHalf()
     {
         // Arrange
         var hardSigmoid = new HardSigmoidActivation<double>();
@@ -465,8 +466,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void HardSigmoidActivation_LargePositive_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HardSigmoidActivation_LargePositive_ReturnsOne()
     {
         // Arrange
         var hardSigmoid = new HardSigmoidActivation<double>();
@@ -478,8 +479,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void HardSigmoidActivation_LargeNegative_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task HardSigmoidActivation_LargeNegative_ReturnsZero()
     {
         // Arrange
         var hardSigmoid = new HardSigmoidActivation<double>();
@@ -495,8 +496,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region HardTanh Activation Tests
 
-    [Fact]
-    public void HardTanhActivation_ActivateZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task HardTanhActivation_ActivateZero_ReturnsZero()
     {
         // Arrange
         var hardTanh = new HardTanhActivation<double>();
@@ -508,8 +509,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void HardTanhActivation_LargePositive_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HardTanhActivation_LargePositive_ReturnsOne()
     {
         // Arrange
         var hardTanh = new HardTanhActivation<double>();
@@ -521,8 +522,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void HardTanhActivation_LargeNegative_ReturnsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task HardTanhActivation_LargeNegative_ReturnsMinusOne()
     {
         // Arrange
         var hardTanh = new HardTanhActivation<double>();
@@ -538,8 +539,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Gaussian Activation Tests
 
-    [Fact]
-    public void GaussianActivation_ActivateZero_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianActivation_ActivateZero_ReturnsOne()
     {
         // Arrange
         var gaussian = new GaussianActivation<double>();
@@ -551,8 +552,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void GaussianActivation_ActivateNonZero_ReturnsLessThanOne()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianActivation_ActivateNonZero_ReturnsLessThanOne()
     {
         // Arrange
         var gaussian = new GaussianActivation<double>();
@@ -569,8 +570,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Linear Activation Tests
 
-    [Fact]
-    public void IdentityActivation_Activate_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_Activate_ReturnsInput()
     {
         // Arrange
         var linear = new IdentityActivation<double>();
@@ -582,8 +583,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void IdentityActivation_Derivative_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_Derivative_ReturnsOne()
     {
         // Arrange
         var linear = new IdentityActivation<double>();
@@ -595,8 +596,8 @@ public class ActivationFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void IdentityActivation_ActivateTensor_ReturnsSameReference()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_ActivateTensor_ReturnsSameReference()
     {
         // Arrange — the override must return the input tensor itself (no allocation)
         var identity = new IdentityActivation<double>();
@@ -610,8 +611,8 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same tensor reference (no copy)");
     }
 
-    [Fact]
-    public void IdentityActivation_ActivateTensor_PreservesAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_ActivateTensor_PreservesAllValues()
     {
         // Arrange
         var identity = new IdentityActivation<double>();
@@ -628,8 +629,8 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void IdentityActivation_ActivateTensor_1D_ReturnsSameReference()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_ActivateTensor_1D_ReturnsSameReference()
     {
         // Arrange
         var identity = new IdentityActivation<double>();
@@ -643,8 +644,8 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same reference for 1-D tensors");
     }
 
-    [Fact]
-    public void IdentityActivation_ActivateTensor_3D_ReturnsSameReference()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_ActivateTensor_3D_ReturnsSameReference()
     {
         // Arrange
         var identity = new IdentityActivation<double>();
@@ -660,8 +661,8 @@ public class ActivationFunctionsIntegrationTests
             "IdentityActivation.Activate(Tensor<T>) must return the same reference for 3-D tensors");
     }
 
-    [Fact]
-    public void IdentityActivation_ActivateTensor_NegativeValues_PreservedExactly()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityActivation_ActivateTensor_NegativeValues_PreservedExactly()
     {
         // Arrange — regression: no clipping of negative values (unlike ReLU)
         var identity = new IdentityActivation<double>();
@@ -680,8 +681,8 @@ public class ActivationFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void AllActivationFunctions_HandleLargeValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllActivationFunctions_HandleLargeValues()
     {
         // Arrange - test only bounded activation functions
         var activations = new IActivationFunction<double>[]
@@ -702,8 +703,8 @@ public class ActivationFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllActivationFunctions_HandleNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllActivationFunctions_HandleNegativeValues()
     {
         // Arrange
         var activations = new IActivationFunction<double>[]

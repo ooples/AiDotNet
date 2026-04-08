@@ -6,13 +6,14 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class NeuralProgramSynthesizerCoverageTests
 {
-    [Fact]
-    public void ValidateProgram_RejectsEmptyCode_AndHonorsMaxProgramLength()
+    [Fact(Timeout = 60000)]
+    public async Task ValidateProgram_RejectsEmptyCode_AndHonorsMaxProgramLength()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 2);
 
@@ -25,8 +26,8 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.False(synthesizer.ValidateProgram(tooComplex));
     }
 
-    [Fact]
-    public void ValidateProgram_ValidatesSqlAndGenericBrackets()
+    [Fact(Timeout = 60000)]
+    public async Task ValidateProgram_ValidatesSqlAndGenericBrackets()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
 
@@ -40,8 +41,8 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.False(synthesizer.ValidateProgram(bracketsBad));
     }
 
-    [Fact]
-    public void EvaluateProgram_ReturnsExpectedDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateProgram_ReturnsExpectedDefaults()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
 
@@ -52,8 +53,8 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.Equal(0.5, synthesizer.EvaluateProgram(validNoExamples, new ProgramInput<double> { Examples = new List<ProgramInputOutputExample>() }));
     }
 
-    [Fact]
-    public void SynthesizeProgram_WithExamples_StopsWhenNoExecutionEngineAvailable()
+    [Fact(Timeout = 60000)]
+    public async Task SynthesizeProgram_WithExamples_StopsWhenNoExecutionEngineAvailable()
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 100);
 
@@ -72,8 +73,8 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.Equal(0.0, result.FitnessScore, precision: 6);
     }
 
-    [Fact]
-    public void BuildFeedbackInput_ReturnsNull_WhenNoFailures()
+    [Fact(Timeout = 60000)]
+    public async Task BuildFeedbackInput_ReturnsNull_WhenNoFailures()
     {
         var synthesizer = CreateSynthesizer(executionEngine: new EchoExecutionEngine(), maxProgramLength: 100);
 

@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Engines;
 
@@ -13,8 +14,8 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Poincare Ball Tests
 
-    [Fact]
-    public void MobiusAdd_OriginPlusPoint_ReturnsPoint()
+    [Fact(Timeout = 60000)]
+    public async Task MobiusAdd_OriginPlusPoint_ReturnsPoint()
     {
         // Arrange: x + 0 = x in Mobius addition
         var origin = new Vector<double>(new[] { 0.0, 0.0 });
@@ -30,8 +31,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact]
-    public void MobiusAdd_PointPlusOrigin_ReturnsPoint()
+    [Fact(Timeout = 60000)]
+    public async Task MobiusAdd_PointPlusOrigin_ReturnsPoint()
     {
         // Arrange: 0 + x = x in Mobius addition
         var point = new Vector<double>(new[] { 0.3, 0.4 });
@@ -47,8 +48,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact]
-    public void PoincareDistance_SamePoint_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareDistance_SamePoint_ReturnsZero()
     {
         // Arrange
         var point = new Vector<double>(new[] { 0.3, 0.4 });
@@ -61,8 +62,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, distance, precision: 10);
     }
 
-    [Fact]
-    public void PoincareDistance_SymmetricProperty()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareDistance_SymmetricProperty()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.1, 0.2 });
@@ -77,8 +78,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(distXY, distYX, precision: 10);
     }
 
-    [Fact]
-    public void PoincareExpLogMap_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareExpLogMap_RoundTrip()
     {
         // Arrange
         var basePoint = new Vector<double>(new[] { 0.1, 0.1 });
@@ -94,8 +95,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(tangent[1], logResult[1], precision: 8);
     }
 
-    [Fact]
-    public void PoincareProject_PointInsideBall_ReturnsUnchanged()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareProject_PointInsideBall_ReturnsUnchanged()
     {
         // Arrange: Point inside ball
         var point = new Vector<double>(new[] { 0.3, 0.4 });  // norm = 0.5 < 1
@@ -110,8 +111,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.4, result[1], precision: 10);
     }
 
-    [Fact]
-    public void PoincareProject_PointOutsideBall_ProjectsBack()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareProject_PointOutsideBall_ProjectsBack()
     {
         // Arrange: Point outside ball (norm = sqrt(2) > 1)
         var point = new Vector<double>(new[] { 1.0, 1.0 });
@@ -131,8 +132,8 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Hyperboloid Tests
 
-    [Fact]
-    public void HyperboloidProject_EnsuresConstraint()
+    [Fact(Timeout = 60000)]
+    public async Task HyperboloidProject_EnsuresConstraint()
     {
         // Arrange: Some point
         var point = new Vector<double>(new[] { 2.0, 0.5, 0.5 });
@@ -147,8 +148,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(-1.0, constraint, precision: 8);
     }
 
-    [Fact]
-    public void HyperboloidDistance_SamePoint_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task HyperboloidDistance_SamePoint_ReturnsZero()
     {
         // Arrange: Create valid hyperboloid point
         var x = _engine.HyperboloidProject(new Vector<double>(new[] { 2.0, 0.5, 0.5 }), -1.0);
@@ -161,8 +162,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, distance, precision: 6);
     }
 
-    [Fact]
-    public void HyperboloidDistance_SymmetricProperty()
+    [Fact(Timeout = 60000)]
+    public async Task HyperboloidDistance_SymmetricProperty()
     {
         // Arrange
         var x = _engine.HyperboloidProject(new Vector<double>(new[] { 2.0, 0.3, 0.4 }), -1.0);
@@ -181,8 +182,8 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Model Conversion Tests
 
-    [Fact]
-    public void PoincareToHyperboloid_Origin_ReturnsNorthPole()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareToHyperboloid_Origin_ReturnsNorthPole()
     {
         // Arrange: Origin in Poincare ball
         var origin = new Vector<double>(new[] { 0.0, 0.0 });
@@ -198,8 +199,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(0.0, result[2], precision: 10);
     }
 
-    [Fact]
-    public void ConversionRoundTrip_PoincareToHyperboloidAndBack()
+    [Fact(Timeout = 60000)]
+    public async Task ConversionRoundTrip_PoincareToHyperboloidAndBack()
     {
         // Arrange
         var poincare = new Vector<double>(new[] { 0.3, 0.4 });
@@ -218,8 +219,8 @@ public class CpuHyperbolicManifoldEngineTests
 
     #region Batch Operations Tests
 
-    [Fact]
-    public void PoincareExpMapBatch_MultipleVectors_ComputesAll()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareExpMapBatch_MultipleVectors_ComputesAll()
     {
         // Arrange
         var basePoints = new Matrix<double>(new double[,]
@@ -242,8 +243,8 @@ public class CpuHyperbolicManifoldEngineTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void PoincareDistanceBatch_MultiplePoints_ComputesAll()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareDistanceBatch_MultiplePoints_ComputesAll()
     {
         // Arrange
         var x = new Matrix<double>(new double[,]

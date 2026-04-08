@@ -2,6 +2,7 @@ using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 /// </summary>
 public class TeacherModelWrapperTests
 {
-    [Fact]
-    public void Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         Func<Vector<double>, Vector<double>> forwardFunc = input =>
@@ -25,16 +26,16 @@ public class TeacherModelWrapperTests
         Assert.Equal(3, wrapper.OutputDimension);
     }
 
-    [Fact]
-    public void Constructor_WithNullForwardFunc_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullForwardFunc_ThrowsArgumentNullException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new TeacherModelWrapper<double>(null!, outputDimension: 3));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidOutputDimension_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidOutputDimension_ThrowsArgumentException()
     {
         // Arrange
         Func<Vector<double>, Vector<double>> forwardFunc = input =>
@@ -47,8 +48,8 @@ public class TeacherModelWrapperTests
             new TeacherModelWrapper<double>(forwardFunc, outputDimension: -1));
     }
 
-    [Fact]
-    public void GetLogits_WithValidInput_ReturnsCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task GetLogits_WithValidInput_ReturnsCorrectOutput()
     {
         // Arrange
         var expectedLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
@@ -68,8 +69,8 @@ public class TeacherModelWrapperTests
         }
     }
 
-    [Fact]
-    public void GetLogits_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task GetLogits_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         Func<Vector<double>, Vector<double>> forwardFunc = input =>

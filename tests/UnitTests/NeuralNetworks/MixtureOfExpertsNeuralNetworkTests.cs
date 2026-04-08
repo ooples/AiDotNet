@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class MixtureOfExpertsNeuralNetworkTests
 {
-    [Fact]
-    public void Constructor_WithValidOptions_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidOptions_CreatesModel()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -38,8 +39,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void Constructor_WithNullOptions_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -54,8 +55,8 @@ public class MixtureOfExpertsNeuralNetworkTests
             new MixtureOfExpertsNeuralNetwork<float>(null!, architecture));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidOptions_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithInvalidOptions_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -78,8 +79,8 @@ public class MixtureOfExpertsNeuralNetworkTests
             new MixtureOfExpertsNeuralNetwork<float>(options, architecture));
     }
 
-    [Fact]
-    public void Predict_WithValidInput_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WithValidInput_ReturnsOutput()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -109,8 +110,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(new[] { 1, 1 }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void Train_WithValidData_UpdatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Train_WithValidData_UpdatesModel()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -146,8 +147,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotEqual(0f, model.LastLoss);
     }
 
-    [Fact]
-    public void Train_MultipleIterations_ReducesLoss()
+    [Fact(Timeout = 120000)]
+    public async Task Train_MultipleIterations_ReducesLoss()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -206,8 +207,8 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) < initialLoss ({initialLoss})");
     }
 
-    [Fact]
-    public void GetModelMetadata_ReturnsCorrectInformation()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ReturnsCorrectInformation()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -244,8 +245,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(true, useLoadBalancing);
     }
 
-    [Fact]
-    public void CreateNewInstance_CreatesNewModelWithSameConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task CreateNewInstance_CreatesNewModelWithSameConfiguration()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -274,8 +275,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(model.Architecture.TaskType, newInstance!.Architecture.TaskType);
     }
 
-    [Fact]
-    public void Classification_SimpleTask_ConvergesToSolution()
+    [Fact(Timeout = 120000)]
+    public async Task Classification_SimpleTask_ConvergesToSolution()
     {
         // Arrange - Create a simple binary classification problem
         var options = new MixtureOfExpertsOptions<float>
@@ -318,8 +319,8 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) to be less than half of initialLoss ({initialLoss})");
     }
 
-    [Fact]
-    public void MultiClassClassification_ConvergesToSolution()
+    [Fact(Timeout = 120000)]
+    public async Task MultiClassClassification_ConvergesToSolution()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -374,8 +375,8 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) < initialLoss ({initialLoss})");
     }
 
-    [Fact]
-    public void LoadBalancing_WhenEnabled_IncludesAuxiliaryLoss()
+    [Fact(Timeout = 120000)]
+    public async Task LoadBalancing_WhenEnabled_IncludesAuxiliaryLoss()
     {
         // Arrange
         var optionsWithLB = new MixtureOfExpertsOptions<float>
@@ -421,8 +422,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotEqual(modelWithLB.LastLoss, modelWithoutLB.LastLoss);
     }
 
-    [Fact]
-    public void TopK_DifferentValues_AffectComputation()
+    [Fact(Timeout = 120000)]
+    public async Task TopK_DifferentValues_AffectComputation()
     {
         // Arrange - Test that different TopK values produce different results
         var optionsTopK1 = new MixtureOfExpertsOptions<float>
@@ -465,8 +466,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotNull(outputTopK2);
     }
 
-    [Fact]
-    public void ParameterCount_IsGreaterThanZero()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_IsGreaterThanZero()
     {
         // Arrange
         var options = new MixtureOfExpertsOptions<float>
@@ -493,8 +494,8 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.True(parameterCount > 0);
     }
 
-    [Fact]
-    public void RandomSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSeed_ProducesReproducibleResults()
     {
         // Arrange
         var options1 = new MixtureOfExpertsOptions<float>

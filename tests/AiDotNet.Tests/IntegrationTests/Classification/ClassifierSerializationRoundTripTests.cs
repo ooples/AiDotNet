@@ -14,6 +14,7 @@ using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -31,8 +32,8 @@ public class ClassifierSerializationRoundTripTests
 {
     #region Linear Classifiers — Weights + Intercept (Fixed in LinearClassifierBase)
 
-    [Fact]
-    public void RidgeClassifier_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
         var classifier = new RidgeClassifier<double>();
@@ -49,8 +50,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RidgeClassifier");
     }
 
-    [Fact]
-    public void SGDClassifier_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 77);
         var classifier = new SGDClassifier<double>();
@@ -67,8 +68,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "SGDClassifier");
     }
 
-    [Fact]
-    public void PerceptronClassifier_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task PerceptronClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 55);
         var classifier = new PerceptronClassifier<double>();
@@ -85,8 +86,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "PerceptronClassifier");
     }
 
-    [Fact]
-    public void PassiveAggressiveClassifier_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressiveClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 33);
         var classifier = new PassiveAggressiveClassifier<double>();
@@ -107,8 +108,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Naive Bayes Classifiers — LogPriors + class-specific params
 
-    [Fact]
-    public void GaussianNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new GaussianNaiveBayes<double>();
@@ -125,8 +126,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "GaussianNaiveBayes");
     }
 
-    [Fact]
-    public void MultinomialNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task MultinomialNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         // MultinomialNB needs non-negative features (counts/frequencies)
         var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
@@ -144,8 +145,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "MultinomialNaiveBayes");
     }
 
-    [Fact]
-    public void BernoulliNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task BernoulliNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         // BernoulliNB expects binary features
         var (trainX, trainY) = CreateBinaryFeatureBinaryData(80, 5, seed: 42);
@@ -167,8 +168,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region SVM Classifiers — support vectors, weights, bias
 
-    [Fact]
-    public void LinearSVC_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
         var classifier = new LinearSupportVectorClassifier<double>();
@@ -189,8 +190,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Tree Classifiers — tree structure
 
-    [Fact]
-    public void DecisionTreeClassifier_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeClassifier_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new DecisionTreeClassifier<double>();
@@ -211,8 +212,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Accuracy Validation — classifiers must learn, not just serialize
 
-    [Fact]
-    public void RidgeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new RidgeClassifier<double>();
@@ -226,8 +227,8 @@ public class ClassifierSerializationRoundTripTests
             $"RidgeClassifier accuracy {accuracy:P1} too low for linearly separable data (expected > 70%)");
     }
 
-    [Fact]
-    public void DecisionTreeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 4.0, seed: 42);
         var classifier = new DecisionTreeClassifier<double>();
@@ -241,8 +242,8 @@ public class ClassifierSerializationRoundTripTests
             $"DecisionTreeClassifier accuracy {accuracy:P1} too low for separable data (expected > 70%)");
     }
 
-    [Fact]
-    public void GaussianNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(120, 3, separation: 4.0, seed: 42);
         var classifier = new GaussianNaiveBayes<double>();
@@ -256,8 +257,8 @@ public class ClassifierSerializationRoundTripTests
             $"GaussianNaiveBayes accuracy {accuracy:P1} too low for Gaussian data (expected > 60%)");
     }
 
-    [Fact]
-    public void SGDClassifier_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new SGDClassifier<double>();
@@ -275,8 +276,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region DeepCopy round-trip — tests the exact path the optimizer uses
 
-    [Fact]
-    public void RidgeClassifier_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
         var classifier = new RidgeClassifier<double>();
@@ -292,8 +293,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RidgeClassifier DeepCopy");
     }
 
-    [Fact]
-    public void GaussianNaiveBayes_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new GaussianNaiveBayes<double>();
@@ -312,8 +313,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Discriminant Analysis — ClassMeans + Covariance + Priors
 
-    [Fact]
-    public void LDA_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
         var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -336,8 +337,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LinearDiscriminantAnalysis");
     }
 
-    [Fact]
-    public void QDA_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
         var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -360,8 +361,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "QuadraticDiscriminantAnalysis");
     }
 
-    [Fact]
-    public void LDA_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
         var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -379,8 +380,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LDA DeepCopy");
     }
 
-    [Fact]
-    public void QDA_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
         var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -398,8 +399,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "QDA DeepCopy");
     }
 
-    [Fact]
-    public void LDA_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
         var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -416,8 +417,8 @@ public class ClassifierSerializationRoundTripTests
             $"LDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
     }
 
-    [Fact]
-    public void QDA_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
         var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -434,8 +435,8 @@ public class ClassifierSerializationRoundTripTests
             $"QDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
     }
 
-    [Fact]
-    public void LDA_PredictProbabilities_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_PredictProbabilities_SumsToOne()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
         var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -464,8 +465,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Complement & Categorical Naive Bayes — complementLogProbs + categoryLogProbs
 
-    [Fact]
-    public void ComplementNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task ComplementNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
         var classifier = new ComplementNaiveBayes<double>();
@@ -482,8 +483,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "ComplementNaiveBayes");
     }
 
-    [Fact]
-    public void ComplementNaiveBayes_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task ComplementNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
         var classifier = new ComplementNaiveBayes<double>();
@@ -498,8 +499,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ComplementNB DeepCopy");
     }
 
-    [Fact]
-    public void CategoricalNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task CategoricalNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
         var classifier = new CategoricalNaiveBayes<double>();
@@ -516,8 +517,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "CategoricalNaiveBayes");
     }
 
-    [Fact]
-    public void CategoricalNaiveBayes_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task CategoricalNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
         var classifier = new CategoricalNaiveBayes<double>();
@@ -536,8 +537,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Full SVM Serialize Round-trips
 
-    [Fact]
-    public void SVC_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
         var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
@@ -568,8 +569,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "SupportVectorClassifier");
     }
 
-    [Fact]
-    public void NuSVC_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
         var classifier = new NuSupportVectorClassifier<double>(new SVMOptions<double>
@@ -600,8 +601,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "NuSupportVectorClassifier");
     }
 
-    [Fact]
-    public void SVC_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
         var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
@@ -627,8 +628,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region SVM Accuracy Validation
 
-    [Fact]
-    public void SVC_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
         var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
@@ -649,8 +650,8 @@ public class ClassifierSerializationRoundTripTests
             $"SVC accuracy {accuracy:P1} too low for well-separated data (expected > 70%)");
     }
 
-    [Fact]
-    public void NuSVC_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
         var classifier = new NuSupportVectorClassifier<double>(new SVMOptions<double>
@@ -671,8 +672,8 @@ public class ClassifierSerializationRoundTripTests
             $"NuSVC accuracy {accuracy:P1} too low for well-separated data (expected > 60%)");
     }
 
-    [Fact]
-    public void LinearSVC_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new LinearSupportVectorClassifier<double>();
@@ -690,8 +691,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Ensemble Classifiers — Estimators + FeatureImportances + weights
 
-    [Fact]
-    public void RandomForest_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
@@ -718,8 +719,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RandomForestClassifier");
     }
 
-    [Fact]
-    public void RandomForest_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
@@ -739,8 +740,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RandomForest DeepCopy");
     }
 
-    [Fact]
-    public void RandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 4.0, seed: 42);
         var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
@@ -759,8 +760,8 @@ public class ClassifierSerializationRoundTripTests
             $"RandomForest accuracy {accuracy:P1} too low for separable data (expected > 70%)");
     }
 
-    [Fact]
-    public void AdaBoost_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
         var classifier = new AdaBoostClassifier<double>(new AdaBoostClassifierOptions<double>
@@ -787,8 +788,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "AdaBoostClassifier");
     }
 
-    [Fact]
-    public void AdaBoost_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
         var classifier = new AdaBoostClassifier<double>(new AdaBoostClassifierOptions<double>
@@ -808,8 +809,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaBoost DeepCopy");
     }
 
-    [Fact]
-    public void ExtraTrees_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task ExtraTrees_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new ExtraTreesClassifier<double>(new ExtraTreesClassifierOptions<double>
@@ -836,8 +837,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "ExtraTreesClassifier");
     }
 
-    [Fact]
-    public void ExtraTrees_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task ExtraTrees_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
         var classifier = new ExtraTreesClassifier<double>(new ExtraTreesClassifierOptions<double>
@@ -857,8 +858,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ExtraTrees DeepCopy");
     }
 
-    [Fact]
-    public void GradientBoosting_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
         var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
@@ -887,8 +888,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "GradientBoostingClassifier");
     }
 
-    [Fact]
-    public void GradientBoosting_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
         var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
@@ -909,8 +910,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "GradientBoosting DeepCopy");
     }
 
-    [Fact]
-    public void GradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
@@ -934,8 +935,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Boosting Classifiers — HistTree + BinBoundaries + InitPrediction
 
-    [Fact]
-    public void HistGradientBoosting_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new HistGradientBoostingClassifier<double>(
@@ -956,8 +957,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "HistGradientBoostingClassifier");
     }
 
-    [Fact]
-    public void HistGradientBoosting_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var classifier = new HistGradientBoostingClassifier<double>(
@@ -974,8 +975,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HistGradientBoosting DeepCopy");
     }
 
-    [Fact]
-    public void HistGradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(120, 3, separation: 5.0, seed: 42);
         var classifier = new HistGradientBoostingClassifier<double>(
@@ -995,8 +996,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Multi-class Serialize Round-trips
 
-    [Fact]
-    public void LDA_MultiClass_SerializeRoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_MultiClass_SerializeRoundTrip()
     {
         var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
         var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -1019,8 +1020,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LDA MultiClass");
     }
 
-    [Fact]
-    public void QDA_MultiClass_SerializeRoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_MultiClass_SerializeRoundTrip()
     {
         var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
         var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
@@ -1047,8 +1048,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Ordinal Classifiers — Coefficients + Thresholds + Bias
 
-    [Fact]
-    public void OrdinalLogisticRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task OrdinalLogisticRegression_SerializeRoundTrip_PredictionsMatch()
     {
         // Create ordinal data (3 ordered classes: 0, 1, 2)
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
@@ -1068,8 +1069,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OrdinalLogisticRegression");
     }
 
-    [Fact]
-    public void OrdinalLogisticRegression_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task OrdinalLogisticRegression_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
         var classifier = new OrdinalLogisticRegression<double>(
@@ -1085,8 +1086,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OrdinalLogisticRegression DeepCopy");
     }
 
-    [Fact]
-    public void OrdinalRidgeRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task OrdinalRidgeRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
         var classifier = new OrdinalRidgeRegression<double>(alpha: 1.0);
@@ -1103,8 +1104,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OrdinalRidgeRegression");
     }
 
-    [Fact]
-    public void OrdinalRidgeRegression_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task OrdinalRidgeRegression_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
         var classifier = new OrdinalRidgeRegression<double>(alpha: 1.0);
@@ -1123,8 +1124,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region ImbalancedEnsemble Classifiers — Internal tree/AdaBoost state
 
-    [Fact]
-    public void BalancedRandomForest_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedRandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         // Create imbalanced binary data (majority:minority = 4:1)
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
@@ -1142,8 +1143,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "BalancedRandomForestClassifier");
     }
 
-    [Fact]
-    public void BalancedRandomForest_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedRandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
         var classifier = new BalancedRandomForestClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
@@ -1158,8 +1159,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedRandomForestClassifier DeepCopy");
     }
 
-    [Fact]
-    public void BalancedRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
         var classifier = new BalancedRandomForestClassifier<double>(nEstimators: 20, maxDepth: 5, seed: 42);
@@ -1173,8 +1174,8 @@ public class ClassifierSerializationRoundTripTests
             $"BalancedRandomForestClassifier accuracy {accuracy:P1} is below 60% threshold.");
     }
 
-    [Fact]
-    public void BalancedBagging_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedBagging_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
         var classifier = new BalancedBaggingClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
@@ -1191,8 +1192,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "BalancedBaggingClassifier");
     }
 
-    [Fact]
-    public void BalancedBagging_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedBagging_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
         var classifier = new BalancedBaggingClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
@@ -1207,8 +1208,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedBaggingClassifier DeepCopy");
     }
 
-    [Fact]
-    public void BalancedBagging_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedBagging_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
         var classifier = new BalancedBaggingClassifier<double>(nEstimators: 20, maxDepth: 5, seed: 42);
@@ -1222,8 +1223,8 @@ public class ClassifierSerializationRoundTripTests
             $"BalancedBaggingClassifier accuracy {accuracy:P1} is below 60% threshold.");
     }
 
-    [Fact]
-    public void EasyEnsemble_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
         var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 10, seed: 42);
@@ -1240,8 +1241,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "EasyEnsembleClassifier");
     }
 
-    [Fact]
-    public void EasyEnsemble_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
         var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 10, seed: 42);
@@ -1256,8 +1257,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "EasyEnsembleClassifier DeepCopy");
     }
 
-    [Fact]
-    public void EasyEnsemble_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
         var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 20, seed: 42);
@@ -1275,8 +1276,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region Online Classifiers — Per-class running statistics
 
-    [Fact]
-    public void OnlineNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
         var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
@@ -1294,8 +1295,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "OnlineNaiveBayesClassifier");
     }
 
-    [Fact]
-    public void OnlineNaiveBayes_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
         var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
@@ -1311,8 +1312,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OnlineNaiveBayesClassifier DeepCopy");
     }
 
-    [Fact]
-    public void OnlineNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
         var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
@@ -1327,8 +1328,8 @@ public class ClassifierSerializationRoundTripTests
             $"OnlineNaiveBayesClassifier accuracy {accuracy:P1} is below 70% threshold.");
     }
 
-    [Fact]
-    public void HoeffdingTree_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task HoeffdingTree_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
         var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
@@ -1346,8 +1347,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "HoeffdingTreeClassifier");
     }
 
-    [Fact]
-    public void HoeffdingTree_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task HoeffdingTree_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
         var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
@@ -1363,8 +1364,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HoeffdingTreeClassifier DeepCopy");
     }
 
-    [Fact]
-    public void HoeffdingTree_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task HoeffdingTree_TrainAndPredict_AchievesReasonableAccuracy()
     {
         // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
         // Default Delta=1e-7 is too conservative for small datasets — tree never splits
@@ -1386,8 +1387,8 @@ public class ClassifierSerializationRoundTripTests
             $"HoeffdingTreeClassifier accuracy {accuracy:P1} is below 55% threshold.");
     }
 
-    [Fact]
-    public void AdaptiveRandomForest_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveRandomForest_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
         var options = new AdaptiveRandomForestOptions<double>
@@ -1408,8 +1409,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "AdaptiveRandomForestClassifier");
     }
 
-    [Fact]
-    public void AdaptiveRandomForest_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveRandomForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
         var options = new AdaptiveRandomForestOptions<double>
@@ -1428,8 +1429,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaptiveRandomForestClassifier DeepCopy");
     }
 
-    [Fact]
-    public void AdaptiveRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
         var (trainX, trainY) = CreateBinaryData(2000, 4, separation: 8.0, seed: 42);
@@ -1454,8 +1455,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region TimeSeries Classifiers — Interval trees, convolutional kernels, biases
 
-    [Fact]
-    public void TimeSeriesForest_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesForest_SerializeRoundTrip_PredictionsMatch()
     {
         // TimeSeriesForest wraps Matrix into Tensor internally via Train(Matrix, Vector)
         var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
@@ -1474,8 +1475,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "TimeSeriesForestClassifier");
     }
 
-    [Fact]
-    public void TimeSeriesForest_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
         var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, RandomSeed = 42 };
@@ -1491,8 +1492,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "TimeSeriesForestClassifier DeepCopy");
     }
 
-    [Fact]
-    public void TimeSeriesForest_TrainAndPredict_AchievesReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(200, 20, separation: 5.0, seed: 42);
         var options = new TimeSeriesForestOptions<double> { NumTrees = 10, MaxDepth = 5, RandomSeed = 42 };
@@ -1507,8 +1508,8 @@ public class ClassifierSerializationRoundTripTests
             $"TimeSeriesForestClassifier accuracy {accuracy:P1} is below 55% threshold.");
     }
 
-    [Fact]
-    public void Rocket_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task Rocket_SerializeRoundTrip_PredictionsMatch()
     {
         // Use few kernels (100) to keep test fast — default 10000 is too slow for tests
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
@@ -1527,8 +1528,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "RocketClassifier");
     }
 
-    [Fact]
-    public void Rocket_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task Rocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
         var options = new RocketOptions<double> { NumKernels = 100, RandomSeed = 42 };
@@ -1544,8 +1545,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RocketClassifier DeepCopy");
     }
 
-    [Fact]
-    public void MiniRocket_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task MiniRocket_SerializeRoundTrip_PredictionsMatch()
     {
         // MiniRocket uses 84 fixed kernels × dilations × biases — needs enough sequence length
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
@@ -1564,8 +1565,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "MiniRocketClassifier");
     }
 
-    [Fact]
-    public void MiniRocket_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task MiniRocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
         var options = new MiniRocketOptions<double> { RandomSeed = 42, NumBiasesPerDilation = 3 };
@@ -1585,8 +1586,8 @@ public class ClassifierSerializationRoundTripTests
 
     #region SemiSupervised Classifiers — Graph-based with training data matrices
 
-    [Fact]
-    public void LabelPropagation_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task LabelPropagation_SerializeRoundTrip_PredictionsMatch()
     {
         // LabelPropagation stores training data + label distributions for kernel-based prediction
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
@@ -1604,8 +1605,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LabelPropagation");
     }
 
-    [Fact]
-    public void LabelPropagation_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task LabelPropagation_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
         var classifier = new LabelPropagation<double>();
@@ -1620,8 +1621,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LabelPropagation DeepCopy");
     }
 
-    [Fact]
-    public void LabelSpreading_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task LabelSpreading_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
         var classifier = new LabelSpreading<double>();
@@ -1638,8 +1639,8 @@ public class ClassifierSerializationRoundTripTests
         AssertPredictionsMatch(original, restoredPreds, "LabelSpreading");
     }
 
-    [Fact]
-    public void LabelSpreading_DeepCopy_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task LabelSpreading_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
         var classifier = new LabelSpreading<double>();

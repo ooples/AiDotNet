@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class PixelToSequenceDocumentTests
 
     #region Donut Tests
 
-    [Fact]
-    public void Donut_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Donut_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Donut_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Donut_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
@@ -55,8 +56,8 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void Donut_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Donut_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
@@ -68,16 +69,16 @@ public class PixelToSequenceDocumentTests
 
     #region Nougat Tests
 
-    [Fact]
-    public void Nougat_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Nougat_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new Nougat<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Nougat_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Nougat_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new Nougat<double>(arch, imageSize: 64);
@@ -88,8 +89,8 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void Nougat_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Nougat_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new Nougat<double>(arch, imageSize: 64);
@@ -101,16 +102,16 @@ public class PixelToSequenceDocumentTests
 
     #region Pix2Struct Tests
 
-    [Fact]
-    public void Pix2Struct_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Struct_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new Pix2Struct<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Pix2Struct_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Struct_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new Pix2Struct<double>(arch, imageSize: 64);
@@ -121,8 +122,8 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void Pix2Struct_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new Pix2Struct<double>(arch, imageSize: 64);
@@ -134,16 +135,16 @@ public class PixelToSequenceDocumentTests
 
     #region Dessurt Tests
 
-    [Fact]
-    public void Dessurt_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Dessurt_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new Dessurt<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Dessurt_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Dessurt_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new Dessurt<double>(arch, imageSize: 64);
@@ -154,8 +155,8 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void Dessurt_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Dessurt_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new Dessurt<double>(arch, imageSize: 64);
@@ -167,16 +168,16 @@ public class PixelToSequenceDocumentTests
 
     #region MATCHA Tests
 
-    [Fact]
-    public void MATCHA_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MATCHA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new MATCHA<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void MATCHA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MATCHA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new MATCHA<double>(arch, imageSize: 64);
@@ -187,8 +188,8 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void MATCHA_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task MATCHA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new MATCHA<double>(arch, imageSize: 64);
@@ -200,8 +201,8 @@ public class PixelToSequenceDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllPixelToSequenceModels_RequiresOCR_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task AllPixelToSequenceModels_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]

@@ -5,13 +5,14 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class StubEmbeddingModelTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new StubEmbeddingModel<double>();
@@ -34,40 +35,40 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithZeroDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() => new StubEmbeddingModel<double>(0, 512));
             Assert.Contains("Embedding dimension must be greater than zero", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() => new StubEmbeddingModel<double>(-1, 512));
             Assert.Contains("Embedding dimension must be greater than zero", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() => new StubEmbeddingModel<double>(768, 0));
             Assert.Contains("MaxTokens must be greater than zero", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() => new StubEmbeddingModel<double>(768, -1));
             Assert.Contains("MaxTokens must be greater than zero", exception.Message);
         }
 
-        [Fact]
-        public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(384, 512);
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -124,8 +125,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
-        public void Embed_ReturnsNormalizedVector()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_ReturnsNormalizedVector()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithNullText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
-        public void Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -164,8 +165,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
-        public void Embed_WithWhitespaceText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
-        public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(384, 512);
@@ -190,8 +191,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embeddings.Columns);
         }
 
-        [Fact]
-        public void EmbedBatch_WithSingleText_ReturnsMatrixWithOneRow()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithSingleText_ReturnsMatrixWithOneRow()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embeddings.Columns);
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -227,8 +228,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTextInCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTextInCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -238,8 +239,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyTextInCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyTextInCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -249,8 +250,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -270,8 +271,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void EmbedBatch_AllRowsAreNormalized()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_AllRowsAreNormalized()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -293,8 +294,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var model = new StubEmbeddingModel<float>(384, 512);
@@ -317,8 +318,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithCustomDimension_ReturnsCorrectSize()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             // Arrange
             var customDimension = 128;
@@ -332,8 +333,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(customDimension, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_WithLongText_ReturnsEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithLongText_ReturnsEmbedding()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(768, 512);
@@ -347,8 +348,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
-        public void EmbedBatch_WithLargeNumberOfTexts_ReturnsCorrectMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithLargeNumberOfTexts_ReturnsCorrectMatrix()
         {
             // Arrange
             var model = new StubEmbeddingModel<double>(384, 512);
@@ -362,8 +363,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embeddings.Columns);
         }
 
-        [Fact]
-        public void Embed_Deterministic_MultipleInstances()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_Deterministic_MultipleInstances()
         {
             // Arrange
             var model1 = new StubEmbeddingModel<double>(768, 512);

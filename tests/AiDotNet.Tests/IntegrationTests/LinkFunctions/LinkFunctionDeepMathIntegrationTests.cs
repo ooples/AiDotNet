@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinkFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinkFunctions;
 
@@ -20,8 +21,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  IDENTITY LINK: g(mu) = mu
     // ============================================================
 
-    [Fact]
-    public void Identity_Link_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_Link_IsIdentity()
     {
         var link = new IdentityLink<double>();
         double[] values = { -10, -1, 0, 0.5, 1, 10, 100 };
@@ -31,8 +32,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_InverseLink_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_InverseLink_IsIdentity()
     {
         var link = new IdentityLink<double>();
         double[] values = { -10, -1, 0, 0.5, 1, 10, 100 };
@@ -42,8 +43,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_LinkDerivative_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_LinkDerivative_IsOne()
     {
         var link = new IdentityLink<double>();
         double[] values = { -10, -1, 0, 0.5, 1, 10, 100 };
@@ -53,8 +54,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_InverseLinkDerivative_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_InverseLinkDerivative_IsOne()
     {
         var link = new IdentityLink<double>();
         double[] values = { -10, -1, 0, 0.5, 1, 10, 100 };
@@ -64,8 +65,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Identity_Variance_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Identity_Variance_IsOne()
     {
         var link = new IdentityLink<double>();
         double[] values = { 0.1, 0.5, 1.0, 5.0 };
@@ -79,8 +80,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  LOGIT LINK: g(mu) = log(mu / (1-mu))
     // ============================================================
 
-    [Fact]
-    public void Logit_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_HandValues()
     {
         var link = new LogitLink<double>();
 
@@ -97,8 +98,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Log(9), link.Link(0.9), Tolerance);
     }
 
-    [Fact]
-    public void Logit_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_InverseHandValues()
     {
         var link = new LogitLink<double>();
 
@@ -112,8 +113,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.1, link.InverseLink(-Math.Log(9)), Tolerance);
     }
 
-    [Fact]
-    public void Logit_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_Roundtrip()
     {
         var link = new LogitLink<double>();
         double[] probs = { 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99 };
@@ -125,8 +126,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_NumericalGradient_Link()
     {
         var link = new LogitLink<double>();
         double[] muValues = { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -138,8 +139,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_NumericalGradient_InverseLink()
     {
         var link = new LogitLink<double>();
         double[] etaValues = { -3, -1, 0, 1, 3 };
@@ -151,8 +152,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_ChainRule_DerivativeProduct()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_ChainRule_DerivativeProduct()
     {
         // g'(mu) * (g^{-1})'(g(mu)) = 1
         var link = new LogitLink<double>();
@@ -165,8 +166,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_Monotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_Monotonicity()
     {
         var link = new LogitLink<double>();
         double prev = link.Link(0.01);
@@ -178,8 +179,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_Antisymmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_Antisymmetry()
     {
         // logit(p) = -logit(1-p)
         var link = new LogitLink<double>();
@@ -192,8 +193,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_Variance_IsMuTimeOneMinusMu()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_Variance_IsMuTimeOneMinusMu()
     {
         var link = new LogitLink<double>();
         double[] probs = { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -204,8 +205,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Logit_LinkDerivative_Equals_1OverVariance()
+    [Fact(Timeout = 120000)]
+    public async Task Logit_LinkDerivative_Equals_1OverVariance()
     {
         // For logit link: g'(mu) = 1/(mu*(1-mu)) = 1/V(mu)
         var link = new LogitLink<double>();
@@ -222,8 +223,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  LOG LINK: g(mu) = log(mu)
     // ============================================================
 
-    [Fact]
-    public void Log_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Log_HandValues()
     {
         var link = new LogLink<double>();
 
@@ -240,8 +241,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Log(0.5), link.Link(0.5), Tolerance);
     }
 
-    [Fact]
-    public void Log_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Log_InverseHandValues()
     {
         var link = new LogLink<double>();
 
@@ -255,8 +256,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(1.0 / Math.E, link.InverseLink(-1.0), Tolerance);
     }
 
-    [Fact]
-    public void Log_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Log_Roundtrip()
     {
         var link = new LogLink<double>();
         double[] muValues = { 0.01, 0.1, 1, 5, 10, 100 };
@@ -268,8 +269,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task Log_NumericalGradient_Link()
     {
         var link = new LogLink<double>();
         double[] muValues = { 0.1, 0.5, 1.0, 5.0, 10.0 };
@@ -281,8 +282,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Log_NumericalGradient_InverseLink()
     {
         var link = new LogLink<double>();
         double[] etaValues = { -3, -1, 0, 1, 3 };
@@ -294,8 +295,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_ChainRule()
+    [Fact(Timeout = 120000)]
+    public async Task Log_ChainRule()
     {
         var link = new LogLink<double>();
         double[] muValues = { 0.1, 0.5, 1.0, 5.0, 10.0 };
@@ -307,8 +308,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_LinkDerivative_Is1OverMu()
+    [Fact(Timeout = 120000)]
+    public async Task Log_LinkDerivative_Is1OverMu()
     {
         var link = new LogLink<double>();
         double[] muValues = { 0.1, 0.5, 1.0, 5.0, 10.0 };
@@ -318,8 +319,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_InverseLinkDerivative_EqualsInverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Log_InverseLinkDerivative_EqualsInverseLink()
     {
         // d/deta exp(eta) = exp(eta)
         var link = new LogLink<double>();
@@ -330,8 +331,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_Monotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task Log_Monotonicity()
     {
         var link = new LogLink<double>();
         double prev = link.Link(0.01);
@@ -343,8 +344,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Log_Variance_IsMu()
+    [Fact(Timeout = 120000)]
+    public async Task Log_Variance_IsMu()
     {
         var link = new LogLink<double>();
         double[] muValues = { 0.1, 1.0, 5.0, 10.0 };
@@ -358,8 +359,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  PROBIT LINK: g(mu) = Phi^{-1}(mu)
     // ============================================================
 
-    [Fact]
-    public void Probit_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_HandValues()
     {
         var link = new ProbitLink<double>();
 
@@ -373,8 +374,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(-1.0, link.Link(0.1587), 0.01);
     }
 
-    [Fact]
-    public void Probit_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_InverseHandValues()
     {
         var link = new ProbitLink<double>();
 
@@ -391,8 +392,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.9772, link.InverseLink(2.0), 0.001);
     }
 
-    [Fact]
-    public void Probit_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_Roundtrip()
     {
         var link = new ProbitLink<double>();
         double[] probs = { 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95 };
@@ -404,8 +405,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Probit_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_NumericalGradient_Link()
     {
         var link = new ProbitLink<double>();
         double[] muValues = { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -418,8 +419,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Probit_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_NumericalGradient_InverseLink()
     {
         var link = new ProbitLink<double>();
         double[] etaValues = { -2, -1, 0, 1, 2 };
@@ -431,8 +432,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Probit_InverseLinkDerivative_IsNormalPdf()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_InverseLinkDerivative_IsNormalPdf()
     {
         // d/deta Phi(eta) = phi(eta) where phi is the standard normal PDF
         var link = new ProbitLink<double>();
@@ -445,8 +446,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Probit_Antisymmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_Antisymmetry()
     {
         // probit(p) = -probit(1-p)
         var link = new ProbitLink<double>();
@@ -459,8 +460,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Probit_Monotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task Probit_Monotonicity()
     {
         var link = new ProbitLink<double>();
         double prev = link.Link(0.01);
@@ -476,8 +477,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  CLOGLOG LINK: g(mu) = log(-log(1-mu))
     // ============================================================
 
-    [Fact]
-    public void CLogLog_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_HandValues()
     {
         var link = new CLogLogLink<double>();
 
@@ -490,8 +491,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, link.Link(p), LooseTolerance);
     }
 
-    [Fact]
-    public void CLogLog_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_InverseHandValues()
     {
         var link = new CLogLogLink<double>();
 
@@ -505,8 +506,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.True(link.InverseLink(10) > 0.999);
     }
 
-    [Fact]
-    public void CLogLog_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_Roundtrip()
     {
         var link = new CLogLogLink<double>();
         double[] probs = { 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99 };
@@ -518,8 +519,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CLogLog_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_NumericalGradient_Link()
     {
         var link = new CLogLogLink<double>();
         double[] muValues = { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -532,8 +533,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CLogLog_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_NumericalGradient_InverseLink()
     {
         var link = new CLogLogLink<double>();
         double[] etaValues = { -2, -1, 0, 1, 2 };
@@ -545,16 +546,16 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CLogLog_IsAsymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_IsAsymmetric()
     {
         // Unlike logit, cloglog(0.5) != 0
         var link = new CLogLogLink<double>();
         Assert.NotEqual(0.0, link.Link(0.5));
     }
 
-    [Fact]
-    public void CLogLog_Monotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task CLogLog_Monotonicity()
     {
         var link = new CLogLogLink<double>();
         double prev = link.Link(0.01);
@@ -570,8 +571,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  RECIPROCAL (INVERSE) LINK: g(mu) = 1/mu
     // ============================================================
 
-    [Fact]
-    public void Reciprocal_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_HandValues()
     {
         var link = new ReciprocalLink<double>();
 
@@ -588,8 +589,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.25, link.Link(4.0), Tolerance);
     }
 
-    [Fact]
-    public void Reciprocal_IsInvolution()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_IsInvolution()
     {
         // g(g(x)) = x for reciprocal link
         var link = new ReciprocalLink<double>();
@@ -601,8 +602,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reciprocal_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_Roundtrip()
     {
         var link = new ReciprocalLink<double>();
         double[] muValues = { 0.1, 0.5, 1, 2, 5, 10 };
@@ -614,8 +615,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reciprocal_LinkDerivative_IsNegative1OverMuSquared()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_LinkDerivative_IsNegative1OverMuSquared()
     {
         var link = new ReciprocalLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -626,8 +627,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reciprocal_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_NumericalGradient_Link()
     {
         var link = new ReciprocalLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -639,8 +640,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reciprocal_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_NumericalGradient_InverseLink()
     {
         var link = new ReciprocalLink<double>();
         double[] etaValues = { 0.1, 0.5, 1.0, 2.0, 5.0 };
@@ -652,8 +653,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reciprocal_Variance_IsMuSquared()
+    [Fact(Timeout = 120000)]
+    public async Task Reciprocal_Variance_IsMuSquared()
     {
         var link = new ReciprocalLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -667,8 +668,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  SQRT LINK: g(mu) = sqrt(mu)
     // ============================================================
 
-    [Fact]
-    public void Sqrt_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_HandValues()
     {
         var link = new SqrtLink<double>();
 
@@ -688,8 +689,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.5, link.Link(0.25), Tolerance);
     }
 
-    [Fact]
-    public void Sqrt_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_InverseHandValues()
     {
         var link = new SqrtLink<double>();
 
@@ -703,8 +704,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, link.InverseLink(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Sqrt_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_Roundtrip()
     {
         var link = new SqrtLink<double>();
         double[] muValues = { 0.01, 0.25, 1, 4, 9, 100 };
@@ -716,8 +717,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sqrt_LinkDerivative_Is1Over2SqrtMu()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_LinkDerivative_Is1Over2SqrtMu()
     {
         var link = new SqrtLink<double>();
         double[] muValues = { 0.25, 1.0, 4.0, 9.0 };
@@ -728,8 +729,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sqrt_InverseLinkDerivative_Is2Eta()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_InverseLinkDerivative_Is2Eta()
     {
         var link = new SqrtLink<double>();
         double[] etaValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -739,8 +740,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sqrt_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_NumericalGradient_Link()
     {
         var link = new SqrtLink<double>();
         double[] muValues = { 0.25, 1.0, 4.0, 9.0, 25.0 };
@@ -752,8 +753,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sqrt_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_NumericalGradient_InverseLink()
     {
         var link = new SqrtLink<double>();
         double[] etaValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -765,8 +766,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sqrt_ChainRule()
+    [Fact(Timeout = 120000)]
+    public async Task Sqrt_ChainRule()
     {
         var link = new SqrtLink<double>();
         double[] muValues = { 0.25, 1.0, 4.0, 9.0 };
@@ -782,8 +783,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  INVERSE SQUARED LINK: g(mu) = 1/mu^2
     // ============================================================
 
-    [Fact]
-    public void InverseSquared_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_HandValues()
     {
         var link = new InverseSquaredLink<double>();
 
@@ -800,8 +801,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(1.0 / 9.0, link.Link(3.0), Tolerance);
     }
 
-    [Fact]
-    public void InverseSquared_InverseHandValues()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_InverseHandValues()
     {
         var link = new InverseSquaredLink<double>();
 
@@ -815,8 +816,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.Equal(2.0, link.InverseLink(0.25), Tolerance);
     }
 
-    [Fact]
-    public void InverseSquared_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_Roundtrip()
     {
         var link = new InverseSquaredLink<double>();
         double[] muValues = { 0.1, 0.5, 1, 2, 5, 10 };
@@ -828,8 +829,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void InverseSquared_LinkDerivative_IsNeg2OverMuCubed()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_LinkDerivative_IsNeg2OverMuCubed()
     {
         var link = new InverseSquaredLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -840,8 +841,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void InverseSquared_NumericalGradient_Link()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_NumericalGradient_Link()
     {
         var link = new InverseSquaredLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -853,8 +854,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void InverseSquared_NumericalGradient_InverseLink()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_NumericalGradient_InverseLink()
     {
         var link = new InverseSquaredLink<double>();
         double[] etaValues = { 0.1, 0.5, 1.0, 4.0, 16.0 };
@@ -866,8 +867,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void InverseSquared_Variance_IsMuCubed()
+    [Fact(Timeout = 120000)]
+    public async Task InverseSquared_Variance_IsMuCubed()
     {
         var link = new InverseSquaredLink<double>();
         double[] muValues = { 0.5, 1.0, 2.0, 5.0 };
@@ -881,8 +882,8 @@ public class LinkFunctionDeepMathIntegrationTests
     //  CROSS-LINK PROPERTIES
     // ============================================================
 
-    [Fact]
-    public void AllLinks_ChainRule_DerivativeProduct()
+    [Fact(Timeout = 120000)]
+    public async Task AllLinks_ChainRule_DerivativeProduct()
     {
         // For all valid link functions: g'(mu) * (g^-1)'(g(mu)) = 1
         var logit = new LogitLink<double>();
@@ -932,8 +933,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BinaryLinks_AtHalf_CompareOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryLinks_AtHalf_CompareOutputs()
     {
         // Compare logit, probit, cloglog at mu=0.5
         var logit = new LogitLink<double>();
@@ -949,8 +950,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.True(Math.Abs(cloglogHalf) > 0.1, "cloglog(0.5) should not be near 0");
     }
 
-    [Fact]
-    public void LogitVsProbit_CloseForModerateValues()
+    [Fact(Timeout = 120000)]
+    public async Task LogitVsProbit_CloseForModerateValues()
     {
         // Logit and probit are approximately proportional: logit ≈ 1.7 * probit
         var logit = new LogitLink<double>();
@@ -970,8 +971,8 @@ public class LinkFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllCanonicalLinks_ReportCorrectCanonicalStatus()
+    [Fact(Timeout = 120000)]
+    public async Task AllCanonicalLinks_ReportCorrectCanonicalStatus()
     {
         // Identity = canonical for Normal
         Assert.True(new IdentityLink<double>().IsCanonical);
@@ -991,8 +992,8 @@ public class LinkFunctionDeepMathIntegrationTests
         Assert.False(new SqrtLink<double>().IsCanonical);
     }
 
-    [Fact]
-    public void AllLinks_HaveCorrectNames()
+    [Fact(Timeout = 120000)]
+    public async Task AllLinks_HaveCorrectNames()
     {
         Assert.Equal("Identity", new IdentityLink<double>().Name);
         Assert.Equal("Logit", new LogitLink<double>().Name);

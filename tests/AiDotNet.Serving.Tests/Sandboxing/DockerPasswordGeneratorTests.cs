@@ -1,12 +1,13 @@
 using AiDotNet.Serving.Sandboxing;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class DockerPasswordGeneratorTests
 {
-    [Fact]
-    public void Generate_Default_ReturnsBase64UrlString()
+    [Fact(Timeout = 60000)]
+    public async Task Generate_Default_ReturnsBase64UrlString()
     {
         var password = DockerPasswordGenerator.Generate();
 

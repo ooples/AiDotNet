@@ -2,6 +2,7 @@
 using AiDotNet.Safety.Audio;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -14,8 +15,8 @@ public class VoiceProtectionIntegrationTests
 {
     #region PerturbationVoiceProtector Tests
 
-    [Fact]
-    public void Perturbation_ProtectsAudio_PreservesLength()
+    [Fact(Timeout = 120000)]
+    public async Task Perturbation_ProtectsAudio_PreservesLength()
     {
         var protector = new PerturbationVoiceProtector<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -25,8 +26,8 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, protectedAudio.Length);
     }
 
-    [Fact]
-    public void Perturbation_ModifiesAudio()
+    [Fact(Timeout = 120000)]
+    public async Task Perturbation_ModifiesAudio()
     {
         var protector = new PerturbationVoiceProtector<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -47,8 +48,8 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Protection should modify the audio samples");
     }
 
-    [Fact]
-    public void Perturbation_ShortAudio_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Perturbation_ShortAudio_HandlesGracefully()
     {
         var protector = new PerturbationVoiceProtector<double>();
         var audio = GenerateSineWave(100, 440.0, 16000);
@@ -62,8 +63,8 @@ public class VoiceProtectionIntegrationTests
 
     #region WatermarkVoiceProtector Tests
 
-    [Fact]
-    public void Watermark_EmbedAndDetect_PreservesLength()
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_EmbedAndDetect_PreservesLength()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -73,8 +74,8 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, watermarked.Length);
     }
 
-    [Fact]
-    public void Watermark_EmbedWatermark_PreservesLength()
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_EmbedWatermark_PreservesLength()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -84,8 +85,8 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, watermarked.Length);
     }
 
-    [Fact]
-    public void Watermark_ModifiesAudio()
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_ModifiesAudio()
     {
         var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.1, watermarkKey: 42);
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -105,8 +106,8 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Watermark embedding should modify samples");
     }
 
-    [Fact]
-    public void Watermark_DifferentKeys_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_DifferentKeys_ProduceDifferentResults()
     {
         var protector1 = new WatermarkVoiceProtector<double>(watermarkStrength: 0.1, watermarkKey: 42);
         var protector2 = new WatermarkVoiceProtector<double>(watermarkStrength: 0.1, watermarkKey: 99);
@@ -132,8 +133,8 @@ public class VoiceProtectionIntegrationTests
 
     #region MaskingVoiceProtector Tests
 
-    [Fact]
-    public void Masking_ProtectsAudio_PreservesLength()
+    [Fact(Timeout = 120000)]
+    public async Task Masking_ProtectsAudio_PreservesLength()
     {
         var protector = new MaskingVoiceProtector<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -143,8 +144,8 @@ public class VoiceProtectionIntegrationTests
         Assert.Equal(audio.Length, protectedAudio.Length);
     }
 
-    [Fact]
-    public void Masking_ModifiesAudio()
+    [Fact(Timeout = 120000)]
+    public async Task Masking_ModifiesAudio()
     {
         var protector = new MaskingVoiceProtector<double>();
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -164,8 +165,8 @@ public class VoiceProtectionIntegrationTests
         Assert.True(anyDifferent, "Masking should modify the audio samples");
     }
 
-    [Fact]
-    public void Masking_LongAudio_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Masking_LongAudio_ProcessesWithoutError()
     {
         var protector = new MaskingVoiceProtector<double>();
         var audio = GenerateSineWave(48000, 440.0, 16000);
@@ -179,8 +180,8 @@ public class VoiceProtectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllProtectors_PreserveAudioLength()
+    [Fact(Timeout = 120000)]
+    public async Task AllProtectors_PreserveAudioLength()
     {
         var audio = GenerateSineWave(16000, 440.0, 16000);
 

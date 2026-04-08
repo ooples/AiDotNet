@@ -3,13 +3,14 @@ using AiDotNet.Enums;
 using AiDotNet.ReinforcementLearning.Environments;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 public class RLConfigurationIntegrationTests
 {
-    [Fact]
-    public void RLTrainingOptions_Default_AssignsExpectedDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_Default_AssignsExpectedDefaults()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
 
@@ -23,16 +24,16 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(64, options.BatchSize);
     }
 
-    [Fact]
-    public void RLStepMetrics_Defaults_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task RLStepMetrics_Defaults_AreZero()
     {
         var metrics = new RLStepMetrics<double>();
 
         Assert.Equal(0.0, metrics.Reward, precision: 10);
     }
 
-    [Fact]
-    public void RLEpisodeMetrics_Defaults_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task RLEpisodeMetrics_Defaults_AreZero()
     {
         var metrics = new RLEpisodeMetrics<double>();
 
@@ -41,8 +42,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(0.0, metrics.AverageRewardRecent, precision: 10);
     }
 
-    [Fact]
-    public void RLTrainingSummary_Defaults_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingSummary_Defaults_AreZero()
     {
         var summary = new RLTrainingSummary<double>();
 
@@ -52,8 +53,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(0.0, summary.AverageLoss, precision: 10);
     }
 
-    [Fact]
-    public void RLEvaluationConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RLEvaluationConfig_Defaults_AreExpected()
     {
         var config = new RLEvaluationConfig();
 
@@ -62,8 +63,8 @@ public class RLConfigurationIntegrationTests
         Assert.True(config.Deterministic);
     }
 
-    [Fact]
-    public void RLCheckpointConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RLCheckpointConfig_Defaults_AreExpected()
     {
         var config = new RLCheckpointConfig();
 
@@ -73,8 +74,8 @@ public class RLConfigurationIntegrationTests
         Assert.True(config.SaveOnBestReward);
     }
 
-    [Fact]
-    public void RLEarlyStoppingConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RLEarlyStoppingConfig_Defaults_AreExpected()
     {
         var config = new RLEarlyStoppingConfig<double>();
 
@@ -82,8 +83,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(0.01, config.MinImprovement, precision: 10);
     }
 
-    [Fact]
-    public void TargetNetworkConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task TargetNetworkConfig_Defaults_AreExpected()
     {
         var config = new TargetNetworkConfig<double>();
 
@@ -92,8 +93,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(0.005, config.Tau, precision: 10);
     }
 
-    [Fact]
-    public void ExplorationScheduleConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationScheduleConfig_Defaults_AreExpected()
     {
         var config = new ExplorationScheduleConfig<double>();
 
@@ -103,8 +104,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(ExplorationDecayType.Linear, config.DecayType);
     }
 
-    [Fact]
-    public void RewardClippingConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RewardClippingConfig_Defaults_AreExpected()
     {
         var config = new RewardClippingConfig<double>();
 
@@ -113,8 +114,8 @@ public class RLConfigurationIntegrationTests
         Assert.True(config.UseClipping);
     }
 
-    [Fact]
-    public void PrioritizedReplayConfig_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task PrioritizedReplayConfig_Defaults_AreExpected()
     {
         var config = new PrioritizedReplayConfig<double>();
 
@@ -125,8 +126,8 @@ public class RLConfigurationIntegrationTests
         Assert.Equal(1e-6, config.PriorityEpsilon, precision: 10);
     }
 
-    [Fact]
-    public void RLAutoMLOptions_Defaults_AreExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RLAutoMLOptions_Defaults_AreExpected()
     {
         var options = new RLAutoMLOptions<double>();
 

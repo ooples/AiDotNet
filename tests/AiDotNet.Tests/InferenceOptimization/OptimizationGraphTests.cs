@@ -1,13 +1,14 @@
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.Core;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class OptimizationGraphTests
 {
-    [Fact]
-    public void AddNode_ShouldAddNodeToGraph()
+    [Fact(Timeout = 60000)]
+    public async Task AddNode_ShouldAddNodeToGraph()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -25,8 +26,8 @@ public class OptimizationGraphTests
         Assert.Single(graph.Nodes);
     }
 
-    [Fact]
-    public void RemoveNode_ShouldRemoveNodeFromGraph()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveNode_ShouldRemoveNodeFromGraph()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -45,8 +46,8 @@ public class OptimizationGraphTests
         Assert.Empty(graph.Nodes);
     }
 
-    [Fact]
-    public void FindNodeById_ShouldReturnCorrectNode()
+    [Fact(Timeout = 60000)]
+    public async Task FindNodeById_ShouldReturnCorrectNode()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -66,8 +67,8 @@ public class OptimizationGraphTests
         Assert.Equal(node, found);
     }
 
-    [Fact]
-    public void GetTopologicalOrder_ShouldReturnValidOrder()
+    [Fact(Timeout = 60000)]
+    public async Task GetTopologicalOrder_ShouldReturnValidOrder()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -96,8 +97,8 @@ public class OptimizationGraphTests
         Assert.True(order.IndexOf(relu) < order.IndexOf(output));
     }
 
-    [Fact]
-    public void Validate_ShouldReturnTrueForValidGraph()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_ShouldReturnTrueForValidGraph()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -120,8 +121,8 @@ public class OptimizationGraphTests
         Assert.True(isValid);
     }
 
-    [Fact]
-    public void Clone_ShouldCreateDeepCopy()
+    [Fact(Timeout = 60000)]
+    public async Task Clone_ShouldCreateDeepCopy()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();
@@ -147,8 +148,8 @@ public class OptimizationGraphTests
         }
     }
 
-    [Fact]
-    public void GetStatistics_ShouldReturnCorrectCounts()
+    [Fact(Timeout = 60000)]
+    public async Task GetStatistics_ShouldReturnCorrectCounts()
     {
         // Arrange
         var graph = new OptimizationGraph<double>();

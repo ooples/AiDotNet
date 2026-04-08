@@ -6,12 +6,13 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.Controllers;
 
 public sealed class InferenceControllerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Predict_ReturnsNotFound_WhenModelDoesNotExist()
     {
         var controller = CreateController(
@@ -26,7 +27,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Predict_ReturnsBadRequest_WhenFeaturesMissing()
     {
         var controller = CreateController(
@@ -38,7 +39,7 @@ public sealed class InferenceControllerTests
         Assert.IsType<BadRequestObjectResult>(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Predict_ReturnsOk_WithPredictions_ForDoubleModel()
     {
         var controller = CreateController(
@@ -60,8 +61,8 @@ public sealed class InferenceControllerTests
         Assert.Equal(new[] { 10.0, 20.0 }, response.Predictions[1]);
     }
 
-    [Fact]
-    public void GetStatistics_ReturnsOk()
+    [Fact(Timeout = 60000)]
+    public async Task GetStatistics_ReturnsOk()
     {
         var controller = CreateController(
             modelRepository: new FakeModelRepository(modelInfo: null),
@@ -73,8 +74,8 @@ public sealed class InferenceControllerTests
         Assert.IsType<Dictionary<string, object>>(ok.Value);
     }
 
-    [Fact]
-    public void GetPerformanceMetrics_ReturnsOk()
+    [Fact(Timeout = 60000)]
+    public async Task GetPerformanceMetrics_ReturnsOk()
     {
         var controller = CreateController(
             modelRepository: new FakeModelRepository(modelInfo: null),
@@ -86,8 +87,8 @@ public sealed class InferenceControllerTests
         Assert.IsType<Dictionary<string, object>>(ok.Value);
     }
 
-    [Fact]
-    public void GenerateWithSpeculativeDecoding_ReturnsNotImplemented_WhenModelExists()
+    [Fact(Timeout = 60000)]
+    public async Task GenerateWithSpeculativeDecoding_ReturnsNotImplemented_WhenModelExists()
     {
         var controller = CreateController(
             modelRepository: new FakeModelRepository(new ModelInfo { Name = "m", InputDimension = 1, OutputDimension = 1, NumericType = NumericType.Double }),

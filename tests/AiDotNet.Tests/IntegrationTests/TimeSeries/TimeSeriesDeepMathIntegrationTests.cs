@@ -2,6 +2,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 
@@ -22,8 +23,8 @@ public class TimeSeriesDeepMathIntegrationTests
     // ARModel - Prediction Formula: y_hat(t) = sum(coeff[i] * y[t-i-1])
     // ========================================================================
 
-    [Fact]
-    public void ARModel_PredictSingle_AR1_DotProductFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_PredictSingle_AR1_DotProductFormula()
     {
         // AR(1): y_hat(t) = coeff[0] * y[t-1]
         // Use small learning rate to prevent gradient explosion on data with magnitude > 1
@@ -44,8 +45,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), "Prediction should be finite");
     }
 
-    [Fact]
-    public void ARModel_Forecast_RollingPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Forecast_RollingPrediction()
     {
         // Forecast uses rolling prediction: each prediction feeds into the next
         var options = new ARModelOptions<double> { AROrder = 2, MaxIterations = 500, LearningRate = 0.001 };
@@ -70,8 +71,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ARModel_Forecast_NegativeHorizon_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Forecast_NegativeHorizon_Throws()
     {
         var options = new ARModelOptions<double> { AROrder = 1 };
         var model = new ARModel<double>(options);
@@ -81,8 +82,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.Forecast(MakeVector(new double[] { 1, 2, 3 }), 0));
     }
 
-    [Fact]
-    public void ARModel_Evaluate_MSE_RMSE_MAE_MAPE_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Evaluate_MSE_RMSE_MAE_MAPE_Consistent()
     {
         // Verify evaluation metrics are internally consistent
         // RMSE = sqrt(MSE), all metrics >= 0
@@ -103,8 +104,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(metrics["MSE"]), metrics["RMSE"], 1e-4);
     }
 
-    [Fact]
-    public void ARModel_PredictSingle_InsufficientHistory_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_PredictSingle_InsufficientHistory_Throws()
     {
         var options = new ARModelOptions<double> { AROrder = 5 };
         var model = new ARModel<double>(options);
@@ -116,8 +117,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.PredictSingle(shortHistory));
     }
 
-    [Fact]
-    public void ARModel_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Clone_ProducesSamePredictions()
     {
         var options = new ARModelOptions<double> { AROrder = 2, MaxIterations = 100 };
         var model = new ARModel<double>(options);
@@ -136,8 +137,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(origPred, clonePred, Tol);
     }
 
-    [Fact]
-    public void ARModel_Reset_ClearsCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Reset_ClearsCoefficients()
     {
         var options = new ARModelOptions<double> { AROrder = 1, MaxIterations = 100 };
         var model = new ARModel<double>(options);
@@ -151,8 +152,8 @@ public class TimeSeriesDeepMathIntegrationTests
             model.Forecast(MakeVector(new double[] { 1, 2, 3 }), 1));
     }
 
-    [Fact]
-    public void ARModel_SerializeDeserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_SerializeDeserialize_PreservesPredictions()
     {
         var options = new ARModelOptions<double> { AROrder = 2, MaxIterations = 200, LearningRate = 0.001 };
         var model = new ARModel<double>(options);
@@ -178,8 +179,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(origPred, newPred, Tol);
     }
 
-    [Fact]
-    public void ARModel_ConstantSeries_ConvergesToZeroCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_ConstantSeries_ConvergesToZeroCoefficients()
     {
         // A constant series y = [1, 1, 1, ...] (using small values to prevent gradient explosion)
         // AR prediction: y_hat = coeff * y[t-1] = coeff * 1
@@ -205,8 +206,8 @@ public class TimeSeriesDeepMathIntegrationTests
     // ExponentialSmoothingModel - Simple (SES), Double (DES), Triple (TES)
     // ========================================================================
 
-    [Fact]
-    public void ExponentialSmoothing_SimpleES_LevelUpdateFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_SimpleES_LevelUpdateFormula()
     {
         // Simple Exponential Smoothing (no trend, no seasonality):
         // Level update: L_t = alpha * y_t + (1-alpha) * L_{t-1}
@@ -252,8 +253,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_DoubleES_TrendCapture()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_DoubleES_TrendCapture()
     {
         // Double Exponential Smoothing (Holt's method):
         // Level: L_t = alpha * y_t + (1-alpha) * (L_{t-1} + T_{t-1})
@@ -291,8 +292,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_DoubleES_ForecastIncreasingForLinearData()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_DoubleES_ForecastIncreasingForLinearData()
     {
         // For a strictly increasing linear series, multi-step forecasts should also be increasing
         var options = new ExponentialSmoothingOptions<double>
@@ -322,8 +323,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_Metrics_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_Metrics_AllPositive()
     {
         // ExponentialSmoothing EvaluateModel returns MSE, RMSE, MAPE (not MAE)
         var options = new ExponentialSmoothingOptions<double>
@@ -350,8 +351,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(metrics["MSE"]), metrics["RMSE"], 1e-4);
     }
 
-    [Fact]
-    public void ExponentialSmoothing_TripleES_HandComputedSeasonalFactors()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_TripleES_HandComputedSeasonalFactors()
     {
         // Triple Exponential Smoothing (Holt-Winters) with seasonality
         // SeasonalPeriod = 4 (quarterly)
@@ -393,8 +394,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_TripleES_ForecastPreservesSeasonality()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_TripleES_ForecastPreservesSeasonality()
     {
         // Seasonal data with period 4: forecasts should show periodicity
         var options = new ExponentialSmoothingOptions<double>
@@ -425,8 +426,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_SES_ConstantSeries_PredictsSameValue()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_SES_ConstantSeries_PredictsSameValue()
     {
         // For constant series, SES should predict approximately the same constant
         var options = new ExponentialSmoothingOptions<double>
@@ -453,8 +454,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_Clone_ProducesSamePredictions()
     {
         var options = new ExponentialSmoothingOptions<double>
         {
@@ -482,8 +483,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_SerializeDeserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_SerializeDeserialize_PreservesPredictions()
     {
         var options = new ExponentialSmoothingOptions<double>
         {
@@ -515,8 +516,8 @@ public class TimeSeriesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_Reset_ClearsState()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_Reset_ClearsState()
     {
         var options = new ExponentialSmoothingOptions<double>
         {
@@ -549,8 +550,8 @@ public class TimeSeriesDeepMathIntegrationTests
     // Cross-model properties
     // ========================================================================
 
-    [Fact]
-    public void ARModel_Metadata_ContainsExpectedFields()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Metadata_ContainsExpectedFields()
     {
         var options = new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 };
         var model = new ARModel<double>(options);
@@ -569,8 +570,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(3, metadata.AdditionalInfo["AROrder"]);
     }
 
-    [Fact]
-    public void ARModel_ToString_ContainsAROrder()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_ToString_ContainsAROrder()
     {
         var options = new ARModelOptions<double> { AROrder = 2 };
         var model = new ARModel<double>(options);
@@ -582,8 +583,8 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Contains("AR Coefficients", str);
     }
 
-    [Fact]
-    public void ExponentialSmoothing_DES_DecreasingData_NegativeTrend()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_DES_DecreasingData_NegativeTrend()
     {
         // For decreasing data, the trend component should be negative
         // and forecasts should continue decreasing
@@ -610,8 +611,8 @@ public class TimeSeriesDeepMathIntegrationTests
             $"First forecast {forecast[0]} should be near or below last data point {data[^1]}");
     }
 
-    [Fact]
-    public void ARModel_HighAROrder_CapturesLongerPatterns()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_HighAROrder_CapturesLongerPatterns()
     {
         // AR(5) should look at 5 lagged values
         var options = new ARModelOptions<double> { AROrder = 5, MaxIterations = 500, LearningRate = 0.0001 };

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new SlidingWindowChunkingStrategy();
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(500, strategy.ChunkOverlap); // windowSize - stride = 1000 - 500
         }
 
-        [Fact]
-        public void Constructor_WithCustomValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 200, stride: 50);
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(150, strategy.ChunkOverlap); // 200 - 50
         }
 
-        [Fact]
-        public void Constructor_StrideZero_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_StrideZero_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -44,8 +45,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Stride must be greater than zero", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_StrideNegative_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_StrideNegative_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Stride must be greater than zero", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_StrideExceedsWindowSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_StrideExceedsWindowSize_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Stride cannot exceed the window size", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_StrideEqualsWindowSize_IsValid()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_StrideEqualsWindowSize_IsValid()
         {
             // Act - stride == windowSize means overlap = 0
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 100);
@@ -75,24 +76,24 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_WindowSizeZero_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WindowSizeZero_ThrowsArgumentException()
         {
             // Act & Assert - base class validation
             Assert.Throws<ArgumentException>(() =>
                 new SlidingWindowChunkingStrategy(windowSize: 0, stride: 0));
         }
 
-        [Fact]
-        public void Constructor_WindowSizeNegative_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WindowSizeNegative_ThrowsArgumentException()
         {
             // Act & Assert - base class validation
             Assert.Throws<ArgumentException>(() =>
                 new SlidingWindowChunkingStrategy(windowSize: -1, stride: 1));
         }
 
-        [Fact]
-        public void Constructor_SmallStrideCreatesLargeOverlap()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_SmallStrideCreatesLargeOverlap()
         {
             // Act
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 10);
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Chunk Method Tests
 
-        [Fact]
-        public void Chunk_NullText_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_NullText_ThrowsArgumentNullException()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy();
@@ -117,8 +118,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(null!).ToList());
         }
 
-        [Fact]
-        public void Chunk_EmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_EmptyText_ThrowsArgumentException()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy();
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(string.Empty).ToList());
         }
 
-        [Fact]
-        public void Chunk_ShortText_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_ShortText_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
@@ -143,8 +144,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Short text.", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_TextExactlyWindowSize_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextExactlyWindowSize_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -158,8 +159,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("1234567890", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_LongText_ReturnsMultipleChunks()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_LongText_ReturnsMultipleChunks()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count > 1, "Should create multiple overlapping chunks");
         }
 
-        [Fact]
-        public void Chunk_WithStride_ChunksOverlapCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WithStride_ChunksOverlapCorrectly()
         {
             // Arrange
             var windowSize = 10;
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_StrideEqualsWindowSize_NoOverlap()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_StrideEqualsWindowSize_NoOverlap()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 10);
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ChunkWithPositions Tests
 
-        [Fact]
-        public void ChunkWithPositions_SingleChunk_ReturnsValidPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_SingleChunk_ReturnsValidPositions()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text.Length, chunks[0].EndPosition);
         }
 
-        [Fact]
-        public void ChunkWithPositions_MultipleChunks_HasCorrectPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_MultipleChunks_HasCorrectPositions()
         {
             // Arrange
             var windowSize = 10;
@@ -260,8 +261,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(20, chunks[2].EndPosition);
         }
 
-        [Fact]
-        public void ChunkWithPositions_ChunkContentMatchesSubstring()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_ChunkContentMatchesSubstring()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -278,8 +279,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void ChunkWithPositions_LastChunk_EndsAtTextLength()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_LastChunk_EndsAtTextLength()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -293,8 +294,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text.Length, lastChunk.EndPosition);
         }
 
-        [Fact]
-        public void ChunkWithPositions_ConsecutiveChunks_StartPositionsDifferByStride()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_ConsecutiveChunks_StartPositionsDifferByStride()
         {
             // Arrange
             var windowSize = 10;
@@ -317,8 +318,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Chunk_SingleCharacter_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SingleCharacter_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
@@ -332,8 +333,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("X", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_WhitespaceOnlyText_ReturnsChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WhitespaceOnlyText_ReturnsChunk()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
@@ -347,8 +348,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("   ", chunks[0]); // Whitespace is preserved
         }
 
-        [Fact]
-        public void Chunk_TextSlightlyOverWindowSize_ReturnsTwoChunks()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextSlightlyOverWindowSize_ReturnsTwoChunks()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -361,8 +362,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, chunks.Count);
         }
 
-        [Fact]
-        public void Chunk_VeryLargeWindowSize_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_VeryLargeWindowSize_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10000, stride: 5000);
@@ -375,8 +376,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(chunks);
         }
 
-        [Fact]
-        public void Chunk_SmallStride_CreatesManyOverlappingChunks()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SmallStride_CreatesManyOverlappingChunks()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 2);
@@ -389,8 +390,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count > 5, "Small stride should create many overlapping chunks");
         }
 
-        [Fact]
-        public void Chunk_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 15, stride: 5);
@@ -412,8 +413,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Overlap Verification Tests
 
-        [Fact]
-        public void Chunk_OverlapAmount_EqualsWindowMinusStride()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_OverlapAmount_EqualsWindowMinusStride()
         {
             // Arrange
             var windowSize = 20;
@@ -433,8 +434,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_AllChunksExceptLast_HaveWindowSize()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_AllChunksExceptLast_HaveWindowSize()
         {
             // Arrange
             var windowSize = 10;
@@ -452,8 +453,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_LastChunk_MayBeShorterThanWindowSize()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_LastChunk_MayBeShorterThanWindowSize()
         {
             // Arrange
             var windowSize = 10;
@@ -472,8 +473,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Coverage Tests
 
-        [Fact]
-        public void Chunk_EnsuresFullTextCoverage()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_EnsuresFullTextCoverage()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 10);
@@ -487,8 +488,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text, reconstructed);
         }
 
-        [Fact]
-        public void ChunkWithPositions_StartPositionsAreAscending()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_StartPositionsAreAscending()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 15, stride: 5);
@@ -505,8 +506,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void ChunkWithPositions_EndPositionMinusStartEquals_ChunkLength()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_EndPositionMinusStartEquals_ChunkLength()
         {
             // Arrange
             var strategy = new SlidingWindowChunkingStrategy(windowSize: 12, stride: 4);

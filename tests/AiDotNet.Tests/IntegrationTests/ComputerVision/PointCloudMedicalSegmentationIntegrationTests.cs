@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -30,16 +31,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region PointTransformerV3
 
-    [Fact]
-    public void PointTransformerV3_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PointTransformerV3_Construction_Succeeds()
     {
         var model = new PointTransformerV3<double>(Arch(), modelSize: PointTransformerV3ModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void PointTransformerV3_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PointTransformerV3_Predict_ReturnsOutput()
     {
         var model = new PointTransformerV3<double>(Arch(), modelSize: PointTransformerV3ModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -47,8 +48,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void PointTransformerV3_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task PointTransformerV3_Dispose_DoesNotThrow()
     {
         var model = new PointTransformerV3<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -58,16 +59,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region Sonata
 
-    [Fact]
-    public void Sonata_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Sonata_Construction_Succeeds()
     {
         var model = new Sonata<double>(Arch(), modelSize: SonataModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void Sonata_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Sonata_Predict_ReturnsOutput()
     {
         var model = new Sonata<double>(Arch(), modelSize: SonataModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -75,8 +76,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void Sonata_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Sonata_Dispose_DoesNotThrow()
     {
         var model = new Sonata<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -86,16 +87,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region Concerto
 
-    [Fact]
-    public void Concerto_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task Concerto_Construction_Succeeds()
     {
         var model = new Concerto<double>(Arch(), modelSize: ConcertoModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void Concerto_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Concerto_Predict_ReturnsOutput()
     {
         var model = new Concerto<double>(Arch(), modelSize: ConcertoModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -103,8 +104,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void Concerto_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Concerto_Dispose_DoesNotThrow()
     {
         var model = new Concerto<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -114,16 +115,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region MedSAM
 
-    [Fact]
-    public void MedSAM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM_Construction_Succeeds()
     {
         var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MedSAM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM_Predict_ReturnsOutput()
     {
         var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -131,8 +132,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedSAM_Train_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM_Train_DoesNotThrow()
     {
         var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
         var input = Rand(1, 3, 32, 32);
@@ -141,8 +142,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact]
-    public void MedSAM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM_Dispose_DoesNotThrow()
     {
         var model = new MedSAM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -152,16 +153,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region MedSAM2
 
-    [Fact]
-    public void MedSAM2_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM2_Construction_Succeeds()
     {
         var model = new MedSAM2<double>(Arch(), modelSize: MedSAM2ModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MedSAM2_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM2_Predict_ReturnsOutput()
     {
         var model = new MedSAM2<double>(Arch(), modelSize: MedSAM2ModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -169,8 +170,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedSAM2_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM2_Dispose_DoesNotThrow()
     {
         var model = new MedSAM2<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -180,16 +181,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region MedNeXt
 
-    [Fact]
-    public void MedNeXt_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MedNeXt_Construction_Succeeds()
     {
         var model = new MedNeXt<double>(Arch(), modelSize: MedNeXtModelSize.Small);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MedNeXt_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedNeXt_Predict_ReturnsOutput()
     {
         var model = new MedNeXt<double>(Arch(), modelSize: MedNeXtModelSize.Small);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -197,8 +198,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedNeXt_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedNeXt_Dispose_DoesNotThrow()
     {
         var model = new MedNeXt<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -208,16 +209,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region NnUNet
 
-    [Fact]
-    public void NnUNet_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task NnUNet_Construction_Succeeds()
     {
         var model = new NnUNet<double>(Arch(), modelSize: NnUNetModelSize.UNet2D);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void NnUNet_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NnUNet_Predict_ReturnsOutput()
     {
         var model = new NnUNet<double>(Arch(), modelSize: NnUNetModelSize.UNet2D);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -225,8 +226,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void NnUNet_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task NnUNet_Dispose_DoesNotThrow()
     {
         var model = new NnUNet<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -236,16 +237,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region SwinUNETR
 
-    [Fact]
-    public void SwinUNETR_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SwinUNETR_Construction_Succeeds()
     {
         var model = new SwinUNETR<double>(Arch(), modelSize: SwinUNETRModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SwinUNETR_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SwinUNETR_Predict_ReturnsOutput()
     {
         var model = new SwinUNETR<double>(Arch(), modelSize: SwinUNETRModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -253,8 +254,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SwinUNETR_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SwinUNETR_Dispose_DoesNotThrow()
     {
         var model = new SwinUNETR<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -264,16 +265,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region TransUNet
 
-    [Fact]
-    public void TransUNet_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TransUNet_Construction_Succeeds()
     {
         var model = new TransUNet<double>(Arch(), modelSize: TransUNetModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void TransUNet_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransUNet_Predict_ReturnsOutput()
     {
         var model = new TransUNet<double>(Arch(), modelSize: TransUNetModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -281,8 +282,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void TransUNet_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TransUNet_Dispose_DoesNotThrow()
     {
         var model = new TransUNet<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -292,16 +293,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region UMamba
 
-    [Fact]
-    public void UMamba_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UMamba_Construction_Succeeds()
     {
         var model = new UMamba<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void UMamba_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UMamba_Predict_ReturnsOutput()
     {
         var model = new UMamba<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -309,8 +310,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void UMamba_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task UMamba_Dispose_DoesNotThrow()
     {
         var model = new UMamba<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -320,16 +321,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region UniverSeg
 
-    [Fact]
-    public void UniverSeg_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UniverSeg_Construction_Succeeds()
     {
         var model = new UniverSeg<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void UniverSeg_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UniverSeg_Predict_ReturnsOutput()
     {
         var model = new UniverSeg<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -337,8 +338,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void UniverSeg_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task UniverSeg_Dispose_DoesNotThrow()
     {
         var model = new UniverSeg<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -348,16 +349,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region SegMamba
 
-    [Fact]
-    public void SegMamba_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SegMamba_Construction_Succeeds()
     {
         var model = new SegMamba<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SegMamba_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SegMamba_Predict_ReturnsOutput()
     {
         var model = new SegMamba<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -365,8 +366,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SegMamba_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SegMamba_Dispose_DoesNotThrow()
     {
         var model = new SegMamba<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -376,16 +377,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region BiomedParse
 
-    [Fact]
-    public void BiomedParse_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task BiomedParse_Construction_Succeeds()
     {
         var model = new BiomedParse<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void BiomedParse_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BiomedParse_Predict_ReturnsOutput()
     {
         var model = new BiomedParse<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -393,8 +394,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void BiomedParse_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task BiomedParse_Dispose_DoesNotThrow()
     {
         var model = new BiomedParse<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -404,16 +405,16 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region MedSegDiffV2
 
-    [Fact]
-    public void MedSegDiffV2_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2_Construction_Succeeds()
     {
         var model = new MedSegDiffV2<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MedSegDiffV2_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2_Predict_ReturnsOutput()
     {
         var model = new MedSegDiffV2<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -421,8 +422,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedSegDiffV2_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2_Dispose_DoesNotThrow()
     {
         var model = new MedSegDiffV2<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));

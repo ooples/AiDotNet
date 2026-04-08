@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -57,7 +58,7 @@ public class CorpusBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithRedditBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"reddit_train_{Guid.NewGuid():N}.json");
@@ -119,7 +120,7 @@ public class CorpusBenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithStackOverflowBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"so_train_{Guid.NewGuid():N}.json");

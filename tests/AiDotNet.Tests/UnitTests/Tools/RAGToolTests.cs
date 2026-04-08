@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Tools;
 
@@ -12,8 +13,8 @@ public class RAGToolTests
 {
     #region PR #756 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void Constructor_ThrowsOnNullRetriever()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNullRetriever()
     {
         var mockGenerator = new MockGenerator<double>();
 
@@ -21,8 +22,8 @@ public class RAGToolTests
             new RAGTool<double>(null!, null, mockGenerator));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnNullGenerator()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNullGenerator()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -30,8 +31,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, null!));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnZeroTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnZeroTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -40,8 +41,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnNegativeTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNegativeTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -50,8 +51,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: -1));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnExcessiveTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnExcessiveTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -60,8 +61,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 101));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnZeroTopKAfterRerank()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnZeroTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -70,8 +71,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 10, topKAfterRerank: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnNegativeTopKAfterRerank()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNegativeTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -80,8 +81,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 10, topKAfterRerank: -1));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenTopKAfterRerankExceedsTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsWhenTopKAfterRerankExceedsTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -90,8 +91,8 @@ public class RAGToolTests
             new RAGTool<double>(mockRetriever, null, mockGenerator, topK: 5, topKAfterRerank: 10));
     }
 
-    [Fact]
-    public void Constructor_AcceptsMaxAllowedTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsMaxAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -102,8 +103,8 @@ public class RAGToolTests
         Assert.Equal("RAG", tool.Name);
     }
 
-    [Fact]
-    public void Constructor_AcceptsMinAllowedTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsMinAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -114,8 +115,8 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact]
-    public void Constructor_AcceptsNullReranker()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsNullReranker()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -125,8 +126,8 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact]
-    public void Constructor_AcceptsNullTopKAfterRerank()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsNullTopKAfterRerank()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -136,8 +137,8 @@ public class RAGToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact]
-    public void Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_EmptyInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -149,8 +150,8 @@ public class RAGToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_WhitespaceInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WhitespaceInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
         var mockGenerator = new MockGenerator<double>();
@@ -161,8 +162,8 @@ public class RAGToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact]
-    public void Execute_ValidQuery_ReturnsAnswer()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_ValidQuery_ReturnsAnswer()
     {
         var mockRetriever = new MockRetriever<double>();
         mockRetriever.AddDocument("doc1", "Test content about AI");
@@ -174,8 +175,8 @@ public class RAGToolTests
         Assert.Contains("Answer", result);
     }
 
-    [Fact]
-    public void Execute_NoDocumentsFound_ReturnsNoDocumentsMessage()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_NoDocumentsFound_ReturnsNoDocumentsMessage()
     {
         var mockRetriever = new MockRetriever<double>(returnEmpty: true);
         var mockGenerator = new MockGenerator<double>();

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -51,8 +52,8 @@ public abstract class GaussianProcessModelTestBase
     // indicates a numerical bug in the Cholesky factorization or kernel.
     // =====================================================
 
-    [Fact]
-    public void PredictiveVariance_ShouldBeNonNegative_Everywhere()
+    [Fact(Timeout = 60000)]
+    public async Task PredictiveVariance_ShouldBeNonNegative_Everywhere()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -87,8 +88,8 @@ public abstract class GaussianProcessModelTestBase
     // Variance far from training data should be larger than at training points.
     // =====================================================
 
-    [Fact]
-    public void PosteriorContraction_VarianceNearTraining_ShouldBeLessThan_VarianceFarAway()
+    [Fact(Timeout = 60000)]
+    public async Task PosteriorContraction_VarianceNearTraining_ShouldBeLessThan_VarianceFarAway()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -122,8 +123,8 @@ public abstract class GaussianProcessModelTestBase
     // increase (for stationary kernels). This is a fundamental property.
     // =====================================================
 
-    [Fact]
-    public void Uncertainty_ShouldIncrease_WithDistanceFromTrainingData()
+    [Fact(Timeout = 60000)]
+    public async Task Uncertainty_ShouldIncrease_WithDistanceFromTrainingData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -168,8 +169,8 @@ public abstract class GaussianProcessModelTestBase
     // Large interpolation error indicates kernel or matrix inversion bugs.
     // =====================================================
 
-    [Fact]
-    public void Mean_ShouldApproximatelyInterpolate_TrainingPoints()
+    [Fact(Timeout = 60000)]
+    public async Task Mean_ShouldApproximatelyInterpolate_TrainingPoints()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -218,8 +219,8 @@ public abstract class GaussianProcessModelTestBase
     // be in the right ballpark (positive, reasonable magnitude).
     // =====================================================
 
-    [Fact]
-    public void Mean_ShouldBeReasonable_OnLinearData()
+    [Fact(Timeout = 60000)]
+    public async Task Mean_ShouldBeReasonable_OnLinearData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -243,8 +244,8 @@ public abstract class GaussianProcessModelTestBase
     // BASIC CONTRACTS: Finite Predictions, Determinism
     // =====================================================
 
-    [Fact]
-    public void Predictions_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -260,8 +261,8 @@ public abstract class GaussianProcessModelTestBase
         Assert.False(double.IsNaN(variance), "GP variance is NaN.");
     }
 
-    [Fact]
-    public void Predict_ShouldBeDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -284,8 +285,8 @@ public abstract class GaussianProcessModelTestBase
     // We approximate this by checking K is symmetric and k(x,x) > 0.
     // =====================================================
 
-    [Fact]
-    public void KernelMatrix_ShouldBeSymmetricAndPositive()
+    [Fact(Timeout = 60000)]
+    public async Task KernelMatrix_ShouldBeSymmetricAndPositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -317,8 +318,8 @@ public abstract class GaussianProcessModelTestBase
     // training points should be ≈ σ²_n (not zero, not the prior variance).
     // =====================================================
 
-    [Fact]
-    public void NoiseVarianceRecovery_VarianceAtTrainingPoints_ShouldApproximateNoiseLevel()
+    [Fact(Timeout = 60000)]
+    public async Task NoiseVarianceRecovery_VarianceAtTrainingPoints_ShouldApproximateNoiseLevel()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -361,8 +362,8 @@ public abstract class GaussianProcessModelTestBase
     // μ(x | X, cy) = c · μ(x | X, y)
     // =====================================================
 
-    [Fact]
-    public void ScalingEquivariance_ScalingTargets_ShouldScaleMean()
+    [Fact(Timeout = 60000)]
+    public async Task ScalingEquivariance_ScalingTargets_ShouldScaleMean()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -401,8 +402,8 @@ public abstract class GaussianProcessModelTestBase
     // μ(x | X, y+c) = μ(x | X, y) + c
     // =====================================================
 
-    [Fact]
-    public void TranslationEquivariance_ShiftingTargets_ShouldShiftMean()
+    [Fact(Timeout = 60000)]
+    public async Task TranslationEquivariance_ShiftingTargets_ShouldShiftMean()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -440,8 +441,8 @@ public abstract class GaussianProcessModelTestBase
     // finite and typically negative. Tests the full Bayesian pipeline.
     // =====================================================
 
-    [Fact]
-    public void LogMarginalLikelihood_ShouldBeFiniteAndNegative()
+    [Fact(Timeout = 60000)]
+    public async Task LogMarginalLikelihood_ShouldBeFiniteAndNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -490,8 +491,8 @@ public abstract class GaussianProcessModelTestBase
     // the predictive variance at that point. This is fundamental.
     // =====================================================
 
-    [Fact]
-    public void MoreData_ShouldReducePredictiveVariance()
+    [Fact(Timeout = 60000)]
+    public async Task MoreData_ShouldReducePredictiveVariance()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -526,8 +527,8 @@ public abstract class GaussianProcessModelTestBase
     // should contain the true value at most test points.
     // =====================================================
 
-    [Fact]
-    public void ConfidenceInterval_ShouldCoverTruth_AtMostTestPoints()
+    [Fact(Timeout = 60000)]
+    public async Task ConfidenceInterval_ShouldCoverTruth_AtMostTestPoints()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -583,8 +584,8 @@ public abstract class GaussianProcessModelTestBase
     // BASIC CONTRACTS: Clone Should Preserve Predictions
     // =====================================================
 
-    [Fact]
-    public void Clone_ShouldProduceIdenticalPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Clone_ShouldProduceIdenticalPredictions()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -615,8 +616,8 @@ public abstract class GaussianProcessModelTestBase
     // INTEGRATION: Builder Pipeline Should Work
     // =====================================================
 
-    [Fact]
-    public void Builder_ShouldProduceResult()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);

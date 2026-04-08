@@ -1,6 +1,7 @@
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
@@ -22,8 +23,8 @@ public class DistillationLossTests
         return matrix;
     }
 
-    [Fact]
-    public void Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange & Act
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
@@ -34,24 +35,24 @@ public class DistillationLossTests
         Assert.Equal(0.3, distillationLoss.Alpha);
     }
 
-    [Fact]
-    public void Constructor_WithInvalidTemperature_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidTemperature_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: 0, alpha: 0.3));
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: -1, alpha: 0.3));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidAlpha_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidAlpha_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: 3.0, alpha: -0.1));
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: 3.0, alpha: 1.5));
     }
 
-    [Fact]
-    public void ComputeLoss_WithIdenticalLogits_ReturnsZeroSoftLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithIdenticalLogits_ReturnsZeroSoftLoss()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
@@ -68,8 +69,8 @@ public class DistillationLossTests
         Assert.True(Math.Abs(loss) < 1e-6, $"Expected loss close to 0, but got {loss}");
     }
 
-    [Fact]
-    public void ComputeLoss_WithDifferentLogits_ReturnsPositiveLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithDifferentLogits_ReturnsPositiveLoss()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -86,8 +87,8 @@ public class DistillationLossTests
         Assert.True(loss > 0, $"Expected positive loss, but got {loss}");
     }
 
-    [Fact]
-    public void ComputeLoss_WithHighTemperature_ProducesSofterDistribution()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithHighTemperature_ProducesSofterDistribution()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 10.0, 1.0, 0.1 });
@@ -110,8 +111,8 @@ public class DistillationLossTests
             $"High temp loss ({highLoss}) should be greater than low temp loss ({lowLoss}) due to T² scaling");
     }
 
-    [Fact]
-    public void ComputeLoss_WithTrueLabels_CombinesHardAndSoftLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithTrueLabels_CombinesHardAndSoftLoss()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -134,8 +135,8 @@ public class DistillationLossTests
         Assert.True(combinedLoss > 0, "Combined loss should be positive");
     }
 
-    [Fact]
-    public void ComputeLoss_WithMismatchedDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -149,8 +150,8 @@ public class DistillationLossTests
             distillationLoss.ComputeLoss(studentBatch, teacherBatch, null));
     }
 
-    [Fact]
-    public void ComputeGradient_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_ReturnsCorrectShape()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -168,8 +169,8 @@ public class DistillationLossTests
         Assert.Equal(studentLogits.Length, gradient.Columns);
     }
 
-    [Fact]
-    public void ComputeGradient_WithIdenticalPredictions_ReturnsZeroGradient()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_WithIdenticalPredictions_ReturnsZeroGradient()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
@@ -190,8 +191,8 @@ public class DistillationLossTests
         }
     }
 
-    [Fact]
-    public void ComputeGradient_WithTrueLabels_CombinesGradients()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_WithTrueLabels_CombinesGradients()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -222,8 +223,8 @@ public class DistillationLossTests
         Assert.True(isDifferent, "Combined gradient should differ from soft-only gradient");
     }
 
-    [Fact]
-    public void ComputeGradient_HasReasonableMagnitude()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_HasReasonableMagnitude()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -245,8 +246,8 @@ public class DistillationLossTests
         }
     }
 
-    [Fact]
-    public void TemperatureScaling_AffectsLossMagnitude()
+    [Fact(Timeout = 60000)]
+    public async Task TemperatureScaling_AffectsLossMagnitude()
     {
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });

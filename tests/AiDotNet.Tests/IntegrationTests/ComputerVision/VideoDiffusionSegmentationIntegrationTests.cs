@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -29,16 +30,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region DEVA
 
-    [Fact]
-    public void DEVA_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DEVA_Construction_Succeeds()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DEVA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DEVA_Predict_ReturnsOutput()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -46,8 +47,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DEVA_Train_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DEVA_Train_DoesNotThrow()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
         var input = Rand(1, 3, 32, 32);
@@ -56,8 +57,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact]
-    public void DEVA_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DEVA_Dispose_DoesNotThrow()
     {
         var model = new DEVA<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -67,16 +68,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region EfficientTAM
 
-    [Fact]
-    public void EfficientTAM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EfficientTAM_Construction_Succeeds()
     {
         var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void EfficientTAM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EfficientTAM_Predict_ReturnsOutput()
     {
         var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -84,8 +85,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void EfficientTAM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task EfficientTAM_Dispose_DoesNotThrow()
     {
         var model = new EfficientTAM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -95,16 +96,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region UniVS
 
-    [Fact]
-    public void UniVS_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UniVS_Construction_Succeeds()
     {
         var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void UniVS_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UniVS_Predict_ReturnsOutput()
     {
         var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -112,8 +113,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void UniVS_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task UniVS_Dispose_DoesNotThrow()
     {
         var model = new UniVS<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -123,16 +124,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region DiffCutSegmentation
 
-    [Fact]
-    public void DiffCutSegmentation_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCutSegmentation_Construction_Succeeds()
     {
         var model = new DiffCutSegmentation<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DiffCutSegmentation_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCutSegmentation_Predict_ReturnsOutput()
     {
         var model = new DiffCutSegmentation<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -140,8 +141,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DiffCutSegmentation_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCutSegmentation_Dispose_DoesNotThrow()
     {
         var model = new DiffCutSegmentation<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -151,16 +152,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region ODISESegmentation
 
-    [Fact]
-    public void ODISESegmentation_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ODISESegmentation_Construction_Succeeds()
     {
         var model = new ODISESegmentation<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void ODISESegmentation_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ODISESegmentation_Predict_ReturnsOutput()
     {
         var model = new ODISESegmentation<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -168,8 +169,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ODISESegmentation_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ODISESegmentation_Dispose_DoesNotThrow()
     {
         var model = new ODISESegmentation<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -179,16 +180,16 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region MedSegDiffV2Segmentation
 
-    [Fact]
-    public void MedSegDiffV2Segmentation_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2Segmentation_Construction_Succeeds()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MedSegDiffV2Segmentation_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2Segmentation_Predict_ReturnsOutput()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -196,8 +197,8 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedSegDiffV2Segmentation_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MedSegDiffV2Segmentation_Dispose_DoesNotThrow()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));

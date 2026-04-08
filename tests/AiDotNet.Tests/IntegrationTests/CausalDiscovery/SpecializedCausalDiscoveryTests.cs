@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery.Specialized;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -27,8 +28,8 @@ public class SpecializedCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void GOBNILP_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task GOBNILP_FindsCausalStructure()
     {
         var algo = new GOBNILPAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

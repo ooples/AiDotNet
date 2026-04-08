@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new SemanticChunkingStrategy();
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(200, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_WithCustomValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new SemanticChunkingStrategy(
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(50, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_ChunkSizeZero_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkSizeZero_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -46,8 +47,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkSize", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkSizeNegative_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkSizeNegative_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -56,8 +57,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkSize", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkOverlapNegative_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkOverlapNegative_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -66,8 +67,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkOverlapEqualToChunkSize_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkOverlapEqualToChunkSize_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -76,8 +77,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkOverlapGreaterThanChunkSize_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkOverlapGreaterThanChunkSize_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -86,8 +87,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ZeroOverlap_IsValid()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ZeroOverlap_IsValid()
         {
             // Act
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 0);
@@ -101,8 +102,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Chunk Method Tests
 
-        [Fact]
-        public void Chunk_NullText_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_NullText_ThrowsArgumentNullException()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy();
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(null!).ToList());
         }
 
-        [Fact]
-        public void Chunk_EmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_EmptyText_ThrowsArgumentException()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy();
@@ -123,8 +124,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(string.Empty).ToList());
         }
 
-        [Fact]
-        public void Chunk_SingleSentence_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SingleSentence_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 10);
@@ -138,8 +139,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("This is a single sentence.", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_MultipleSentences_GroupsBySizeLimit()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_MultipleSentences_GroupsBySizeLimit()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 50, chunkOverlap: 0);
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split into multiple chunks");
         }
 
-        [Fact]
-        public void Chunk_SentencesWithDifferentEndings_HandlesAllEndingTypes()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SentencesWithDifferentEndings_HandlesAllEndingTypes()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 200, chunkOverlap: 0);
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Exclamation", combined);
         }
 
-        [Fact]
-        public void Chunk_TextWithNewlines_SplitsSentencesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextWithNewlines_SplitsSentencesCorrectly()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 0);
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 1, "Should create at least one chunk");
         }
 
-        [Fact]
-        public void Chunk_LargeSentence_IncludesSentenceEvenIfOverLimit()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_LargeSentence_IncludesSentenceEvenIfOverLimit()
         {
             // Arrange - sentence is larger than chunk size
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 20, chunkOverlap: 0);
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Overlap Tests
 
-        [Fact]
-        public void Chunk_WithOverlap_ChunksHaveOverlappingPositions()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WithOverlap_ChunksHaveOverlappingPositions()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 40, chunkOverlap: 10);
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_ZeroOverlap_ChunksAreContiguous()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_ZeroOverlap_ChunksAreContiguous()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 40, chunkOverlap: 0);
@@ -246,8 +247,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ChunkWithPositions Tests
 
-        [Fact]
-        public void ChunkWithPositions_SingleSentence_ReturnsValidPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_SingleSentence_ReturnsValidPositions()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 0);
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks[0].EndPosition > 0);
         }
 
-        [Fact]
-        public void ChunkWithPositions_MultipleChunks_HasSequentialPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_MultipleChunks_HasSequentialPositions()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 30, chunkOverlap: 0);
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void ChunkWithPositions_ChunkContentHasValidLength()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_ChunkContentHasValidLength()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 10);
@@ -307,8 +308,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Chunk_SingleCharacter_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SingleCharacter_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 10);
@@ -322,8 +323,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("X", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_WhitespaceOnlyText_ReturnsEmptyCollection()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WhitespaceOnlyText_ReturnsEmptyCollection()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 10);
@@ -337,8 +338,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(chunks);
         }
 
-        [Fact]
-        public void Chunk_VeryLongSingleSentence_ReturnsEntireTextAsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_VeryLongSingleSentence_ReturnsEntireTextAsSingleChunk()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 50, chunkOverlap: 10);
@@ -352,8 +353,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text, chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_LargeChunkSize_ReturnsEntireTextAsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_LargeChunkSize_ReturnsEntireTextAsSingleChunk()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 10000, chunkOverlap: 100);
@@ -366,8 +367,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(chunks);
         }
 
-        [Fact]
-        public void Chunk_OnlyPunctuation_HandlesProperly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_OnlyPunctuation_HandlesProperly()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 10);
@@ -380,8 +381,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count <= 1, "Should result in 0 or 1 chunks");
         }
 
-        [Fact]
-        public void Chunk_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 50, chunkOverlap: 10);
@@ -399,8 +400,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_MixedPunctuation_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_MixedPunctuation_SplitsCorrectly()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 100, chunkOverlap: 0);
@@ -416,8 +417,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("fine", combined);
         }
 
-        [Fact]
-        public void Chunk_SentencesWithAbbreviations_HandlesCommonCases()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SentencesWithAbbreviations_HandlesCommonCases()
         {
             // Arrange - Note: Simple sentence splitter may incorrectly split on abbreviations
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 200, chunkOverlap: 0);
@@ -434,8 +435,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Sentence Grouping Tests
 
-        [Fact]
-        public void Chunk_SentencesFitExactly_GroupsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SentencesFitExactly_GroupsCorrectly()
         {
             // Arrange - sentences that fit exactly within limit
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 50, chunkOverlap: 0);
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 1);
         }
 
-        [Fact]
-        public void Chunk_ManySentences_CreatesManyChunks()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_ManySentences_CreatesManyChunks()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 30, chunkOverlap: 0);
@@ -462,8 +463,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Many sentences should create multiple chunks");
         }
 
-        [Fact]
-        public void Chunk_MixedLengthSentences_GroupsAppropriately()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_MixedLengthSentences_GroupsAppropriately()
         {
             // Arrange
             var strategy = new SemanticChunkingStrategy(maxChunkSize: 50, chunkOverlap: 0);

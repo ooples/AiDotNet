@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DecompositionMethods;
 
@@ -17,8 +18,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Additive Decomposition - Moving Average
 
-    [Fact]
-    public void Additive_MovingAverage_AdditiveIdentity_TrendPlusSeasonalPlusResidualEqualsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_AdditiveIdentity_TrendPlusSeasonalPlusResidualEqualsOriginal()
     {
         // The fundamental identity: Original = Trend + Seasonal + Residual
         var data = new double[] { 10, 12, 15, 11, 13, 16, 12, 14, 17, 13, 15, 18,
@@ -41,8 +42,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_MovingAverage_TrendHandCalculated_WindowSize7()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_TrendHandCalculated_WindowSize7()
     {
         // Moving average with window=7, for center points (i=3..n-4) we get exact 7-point average
         // For edge points, the window is truncated
@@ -67,8 +68,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(6.0, trend[1], Tolerance);
     }
 
-    [Fact]
-    public void Additive_MovingAverage_ConstantSeries_TrendEqualsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_ConstantSeries_TrendEqualsConstant()
     {
         // If data is constant, trend should equal the constant
         var data = new double[24];
@@ -83,8 +84,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_MovingAverage_ConstantSeries_SeasonalIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_ConstantSeries_SeasonalIsZero()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++) data[i] = 7.0;
@@ -98,8 +99,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_MovingAverage_ConstantSeries_ResidualIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_ConstantSeries_ResidualIsZero()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++) data[i] = 7.0;
@@ -113,8 +114,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_MovingAverage_LinearTrend_TrendApproximatesLinear()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_LinearTrend_TrendApproximatesLinear()
     {
         // Pure linear: y = 10 + 2*i. For interior points with full window, MA = exact linear
         var data = new double[24];
@@ -130,8 +131,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_MovingAverage_SeasonalComponentIsPeriodic()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_SeasonalComponentIsPeriodic()
     {
         // Seasonal component repeats with period 12 (hardcoded in the code)
         var data = new double[48];
@@ -152,8 +153,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Additive Decomposition - Exponential Smoothing
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_TrendFirstValueEqualsFirstObservation()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_TrendFirstValueEqualsFirstObservation()
     {
         // trend[0] = TimeSeries[0] per the code
         var data = new double[] { 42, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
@@ -164,8 +165,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(42.0, trend[0], Tolerance);
     }
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_TrendRecurrenceHandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_TrendRecurrenceHandCalculated()
     {
         // alpha = 0.2, trend[i] = 0.2*data[i] + 0.8*trend[i-1]
         var data = new double[] { 10, 20, 30, 15, 25, 35, 20, 30, 40, 25, 35, 45, 30 };
@@ -185,8 +186,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(expected3, trend[3], Tolerance);
     }
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_AdditiveIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_AdditiveIdentity()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -205,8 +206,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_ConstantSeries_TrendConvergesToConstant()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_ConstantSeries_TrendConvergesToConstant()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++) data[i] = 5.0;
@@ -221,8 +222,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_SeasonalInitializationHandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_SeasonalInitializationHandCalculated()
     {
         // First 12 seasonal values = data[i] - trend[i]
         var data = new double[] { 10, 20, 30, 15, 25, 35, 20, 30, 40, 25, 35, 45,
@@ -239,8 +240,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_ExponentialSmoothing_SeasonalRecurrenceHandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_ExponentialSmoothing_SeasonalRecurrenceHandCalculated()
     {
         // For i >= 12: seasonal[i] = gamma*(data[i]-trend[i]) + (1-gamma)*seasonal[i-12]
         // gamma = 0.3
@@ -264,8 +265,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Additive Decomposition - STL
 
-    [Fact]
-    public void Additive_STL_AdditiveIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_STL_AdditiveIdentity()
     {
         var data = new double[48];
         for (int i = 0; i < 48; i++)
@@ -284,8 +285,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Additive_STL_TrendIsSmoothForCleanData()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_STL_TrendIsSmoothForCleanData()
     {
         // For clean sinusoidal + linear data, STL trend should be smooth
         var data = new double[48];
@@ -310,8 +311,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - Matrix Method
 
-    [Fact]
-    public void HP_MatrixMethod_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_CycleEqualsOriginalMinusTrend()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -329,8 +330,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_LinearSeries_TrendEqualsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_LinearSeries_TrendEqualsOriginal()
     {
         // For a perfectly linear series, HP trend = original (second differences = 0)
         var data = new double[20];
@@ -348,8 +349,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_ConstantSeries_TrendEqualsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_ConstantSeries_TrendEqualsConstant()
     {
         var data = new double[20];
         for (int i = 0; i < 20; i++) data[i] = 42.0;
@@ -364,8 +365,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_LargeLambda_TrendIsVerySmooth()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_LargeLambda_TrendIsVerySmooth()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -384,8 +385,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_SmallLambda_TrendApproximatesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_SmallLambda_TrendApproximatesOriginal()
     {
         var data = new double[20];
         for (int i = 0; i < 20; i++)
@@ -402,8 +403,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_SecondDifferenceMatrix_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_SecondDifferenceMatrix_HandCalculated()
     {
         // Verify the HP filter for a tiny example where we can solve (I + λD^TD)τ = y by hand
         // For n=4, D is 2x4: [[1,-2,1,0],[0,1,-2,1]]
@@ -426,8 +427,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.True(trend[3] > trend[0], "Trend should show upward direction for {1,3,2,4}");
     }
 
-    [Fact]
-    public void HP_MatrixMethod_NegativeLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_NegativeLambda_Throws()
     {
         var data = new double[] { 1, 2, 3, 4, 5 };
         var ts = new Vector<double>(data);
@@ -435,8 +436,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
             new HodrickPrescottDecomposition<double>(ts, lambda: -1.0));
     }
 
-    [Fact]
-    public void HP_MatrixMethod_ZeroLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_ZeroLambda_Throws()
     {
         var data = new double[] { 1, 2, 3, 4, 5 };
         var ts = new Vector<double>(data);
@@ -448,8 +449,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - Iterative Method
 
-    [Fact]
-    public void HP_Iterative_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Iterative_CycleEqualsOriginalMinusTrend()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -467,8 +468,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_Iterative_BoundaryValues_EqualOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Iterative_BoundaryValues_EqualOriginal()
     {
         // The iterative method sets boundary values to original: trend[0,1,n-2,n-1] = data[0,1,n-2,n-1]
         var data = new double[24];
@@ -485,8 +486,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(data[23], trend[23], Tolerance);
     }
 
-    [Fact]
-    public void HP_Iterative_ConstantSeries_TrendEqualsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Iterative_ConstantSeries_TrendEqualsConstant()
     {
         var data = new double[20];
         for (int i = 0; i < 20; i++) data[i] = 15.0;
@@ -505,8 +506,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - Kalman Filter
 
-    [Fact]
-    public void HP_Kalman_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Kalman_CycleEqualsOriginalMinusTrend()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -524,8 +525,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_Kalman_FirstTrendValue_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Kalman_FirstTrendValue_HandCalculated()
     {
         // Kalman filter: x_pred = F*x = [x0+x1, x1] where initial x = [data[0], 0]
         // First prediction: x_pred = [data[0], 0]
@@ -541,8 +542,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(100.0, trend[0], 1.0);
     }
 
-    [Fact]
-    public void HP_Kalman_ConstantSeries_TrendConverges()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Kalman_ConstantSeries_TrendConverges()
     {
         var data = new double[30];
         for (int i = 0; i < 30; i++) data[i] = 50.0;
@@ -555,8 +556,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(50.0, trend[29], 1.0);
     }
 
-    [Fact]
-    public void HP_Kalman_LinearSeries_TrendTracksLinear()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Kalman_LinearSeries_TrendTracksLinear()
     {
         var data = new double[30];
         for (int i = 0; i < 30; i++) data[i] = 10 + 2.0 * i;
@@ -577,8 +578,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - Wavelet Method
 
-    [Fact]
-    public void HP_Wavelet_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Wavelet_CycleEqualsOriginalMinusTrend()
     {
         // Wavelet requires power-of-2 length
         int n = 32;
@@ -598,8 +599,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_Wavelet_DWT_InverseDWT_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Wavelet_DWT_InverseDWT_Roundtrip()
     {
         // Test that DWT followed by IDWT gives back original (without thresholding)
         // We test this indirectly: for constant data, wavelet detail coeffs = 0,
@@ -618,8 +619,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_Wavelet_DWT_HandCalculated_TwoElements()
+    [Fact(Timeout = 120000)]
+    public async Task HP_Wavelet_DWT_HandCalculated_TwoElements()
     {
         // For data [a, b] = [10, 20], one level DWT:
         // approx = (a+b)/2 = 15, detail = (a-b)/2 = -5
@@ -640,8 +641,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - State Space Method
 
-    [Fact]
-    public void HP_StateSpace_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_StateSpace_CycleEqualsOriginalMinusTrend()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -659,8 +660,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_StateSpace_HandCalculated_FirstThreeSteps()
+    [Fact(Timeout = 120000)]
+    public async Task HP_StateSpace_HandCalculated_FirstThreeSteps()
     {
         // State space: alpha=0.1, rho=0.5
         // mu = data[0], beta = 0, c = 0
@@ -690,8 +691,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_StateSpace_ConstantSeries_CycleDecays()
+    [Fact(Timeout = 120000)]
+    public async Task HP_StateSpace_ConstantSeries_CycleDecays()
     {
         // With rho=0.5, cycle should decay towards zero for constant input
         var data = new double[20];
@@ -710,8 +711,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Hodrick-Prescott - Frequency Domain Method
 
-    [Fact]
-    public void HP_FrequencyDomain_CycleEqualsOriginalMinusTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HP_FrequencyDomain_CycleEqualsOriginalMinusTrend()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -729,8 +730,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_FrequencyDomain_ConstantSeries_TrendEqualsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task HP_FrequencyDomain_ConstantSeries_TrendEqualsConstant()
     {
         // DC component (frequency 0) should pass through, all others are zero for constant
         // Use power-of-2 length to avoid zero-padding spectral leakage
@@ -748,8 +749,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_FrequencyDomain_LowFrequencyPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task HP_FrequencyDomain_LowFrequencyPreserved()
     {
         // Low frequency sinusoid should mostly pass through the low-pass filter
         int n = 64;
@@ -771,8 +772,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Multiplicative Decomposition
 
-    [Fact]
-    public void Multiplicative_GeometricMA_MultiplicativeIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_GeometricMA_MultiplicativeIdentity()
     {
         // Original = Trend * Seasonal * Residual
         var data = new double[24];
@@ -792,8 +793,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Multiplicative_ConstantSeries_TrendEqualsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_ConstantSeries_TrendEqualsConstant()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++) data[i] = 10.0;
@@ -808,8 +809,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Multiplicative_ConstantSeries_SeasonalIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_ConstantSeries_SeasonalIsOne()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++) data[i] = 10.0;
@@ -824,8 +825,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Multiplicative_GeometricMeanTrend_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_GeometricMeanTrend_HandCalculated()
     {
         // For interior point i with full window: geometric mean = (product of window values)^(1/count)
         // With period=12, halfWindow=6. At i=6, window = [0..12], count=13
@@ -842,8 +843,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(expectedTrend6, trend[6], LooseTolerance);
     }
 
-    [Fact]
-    public void Multiplicative_ExponentialSmoothing_MultiplicativeIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_ExponentialSmoothing_MultiplicativeIdentity()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -867,8 +868,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region TriCube Weight Function
 
-    [Fact]
-    public void TriCube_IsZeroOutsideUnitInterval()
+    [Fact(Timeout = 120000)]
+    public async Task TriCube_IsZeroOutsideUnitInterval()
     {
         // The TriCube function in the code: if x > 1, return 0; else (1-x)^3
         // We test this indirectly through the additive decomposition smoothing behavior
@@ -889,8 +890,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Cross-Method Consistency
 
-    [Fact]
-    public void AllHP_Methods_ProduceTrendAndCycle()
+    [Fact(Timeout = 120000)]
+    public async Task AllHP_Methods_ProduceTrendAndCycle()
     {
         var data = new double[32];
         for (int i = 0; i < 32; i++)
@@ -924,8 +925,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllAdditive_Methods_ProduceTrendSeasonalResidual()
+    [Fact(Timeout = 120000)]
+    public async Task AllAdditive_Methods_ProduceTrendSeasonalResidual()
     {
         var data = new double[48];
         for (int i = 0; i < 48; i++)
@@ -962,8 +963,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_TrendSmootherThanOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_TrendSmootherThanOriginal()
     {
         var data = new double[24];
         for (int i = 0; i < 24; i++)
@@ -991,8 +992,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Additive_MovingAverage_EdgePoints_UseReducedWindow()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_EdgePoints_UseReducedWindow()
     {
         // At i=0: window=[0, min(n-1, 3)] = [0,3], so uses 4 elements
         var data = new double[] { 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
@@ -1012,8 +1013,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         Assert.Equal(350.0, trend[2], Tolerance);
     }
 
-    [Fact]
-    public void Additive_MovingAverage_SymmetricData_TrendIsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_MovingAverage_SymmetricData_TrendIsSymmetric()
     {
         // Symmetric data: palindromic pattern repeating
         var data = new double[] { 10, 20, 30, 20, 10, 20, 30, 20, 10, 20, 30, 20,
@@ -1031,8 +1032,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HP_MatrixMethod_QuadraticData_TrendCapturesQuadratic()
+    [Fact(Timeout = 120000)]
+    public async Task HP_MatrixMethod_QuadraticData_TrendCapturesQuadratic()
     {
         // Quadratic: y = i^2. Second differences are constant (=2), so penalty is 4*lambda*(n-2)
         // With small lambda, trend should be close to quadratic
@@ -1050,8 +1051,8 @@ public class TimeSeriesDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllMethods_SameLength_OutputMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task AllMethods_SameLength_OutputMatchesInput()
     {
         int n = 24;
         var data = new double[n];

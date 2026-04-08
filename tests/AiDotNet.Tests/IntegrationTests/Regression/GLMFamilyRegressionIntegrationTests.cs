@@ -1,5 +1,6 @@
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -150,8 +151,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region BetaRegression
 
-    [Fact]
-    public void BetaRegression_FitsProportionData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task BetaRegression_FitsProportionData_ReasonableR2()
     {
         var (x, y) = CreateBetaData(80, new[] { 1.0, -0.5 }, intercept: 0, seed: 42);
 
@@ -174,8 +175,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region GammaRegression
 
-    [Fact]
-    public void GammaRegression_FitsPositiveData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task GammaRegression_FitsPositiveData_ReasonableR2()
     {
         var (x, y) = CreatePositiveResponseData(80, new[] { 0.5, -0.3 }, intercept: 1.0, noise: 0.2, seed: 42);
 
@@ -188,8 +189,8 @@ public class GLMFamilyRegressionIntegrationTests
         Assert.True(r2 > 0.2, $"GammaRegression R²={r2:F4} should be > 0.2 on positive data");
     }
 
-    [Fact]
-    public void GammaRegression_PredictionsArePositive()
+    [Fact(Timeout = 120000)]
+    public async Task GammaRegression_PredictionsArePositive()
     {
         var (x, y) = CreatePositiveResponseData(60, new[] { 0.3 }, intercept: 0.5, noise: 0.1, seed: 42);
 
@@ -208,8 +209,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region InverseGaussianRegression
 
-    [Fact]
-    public void InverseGaussianRegression_FitsPositiveData_PredictionsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task InverseGaussianRegression_FitsPositiveData_PredictionsFinite()
     {
         var (x, y) = CreatePositiveResponseData(80, new[] { 0.5, -0.2 }, intercept: 1.0, noise: 0.2, seed: 42);
 
@@ -225,8 +226,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region TweedieRegression
 
-    [Fact]
-    public void TweedieRegression_FitsPositiveData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task TweedieRegression_FitsPositiveData_ReasonableR2()
     {
         var (x, y) = CreatePositiveResponseData(80, new[] { 0.5, 0.3 }, intercept: 0.5, noise: 0.2, seed: 42);
 
@@ -243,8 +244,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region PoissonRegression
 
-    [Fact]
-    public void PoissonRegression_FitsCountData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_FitsCountData_ReasonableR2()
     {
         var (x, y) = CreateCountData(100, new[] { 0.5, -0.3 }, intercept: 1.0, seed: 42);
 
@@ -257,8 +258,8 @@ public class GLMFamilyRegressionIntegrationTests
         Assert.True(r2 > 0.1, $"Poisson R²={r2:F4} should be > 0.1 on count data");
     }
 
-    [Fact]
-    public void PoissonRegression_PredictionsAreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_PredictionsAreNonNegative()
     {
         var (x, y) = CreateCountData(60, new[] { 0.3, 0.2 }, intercept: 0.5, seed: 42);
 
@@ -277,8 +278,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region NegativeBinomialRegression
 
-    [Fact]
-    public void NegativeBinomialRegression_FitsCountData_PredictionsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_FitsCountData_PredictionsFinite()
     {
         var (x, y) = CreateCountData(80, new[] { 0.5, -0.2 }, intercept: 1.0, seed: 42);
 
@@ -294,8 +295,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region ZeroInflatedRegression
 
-    [Fact]
-    public void ZeroInflatedRegression_HandlesZeroHeavyData()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroInflatedRegression_HandlesZeroHeavyData()
     {
         // Create data with many zeros (zero-inflated pattern)
         var random = new Random(42);
@@ -326,8 +327,8 @@ public class GLMFamilyRegressionIntegrationTests
 
     #region GAMLSSRegression
 
-    [Fact]
-    public void GAMLSSRegression_FitsData_PredictionsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GAMLSSRegression_FitsData_PredictionsFinite()
     {
         var random = new Random(42);
         int n = 80;

@@ -7,13 +7,14 @@ using AiDotNet.Geometry.IO;
 using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Geometry;
 
 public class GeometryIOIntegrationTests
 {
-    [Fact]
-    public void ObjMeshIO_RoundTripsMeshWithAttributes()
+    [Fact(Timeout = 120000)]
+    public async Task ObjMeshIO_RoundTripsMeshWithAttributes()
     {
         string tempDir = CreateTempDirectory();
         try
@@ -68,8 +69,8 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact]
-    public void ObjMeshIO_RoundTripsPointCloudWithColors()
+    [Fact(Timeout = 120000)]
+    public async Task ObjMeshIO_RoundTripsPointCloudWithColors()
     {
         string tempDir = CreateTempDirectory();
         try
@@ -98,8 +99,8 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact]
-    public void PlyMeshIO_RoundTripsMeshAscii()
+    [Fact(Timeout = 120000)]
+    public async Task PlyMeshIO_RoundTripsMeshAscii()
     {
         string tempDir = CreateTempDirectory();
         try
@@ -154,8 +155,8 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact]
-    public void PlyMeshIO_RoundTripsPointCloudBinary()
+    [Fact(Timeout = 120000)]
+    public async Task PlyMeshIO_RoundTripsPointCloudBinary()
     {
         string tempDir = CreateTempDirectory();
         try
@@ -182,8 +183,8 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact]
-    public void StlMeshIO_RoundTripsBinary()
+    [Fact(Timeout = 120000)]
+    public async Task StlMeshIO_RoundTripsBinary()
     {
         string tempDir = CreateTempDirectory();
         try
@@ -213,8 +214,8 @@ public class GeometryIOIntegrationTests
         }
     }
 
-    [Fact]
-    public void StlMeshIO_LoadsAscii()
+    [Fact(Timeout = 120000)]
+    public async Task StlMeshIO_LoadsAscii()
     {
         string tempDir = CreateTempDirectory();
         try

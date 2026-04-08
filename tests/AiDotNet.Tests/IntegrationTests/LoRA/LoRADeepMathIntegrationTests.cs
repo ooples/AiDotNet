@@ -2,6 +2,7 @@ using AiDotNet.LoRA;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LoRA;
 
@@ -43,24 +44,24 @@ public class LoRADeepMathIntegrationTests
 
     #region LoRALayer Scaling Factor
 
-    [Fact]
-    public void Scaling_AlphaOverRank_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Scaling_AlphaOverRank_ExactValue()
     {
         // alpha=4, rank=2 → scaling = 4/2 = 2
         var layer = new LoRALayer<double>(4, 4, 2, 4.0);
         Assert.Equal(2.0, Convert.ToDouble(layer.Scaling), Tol);
     }
 
-    [Fact]
-    public void Scaling_DefaultAlpha_EqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Scaling_DefaultAlpha_EqualsOne()
     {
         // default alpha = rank → scaling = rank/rank = 1
         var layer = new LoRALayer<double>(4, 4, 3, -1);
         Assert.Equal(1.0, Convert.ToDouble(layer.Scaling), Tol);
     }
 
-    [Fact]
-    public void Scaling_AlphaDoubleRank_EqualsTwo()
+    [Fact(Timeout = 120000)]
+    public async Task Scaling_AlphaDoubleRank_EqualsTwo()
     {
         var layer = new LoRALayer<double>(10, 10, 5, 10.0);
         Assert.Equal(2.0, Convert.ToDouble(layer.Scaling), Tol);
@@ -70,8 +71,8 @@ public class LoRADeepMathIntegrationTests
 
     #region B-Zero Initialization
 
-    [Fact]
-    public void BZero_InitialForwardPass_ProducesZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BZero_InitialForwardPass_ProducesZeroOutput()
     {
         // B starts at zero → input * A * 0 * scaling = 0
         var layer = new LoRALayer<double>(3, 2, 2, 4.0);
@@ -82,8 +83,8 @@ public class LoRADeepMathIntegrationTests
             Assert.Equal(0.0, output[i], Tol);
     }
 
-    [Fact]
-    public void BZero_InitialMergeWeights_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task BZero_InitialMergeWeights_AllZeros()
     {
         var layer = new LoRALayer<double>(4, 3, 2, 4.0);
         var merged = layer.MergeWeights();
@@ -93,8 +94,8 @@ public class LoRADeepMathIntegrationTests
                 Assert.Equal(0.0, merged[i, j], Tol);
     }
 
-    [Fact]
-    public void BZero_GetMatrixB_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task BZero_GetMatrixB_AllZeros()
     {
         var layer = new LoRALayer<double>(4, 3, 2, 4.0);
         var B = layer.GetMatrixB();
@@ -108,8 +109,8 @@ public class LoRADeepMathIntegrationTests
 
     #region Forward Pass Exact Values
 
-    [Fact]
-    public void Forward_3x2Rank2_HandComputedValues()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_3x2Rank2_HandComputedValues()
     {
         // A=[3,2], B=[2,2], alpha=4, scaling=2
         // A = [[1,0],[0,1],[1,1]], B = [[1,2],[3,4]]
@@ -127,8 +128,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(56.0, output[1], Tol);
     }
 
-    [Fact]
-    public void Forward_BatchOf2_HandComputedValues()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_BatchOf2_HandComputedValues()
     {
         // Same matrices, batch of 2
         // input1=[1,2,3]: output=[38,56] (computed above)
@@ -148,8 +149,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(128.0, output[3], Tol);
     }
 
-    [Fact]
-    public void Forward_ScalingOne_NoAmplification()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_ScalingOne_NoAmplification()
     {
         // alpha=rank=2 → scaling=1
         // A = [[1,0],[0,1]], B = [[2,0],[0,3]]
@@ -167,8 +168,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(3.0, output[1], Tol);
     }
 
-    [Fact]
-    public void Forward_Rank1_OuterProductBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_Rank1_OuterProductBehavior()
     {
         // rank=1: A=[3,1], B=[1,2], alpha=1, scaling=1
         // A = [[2],[3],[5]], B = [[7, 11]]
@@ -185,8 +186,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(22.0, output[1], Tol);
     }
 
-    [Fact]
-    public void Forward_1x1Rank1_ScalarMultiplication()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_1x1Rank1_ScalarMultiplication()
     {
         // input=1, output=1, rank=1, alpha=3, scaling=3
         // A = [[2]], B = [[5]]
@@ -205,8 +206,8 @@ public class LoRADeepMathIntegrationTests
 
     #region MergeWeights Exact Values
 
-    [Fact]
-    public void MergeWeights_3x2Rank2_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MergeWeights_3x2Rank2_HandComputed()
     {
         // A*B*scaling = [[1,0],[0,1],[1,1]] * [[1,2],[3,4]] * 2
         // A*B = [[1,2],[3,4],[4,6]]
@@ -226,8 +227,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(12.0, merged[2, 1], Tol);
     }
 
-    [Fact]
-    public void MergeWeights_ScalingOne_EqualsATimesB()
+    [Fact(Timeout = 120000)]
+    public async Task MergeWeights_ScalingOne_EqualsATimesB()
     {
         // alpha=rank → scaling=1 → merged = A*B
         var layer = CreateLayerWithKnownMatrices(2, 2, 2, 2.0,
@@ -243,8 +244,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(50.0, merged[1, 1], Tol);
     }
 
-    [Fact]
-    public void MergeWeights_IdentityA_EqualsScaledB()
+    [Fact(Timeout = 120000)]
+    public async Task MergeWeights_IdentityA_EqualsScaledB()
     {
         // A = I (identity), rank=2, inputSize=2, alpha=6, scaling=3
         // merged = I * B * 3 = B * 3
@@ -281,8 +282,8 @@ public class LoRADeepMathIntegrationTests
 
     #region Parameter Packing Round-Trip
 
-    [Fact]
-    public void SetParameters_SetsMatrixA_Correctly()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_SetsMatrixA_Correctly()
     {
         var layer = CreateLayerWithKnownMatrices(3, 2, 2, 4.0,
             new double[,] { { 1, 0 }, { 0, 1 }, { 1, 1 } },
@@ -297,8 +298,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(1.0, A[2, 1], Tol);
     }
 
-    [Fact]
-    public void SetParameters_SetsMatrixB_Correctly()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_SetsMatrixB_Correctly()
     {
         var layer = CreateLayerWithKnownMatrices(3, 2, 2, 4.0,
             new double[,] { { 1, 0 }, { 0, 1 }, { 1, 1 } },
@@ -311,8 +312,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(4.0, B[1, 1], Tol);
     }
 
-    [Fact]
-    public void GetParameters_RoundTrip_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_RoundTrip_PreservesValues()
     {
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 1.0,
             new double[,] { { 7 }, { 11 } },
@@ -326,8 +327,8 @@ public class LoRADeepMathIntegrationTests
             Assert.Equal(params1[i], params2[i], Tol);
     }
 
-    [Fact]
-    public void GetMatrixA_ReturnsClone_NotReference()
+    [Fact(Timeout = 120000)]
+    public async Task GetMatrixA_ReturnsClone_NotReference()
     {
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 1.0,
             new double[,] { { 3 }, { 5 } },
@@ -343,23 +344,23 @@ public class LoRADeepMathIntegrationTests
 
     #region Parameter Count Formula
 
-    [Fact]
-    public void ParameterCount_StandardFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_StandardFormula()
     {
         // paramCount = inputSize*rank + rank*outputSize
         var layer = new LoRALayer<double>(64, 32, 8, 16.0);
         Assert.Equal(64 * 8 + 8 * 32, layer.ParameterCount);
     }
 
-    [Fact]
-    public void ParameterCount_Asymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_Asymmetric()
     {
         var layer = new LoRALayer<double>(100, 10, 4, 4.0);
         Assert.Equal(100 * 4 + 4 * 10, layer.ParameterCount);
     }
 
-    [Fact]
-    public void ParameterCount_Rank1_Minimal()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_Rank1_Minimal()
     {
         var layer = new LoRALayer<double>(50, 30, 1, 1.0);
         Assert.Equal(50 + 30, layer.ParameterCount);
@@ -369,8 +370,8 @@ public class LoRADeepMathIntegrationTests
 
     #region DoRA Magnitude Decomposition
 
-    [Fact]
-    public void DoRA_Magnitude_L2Norm_KnownWeights()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_Magnitude_L2Norm_KnownWeights()
     {
         // Weights = [[3,4],[0,5]], biases = [0,0]
         // magnitude[0] = ||[3,4]|| = 5
@@ -390,8 +391,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(5.0, parameters[magnitudeStart + 1], 1e-6); // magnitude[1]
     }
 
-    [Fact]
-    public void DoRA_Magnitude_UnitWeights()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_Magnitude_UnitWeights()
     {
         // Weights = [[1,0],[0,1]], biases = [0,0]
         // magnitude[0] = ||[1,0]|| = 1, magnitude[1] = ||[0,1]|| = 1
@@ -406,8 +407,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(1.0, parameters[magnitudeStart + 1], 1e-6);
     }
 
-    [Fact]
-    public void DoRA_Magnitude_3_4_5_Triangle()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_Magnitude_3_4_5_Triangle()
     {
         // Only first output neuron has [3,4] → magnitude = 5
         // Second: [5,12] → magnitude = 13
@@ -422,8 +423,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(13.0, parameters[magnitudeStart + 1], 1e-6);
     }
 
-    [Fact]
-    public void DoRA_ParameterCount_IncludesMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_ParameterCount_IncludesMagnitude()
     {
         var baseLayer = new DenseLayer<double>(10, 5);
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 2, alpha: 2.0);
@@ -436,8 +437,8 @@ public class LoRADeepMathIntegrationTests
 
     #region DoRA Initial Forward
 
-    [Fact]
-    public void DoRA_InitialForward_MatchesBaseWeightTimesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_InitialForward_MatchesBaseWeightTimesInput()
     {
         // With B=0, DoRA output = input @ W^T (no bias)
         // W = [[3,4],[0,5]], input = [1, 2]
@@ -453,8 +454,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(10.0, output[1], 1e-6);
     }
 
-    [Fact]
-    public void DoRA_InitialForward_IdentityWeights_PassThrough()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_InitialForward_IdentityWeights_PassThrough()
     {
         // W = I (identity), input = [3, 7]
         // output = [3, 7]
@@ -469,8 +470,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(7.0, output[1], 1e-6);
     }
 
-    [Fact]
-    public void DoRA_InitialForward_Batch_ExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_InitialForward_Batch_ExactValues()
     {
         // W = [[3,4],[0,5]]
         // input1 = [1, 0] → [3, 0]
@@ -492,8 +493,8 @@ public class LoRADeepMathIntegrationTests
 
     #region StandardLoRA Adapter Math
 
-    [Fact]
-    public void StandardAdapter_FrozenParamCount_OnlyLoRA()
+    [Fact(Timeout = 120000)]
+    public async Task StandardAdapter_FrozenParamCount_OnlyLoRA()
     {
         var baseLayer = new DenseLayer<double>(10, 5);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
@@ -502,8 +503,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(loraOnly, adapter.ParameterCount);
     }
 
-    [Fact]
-    public void StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
+    [Fact(Timeout = 120000)]
+    public async Task StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
     {
         var baseLayer = new DenseLayer<double>(10, 5);
         int baseParams = baseLayer.ParameterCount;
@@ -513,8 +514,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(baseParams + loraParams, adapter.ParameterCount);
     }
 
-    [Fact]
-    public void StandardAdapter_InitialForward_EqualsBaseOnly()
+    [Fact(Timeout = 120000)]
+    public async Task StandardAdapter_InitialForward_EqualsBaseOnly()
     {
         // With B=0, LoRA output = 0, so adapter output = base output + 0 = base output
         var baseLayer = new DenseLayer<double>(4, 3);
@@ -550,8 +551,8 @@ public class LoRADeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StandardAdapter_ParameterEfficiency_LargeLayer()
+    [Fact(Timeout = 120000)]
+    public async Task StandardAdapter_ParameterEfficiency_LargeLayer()
     {
         // 1024x1024 with rank=8: LoRA uses < 2% of full parameters
         int size = 1024;
@@ -571,8 +572,8 @@ public class LoRADeepMathIntegrationTests
 
     #region LoHa Math
 
-    [Fact]
-    public void LoHa_ParameterCount_Frozen()
+    [Fact(Timeout = 120000)]
+    public async Task LoHa_ParameterCount_Frozen()
     {
         // 2 * rank * inputSize * outputSize (frozen)
         var baseLayer = new DenseLayer<double>(10, 5);
@@ -581,8 +582,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(2 * 3 * 10 * 5, adapter.ParameterCount);
     }
 
-    [Fact]
-    public void LoHa_InitialForward_EqualsBaseOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LoHa_InitialForward_EqualsBaseOutput()
     {
         // B matrices all zero initially → ΔW = 0 → adapter output = base output
         var baseLayer = new DenseLayer<double>(4, 3);
@@ -609,8 +610,8 @@ public class LoRADeepMathIntegrationTests
 
     #region Numerical Properties
 
-    [Fact]
-    public void Forward_BatchIndependence_SameSampleSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_BatchIndependence_SameSampleSameResult()
     {
         // Result for a sample should be the same whether it's alone or in a batch
         var layer1 = CreateLayerWithKnownMatrices(3, 2, 2, 4.0,
@@ -632,8 +633,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(singleOutput[1], batchOutput[1], Tol);
     }
 
-    [Fact]
-    public void Forward_LinearInInput_Superposition()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_LinearInInput_Superposition()
     {
         // For fixed A, B: f(x1 + x2) = f(x1) + f(x2) because LoRA is linear
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 1.0,
@@ -654,8 +655,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(out1[1] + out2[1], outSum[1], Tol);
     }
 
-    [Fact]
-    public void Forward_ScalingInOutput_Homogeneity()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_ScalingInOutput_Homogeneity()
     {
         // f(c*x) = c * f(x) for linear layer
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 1.0,
@@ -677,8 +678,8 @@ public class LoRADeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Rank1_ForwardBackwardUpdate_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task Rank1_ForwardBackwardUpdate_Consistent()
     {
         // Minimal rank=1 layer
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 2.0,
@@ -700,8 +701,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(6.0, output2[1], Tol);
     }
 
-    [Fact]
-    public void NegativeValues_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeValues_HandledCorrectly()
     {
         var layer = CreateLayerWithKnownMatrices(2, 2, 1, 1.0,
             new double[,] { { -1 }, { 2 } },
@@ -718,8 +719,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(20.0, output[1], Tol);
     }
 
-    [Fact]
-    public void ZeroInput_ProducesZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroInput_ProducesZeroOutput()
     {
         var layer = CreateLayerWithKnownMatrices(3, 2, 2, 4.0,
             new double[,] { { 1, 0 }, { 0, 1 }, { 1, 1 } },
@@ -732,8 +733,8 @@ public class LoRADeepMathIntegrationTests
         Assert.Equal(0.0, output[1], Tol);
     }
 
-    [Fact]
-    public void LargeAlpha_ScalingCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task LargeAlpha_ScalingCorrect()
     {
         // alpha=1000, rank=1 → scaling=1000
         var layer = CreateLayerWithKnownMatrices(1, 1, 1, 1000.0,

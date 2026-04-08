@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing.PowerTransforms;
 using AiDotNet.Preprocessing.Discretizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -16,8 +17,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     // Requires strictly positive data
     // =====================================================================
 
-    [Fact]
-    public void BoxCox_Lambda1_IsLinearShift()
+    [Fact(Timeout = 120000)]
+    public async Task BoxCox_Lambda1_IsLinearShift()
     {
         // Box-Cox with lambda=1: (x^1 - 1)/1 = x - 1
         // We can't directly set lambda, but we can verify the formula
@@ -51,8 +52,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BoxCox_RejectsNonPositiveData()
+    [Fact(Timeout = 120000)]
+    public async Task BoxCox_RejectsNonPositiveData()
     {
         var data = new double[,]
         {
@@ -66,8 +67,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.FitTransform(matrix));
     }
 
-    [Fact]
-    public void BoxCox_RejectsNegativeData()
+    [Fact(Timeout = 120000)]
+    public async Task BoxCox_RejectsNegativeData()
     {
         var data = new double[,]
         {
@@ -81,8 +82,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.FitTransform(matrix));
     }
 
-    [Fact]
-    public void BoxCox_TransformedDataHasSmallVariance()
+    [Fact(Timeout = 120000)]
+    public async Task BoxCox_TransformedDataHasSmallVariance()
     {
         // Highly skewed data should have reduced variance after transformation
         var data = new double[,]
@@ -127,8 +128,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
             $"Coefficient of variation should decrease: original={origCV}, transformed={txCV}");
     }
 
-    [Fact]
-    public void BoxCox_InverseTransform_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task BoxCox_InverseTransform_RoundTrips()
     {
         var data = new double[,]
         {
@@ -155,8 +156,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     // Works with negative values
     // =====================================================================
 
-    [Fact]
-    public void YeoJohnson_PositiveValues_MatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task YeoJohnson_PositiveValues_MatchFormula()
     {
         var data = new double[,]
         {
@@ -185,8 +186,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void YeoJohnson_NegativeValues_MatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task YeoJohnson_NegativeValues_MatchFormula()
     {
         // Yeo-Johnson handles negative values
         var data = new double[,]
@@ -226,8 +227,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void YeoJohnson_AcceptsZeros()
+    [Fact(Timeout = 120000)]
+    public async Task YeoJohnson_AcceptsZeros()
     {
         var data = new double[,]
         {
@@ -248,8 +249,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void YeoJohnson_InverseTransform_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task YeoJohnson_InverseTransform_RoundTrips()
     {
         var data = new double[,]
         {
@@ -269,8 +270,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PowerTransformer_Standardize_MeanZeroUnitVariance()
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_Standardize_MeanZeroUnitVariance()
     {
         var data = new double[,]
         {
@@ -301,8 +302,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(1.0, variance, LooseTolerance);
     }
 
-    [Fact]
-    public void PowerTransformer_LambdaGridSearch_BoundsAreRespected()
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_LambdaGridSearch_BoundsAreRespected()
     {
         // Lambda search is in [-2, 2] with step 0.1
         var data = new double[,]
@@ -321,8 +322,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.InRange(lambda, -2.0, 2.0);
     }
 
-    [Fact]
-    public void PowerTransformer_MultiColumn_IndependentLambdas()
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_MultiColumn_IndependentLambdas()
     {
         // Two columns with very different distributions should get different lambdas
         var data = new double[,]
@@ -346,8 +347,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.NotEqual(lambda0, lambda1, 3);
     }
 
-    [Fact]
-    public void PowerTransformer_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_PreservesMonotonicity()
     {
         // Power transforms are monotonic
         var data = new double[,]
@@ -372,8 +373,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     // QuantileTransformer Tests
     // =====================================================================
 
-    [Fact]
-    public void QuantileTransformer_Uniform_OutputInZeroOne()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Uniform_OutputInZeroOne()
     {
         var data = new double[,]
         {
@@ -392,8 +393,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QuantileTransformer_Uniform_PreservesOrder()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Uniform_PreservesOrder()
     {
         var data = new double[,]
         {
@@ -421,8 +422,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QuantileTransformer_Uniform_ExtremeValuesClipped()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Uniform_ExtremeValuesClipped()
     {
         // Fit on [1..10], transform values outside the range
         var trainData = new double[,]
@@ -451,8 +452,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(1.0, result[4, 0], Tolerance);
     }
 
-    [Fact]
-    public void QuantileTransformer_Uniform_ConstantFeature_MapToHalf()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Uniform_ConstantFeature_MapToHalf()
     {
         // All identical values → 0.5
         var data = new double[,]
@@ -472,8 +473,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QuantileTransformer_Normal_OutputSymmetricAroundZero()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Normal_OutputSymmetricAroundZero()
     {
         // Symmetric input should give symmetric output in normal mode
         var data = new double[,]
@@ -495,8 +496,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
             $"Max value should map to positive z-score, got {result[9, 0]}");
     }
 
-    [Fact]
-    public void QuantileTransformer_Normal_ExtremesClippedToEight()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Normal_ExtremesClippedToEight()
     {
         // Values outside quantile range should be clipped to ±8 for normal output
         var trainData = new double[,]
@@ -521,8 +522,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(8.0, result[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void QuantileTransformer_QuantilesAreSorted()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_QuantilesAreSorted()
     {
         var data = new double[,]
         {
@@ -545,8 +546,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QuantileTransformer_InverseTransform_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_InverseTransform_RoundTrips()
     {
         var data = new double[,]
         {
@@ -568,8 +569,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QuantileTransformer_NQuantilesValidation()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_NQuantilesValidation()
     {
         Assert.Throws<ArgumentException>(() =>
             new QuantileTransformer<double>(nQuantiles: 5)); // minimum is 10
@@ -579,8 +580,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     // KBinsDiscretizer Tests
     // =====================================================================
 
-    [Fact]
-    public void KBins_Uniform_EqualWidthEdges()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Uniform_EqualWidthEdges()
     {
         var data = new double[,]
         {
@@ -605,8 +606,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(10.0, edges[5], Tolerance);
     }
 
-    [Fact]
-    public void KBins_Uniform_OrdinalEncoding_CorrectBins()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Uniform_OrdinalEncoding_CorrectBins()
     {
         var data = new double[,]
         {
@@ -626,8 +627,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(4.0, result[4, 0], Tolerance); // 10 → bin 4 (last bin)
     }
 
-    [Fact]
-    public void KBins_Uniform_NormalizedEncoding_InZeroOne()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Uniform_NormalizedEncoding_InZeroOne()
     {
         var data = new double[,]
         {
@@ -651,8 +652,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(1.0, result[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void KBins_Quantile_EqualFrequencyBins()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Quantile_EqualFrequencyBins()
     {
         // With 10 values and 5 bins, each bin should have ~2 values
         var data = new double[,]
@@ -678,8 +679,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(4.0, result[9, 0], Tolerance);
     }
 
-    [Fact]
-    public void KBins_Quantile_BinEdgesAreNonDecreasing()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Quantile_BinEdgesAreNonDecreasing()
     {
         var data = new double[,]
         {
@@ -702,8 +703,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void KBins_InverseTransform_ReturnsMidpoints()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_InverseTransform_ReturnsMidpoints()
     {
         var data = new double[,]
         {
@@ -725,15 +726,15 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(7.5, inverse[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void KBins_MinBinsValidation()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_MinBinsValidation()
     {
         Assert.Throws<ArgumentException>(() =>
             new KBinsDiscretizer<double>(nBins: 1));
     }
 
-    [Fact]
-    public void KBins_MultiColumn_IndependentBins()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_MultiColumn_IndependentBins()
     {
         var data = new double[,]
         {
@@ -759,8 +760,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(300.0, edges1[3], Tolerance);
     }
 
-    [Fact]
-    public void KBins_ValueAboveMax_GoesToLastBin()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_ValueAboveMax_GoesToLastBin()
     {
         var trainData = new double[,]
         {
@@ -783,8 +784,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         Assert.Equal(1.0, result[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void KBins_Uniform_EdgeWidthsAreEqual()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_Uniform_EdgeWidthsAreEqual()
     {
         var data = new double[,]
         {
@@ -809,8 +810,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void KBins_OrdinalEncoding_IntegerValues()
+    [Fact(Timeout = 120000)]
+    public async Task KBins_OrdinalEncoding_IntegerValues()
     {
         var data = new double[,]
         {

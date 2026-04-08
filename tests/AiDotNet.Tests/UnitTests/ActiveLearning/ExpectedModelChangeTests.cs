@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
@@ -24,8 +25,8 @@ public class ExpectedModelChangeTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_DefaultMetric_InitializesWithExpectedGradientLength()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultMetric_InitializesWithExpectedGradientLength()
     {
         // Arrange & Act
         var emc = new ExpectedModelChange<double>();
@@ -51,8 +52,8 @@ public class ExpectedModelChangeTests
 
     #region Name Property Tests
 
-    [Fact]
-    public void Name_ExpectedGradientLength_ContainsMetricName()
+    [Fact(Timeout = 60000)]
+    public async Task Name_ExpectedGradientLength_ContainsMetricName()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
@@ -61,8 +62,8 @@ public class ExpectedModelChangeTests
         Assert.Equal("ExpectedModelChange-ExpectedGradientLength", emc.Name);
     }
 
-    [Fact]
-    public void Name_MaxGradientLength_ContainsMetricName()
+    [Fact(Timeout = 60000)]
+    public async Task Name_MaxGradientLength_ContainsMetricName()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.MaxGradientLength);
@@ -71,8 +72,8 @@ public class ExpectedModelChangeTests
         Assert.Equal("ExpectedModelChange-MaxGradientLength", emc.Name);
     }
 
-    [Fact]
-    public void Name_GradientVariance_ContainsMetricName()
+    [Fact(Timeout = 60000)]
+    public async Task Name_GradientVariance_ContainsMetricName()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.GradientVariance);
@@ -85,8 +86,8 @@ public class ExpectedModelChangeTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact]
-    public void UseBatchDiversity_DefaultValue_IsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_DefaultValue_IsFalse()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -95,8 +96,8 @@ public class ExpectedModelChangeTests
         Assert.False(emc.UseBatchDiversity);
     }
 
-    [Fact]
-    public void UseBatchDiversity_SetToTrue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_SetToTrue_UpdatesCorrectly()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -112,8 +113,8 @@ public class ExpectedModelChangeTests
 
     #region SelectSamples Tests
 
-    [Fact]
-    public void SelectSamples_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -123,8 +124,8 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(null!, pool, batchSize: 3));
     }
 
-    [Fact]
-    public void SelectSamples_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -134,8 +135,8 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact]
-    public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -149,8 +150,8 @@ public class ExpectedModelChangeTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -164,8 +165,8 @@ public class ExpectedModelChangeTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_ReturnsUniqueIndices()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -179,8 +180,8 @@ public class ExpectedModelChangeTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void SelectSamples_WithBatchDiversity_ReturnsValidIndices()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_WithBatchDiversity_ReturnsValidIndices()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -217,8 +218,8 @@ public class ExpectedModelChangeTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact]
-    public void ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -228,8 +229,8 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(null!, pool));
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -239,8 +240,8 @@ public class ExpectedModelChangeTests
         Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -254,8 +255,8 @@ public class ExpectedModelChangeTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ReturnsNonNegativeScores()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -297,8 +298,8 @@ public class ExpectedModelChangeTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact]
-    public void GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -316,8 +317,8 @@ public class ExpectedModelChangeTests
         Assert.Equal(0.0, stats["MeanScore"]);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>();
@@ -339,8 +340,8 @@ public class ExpectedModelChangeTests
 
     #region Gradient Computation Tests
 
-    [Fact]
-    public void ExpectedGradientLength_UniformProbabilities_ReturnsConsistentScores()
+    [Fact(Timeout = 60000)]
+    public async Task ExpectedGradientLength_UniformProbabilities_ReturnsConsistentScores()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
@@ -358,8 +359,8 @@ public class ExpectedModelChangeTests
         }
     }
 
-    [Fact]
-    public void MaxGradientLength_ComputesMaximumAcrossLabels()
+    [Fact(Timeout = 60000)]
+    public async Task MaxGradientLength_ComputesMaximumAcrossLabels()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.MaxGradientLength);
@@ -377,8 +378,8 @@ public class ExpectedModelChangeTests
         }
     }
 
-    [Fact]
-    public void GradientVariance_ComputesVarianceAcrossLabels()
+    [Fact(Timeout = 60000)]
+    public async Task GradientVariance_ComputesVarianceAcrossLabels()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.GradientVariance);
@@ -400,8 +401,8 @@ public class ExpectedModelChangeTests
 
     #region Integration Tests
 
-    [Fact]
-    public void ExpectedModelChange_CompleteWorkflow_ExecutesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ExpectedModelChange_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
         var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
@@ -422,8 +423,8 @@ public class ExpectedModelChangeTests
         Assert.NotNull(stats2);
     }
 
-    [Fact]
-    public void ExpectedModelChange_DiversityMode_ProducesDifferentResults()
+    [Fact(Timeout = 60000)]
+    public async Task ExpectedModelChange_DiversityMode_ProducesDifferentResults()
     {
         // Arrange
         var emcNoDiversity = new ExpectedModelChange<double>();

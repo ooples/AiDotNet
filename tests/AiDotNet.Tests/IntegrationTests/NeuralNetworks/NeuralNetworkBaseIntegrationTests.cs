@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -49,8 +50,8 @@ public class NeuralNetworkBaseIntegrationTests
         return network;
     }
 
-    [Fact]
-    public void NeuralNetworkBase_ForwardWithFeatures_ReturnsExpectedShapes()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkBase_ForwardWithFeatures_ReturnsExpectedShapes()
     {
         TestNeuralNetwork network = BuildNetwork();
         NeuralNetworkBase<float> baseNetwork = network;
@@ -69,8 +70,8 @@ public class NeuralNetworkBaseIntegrationTests
 
     // ComputeInputGradient test removed — method deleted in tape-based autodiff migration
 
-    [Fact]
-    public void NeuralNetworkBase_ParameterCount_UpdatesWhenLayersChange()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkBase_ParameterCount_UpdatesWhenLayersChange()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,

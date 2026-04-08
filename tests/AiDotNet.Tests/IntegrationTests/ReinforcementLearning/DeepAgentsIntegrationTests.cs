@@ -24,6 +24,7 @@ using AiDotNet.ReinforcementLearning.Agents.TD3;
 using AiDotNet.ReinforcementLearning.Agents.TRPO;
 using AiDotNet.ReinforcementLearning.Agents.WorldModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
@@ -37,8 +38,8 @@ public class DeepAgentsIntegrationTests
     private const double LearningRate = 0.01;
     private const double DiscountFactor = 0.9;
 
-    [Fact]
-    public void DeepQAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task DeepQAgents_RunBasicWorkflow()
     {
         var dqn = new DQNAgent<double>(new DQNOptions<double>
         {
@@ -127,8 +128,8 @@ public class DeepAgentsIntegrationTests
         ExerciseReplayAgent(rainbow, DiscreteStateSize, DiscreteActionSize, true, 2, true);
     }
 
-    [Fact]
-    public void ActorCriticAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task ActorCriticAgents_RunBasicWorkflow()
     {
         var a2c = new A2CAgent<double>(new A2COptions<double>
         {
@@ -226,8 +227,8 @@ public class DeepAgentsIntegrationTests
         ExerciseTrajectoryAgent(reinforce, DiscreteStateSize, DiscreteActionSize, 1, true, true);
     }
 
-    [Fact]
-    public void ContinuousAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousAgents_RunBasicWorkflow()
     {
         var ddpg = new DDPGAgent<double>(new DDPGOptions<double>
         {
@@ -302,8 +303,8 @@ public class DeepAgentsIntegrationTests
             LearningRate));
     }
 
-    [Fact]
-    public void OfflineAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task OfflineAgents_RunBasicWorkflow()
     {
         var cql = new CQLAgent<double>(new CQLOptions<double>
         {
@@ -370,8 +371,8 @@ public class DeepAgentsIntegrationTests
         AssertAgentState(decisionTransformer, true);
     }
 
-    [Fact]
-    public void ModelBasedAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task ModelBasedAgents_RunBasicWorkflow()
     {
         var muzero = new MuZeroAgent<double>(new MuZeroOptions<double>
         {
@@ -434,8 +435,8 @@ public class DeepAgentsIntegrationTests
         ExerciseReplayAgent(worldModels, 4, ContinuousActionSize, false, 2, true);
     }
 
-    [Fact]
-    public void MultiAgentAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task MultiAgentAgents_RunBasicWorkflow()
     {
         var qmix = new QMIXAgent<double>(new QMIXOptions<double>
         {

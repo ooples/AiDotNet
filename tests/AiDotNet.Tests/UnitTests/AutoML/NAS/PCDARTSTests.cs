@@ -5,6 +5,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -13,8 +14,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class PCDARTSTests
     {
-        [Fact]
-        public void PCDARTS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -24,8 +25,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(pcdarts);
         }
 
-        [Fact]
-        public void PCDARTS_GetArchitectureParameters_ReturnsValidList()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -39,8 +40,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact]
-        public void PCDARTS_GetChannelSamplingRatio_ReturnsConfiguredValue()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_GetChannelSamplingRatio_ReturnsConfiguredValue()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -53,8 +54,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.5, ratio);
         }
 
-        [Fact]
-        public void PCDARTS_SampleChannels_ReturnsSampledSubset()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_SampleChannels_ReturnsSampledSubset()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, sampledChannels.Count); // 25% of 16 = 4
         }
 
-        [Fact]
-        public void PCDARTS_SampleChannels_ReturnsAtLeastOneChannel()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_SampleChannels_ReturnsAtLeastOneChannel()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -82,8 +83,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(sampledChannels.Count >= 1);
         }
 
-        [Fact]
-        public void PCDARTS_SampleChannels_ReturnsSortedChannels()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_SampleChannels_ReturnsSortedChannels()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -99,8 +100,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void PCDARTS_SampleChannels_ReturnsValidIndices()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_SampleChannels_ReturnsValidIndices()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -114,8 +115,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.All(sampledChannels, ch => Assert.InRange(ch, 0, totalChannels - 1));
         }
 
-        [Fact]
-        public void PCDARTS_ApplyEdgeNormalization_ReturnsValidProbabilities()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_ApplyEdgeNormalization_ReturnsValidProbabilities()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -135,8 +136,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(alpha.Columns, normalized.Columns);
         }
 
-        [Fact]
-        public void PCDARTS_GetMemorySavingsRatio_CalculatesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_GetMemorySavingsRatio_CalculatesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -149,8 +150,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.75, savings); // 1.0 - 0.25
         }
 
-        [Fact]
-        public void PCDARTS_DeriveArchitecture_ReturnsValidArchitecture()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -164,8 +165,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
-        public void PCDARTS_DeriveArchitecture_SelectsTopTwoEdges()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_DeriveArchitecture_SelectsTopTwoEdges()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -179,8 +180,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count <= 8);
         }
 
-        [Fact]
-        public void PCDARTS_WithoutEdgeNormalization_StillWorks()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_WithoutEdgeNormalization_StillWorks()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -193,8 +194,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(architecture);
         }
 
-        [Fact]
-        public void PCDARTS_GetArchitectureGradients_MatchesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task PCDARTS_GetArchitectureGradients_MatchesParameters()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

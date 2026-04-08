@@ -1,6 +1,7 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 
@@ -17,8 +18,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region Adam Update Rule Tests
 
-    [Fact]
-    public void Adam_Step1_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_Step1_HandCalculated()
     {
         // Adam step 1 with known values
         // params = [1.0, 2.0], grad = [0.1, -0.2]
@@ -61,8 +62,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(expected1, result[1], StrictTol);
     }
 
-    [Fact]
-    public void Adam_ZeroGradient_NoParameterChange()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ZeroGradient_NoParameterChange()
     {
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
@@ -86,8 +87,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adam_BiasCorrection_ConvergesOverSteps()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_BiasCorrection_ConvergesOverSteps()
     {
         // Verify bias correction: at step 1, correction is large (1-0.9=0.1 for beta1)
         // At step 100, correction is small (1-0.9^100 ≈ 1.0)
@@ -123,8 +124,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adam_ConstantGradient_StepSizeApproachesLR()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ConstantGradient_StepSizeApproachesLR()
     {
         // With constant gradient g, at convergence:
         // m → g, v → g^2, mHat → g, vHat → g^2
@@ -157,8 +158,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(0.01, lastStepSize, 1e-4);
     }
 
-    [Fact]
-    public void Adam_ScaleInvariance_DifferentGradientMagnitudes()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ScaleInvariance_DifferentGradientMagnitudes()
     {
         // Adam is scale invariant: the step size for each parameter is roughly lr
         // regardless of gradient magnitude (when converged)
@@ -197,8 +198,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(step1, step2, 1e-3);
     }
 
-    [Fact]
-    public void Adam_TwoSteps_MomentsAccumulate()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_TwoSteps_MomentsAccumulate()
     {
         // Verify moments accumulate correctly across 2 steps
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -244,8 +245,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(expected2, p2[0], 1e-10);
     }
 
-    [Fact]
-    public void Adam_Matrix_MatchesVector()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_Matrix_MatchesVector()
     {
         // Matrix update should produce same results as flattened vector update
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -282,8 +283,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(resultVec[3], resultMat[1, 1], StrictTol);
     }
 
-    [Fact]
-    public void Adam_ReverseUpdate_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ReverseUpdate_RecoverOriginal()
     {
         // Forward then reverse should approximately recover original parameters
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -314,8 +315,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region AdamW Update Rule Tests
 
-    [Fact]
-    public void AdamW_DecoupledWeightDecay_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_DecoupledWeightDecay_HandCalculated()
     {
         // AdamW step 1 with weight decay
         // params = [1.0, 2.0], grad = [0.1, -0.2]
@@ -369,8 +370,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(expected1, result[1], StrictTol);
     }
 
-    [Fact]
-    public void AdamW_ZeroWeightDecay_MatchesAdam()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_ZeroWeightDecay_MatchesAdam()
     {
         // With weight decay = 0, AdamW should give same result as Adam
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -406,8 +407,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdamW_WeightDecayShrinks_Parameters()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_WeightDecayShrinks_Parameters()
     {
         // Weight decay should shrink parameters toward zero
         var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -433,8 +434,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             $"Negative param should shrink: {result[1]} vs {parameters[1]}");
     }
 
-    [Fact]
-    public void AdamW_WeightDecay_LinearInParamMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_WeightDecay_LinearInParamMagnitude()
     {
         // Weight decay effect should be proportional to parameter magnitude
         var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -466,8 +467,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region AMSGrad Tests
 
-    [Fact]
-    public void AMSGrad_Step1_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_Step1_HandCalculated()
     {
         // AMSGrad step 1: same as Adam for first step
         // since vHat = max(vHat, v) and vHat starts at 0
@@ -511,8 +512,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AMSGrad_VMax_Monotonically_Increasing()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_VMax_Monotonically_Increasing()
     {
         // Key property of AMSGrad: vMax = max(vMax, v)
         // With alternating gradients, vMax should never decrease
@@ -560,8 +561,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region LAMB Trust Ratio Tests
 
-    [Fact]
-    public void LAMB_TrustRatio_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_TrustRatio_HandCalculated()
     {
         // LAMB: trust_ratio = ||w|| / ||r||
         // where r = adam_update + weight_decay * w
@@ -597,8 +598,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True(result[0] < parameters[0], "Parameter 0 should decrease (positive gradient)");
     }
 
-    [Fact]
-    public void LAMB_ZeroParams_TrustRatioIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_ZeroParams_TrustRatioIsOne()
     {
         // When ||w|| is near zero, trust ratio should default to 1.0
         var options = new LAMBOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -623,8 +624,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True((!double.IsNaN(result[1]) && !double.IsInfinity(result[1])), $"Result should be finite: {result[1]}");
     }
 
-    [Fact]
-    public void LAMB_NoBiasCorrection_DiffersFromCorrected()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_NoBiasCorrection_DiffersFromCorrected()
     {
         // Without bias correction, early steps produce different results
         var correctedOpts = new LAMBOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -668,8 +669,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True(differ, "Bias-corrected and uncorrected LAMB should differ at step 1");
     }
 
-    [Fact]
-    public void LAMB_WeightDecay_LargerParamsGetLargerDecay()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_WeightDecay_LargerParamsGetLargerDecay()
     {
         // LAMB's weight decay term is proportional to parameter magnitude
         var options = new LAMBOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -701,8 +702,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region Cross-Optimizer Consistency Tests
 
-    [Fact]
-    public void Adam_MovesInNegativeGradientDirection()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_MovesInNegativeGradientDirection()
     {
         // Fundamental: optimizer should move in the opposite direction of the gradient
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -726,8 +727,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True(result[2] < parameters[2], "Positive gradient → param should decrease");
     }
 
-    [Fact]
-    public void AdamW_MovesInNegativeGradientDirection()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_MovesInNegativeGradientDirection()
     {
         var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
@@ -750,8 +751,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True(result[2] < parameters[2], "Positive gradient → param should decrease");
     }
 
-    [Fact]
-    public void AllOptimizers_SymmetricGradient_SymmetricUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task AllOptimizers_SymmetricGradient_SymmetricUpdate()
     {
         // Symmetric gradients should produce symmetric updates
         var adamOpts = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -774,8 +775,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(result[0], result[1], StrictTol);
     }
 
-    [Fact]
-    public void AllOptimizers_OppositeGradients_SymmetricButOppositeUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task AllOptimizers_OppositeGradients_SymmetricButOppositeUpdate()
     {
         // Gradients of equal magnitude but opposite sign should produce
         // equal magnitude but opposite updates (from same starting point)
@@ -808,8 +809,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Adam_Float_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_Float_ProducesFiniteResults()
     {
         var options = new AdamOptimizerOptions<float, Matrix<float>, Vector<float>>
         {
@@ -832,8 +833,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdamW_Float_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_Float_ProducesFiniteResults()
     {
         var options = new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
         {
@@ -861,8 +862,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void Adam_LargeGradients_NoOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_LargeGradients_NoOverflow()
     {
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
@@ -882,8 +883,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), $"Result should be finite with large gradient: {result[0]}");
     }
 
-    [Fact]
-    public void Adam_VerySmallGradients_NoUnderflow()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_VerySmallGradients_NoUnderflow()
     {
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
@@ -906,8 +907,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             $"Tiny gradient should cause minimal change: {result[0]}");
     }
 
-    [Fact]
-    public void Adam_ManySteps_NoNumericalDrift()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ManySteps_NoNumericalDrift()
     {
         // Run 1000 steps and verify no NaN/Inf
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -941,8 +942,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Adam_SingleParameter_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_SingleParameter_Works()
     {
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
@@ -963,8 +964,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), "Should be finite");
     }
 
-    [Fact]
-    public void Adam_LargeVector_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_LargeVector_Works()
     {
         var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {

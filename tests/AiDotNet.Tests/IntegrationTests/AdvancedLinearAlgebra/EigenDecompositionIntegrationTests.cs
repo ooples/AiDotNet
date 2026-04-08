@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -194,8 +195,8 @@ public class EigenDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void EigenDecomposition_IdentityMatrix_HasAllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -211,8 +212,8 @@ public class EigenDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void EigenDecomposition_DiagonalMatrix_HasDiagonalAsEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_DiagonalMatrix_HasDiagonalAsEigenvalues()
     {
         // Arrange - Diagonal matrix with values 4, 3, 2, 1
         var D = new Matrix<double>(4, 4);
@@ -239,8 +240,8 @@ public class EigenDecompositionIntegrationTests
         Assert.Empty(remainingExpected);
     }
 
-    [Fact]
-    public void EigenDecomposition_ZeroMatrix_HasAllZeroEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_ZeroMatrix_HasAllZeroEigenvalues()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -256,8 +257,8 @@ public class EigenDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void EigenDecomposition_SymmetricPositiveDefinite_HasPositiveEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_SymmetricPositiveDefinite_HasPositiveEigenvalues()
     {
         // Arrange - Create SPD matrix A^T * A
         var B = CreateTestMatrix(4, seed: 789);
@@ -304,8 +305,8 @@ public class EigenDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void EigenDecomposition_LargeMatrix_ProducesValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_LargeMatrix_ProducesValidDecomposition()
     {
         // Arrange
         var A = CreateSymmetricMatrix(10, seed: 999);
@@ -333,8 +334,8 @@ public class EigenDecompositionIntegrationTests
             $"Large matrix: A*v should equal λ*v. Max difference: {diff}");
     }
 
-    [Fact]
-    public void EigenDecomposition_IllConditionedMatrix_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_IllConditionedMatrix_HandlesGracefully()
     {
         // Arrange - Create a nearly singular matrix
         var A = new Matrix<double>(3, 3);
@@ -364,8 +365,8 @@ public class EigenDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void EigenDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task EigenDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4); // Non-square

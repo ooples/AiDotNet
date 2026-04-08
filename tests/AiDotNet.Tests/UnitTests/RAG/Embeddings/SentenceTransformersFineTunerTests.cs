@@ -6,6 +6,7 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
@@ -14,8 +15,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         private static string GetMissingModelPath() =>
             Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.onnx");
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new SentenceTransformersFineTuner<double>(
@@ -32,40 +33,40 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithNullBaseModelPath_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullBaseModelPath_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new SentenceTransformersFineTuner<double>(null, GetMissingModelPath(), 10, 0.00002, 384));
         }
 
-        [Fact]
-        public void Constructor_WithNullOutputModelPath_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullOutputModelPath_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), null, 10, 0.00002, 384));
         }
 
-        [Fact]
-        public void Constructor_WithZeroEpochs_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroEpochs_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), 0, 0.00002, 384));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeEpochs_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeEpochs_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), -1, 0.00002, 384));
         }
 
-        [Fact]
-        public void Embed_WithMissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<double>(
@@ -80,8 +81,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test text"));
         }
 
-        [Fact]
-        public void Embed_WithNullText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
-        public void Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
-        public void FineTune_WithMissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task FineTune_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - using a non-existent model path
             var model = new SentenceTransformersFineTuner<double>(
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
         }
 
-        [Fact]
-        public void FineTune_WithNullTrainingPairs_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task FineTune_WithNullTrainingPairs_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -150,8 +151,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.FineTune(null));
         }
 
-        [Fact]
-        public void FineTune_WithEmptyTrainingPairs_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task FineTune_WithEmptyTrainingPairs_ThrowsArgumentException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Training pairs cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -201,8 +202,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<double>(
@@ -218,8 +219,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<float>(
@@ -234,8 +235,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
-        public void MaxTokens_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task MaxTokens_ReturnsCorrectValue()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
@@ -253,8 +254,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, maxTokens);
         }
 
-        [Fact]
-        public void FineTune_WithLargeTrainingSet_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task FineTune_WithLargeTrainingSet_ThrowsFileNotFoundException()
         {
             // Arrange - using a non-existent model path
             var model = new SentenceTransformersFineTuner<double>(
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
         }
 
-        [Fact]
-        public void FineTune_WithDifferentLearningRates_MissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task FineTune_WithDifferentLearningRates_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model files don't exist, both should throw
             var model1 = new SentenceTransformersFineTuner<double>(

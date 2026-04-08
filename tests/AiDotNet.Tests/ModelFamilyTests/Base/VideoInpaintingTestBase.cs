@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
 {
-    [Fact]
-    public void InpaintedOutput_SameSizeAsInput()
+    [Fact(Timeout = 120000)]
+    public async Task InpaintedOutput_SameSizeAsInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -20,8 +21,8 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
         Assert.Equal(input.Length, output.Length);
     }
 
-    [Fact]
-    public void InpaintedValues_ShouldBeBounded()
+    [Fact(Timeout = 120000)]
+    public async Task InpaintedValues_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

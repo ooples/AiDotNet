@@ -2,6 +2,7 @@ using AiDotNet.Data.Sampling;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Data.Transforms.Numeric;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Data;
 
@@ -18,8 +19,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // NormalizeTransform Tests
     // ============================
 
-    [Fact]
-    public void Normalize_Formula_XMinusMeanOverStd()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_Formula_XMinusMeanOverStd()
     {
         // (x - mean) / std
         var mean = new[] { 2.0, 4.0 };
@@ -33,8 +34,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void Normalize_MeanInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_MeanInput_ReturnsZero()
     {
         var mean = new[] { 5.0, 10.0 };
         var std = new[] { 2.0, 3.0 };
@@ -46,8 +47,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void Normalize_OneSigmaAbove_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_OneSigmaAbove_ReturnsOne()
     {
         var mean = new[] { 0.0 };
         var std = new[] { 3.0 };
@@ -57,8 +58,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void Normalize_ZeroStd_ReturnsDifference()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_ZeroStd_ReturnsDifference()
     {
         // When std is nearly zero, result = x - mean (std division skipped)
         var mean = new[] { 5.0 };
@@ -69,8 +70,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[0], Tolerance); // 7 - 5 = 2, no division
     }
 
-    [Fact]
-    public void Normalize_GlobalMeanStd_AppliedToAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_GlobalMeanStd_AppliedToAllElements()
     {
         var transform = new NormalizeTransform<double>(10.0, 5.0, 3);
 
@@ -82,16 +83,16 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void Normalize_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_MismatchedLengths_Throws()
     {
         var mean = new[] { 1.0, 2.0 };
         var std = new[] { 1.0 };
         Assert.Throws<ArgumentException>(() => new NormalizeTransform<double>(mean, std));
     }
 
-    [Fact]
-    public void Normalize_InputLengthMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_InputLengthMismatch_Throws()
     {
         var mean = new[] { 1.0, 2.0 };
         var std = new[] { 1.0, 1.0 };
@@ -103,8 +104,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // StandardScaleTransform Tests
     // ============================
 
-    [Fact]
-    public void StandardScale_ComputesMeanCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_ComputesMeanCorrectly()
     {
         // Data: [1, 3], [3, 7] => means: [2, 5]
         var data = new[] { new[] { 1.0, 3.0 }, new[] { 3.0, 7.0 } };
@@ -116,8 +117,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void StandardScale_ComputesStdCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_ComputesStdCorrectly()
     {
         // Data: [0, 0], [2, 4] => means: [1, 2]
         // std feature 0: sqrt(((0-1)^2 + (2-1)^2)/2) = sqrt(2/2) = 1
@@ -132,8 +133,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void StandardScale_FromPrecomputed_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_FromPrecomputed_MatchesFormula()
     {
         var mean = new[] { 10.0, 20.0 };
         var std = new[] { 2.0, 5.0 };
@@ -145,8 +146,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void StandardScale_ConstantFeature_StdSetToOne()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_ConstantFeature_StdSetToOne()
     {
         // All values same => std would be 0, should be set to 1
         var data = new[] { new[] { 5.0 }, new[] { 5.0 }, new[] { 5.0 } };
@@ -157,8 +158,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void StandardScale_EmptyData_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_EmptyData_Throws()
     {
         Assert.Throws<ArgumentException>(() => new StandardScaleTransform<double>(Array.Empty<double[]>()));
     }
@@ -167,8 +168,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // MinMaxScaleTransform Tests
     // ============================
 
-    [Fact]
-    public void MinMaxScale_DefaultRange_ScalesTo01()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_DefaultRange_ScalesTo01()
     {
         // min=[0], max=[10], x=5 => (5-0)/(10-0) * (1-0) + 0 = 0.5
         var transform = new MinMaxScaleTransform<double>(new[] { 0.0 }, new[] { 10.0 });
@@ -177,8 +178,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[0], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_MinValue_MapsToTargetMin()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_MinValue_MapsToTargetMin()
     {
         var transform = new MinMaxScaleTransform<double>(new[] { 2.0 }, new[] { 8.0 });
 
@@ -186,8 +187,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_MaxValue_MapsToTargetMax()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_MaxValue_MapsToTargetMax()
     {
         var transform = new MinMaxScaleTransform<double>(new[] { 2.0 }, new[] { 8.0 });
 
@@ -195,8 +196,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_CustomRange_ScalesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_CustomRange_ScalesCorrectly()
     {
         // Scale to [-1, 1]
         var transform = new MinMaxScaleTransform<double>(new[] { 0.0 }, new[] { 100.0 }, -1.0, 1.0);
@@ -206,8 +207,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_FromReferenceData_ComputesMinMax()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_FromReferenceData_ComputesMinMax()
     {
         var data = new[]
         {
@@ -224,8 +225,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[1], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_ConstantFeature_MapsToTargetMin()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_ConstantFeature_MapsToTargetMin()
     {
         // All values the same => range = 0, should map to targetMin
         var transform = new MinMaxScaleTransform<double>(new[] { 5.0 }, new[] { 5.0 });
@@ -234,8 +235,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[0], Tolerance); // maps to targetMin = 0
     }
 
-    [Fact]
-    public void MinMaxScale_HandComputed_TwoFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_HandComputed_TwoFeatures()
     {
         // min=[0, -10], max=[100, 10]
         var transform = new MinMaxScaleTransform<double>(
@@ -248,8 +249,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.5, result[1], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScale_InvalidRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_InvalidRange_Throws()
     {
         // targetMin >= targetMax should throw
         Assert.Throws<ArgumentException>(() =>
@@ -262,8 +263,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // OneHotEncodeTransform Tests
     // ============================
 
-    [Fact]
-    public void OneHot_Class0_FirstElementIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_Class0_FirstElementIsOne()
     {
         var transform = new OneHotEncodeTransform<double>(3);
         var result = transform.Apply(0);
@@ -274,8 +275,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void OneHot_LastClass_LastElementIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_LastClass_LastElementIsOne()
     {
         var transform = new OneHotEncodeTransform<double>(4);
         var result = transform.Apply(3);
@@ -286,8 +287,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void OneHot_SumIsAlwaysOne()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_SumIsAlwaysOne()
     {
         var transform = new OneHotEncodeTransform<double>(5);
         for (int i = 0; i < 5; i++)
@@ -298,8 +299,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void OneHot_DifferentClasses_AreOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_DifferentClasses_AreOrthogonal()
     {
         // Dot product of different one-hot vectors should be 0
         var transform = new OneHotEncodeTransform<double>(4);
@@ -311,16 +312,16 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, dot, Tolerance);
     }
 
-    [Fact]
-    public void OneHot_InvalidIndex_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_InvalidIndex_Throws()
     {
         var transform = new OneHotEncodeTransform<double>(3);
         Assert.Throws<ArgumentOutOfRangeException>(() => transform.Apply(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => transform.Apply(3));
     }
 
-    [Fact]
-    public void OneHot_InvalidNumClasses_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_InvalidNumClasses_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new OneHotEncodeTransform<double>(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new OneHotEncodeTransform<double>(-1));
@@ -330,8 +331,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // Compose Transform Tests
     // ============================
 
-    [Fact]
-    public void Compose_AppliesTransformsInOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_AppliesTransformsInOrder()
     {
         // First normalize, then apply identity (compose two transforms)
         var normalize = new NormalizeTransform<double>(new[] { 0.0 }, new[] { 2.0 });
@@ -347,8 +348,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // WeightedSampler Balanced Weights Tests
     // ============================
 
-    [Fact]
-    public void BalancedWeights_EqualClasses_EqualWeights()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedWeights_EqualClasses_EqualWeights()
     {
         // 4 samples, 2 classes, each with 2 samples
         var labels = new[] { 0, 0, 1, 1 };
@@ -362,8 +363,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(1.0, weights[3], Tolerance);
     }
 
-    [Fact]
-    public void BalancedWeights_ImbalancedClasses_InverseFrequency()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedWeights_ImbalancedClasses_InverseFrequency()
     {
         // 10 samples: 9 class 0, 1 class 1
         var labels = new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
@@ -378,8 +379,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(weights[9] / weights[0], 9.0, Tolerance);
     }
 
-    [Fact]
-    public void BalancedWeights_TotalWeightPerClass_IsEqual()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedWeights_TotalWeightPerClass_IsEqual()
     {
         // After balancing, total weight per class should be equal
         var labels = new[] { 0, 0, 0, 1, 1, 2 };
@@ -399,8 +400,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(2.0, class2Weight, Tolerance);
     }
 
-    [Fact]
-    public void BalancedWeights_EmptyClass_WeightIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedWeights_EmptyClass_WeightIsZero()
     {
         // 3 classes but only 2 have samples
         var labels = new[] { 0, 0, 2, 2 };
@@ -417,8 +418,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // WeightedSampler Sampling Tests
     // ============================
 
-    [Fact]
-    public void WeightedSampler_WithReplacement_SamplesCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedSampler_WithReplacement_SamplesCorrectCount()
     {
         var weights = new[] { 1.0, 1.0, 1.0, 1.0, 1.0 };
         var sampler = new WeightedSampler<double>(weights, numSamples: 10, replacement: true, seed: 42);
@@ -427,8 +428,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(10, indices.Count);
     }
 
-    [Fact]
-    public void WeightedSampler_WithoutReplacement_NoDuplicates()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedSampler_WithoutReplacement_NoDuplicates()
     {
         var weights = new[] { 1.0, 1.0, 1.0, 1.0, 1.0 };
         var sampler = new WeightedSampler<double>(weights, replacement: false, seed: 42);
@@ -438,8 +439,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(indices.Distinct().Count(), indices.Count); // no duplicates
     }
 
-    [Fact]
-    public void WeightedSampler_ZeroWeight_NeverSampled()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedSampler_ZeroWeight_NeverSampled()
     {
         // Index 2 has zero weight - should never appear
         var weights = new[] { 1.0, 1.0, 0.0, 1.0, 1.0 };
@@ -449,8 +450,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.DoesNotContain(2, indices);
     }
 
-    [Fact]
-    public void WeightedSampler_HighWeight_SampledMoreOften()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedSampler_HighWeight_SampledMoreOften()
     {
         // Index 0 has 100x the weight of others
         var weights = new[] { 100.0, 1.0, 1.0, 1.0, 1.0 };
@@ -464,8 +465,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.True(count0 > 800, $"Index 0 sampled {count0}/1000 times, expected >800 with 100x weight");
     }
 
-    [Fact]
-    public void WeightedSampler_AllIndicesInRange()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedSampler_AllIndicesInRange()
     {
         var weights = new[] { 1.0, 2.0, 3.0 };
         var sampler = new WeightedSampler<double>(weights, numSamples: 100, replacement: true, seed: 42);
@@ -478,8 +479,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
     // Mathematical Properties Tests
     // ============================
 
-    [Fact]
-    public void Normalize_InvertibleWithDenormalize()
+    [Fact(Timeout = 120000)]
+    public async Task Normalize_InvertibleWithDenormalize()
     {
         // If you normalize then multiply by std and add mean, you get the original
         var mean = new[] { 3.0, 7.0 };
@@ -500,8 +501,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(original[1], recovered[1], Tolerance);
     }
 
-    [Fact]
-    public void StandardScale_OutputMean_IsApproxZero()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScale_OutputMean_IsApproxZero()
     {
         // After z-score normalization on the training data, the output mean should be ~0
         var data = new[]
@@ -525,8 +526,8 @@ public class DataTransformsAndSamplingDeepMathIntegrationTests
         Assert.Equal(0.0, sum1 / data.Length, 1e-8);
     }
 
-    [Fact]
-    public void MinMaxScale_OutputRange_WithinTargetBounds()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScale_OutputRange_WithinTargetBounds()
     {
         var data = new[]
         {

@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Serialization;
 using AiDotNet.Reasoning.Models;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Serialization;
 
@@ -26,8 +27,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region JsonConverterRegistry Tests
 
-    [Fact]
-    public void JsonConverterRegistry_RegisterAllConverters_InitializesConverters()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_RegisterAllConverters_InitializesConverters()
     {
         JsonConverterRegistry.RegisterAllConverters();
 
@@ -37,8 +38,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(3, converters.Count); // Matrix, Vector, Tensor
     }
 
-    [Fact]
-    public void JsonConverterRegistry_RegisterAllConverters_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_RegisterAllConverters_IsIdempotent()
     {
         JsonConverterRegistry.RegisterAllConverters();
         JsonConverterRegistry.RegisterAllConverters();
@@ -59,8 +60,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(1, tensorConverterCount);
     }
 
-    [Fact]
-    public void JsonConverterRegistry_GetAllConverters_AutoInitializes()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_GetAllConverters_AutoInitializes()
     {
         // Don't call RegisterAllConverters - GetAllConverters should do it
         var converters = JsonConverterRegistry.GetAllConverters();
@@ -69,8 +70,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(3, converters.Count);
     }
 
-    [Fact]
-    public void JsonConverterRegistry_GetConvertersForType_ReturnsConverters()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_GetConvertersForType_ReturnsConverters()
     {
         var converters = JsonConverterRegistry.GetConvertersForType<double>();
 
@@ -78,8 +79,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(3, converters.Count);
     }
 
-    [Fact]
-    public void JsonConverterRegistry_RegisterConverter_AddsCustomConverter()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_RegisterConverter_AddsCustomConverter()
     {
         JsonConverterRegistry.RegisterAllConverters();
         var customConverter = new MockJsonConverter();
@@ -91,15 +92,15 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Contains(customConverter, converters);
     }
 
-    [Fact]
-    public void JsonConverterRegistry_RegisterConverter_ThrowsOnNull()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_RegisterConverter_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             JsonConverterRegistry.RegisterConverter(null!));
     }
 
-    [Fact]
-    public void JsonConverterRegistry_RegisterConverter_DoesNotDuplicate()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_RegisterConverter_DoesNotDuplicate()
     {
         JsonConverterRegistry.RegisterAllConverters();
         var customConverter = new MockJsonConverter();
@@ -111,8 +112,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(4, converters.Count); // Should not add duplicate
     }
 
-    [Fact]
-    public void JsonConverterRegistry_ClearConverters_RemovesAll()
+    [Fact(Timeout = 120000)]
+    public async Task JsonConverterRegistry_ClearConverters_RemovesAll()
     {
         // Step 1: Register default converters
         JsonConverterRegistry.RegisterAllConverters();
@@ -143,8 +144,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region VectorJsonConverter Tests
 
-    [Fact]
-    public void VectorJsonConverter_CanConvert_Vector_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_CanConvert_Vector_ReturnsTrue()
     {
         var converter = new VectorJsonConverter();
 
@@ -153,8 +154,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.True(converter.CanConvert(typeof(Vector<int>)));
     }
 
-    [Fact]
-    public void VectorJsonConverter_CanConvert_NonVector_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_CanConvert_NonVector_ReturnsFalse()
     {
         var converter = new VectorJsonConverter();
 
@@ -164,8 +165,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.False(converter.CanConvert(typeof(List<double>)));
     }
 
-    [Fact]
-    public void VectorJsonConverter_RoundTrip_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_RoundTrip_PreservesData()
     {
         var originalData = new double[] { 1.5, 2.5, 3.5, 4.5, 5.5 };
         var originalVector = new Vector<double>(originalData);
@@ -187,8 +188,8 @@ public class SerializationIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
-    public void VectorJsonConverter_Serialize_EmptyVector()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Serialize_EmptyVector()
     {
         var emptyVector = new Vector<double>(0);
         var converter = new VectorJsonConverter();
@@ -205,8 +206,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(0, deserializedVector.Length);
     }
 
-    [Fact]
-    public void VectorJsonConverter_Serialize_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Serialize_SingleElement()
     {
         var singleVector = new Vector<double>(new double[] { 42.0 });
         var converter = new VectorJsonConverter();
@@ -224,8 +225,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(42.0, deserializedVector[0]);
     }
 
-    [Fact]
-    public void VectorJsonConverter_Serialize_Null_WritesNull()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Serialize_Null_WritesNull()
     {
         var converter = new VectorJsonConverter();
 
@@ -240,8 +241,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal("null", json);
     }
 
-    [Fact]
-    public void VectorJsonConverter_Deserialize_Null_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Deserialize_Null_ReturnsNull()
     {
         var converter = new VectorJsonConverter();
 
@@ -255,8 +256,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Null(result);
     }
 
-    [Fact]
-    public void VectorJsonConverter_Deserialize_InvalidJson_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Deserialize_InvalidJson_ThrowsException()
     {
         var converter = new VectorJsonConverter();
 
@@ -270,8 +271,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Vector<double>>("{\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void VectorJsonConverter_Deserialize_MismatchedLength_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_Deserialize_MismatchedLength_ThrowsException()
     {
         var converter = new VectorJsonConverter();
 
@@ -285,8 +286,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Vector<double>>("{\"length\":5,\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void VectorJsonConverter_JsonFormat_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task VectorJsonConverter_JsonFormat_IsCorrect()
     {
         var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var converter = new VectorJsonConverter();
@@ -307,8 +308,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region MatrixJsonConverter Tests
 
-    [Fact]
-    public void MatrixJsonConverter_CanConvert_Matrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_CanConvert_Matrix_ReturnsTrue()
     {
         var converter = new MatrixJsonConverter();
 
@@ -316,8 +317,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.True(converter.CanConvert(typeof(Matrix<float>)));
     }
 
-    [Fact]
-    public void MatrixJsonConverter_CanConvert_NonMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_CanConvert_NonMatrix_ReturnsFalse()
     {
         var converter = new MatrixJsonConverter();
 
@@ -326,8 +327,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.False(converter.CanConvert(typeof(double[,])));
     }
 
-    [Fact]
-    public void MatrixJsonConverter_RoundTrip_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_RoundTrip_PreservesData()
     {
         var originalMatrix = new Matrix<double>(2, 3);
         originalMatrix[0, 0] = 1.0; originalMatrix[0, 1] = 2.0; originalMatrix[0, 2] = 3.0;
@@ -356,8 +357,8 @@ public class SerializationIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
-    public void MatrixJsonConverter_Serialize_EmptyMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_Serialize_EmptyMatrix()
     {
         var emptyMatrix = new Matrix<double>(0, 0);
         var converter = new MatrixJsonConverter();
@@ -375,8 +376,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(0, deserializedMatrix.Columns);
     }
 
-    [Fact]
-    public void MatrixJsonConverter_Serialize_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_Serialize_SingleElement()
     {
         var singleMatrix = new Matrix<double>(1, 1);
         singleMatrix[0, 0] = 99.5;
@@ -397,8 +398,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(99.5, deserializedMatrix[0, 0]);
     }
 
-    [Fact]
-    public void MatrixJsonConverter_Serialize_Null_WritesNull()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_Serialize_Null_WritesNull()
     {
         var converter = new MatrixJsonConverter();
 
@@ -413,8 +414,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal("null", json);
     }
 
-    [Fact]
-    public void MatrixJsonConverter_Deserialize_InvalidJson_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_Deserialize_InvalidJson_ThrowsException()
     {
         var converter = new MatrixJsonConverter();
 
@@ -428,8 +429,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Matrix<double>>("{\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void MatrixJsonConverter_Deserialize_MismatchedDimensions_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_Deserialize_MismatchedDimensions_ThrowsException()
     {
         var converter = new MatrixJsonConverter();
 
@@ -443,8 +444,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Matrix<double>>("{\"rows\":2,\"columns\":3,\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void MatrixJsonConverter_JsonFormat_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixJsonConverter_JsonFormat_IsCorrect()
     {
         var matrix = new Matrix<double>(2, 2);
         var converter = new MatrixJsonConverter();
@@ -466,8 +467,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region TensorJsonConverter Tests
 
-    [Fact]
-    public void TensorJsonConverter_CanConvert_Tensor_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_CanConvert_Tensor_ReturnsTrue()
     {
         var converter = new TensorJsonConverter();
 
@@ -475,8 +476,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.True(converter.CanConvert(typeof(Tensor<float>)));
     }
 
-    [Fact]
-    public void TensorJsonConverter_CanConvert_NonTensor_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_CanConvert_NonTensor_ReturnsFalse()
     {
         var converter = new TensorJsonConverter();
 
@@ -485,8 +486,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.False(converter.CanConvert(typeof(Matrix<double>)));
     }
 
-    [Fact]
-    public void TensorJsonConverter_RoundTrip_1D_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_RoundTrip_1D_PreservesData()
     {
         var originalTensor = new Tensor<double>(new int[] { 5 });
         for (int i = 0; i < 5; i++)
@@ -514,8 +515,8 @@ public class SerializationIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
-    public void TensorJsonConverter_RoundTrip_2D_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_RoundTrip_2D_PreservesData()
     {
         var originalTensor = new Tensor<double>(new int[] { 2, 3 });
         int index = 0;
@@ -543,8 +544,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(3, deserializedTensor.Shape[1]);
     }
 
-    [Fact]
-    public void TensorJsonConverter_RoundTrip_3D_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_RoundTrip_3D_PreservesData()
     {
         var originalTensor = new Tensor<double>(new int[] { 2, 3, 4 });
 
@@ -565,8 +566,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(4, deserializedTensor.Shape[2]);
     }
 
-    [Fact]
-    public void TensorJsonConverter_Serialize_Null_WritesNull()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_Serialize_Null_WritesNull()
     {
         var converter = new TensorJsonConverter();
 
@@ -581,8 +582,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal("null", json);
     }
 
-    [Fact]
-    public void TensorJsonConverter_Deserialize_MissingShape_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_Deserialize_MissingShape_ThrowsException()
     {
         var converter = new TensorJsonConverter();
 
@@ -595,8 +596,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Tensor<double>>("{\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void TensorJsonConverter_Deserialize_MismatchedShape_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_Deserialize_MismatchedShape_ThrowsException()
     {
         var converter = new TensorJsonConverter();
 
@@ -610,8 +611,8 @@ public class SerializationIntegrationTests : IDisposable
             JsonConvert.DeserializeObject<Tensor<double>>("{\"shape\":[2,3],\"data\":[1,2,3]}", settings));
     }
 
-    [Fact]
-    public void TensorJsonConverter_JsonFormat_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TensorJsonConverter_JsonFormat_IsCorrect()
     {
         var tensor = new Tensor<double>(new int[] { 2, 2 });
         var converter = new TensorJsonConverter();
@@ -632,8 +633,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region SafeSerializationBinder Tests
 
-    [Fact]
-    public void SafeSerializationBinder_BindToType_AllowsAiDotNetTypes()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_BindToType_AllowsAiDotNetTypes()
     {
         var binder = new SafeSerializationBinder();
 
@@ -647,8 +648,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Contains("ReasoningConfig", typeName);
     }
 
-    [Fact]
-    public void SafeSerializationBinder_BindToType_AllowsPrimitiveTypes()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_BindToType_AllowsPrimitiveTypes()
     {
         var binder = new SafeSerializationBinder();
 
@@ -662,8 +663,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(typeof(double), doubleType);
     }
 
-    [Fact]
-    public void SafeSerializationBinder_BindToType_AllowsGenericCollections()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_BindToType_AllowsGenericCollections()
     {
         var binder = new SafeSerializationBinder();
 
@@ -673,8 +674,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.NotNull(listType);
     }
 
-    [Fact]
-    public void SafeSerializationBinder_BindToType_RejectsDangerousTypes()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_BindToType_RejectsDangerousTypes()
     {
         var binder = new SafeSerializationBinder();
 
@@ -683,8 +684,8 @@ public class SerializationIntegrationTests : IDisposable
             binder.BindToType(null, "System.IO.FileInfo"));
     }
 
-    [Fact]
-    public void SafeSerializationBinder_BindToName_DelegatesToDefaultBinder()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_BindToName_DelegatesToDefaultBinder()
     {
         var binder = new SafeSerializationBinder();
 
@@ -694,8 +695,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Contains("Int32", typeName);
     }
 
-    [Fact]
-    public void SafeSerializationBinder_AllowsArrayOfPrimitives()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_AllowsArrayOfPrimitives()
     {
         var binder = new SafeSerializationBinder();
 
@@ -705,8 +706,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.True(doubleArrayType.IsArray);
     }
 
-    [Fact]
-    public void SafeSerializationBinder_AllowsNullablePrimitives()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSerializationBinder_AllowsNullablePrimitives()
     {
         var binder = new SafeSerializationBinder();
 
@@ -719,8 +720,8 @@ public class SerializationIntegrationTests : IDisposable
 
     #region Integration Tests
 
-    [Fact]
-    public void AllConverters_WorkTogether()
+    [Fact(Timeout = 120000)]
+    public async Task AllConverters_WorkTogether()
     {
         JsonConverterRegistry.RegisterAllConverters();
         var converters = JsonConverterRegistry.GetAllConverters();
@@ -753,8 +754,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(tensor.Shape.Length, deserializedTensor.Shape.Length);
     }
 
-    [Fact]
-    public void Serialization_WithSafeBinder_WorksForAllowedTypes()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_WithSafeBinder_WorksForAllowedTypes()
     {
         var settings = new JsonSerializerSettings
         {
@@ -772,8 +773,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(vector.Length, deserialized.Length);
     }
 
-    [Fact]
-    public void ComplexObject_WithLinearAlgebraTypes_SerializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexObject_WithLinearAlgebraTypes_SerializesCorrectly()
     {
         var settings = new JsonSerializerSettings
         {
@@ -800,8 +801,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(2, deserialized.Matrix.Rows);
     }
 
-    [Fact]
-    public void LargeVector_SerializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LargeVector_SerializesCorrectly()
     {
         var largeData = new double[10000];
         for (int i = 0; i < largeData.Length; i++)
@@ -824,8 +825,8 @@ public class SerializationIntegrationTests : IDisposable
         Assert.Equal(largeData[9999], deserialized[9999]);
     }
 
-    [Fact]
-    public void LargeMatrix_SerializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LargeMatrix_SerializesCorrectly()
     {
         var largeMatrix = new Matrix<double>(100, 100);
         for (int i = 0; i < 100; i++)

@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -50,8 +51,8 @@ public class NeuralProcessAlgorithmTests
         return false;
     }
 
-    [Fact]
-    public void CNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task CNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new CNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -76,8 +77,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(predictions);
     }
 
-    [Fact]
-    public void NP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task NP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new NPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -98,8 +99,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(adapted.Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task ANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new ANPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -120,8 +121,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(adapted.Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ConvCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task ConvCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new ConvCNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -141,8 +142,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ConvNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task ConvNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new ConvNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -162,8 +163,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void TNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task TNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new TNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -183,8 +184,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void SwinTNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task SwinTNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new SwinTNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -204,8 +205,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void EquivCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task EquivCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new EquivCNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -225,8 +226,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void SteerCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task SteerCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new SteerCNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -246,8 +247,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void RCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task RCNP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new RCNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -267,8 +268,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void LBANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
+    [Fact(Timeout = 120000)]
+    public async Task LBANP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {
         var model = new LinearVectorModel(3);
         var options = new LBANPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -288,8 +289,8 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void CNP_MultipleTrainingSteps_ProducesStableLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CNP_MultipleTrainingSteps_ProducesStableLoss()
     {
         var model = new LinearVectorModel(3);
         var options = new CNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -312,8 +313,8 @@ public class NeuralProcessAlgorithmTests
         Assert.False(double.IsNaN(lastLoss), "Final CNP loss is NaN after 5 steps");
     }
 
-    [Fact]
-    public void TETNP_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task TETNP_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new TETNPOptions<double, Matrix<double>, Vector<double>>(model)

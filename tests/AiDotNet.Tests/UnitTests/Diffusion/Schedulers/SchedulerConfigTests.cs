@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Diffusion.Schedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
 
@@ -11,8 +12,8 @@ public class SchedulerConfigTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultValues_SetsCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultValues_SetsCorrectDefaults()
     {
         // Arrange & Act
         var config = new SchedulerConfig<double>(
@@ -29,8 +30,8 @@ public class SchedulerConfigTests
         Assert.False(config.ClipSample);
     }
 
-    [Fact]
-    public void Constructor_WithCustomValues_SetsAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomValues_SetsAllProperties()
     {
         // Arrange & Act
         var config = new SchedulerConfig<double>(
@@ -64,8 +65,8 @@ public class SchedulerConfigTests
                 betaEnd: 0.02));
     }
 
-    [Fact]
-    public void Constructor_WithZeroBetaStart_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithZeroBetaStart_DoesNotThrow()
     {
         // Arrange & Act - The implementation doesn't validate beta values
         // so we test that it accepts any beta values without throwing
@@ -78,8 +79,8 @@ public class SchedulerConfigTests
         Assert.Equal(0.0, config.BetaStart);
     }
 
-    [Fact]
-    public void Constructor_WithBetaEndLessThanBetaStart_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithBetaEndLessThanBetaStart_DoesNotThrow()
     {
         // Arrange & Act - The implementation doesn't validate beta ordering
         var config = new SchedulerConfig<double>(
@@ -96,8 +97,8 @@ public class SchedulerConfigTests
 
     #region Factory Method Tests
 
-    [Fact]
-    public void CreateDefault_ReturnsStandardDDPMConfig()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefault_ReturnsStandardDDPMConfig()
     {
         // Arrange & Act
         var config = SchedulerConfig<double>.CreateDefault();
@@ -110,8 +111,8 @@ public class SchedulerConfigTests
         Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
-    [Fact]
-    public void CreateStableDiffusion_ReturnsStableDiffusionConfig()
+    [Fact(Timeout = 120000)]
+    public async Task CreateStableDiffusion_ReturnsStableDiffusionConfig()
     {
         // Arrange & Act
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -128,8 +129,8 @@ public class SchedulerConfigTests
 
     #region Generic Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithFloatType_WorksCorrectly()
     {
         // Arrange & Act
         var config = new SchedulerConfig<float>(

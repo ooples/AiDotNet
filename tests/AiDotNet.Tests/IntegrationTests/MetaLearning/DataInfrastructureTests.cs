@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -16,8 +17,8 @@ public class DataInfrastructureTests
 {
     // ── SineWaveMetaDataset ──
 
-    [Fact]
-    public void SineWaveMetaDataset_SampleEpisode_ReturnsValidEpisode()
+    [Fact(Timeout = 120000)]
+    public async Task SineWaveMetaDataset_SampleEpisode_ReturnsValidEpisode()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(seed: 42);
         var episode = dataset.SampleEpisode(numWays: 1, numShots: 5, numQueryPerClass: 10);
@@ -27,8 +28,8 @@ public class DataInfrastructureTests
         Assert.True(episode.EpisodeId > 0);
     }
 
-    [Fact]
-    public void SineWaveMetaDataset_SampleMultipleEpisodes_ReturnsRequestedCount()
+    [Fact(Timeout = 120000)]
+    public async Task SineWaveMetaDataset_SampleMultipleEpisodes_ReturnsRequestedCount()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(seed: 42);
         var episodes = dataset.SampleEpisodes(count: 5, numWays: 1, numShots: 3, numQueryPerClass: 7);
@@ -36,8 +37,8 @@ public class DataInfrastructureTests
         Assert.Equal(5, episodes.Count);
     }
 
-    [Fact]
-    public void SineWaveMetaDataset_SupportsConfiguration_ReturnsTrueForFeasible()
+    [Fact(Timeout = 120000)]
+    public async Task SineWaveMetaDataset_SupportsConfiguration_ReturnsTrueForFeasible()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(numClasses: 10, examplesPerClass: 30);
         Assert.True(dataset.SupportsConfiguration(5, 3, 3));
@@ -46,8 +47,8 @@ public class DataInfrastructureTests
 
     // ── GaussianClassificationMetaDataset ──
 
-    [Fact]
-    public void GaussianClassification_SampleEpisode_ReturnsValidTask()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianClassification_SampleEpisode_ReturnsValidTask()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 5, seed: 42);
@@ -62,8 +63,8 @@ public class DataInfrastructureTests
 
     // ── Episode ──
 
-    [Fact]
-    public void Episode_TracksMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task Episode_TracksMetadata()
     {
         var mlTask = new MetaLearningTask<double, Matrix<double>, Vector<double>>
         {
@@ -88,8 +89,8 @@ public class DataInfrastructureTests
 
     // ── EpisodeCache ──
 
-    [Fact]
-    public void EpisodeCache_PutAndGet_Works()
+    [Fact(Timeout = 120000)]
+    public async Task EpisodeCache_PutAndGet_Works()
     {
         var cache = new EpisodeCache<double, Matrix<double>, Vector<double>>(capacity: 3);
         var mlTask = new MetaLearningTask<double, Matrix<double>, Vector<double>>
@@ -121,8 +122,8 @@ public class DataInfrastructureTests
         Assert.Equal(2, cache.HitCount);
     }
 
-    [Fact]
-    public void EpisodeCache_Clear_ResetsAll()
+    [Fact(Timeout = 120000)]
+    public async Task EpisodeCache_Clear_ResetsAll()
     {
         var cache = new EpisodeCache<double, Matrix<double>, Vector<double>>(capacity: 10);
         var mlTask = new MetaLearningTask<double, Matrix<double>, Vector<double>>
@@ -141,8 +142,8 @@ public class DataInfrastructureTests
 
     // ── UniformTaskSampler ──
 
-    [Fact]
-    public void UniformTaskSampler_SampleBatch_ReturnsValidBatch()
+    [Fact(Timeout = 120000)]
+    public async Task UniformTaskSampler_SampleBatch_ReturnsValidBatch()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 5, seed: 42);
@@ -156,8 +157,8 @@ public class DataInfrastructureTests
 
     // ── BalancedTaskSampler ──
 
-    [Fact]
-    public void BalancedTaskSampler_SampleBatch_Works()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedTaskSampler_SampleBatch_Works()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 5, seed: 42);
@@ -170,8 +171,8 @@ public class DataInfrastructureTests
 
     // ── DynamicTaskSampler ──
 
-    [Fact]
-    public void DynamicTaskSampler_UpdateWithFeedback_TracksMeanLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DynamicTaskSampler_UpdateWithFeedback_TracksMeanLoss()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 5, seed: 42);
@@ -190,8 +191,8 @@ public class DataInfrastructureTests
 
     // ── BatchEpisodeSampler ──
 
-    [Fact]
-    public void BatchEpisodeSampler_NextBatch_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BatchEpisodeSampler_NextBatch_ReturnsCorrectSize()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 5, seed: 42);
@@ -209,8 +210,8 @@ public class DataInfrastructureTests
 
     // ── EpisodicDataLoaderTaskSamplerAdapter ──
 
-    [Fact]
-    public void Adapter_WrapsLegacyLoader()
+    [Fact(Timeout = 120000)]
+    public async Task Adapter_WrapsLegacyLoader()
     {
         var supportX = new Matrix<double>(4, 3);
         var supportY = new Vector<double>(4);

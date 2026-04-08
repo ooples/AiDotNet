@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 {
@@ -28,16 +29,16 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithNullBaseRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullBaseRetriever_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiQueryRetriever<double>(null));
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -50,8 +51,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_WithCustomNumQueries_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomNumQueries_CreatesInstance()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithZeroNumQueries_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroNumQueries_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -75,8 +76,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Contains("must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeNumQueries_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeNumQueries_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -87,8 +88,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Contains("must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithCustomDefaultTopK_SetsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomDefaultTopK_SetsCorrectly()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -104,8 +105,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Basic Retrieval Tests
 
-        [Fact]
-        public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
             var baseRetriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
@@ -118,8 +119,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_WithValidQuery_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
             AddSampleDocuments();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_WithCustomTopK_ReturnsCorrectNumberOfResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithCustomTopK_ReturnsCorrectNumberOfResults()
         {
             // Arrange
             AddSampleDocuments();
@@ -149,8 +150,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.True(results.Count <= 2);
         }
 
-        [Fact]
-        public void Retrieve_WithValidQuery_ReturnsSortedByRelevance()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithValidQuery_ReturnsSortedByRelevance()
         {
             // Arrange
             AddSampleDocuments();
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Multi-Query Expansion Tests
 
-        [Fact]
-        public void Retrieve_WithMultipleQueries_AggregatesScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMultipleQueries_AggregatesScores()
         {
             // Arrange
             AddSampleDocuments();
@@ -193,8 +194,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact]
-        public void Retrieve_WithSingleQuery_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithSingleQuery_WorksCorrectly()
         {
             // Arrange
             AddSampleDocuments();
@@ -208,8 +209,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotEmpty(results);
         }
 
-        [Fact]
-        public void Retrieve_WithManyQueries_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithManyQueries_WorksCorrectly()
         {
             // Arrange
             AddSampleDocuments();
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
             AddSampleDocuments();
@@ -248,8 +249,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact]
-        public void Retrieve_WithNonMatchingFilter_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNonMatchingFilter_ReturnsEmpty()
         {
             // Arrange
             AddSampleDocuments();
@@ -268,8 +269,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Score Aggregation Tests
 
-        [Fact]
-        public void Retrieve_AggregatesScoresAcrossQueries()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AggregatesScoresAcrossQueries()
         {
             // Arrange
             AddSampleDocuments();
@@ -291,8 +292,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_WithDifferentBaseRetrievers_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDifferentBaseRetrievers_WorksCorrectly()
         {
             // Arrange - Test with BM25 as base retriever
             AddSampleDocuments();
@@ -307,8 +308,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var floatStore = TestHelpers.CreateDocumentStore<float>(VectorDimension);

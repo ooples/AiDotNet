@@ -2,13 +2,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 public class UniformReplayBufferTests
 {
-    [Fact]
-    public void Constructor_WithValidCapacity_CreatesBuffer()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidCapacity_CreatesBuffer()
     {
         // Arrange & Act
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 100);
@@ -18,16 +19,16 @@ public class UniformReplayBufferTests
         Assert.Equal(0, buffer.Count);
     }
 
-    [Fact]
-    public void Constructor_WithInvalidCapacity_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidCapacity_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 0));
         Assert.Throws<ArgumentException>(() => new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: -1));
     }
 
-    [Fact]
-    public void Add_WithValidExperience_IncreasesCount()
+    [Fact(Timeout = 60000)]
+    public async Task Add_WithValidExperience_IncreasesCount()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 10);
@@ -43,8 +44,8 @@ public class UniformReplayBufferTests
         Assert.Equal(1, buffer.Count);
     }
 
-    [Fact]
-    public void Add_BeyondCapacity_ReplacesOldest()
+    [Fact(Timeout = 60000)]
+    public async Task Add_BeyondCapacity_ReplacesOldest()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 3);
@@ -63,8 +64,8 @@ public class UniformReplayBufferTests
         Assert.Equal(3, buffer.Count); // Should still be at capacity
     }
 
-    [Fact]
-    public void Sample_WithEnoughExperiences_ReturnsBatch()
+    [Fact(Timeout = 60000)]
+    public async Task Sample_WithEnoughExperiences_ReturnsBatch()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 100, seed: 42);
@@ -86,8 +87,8 @@ public class UniformReplayBufferTests
         Assert.Equal(10, batch.Count);
     }
 
-    [Fact]
-    public void Sample_WithInsufficientExperiences_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Sample_WithInsufficientExperiences_ThrowsException()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 100);
@@ -106,8 +107,8 @@ public class UniformReplayBufferTests
         Assert.Throws<InvalidOperationException>(() => buffer.Sample(batchSize: 10));
     }
 
-    [Fact]
-    public void CanSample_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task CanSample_ReturnsCorrectValue()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 100);
@@ -127,8 +128,8 @@ public class UniformReplayBufferTests
         Assert.False(buffer.CanSample(6));
     }
 
-    [Fact]
-    public void Clear_RemovesAllExperiences()
+    [Fact(Timeout = 60000)]
+    public async Task Clear_RemovesAllExperiences()
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 100);

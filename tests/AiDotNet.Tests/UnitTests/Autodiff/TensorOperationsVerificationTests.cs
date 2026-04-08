@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff.Testing;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Autodiff;
 
@@ -39,8 +40,8 @@ public class TensorOperationsVerificationTests
             Epsilon = 1e-4
         };
 
-    [Fact]
-    public void VerifyReLU_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyReLU_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyReLU();
@@ -48,8 +49,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"ReLU gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifySigmoid_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifySigmoid_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifySigmoid();
@@ -57,8 +58,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sigmoid gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyTanh_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyTanh_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyTanh();
@@ -66,8 +67,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Tanh gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyNegate_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyNegate_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyNegate();
@@ -75,8 +76,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Negate gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyExp_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyExp_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyExp();
@@ -84,8 +85,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Exp gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyLog_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyLog_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyLog();
@@ -93,8 +94,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Log gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifySqrt_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifySqrt_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifySqrt();
@@ -102,8 +103,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sqrt gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifySquare_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifySquare_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifySquare();
@@ -111,8 +112,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Square gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyLeakyReLU_Float_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyLeakyReLU_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var result = verifier.VerifyLeakyReLU();
@@ -120,8 +121,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"LeakyReLU gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyAdd_Float_BothInputs_Pass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyAdd_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var (result1, result2) = verifier.VerifyAdd();
@@ -130,8 +131,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Add gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
-    public void VerifySubtract_Float_BothInputs_Pass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifySubtract_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var (result1, result2) = verifier.VerifySubtract();
@@ -140,8 +141,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Subtract gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
-    public void VerifyElementwiseMultiply_Float_BothInputs_Pass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyElementwiseMultiply_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var (result1, result2) = verifier.VerifyElementwiseMultiply();
@@ -150,8 +151,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Multiply gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
-    public void VerifyElementwiseDivide_Float_BothInputs_Pass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyElementwiseDivide_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var (result1, result2) = verifier.VerifyElementwiseDivide();
@@ -160,8 +161,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Divide gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
-    public void VerifyAllOperations_Float_AllPass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyAllOperations_Float_AllPass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
         var summary = verifier.VerifyAllOperations();
@@ -184,8 +185,8 @@ public class TensorOperationsVerificationTests
             Epsilon = 1e-5
         };
 
-    [Fact]
-    public void VerifyReLU_Double_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyReLU_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
         var result = verifier.VerifyReLU();
@@ -193,8 +194,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"ReLU gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifySigmoid_Double_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifySigmoid_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
         var result = verifier.VerifySigmoid();
@@ -202,8 +203,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sigmoid gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyTanh_Double_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyTanh_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
         var result = verifier.VerifyTanh();
@@ -211,8 +212,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Tanh gradient verification failed: {result}");
     }
 
-    [Fact]
-    public void VerifyAllOperations_Double_AllPass()
+    [Fact(Timeout = 60000)]
+    public async Task VerifyAllOperations_Double_AllPass()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
         var summary = verifier.VerifyAllOperations();
@@ -224,8 +225,8 @@ public class TensorOperationsVerificationTests
 
     #region Configuration Tests
 
-    [Fact]
-    public void CustomConfiguration_UsesCorrectTolerances()
+    [Fact(Timeout = 60000)]
+    public async Task CustomConfiguration_UsesCorrectTolerances()
     {
         // Float tests require larger tolerances due to inherent precision limitations
         var config = new TensorOperationsVerification<float>.VerificationConfig
@@ -261,8 +262,8 @@ public class TensorOperationsVerificationTests
 
     #region NumericalGradient Utility Tests
 
-    [Fact]
-    public void NumericalGradient_ComputeForScalarFunction_CorrectForSquare()
+    [Fact(Timeout = 60000)]
+    public async Task NumericalGradient_ComputeForScalarFunction_CorrectForSquare()
     {
         // f(x) = sum(x^2), df/dx = 2x
         var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
@@ -287,8 +288,8 @@ public class TensorOperationsVerificationTests
         Assert.True(Math.Abs(gradient[2] - 6.0f) < 1e-2f, $"Expected 6.0, got {gradient[2]}");
     }
 
-    [Fact]
-    public void NumericalGradient_Compare_IdenticalTensors_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task NumericalGradient_Compare_IdenticalTensors_Passes()
     {
         var tensor1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
         var tensor2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
@@ -303,8 +304,8 @@ public class TensorOperationsVerificationTests
         Assert.Equal(0.0, result.MaxRelativeError);
     }
 
-    [Fact]
-    public void NumericalGradient_Compare_DifferentTensors_FailsWithDetails()
+    [Fact(Timeout = 60000)]
+    public async Task NumericalGradient_Compare_DifferentTensors_FailsWithDetails()
     {
         var expected = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
         var actual = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
@@ -320,8 +321,8 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Errors.Count > 0);
     }
 
-    [Fact]
-    public void NumericalGradient_Compare_ShapeMismatch_Fails()
+    [Fact(Timeout = 60000)]
+    public async Task NumericalGradient_Compare_ShapeMismatch_Fails()
     {
         var tensor1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
         var tensor2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 4 });

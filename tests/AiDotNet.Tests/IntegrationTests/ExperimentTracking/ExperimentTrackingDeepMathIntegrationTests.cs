@@ -1,5 +1,6 @@
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ExperimentTracking;
 
@@ -14,8 +15,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // Experiment: Creation Tests
     // ============================
 
-    [Fact]
-    public void Experiment_Creation_GeneratesUniqueId()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_GeneratesUniqueId()
     {
         var exp = new Experiment("Test Experiment");
 
@@ -23,22 +24,22 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.True(Guid.TryParse(exp.ExperimentId, out _));
     }
 
-    [Fact]
-    public void Experiment_Creation_SetsName()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_SetsName()
     {
         var exp = new Experiment("My ML Experiment");
         Assert.Equal("My ML Experiment", exp.Name);
     }
 
-    [Fact]
-    public void Experiment_Creation_DefaultStatus_Active()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_DefaultStatus_Active()
     {
         var exp = new Experiment("Test");
         Assert.Equal("Active", exp.Status);
     }
 
-    [Fact]
-    public void Experiment_Creation_SetsTimestamps()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_SetsTimestamps()
     {
         var before = DateTime.UtcNow;
         var exp = new Experiment("Test");
@@ -48,15 +49,15 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.InRange(exp.LastUpdatedAt, before, after);
     }
 
-    [Fact]
-    public void Experiment_Creation_WithDescription()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_WithDescription()
     {
         var exp = new Experiment("Test", "A detailed description");
         Assert.Equal("A detailed description", exp.Description);
     }
 
-    [Fact]
-    public void Experiment_Creation_WithTags()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_WithTags()
     {
         var tags = new Dictionary<string, string> { { "env", "production" }, { "team", "ml" } };
         var exp = new Experiment("Test", tags: tags);
@@ -65,16 +66,16 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("production", exp.Tags["env"]);
     }
 
-    [Fact]
-    public void Experiment_Creation_NullTags_DefaultsToEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Creation_NullTags_DefaultsToEmpty()
     {
         var exp = new Experiment("Test");
         Assert.NotNull(exp.Tags);
         Assert.Empty(exp.Tags);
     }
 
-    [Fact]
-    public void Experiment_MultipleInstances_UniqueIds()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_MultipleInstances_UniqueIds()
     {
         var ids = new HashSet<string>();
         for (int i = 0; i < 100; i++)
@@ -90,21 +91,21 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // Experiment: Name Validation Tests
     // ============================
 
-    [Fact]
-    public void Experiment_NullName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_NullName_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new Experiment(null!));
     }
 
-    [Fact]
-    public void Experiment_SetName_Null_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_SetName_Null_Throws()
     {
         var exp = new Experiment("initial");
         Assert.Throws<ArgumentNullException>(() => exp.Name = null!);
     }
 
-    [Fact]
-    public void Experiment_SetName_WhitespaceOnly_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_SetName_WhitespaceOnly_Throws()
     {
         var exp = new Experiment("initial");
         Assert.Throws<ArgumentException>(() => exp.Name = "   ");
@@ -114,8 +115,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // Experiment: Archive/Restore Tests
     // ============================
 
-    [Fact]
-    public void Experiment_Archive_ChangesStatus()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Archive_ChangesStatus()
     {
         var exp = new Experiment("Test");
         Assert.Equal("Active", exp.Status);
@@ -124,8 +125,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("Archived", exp.Status);
     }
 
-    [Fact]
-    public void Experiment_Restore_ChangesStatusBack()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Restore_ChangesStatusBack()
     {
         var exp = new Experiment("Test");
         exp.Archive();
@@ -135,8 +136,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("Active", exp.Status);
     }
 
-    [Fact]
-    public void Experiment_Archive_UpdatesTimestamp()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Archive_UpdatesTimestamp()
     {
         var exp = new Experiment("Test");
         var initialUpdate = exp.LastUpdatedAt;
@@ -147,8 +148,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.True(exp.LastUpdatedAt >= initialUpdate);
     }
 
-    [Fact]
-    public void Experiment_Touch_UpdatesTimestamp()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Touch_UpdatesTimestamp()
     {
         var exp = new Experiment("Test");
         var initialUpdate = exp.LastUpdatedAt;
@@ -163,8 +164,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Creation Tests
     // ============================
 
-    [Fact]
-    public void ExperimentRun_Creation_GeneratesUniqueId()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Creation_GeneratesUniqueId()
     {
         var run = new ExperimentRun<double>("exp-1");
 
@@ -172,28 +173,28 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.True(Guid.TryParse(run.RunId, out _));
     }
 
-    [Fact]
-    public void ExperimentRun_Creation_DefaultStatus_Running()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Creation_DefaultStatus_Running()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Equal("Running", run.Status);
     }
 
-    [Fact]
-    public void ExperimentRun_Creation_SetsExperimentId()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Creation_SetsExperimentId()
     {
         var run = new ExperimentRun<double>("my-experiment");
         Assert.Equal("my-experiment", run.ExperimentId);
     }
 
-    [Fact]
-    public void ExperimentRun_Creation_NullExperimentId_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Creation_NullExperimentId_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(null!));
     }
 
-    [Fact]
-    public void ExperimentRun_Creation_WithNameAndTags()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Creation_WithNameAndTags()
     {
         var tags = new Dictionary<string, string> { { "model", "random_forest" } };
         var run = new ExperimentRun<double>("exp-1", "Run #1", tags);
@@ -202,8 +203,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.True(run.Tags.ContainsKey("model"));
     }
 
-    [Fact]
-    public void ExperimentRun_MultipleInstances_UniqueIds()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_MultipleInstances_UniqueIds()
     {
         var ids = new HashSet<string>();
         for (int i = 0; i < 100; i++)
@@ -219,8 +220,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Parameter Logging Tests
     // ============================
 
-    [Fact]
-    public void LogParameter_SingleParam_Retrievable()
+    [Fact(Timeout = 120000)]
+    public async Task LogParameter_SingleParam_Retrievable()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogParameter("learning_rate", 0.01);
@@ -229,8 +230,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal(0.01, params2["learning_rate"]);
     }
 
-    [Fact]
-    public void LogParameter_OverwritesSameKey()
+    [Fact(Timeout = 120000)]
+    public async Task LogParameter_OverwritesSameKey()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogParameter("lr", 0.01);
@@ -239,15 +240,15 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal(0.001, run.GetParameters()["lr"]);
     }
 
-    [Fact]
-    public void LogParameter_EmptyKey_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogParameter_EmptyKey_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Throws<ArgumentException>(() => run.LogParameter("", 1.0));
     }
 
-    [Fact]
-    public void LogParameters_MultiplePairs_AllRetrievable()
+    [Fact(Timeout = 120000)]
+    public async Task LogParameters_MultiplePairs_AllRetrievable()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogParameters(new Dictionary<string, object>
@@ -264,8 +265,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal(32, p["batch_size"]);
     }
 
-    [Fact]
-    public void LogParameters_NullDict_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogParameters_NullDict_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Throws<ArgumentNullException>(() => run.LogParameters(null!));
@@ -275,8 +276,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Metric Logging Tests
     // ============================
 
-    [Fact]
-    public void LogMetric_SingleMetric_Retrievable()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_SingleMetric_Retrievable()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogMetric("loss", 0.5, step: 1);
@@ -288,8 +289,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal(1, metrics["loss"][0].Step);
     }
 
-    [Fact]
-    public void LogMetric_MultipleSteps_AllRecorded()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_MultipleSteps_AllRecorded()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogMetric("loss", 1.0, step: 0);
@@ -307,15 +308,15 @@ public class ExperimentTrackingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogMetric_EmptyKey_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_EmptyKey_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Throws<ArgumentException>(() => run.LogMetric("", 1.0));
     }
 
-    [Fact]
-    public void GetLatestMetric_ReturnsHighestStep()
+    [Fact(Timeout = 120000)]
+    public async Task GetLatestMetric_ReturnsHighestStep()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogMetric("accuracy", 0.7, step: 1);
@@ -326,16 +327,16 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal(0.85, latest);
     }
 
-    [Fact]
-    public void GetLatestMetric_UnknownMetric_ReturnsDefault()
+    [Fact(Timeout = 120000)]
+    public async Task GetLatestMetric_UnknownMetric_ReturnsDefault()
     {
         var run = new ExperimentRun<double>("exp-1");
         var result = run.GetLatestMetric("nonexistent");
         Assert.Equal(0.0, result);
     }
 
-    [Fact]
-    public void LogMetrics_MultiplePairs_AllRecorded()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetrics_MultiplePairs_AllRecorded()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogMetrics(new Dictionary<string, double>
@@ -355,8 +356,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Status Transitions
     // ============================
 
-    [Fact]
-    public void Complete_ChangesStatusToCompleted()
+    [Fact(Timeout = 120000)]
+    public async Task Complete_ChangesStatusToCompleted()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Equal("Running", run.Status);
@@ -367,8 +368,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.NotNull(run.EndTime);
     }
 
-    [Fact]
-    public void Fail_ChangesStatusToFailed()
+    [Fact(Timeout = 120000)]
+    public async Task Fail_ChangesStatusToFailed()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.Fail("Out of memory");
@@ -378,8 +379,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("Out of memory", run.GetErrorMessage());
     }
 
-    [Fact]
-    public void Fail_WithoutMessage_NoError()
+    [Fact(Timeout = 120000)]
+    public async Task Fail_WithoutMessage_NoError()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.Fail();
@@ -388,8 +389,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Null(run.GetErrorMessage());
     }
 
-    [Fact]
-    public void Fail_WithMessage_AddsNote()
+    [Fact(Timeout = 120000)]
+    public async Task Fail_WithMessage_AddsNote()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.Fail("Training diverged");
@@ -403,8 +404,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Notes Tests
     // ============================
 
-    [Fact]
-    public void AddNote_Retrievable()
+    [Fact(Timeout = 120000)]
+    public async Task AddNote_Retrievable()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.AddNote("Learning rate adjusted");
@@ -414,15 +415,15 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("Learning rate adjusted", notes[0].Note);
     }
 
-    [Fact]
-    public void AddNote_EmptyNote_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AddNote_EmptyNote_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Throws<ArgumentException>(() => run.AddNote(""));
     }
 
-    [Fact]
-    public void AddNote_MultipleNotes_OrderedByTimestamp()
+    [Fact(Timeout = 120000)]
+    public async Task AddNote_MultipleNotes_OrderedByTimestamp()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.AddNote("First note");
@@ -438,8 +439,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Artifact Tests
     // ============================
 
-    [Fact]
-    public void LogArtifact_SingleFile_Recorded()
+    [Fact(Timeout = 120000)]
+    public async Task LogArtifact_SingleFile_Recorded()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogArtifact("/tmp/model.pkl");
@@ -449,8 +450,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Equal("model.pkl", artifacts[0]);
     }
 
-    [Fact]
-    public void LogArtifact_WithCustomPath_UsesCustomPath()
+    [Fact(Timeout = 120000)]
+    public async Task LogArtifact_WithCustomPath_UsesCustomPath()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogArtifact("/tmp/model.pkl", "models/v1/model.pkl");
@@ -459,8 +460,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.Contains("models/v1/model.pkl", artifacts);
     }
 
-    [Fact]
-    public void LogArtifact_EmptyPath_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogArtifact_EmptyPath_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
         Assert.Throws<ArgumentException>(() => run.LogArtifact(""));
@@ -470,8 +471,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: Duration Tests
     // ============================
 
-    [Fact]
-    public void GetDuration_Running_ReturnsElapsedTime()
+    [Fact(Timeout = 120000)]
+    public async Task GetDuration_Running_ReturnsElapsedTime()
     {
         var run = new ExperimentRun<double>("exp-1");
 
@@ -481,8 +482,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
         Assert.True(duration.Value >= TimeSpan.Zero);
     }
 
-    [Fact]
-    public void GetDuration_Completed_ReturnsEndMinusStart()
+    [Fact(Timeout = 120000)]
+    public async Task GetDuration_Completed_ReturnsEndMinusStart()
     {
         var run = new ExperimentRun<double>("exp-1");
         Thread.Sleep(50);
@@ -497,8 +498,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: GetParameters Returns Copy
     // ============================
 
-    [Fact]
-    public void GetParameters_ReturnsCopy_ModificationDoesNotAffectOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_ReturnsCopy_ModificationDoesNotAffectOriginal()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogParameter("lr", 0.01);
@@ -514,8 +515,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // ExperimentRun: GetMetrics Returns Copy
     // ============================
 
-    [Fact]
-    public void GetMetrics_ReturnsCopy_ModificationDoesNotAffectOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetrics_ReturnsCopy_ModificationDoesNotAffectOriginal()
     {
         var run = new ExperimentRun<double>("exp-1");
         run.LogMetric("loss", 0.5, step: 1);
@@ -531,8 +532,8 @@ public class ExperimentTrackingDeepMathIntegrationTests
     // Cross-Component Tests
     // ============================
 
-    [Fact]
-    public void Experiment_And_Run_FullWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_And_Run_FullWorkflow()
     {
         // Create experiment
         var exp = new Experiment("Image Classification", "ResNet fine-tuning");

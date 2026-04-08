@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiDotNet.Helpers;
 using Xunit;
 using Xunit.Abstractions;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -108,8 +109,8 @@ public class EncryptionOverheadBenchmarkTests
         _output.WriteLine($"[{label}] Total crypto time: {totalCryptoMs:F1} ms ({measureIterations} iterations)");
     }
 
-    [Fact]
-    public void EncryptedPayload_SizeOverhead_IsMinimal()
+    [Fact(Timeout = 120000)]
+    public async Task EncryptedPayload_SizeOverhead_IsMinimal()
     {
         if (!AesGcmAvailable)
         {

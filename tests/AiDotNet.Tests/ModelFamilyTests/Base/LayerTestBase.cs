@@ -5,6 +5,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -296,8 +297,8 @@ public abstract class LayerTestBase
     // If the forward pass returns NaN/Inf/empty, the layer is numerically broken.
     // =========================================================================
 
-    [Fact]
-    public void Forward_ShouldProduceFiniteOutput()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldProduceFiniteOutput()
     {
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
@@ -320,8 +321,8 @@ public abstract class LayerTestBase
     // same input must produce bit-identical output.
     // =========================================================================
 
-    [Fact]
-    public void Forward_ShouldBeDeterministic()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldBeDeterministic()
     {
         var layer = CreateLayer();
         layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
@@ -344,8 +345,8 @@ public abstract class LayerTestBase
     // dead neurons, or input-ignoring forward pass).
     // =========================================================================
 
-    [Fact]
-    public void Forward_DifferentInputs_ShouldProduceDifferentOutputs()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
         if (!ExpectsDifferentOutputForConstantInputs) return;
 
@@ -380,8 +381,8 @@ public abstract class LayerTestBase
     // GetOutputShape() must match the actual shape produced by Forward.
     // =========================================================================
 
-    [Fact]
-    public void Forward_OutputShape_ShouldMatchGetOutputShape()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_OutputShape_ShouldMatchGetOutputShape()
     {
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
@@ -412,8 +413,8 @@ public abstract class LayerTestBase
     // ParameterCount must equal GetParameters().Length for trainable layers.
     // =========================================================================
 
-    [Fact]
-    public void Parameters_CountShouldMatchVector()
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_CountShouldMatchVector()
     {
         var layer = CreateLayer();
 
@@ -435,8 +436,8 @@ public abstract class LayerTestBase
     // Setting parameters and getting them back should return the same values.
     // =========================================================================
 
-    [Fact]
-    public void Parameters_SetGet_Roundtrip()
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_SetGet_Roundtrip()
     {
         var layer = CreateLayer();
         if (layer.ParameterCount == 0) return; // Skip for non-trainable layers
@@ -465,8 +466,8 @@ public abstract class LayerTestBase
     // Serialize -> Deserialize should produce a layer with identical Forward output.
     // =========================================================================
 
-    [Fact]
-    public void Serialize_Deserialize_ShouldPreserveBehavior()
+    [Fact(Timeout = 30000)]
+    public async Task Serialize_Deserialize_ShouldPreserveBehavior()
     {
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
@@ -507,8 +508,8 @@ public abstract class LayerTestBase
     // After ResetState, Forward should still produce valid (finite) output.
     // =========================================================================
 
-    [Fact]
-    public void ResetState_ShouldNotBreakForward()
+    [Fact(Timeout = 30000)]
+    public async Task ResetState_ShouldNotBreakForward()
     {
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);

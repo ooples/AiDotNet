@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AdversarialRobustness;
 
@@ -119,8 +120,8 @@ public class AdversarialTrainingTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithValidOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidOptions_Initializes()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -134,14 +135,14 @@ public class AdversarialTrainingTests
         Assert.Equal(0.1, defense.GetOptions().Epsilon);
     }
 
-    [Fact]
-    public void Constructor_WithNullOptions_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullOptions_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(null!));
     }
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultOptions_Initializes()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -155,8 +156,8 @@ public class AdversarialTrainingTests
 
     #region ApplyDefense Tests
 
-    [Fact]
-    public void ApplyDefense_WithNullModel_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyDefense_WithNullModel_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -166,8 +167,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, null!));
     }
 
-    [Fact]
-    public void ApplyDefense_WithPreprocessingDisabled_ReturnsOriginalModel()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyDefense_WithPreprocessingDisabled_ReturnsOriginalModel()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -183,8 +184,8 @@ public class AdversarialTrainingTests
         Assert.Same(model, defendedModel);
     }
 
-    [Fact]
-    public void ApplyDefense_WithPreprocessingEnabled_ReturnsWrappedModel()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyDefense_WithPreprocessingEnabled_ReturnsWrappedModel()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -200,8 +201,8 @@ public class AdversarialTrainingTests
         Assert.NotSame(model, defendedModel);
     }
 
-    [Fact]
-    public void ApplyDefense_DefendedModelCanPredict()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyDefense_DefendedModelCanPredict()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -226,8 +227,8 @@ public class AdversarialTrainingTests
 
     #region PreprocessInput Tests
 
-    [Fact]
-    public void PreprocessInput_WithPreprocessingDisabled_ReturnsOriginal()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_WithPreprocessingDisabled_ReturnsOriginal()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -241,8 +242,8 @@ public class AdversarialTrainingTests
         Assert.Same(input, preprocessed);
     }
 
-    [Fact]
-    public void PreprocessInput_JPEGMethod_AppliesQuantization()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_JPEGMethod_AppliesQuantization()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -263,8 +264,8 @@ public class AdversarialTrainingTests
         }
     }
 
-    [Fact]
-    public void PreprocessInput_BitDepthReduction_AppliesQuantization()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_BitDepthReduction_AppliesQuantization()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -280,8 +281,8 @@ public class AdversarialTrainingTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
-    public void PreprocessInput_Denoising_ReturnsVector()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_Denoising_ReturnsVector()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -297,8 +298,8 @@ public class AdversarialTrainingTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
-    public void PreprocessInput_UnknownMethod_ReturnsOriginal()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_UnknownMethod_ReturnsOriginal()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -317,8 +318,8 @@ public class AdversarialTrainingTests
 
     #region EvaluateRobustness Tests
 
-    [Fact]
-    public void EvaluateRobustness_WithNullModel_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_WithNullModel_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -329,8 +330,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(null!, testData, labels, attack));
     }
 
-    [Fact]
-    public void EvaluateRobustness_WithNullTestData_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_WithNullTestData_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -341,8 +342,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, null!, labels, attack));
     }
 
-    [Fact]
-    public void EvaluateRobustness_WithNullLabels_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_WithNullLabels_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -353,8 +354,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, null!, attack));
     }
 
-    [Fact]
-    public void EvaluateRobustness_WithNullAttack_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_WithNullAttack_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -365,8 +366,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, null!));
     }
 
-    [Fact]
-    public void EvaluateRobustness_MismatchedRowsAndLabels_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_MismatchedRowsAndLabels_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -378,8 +379,8 @@ public class AdversarialTrainingTests
         Assert.Throws<ArgumentException>(() => defense.EvaluateRobustness(model, testData, labels, attack));
     }
 
-    [Fact]
-    public void EvaluateRobustness_ReturnsValidMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_ReturnsValidMetrics()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -401,8 +402,8 @@ public class AdversarialTrainingTests
         Assert.InRange(metrics.RobustnessScore, 0.0, 1.0);
     }
 
-    [Fact]
-    public void EvaluateRobustness_CalculatesAveragePerturbationSize()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_CalculatesAveragePerturbationSize()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -424,8 +425,8 @@ public class AdversarialTrainingTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_ReturnsNonEmptyBytes()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_ReturnsNonEmptyBytes()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -440,8 +441,8 @@ public class AdversarialTrainingTests
         Assert.NotEmpty(bytes);
     }
 
-    [Fact]
-    public void Deserialize_RestoresOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_RestoresOptions()
     {
         var originalOptions = new AdversarialDefenseOptions<double>
         {
@@ -460,16 +461,16 @@ public class AdversarialTrainingTests
         Assert.Equal(50, restored.GetOptions().TrainingEpochs);
     }
 
-    [Fact]
-    public void Deserialize_NullData_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_NullData_ThrowsException()
     {
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => defense.Deserialize(null!));
     }
 
-    [Fact]
-    public void SaveAndLoadModel_PreservesState()
+    [Fact(Timeout = 60000)]
+    public async Task SaveAndLoadModel_PreservesState()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"defense_test_{Guid.NewGuid()}.json");
         try
@@ -501,8 +502,8 @@ public class AdversarialTrainingTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DoesNotThrow()
     {
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
@@ -515,8 +516,8 @@ public class AdversarialTrainingTests
 
     #region GetOptions Tests
 
-    [Fact]
-    public void GetOptions_ReturnsCorrectOptions()
+    [Fact(Timeout = 60000)]
+    public async Task GetOptions_ReturnsCorrectOptions()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -537,8 +538,8 @@ public class AdversarialTrainingTests
 
     #region Defended Model Tests
 
-    [Fact]
-    public void DefendedModel_GetModelMetadata_DelegatesToInner()
+    [Fact(Timeout = 60000)]
+    public async Task DefendedModel_GetModelMetadata_DelegatesToInner()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -555,8 +556,8 @@ public class AdversarialTrainingTests
         Assert.NotNull(metadata);
     }
 
-    [Fact]
-    public void DefendedModel_Serialize_DelegatesToInner()
+    [Fact(Timeout = 60000)]
+    public async Task DefendedModel_Serialize_DelegatesToInner()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -573,8 +574,8 @@ public class AdversarialTrainingTests
         Assert.NotNull(bytes);
     }
 
-    [Fact]
-    public void DefendedModel_Deserialize_DelegatesToInner()
+    [Fact(Timeout = 60000)]
+    public async Task DefendedModel_Deserialize_DelegatesToInner()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -592,8 +593,8 @@ public class AdversarialTrainingTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void DefendedModel_SaveModel_DelegatesToInner()
+    [Fact(Timeout = 60000)]
+    public async Task DefendedModel_SaveModel_DelegatesToInner()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -622,8 +623,8 @@ public class AdversarialTrainingTests
         }
     }
 
-    [Fact]
-    public void DefendedModel_LoadModel_DelegatesToInner()
+    [Fact(Timeout = 60000)]
+    public async Task DefendedModel_LoadModel_DelegatesToInner()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -646,8 +647,8 @@ public class AdversarialTrainingTests
 
     #region Edge Cases
 
-    [Fact]
-    public void EvaluateRobustness_EmptyTestData_ReturnsZeroMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_EmptyTestData_ReturnsZeroMetrics()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
@@ -662,8 +663,8 @@ public class AdversarialTrainingTests
         // With 0 rows, metrics should be NaN or 0 depending on implementation
     }
 
-    [Fact]
-    public void PreprocessInput_JPEGMethod_ClipsToValidRange()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_JPEGMethod_ClipsToValidRange()
     {
         var options = new AdversarialDefenseOptions<double>
         {
@@ -681,8 +682,8 @@ public class AdversarialTrainingTests
         }
     }
 
-    [Fact]
-    public void PreprocessInput_BitDepthReduction_ClipsToValidRange()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessInput_BitDepthReduction_ClipsToValidRange()
     {
         var options = new AdversarialDefenseOptions<double>
         {

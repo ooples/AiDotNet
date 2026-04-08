@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DataVersionControl;
 
@@ -17,8 +18,8 @@ public class DataVersionControlDeepMathIntegrationTests
     // Hash-Based Integrity: SHA-256 Properties
     // ============================
 
-    [Fact]
-    public void HashMath_SHA256_Deterministic()
+    [Fact(Timeout = 120000)]
+    public async Task HashMath_SHA256_Deterministic()
     {
         byte[] data = Encoding.UTF8.GetBytes("Hello, dataset version control!");
         string hash1 = ComputeSHA256(data);
@@ -27,8 +28,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
-    public void HashMath_SHA256_FixedLength()
+    [Fact(Timeout = 120000)]
+    public async Task HashMath_SHA256_FixedLength()
     {
         // SHA-256 always produces 256 bits = 64 hex characters
         string hash1 = ComputeSHA256(Encoding.UTF8.GetBytes("short"));
@@ -38,8 +39,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(64, hash2.Length);
     }
 
-    [Fact]
-    public void HashMath_SHA256_AvalancheEffect()
+    [Fact(Timeout = 120000)]
+    public async Task HashMath_SHA256_AvalancheEffect()
     {
         // A single bit change should produce a completely different hash
         string hash1 = ComputeSHA256(Encoding.UTF8.GetBytes("data_v1"));
@@ -76,8 +77,8 @@ public class DataVersionControlDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HashMath_CollisionResistance_BirthdayBound()
+    [Fact(Timeout = 120000)]
+    public async Task HashMath_CollisionResistance_BirthdayBound()
     {
         // Birthday bound for SHA-256: ~2^128 hashes needed for 50% collision probability
         // With n-bit hash, expected collisions after 2^(n/2) trials
@@ -147,8 +148,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedPercent, changePercent, 1e-10);
     }
 
-    [Fact]
-    public void ComparisonMath_SchemaCompatibility_ColumnsAdded()
+    [Fact(Timeout = 120000)]
+    public async Task ComparisonMath_SchemaCompatibility_ColumnsAdded()
     {
         string[] originalColumns = { "id", "name", "age" };
         string[] newColumns = { "id", "name", "age", "email" };
@@ -161,8 +162,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Empty(removed);
     }
 
-    [Fact]
-    public void ComparisonMath_SchemaCompatibility_ColumnsRemoved()
+    [Fact(Timeout = 120000)]
+    public async Task ComparisonMath_SchemaCompatibility_ColumnsRemoved()
     {
         string[] originalColumns = { "id", "name", "age", "address" };
         string[] newColumns = { "id", "name", "age" };
@@ -205,8 +206,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedEffect, effect);
     }
 
-    [Fact]
-    public void DriftMath_PopulationStabilityIndex()
+    [Fact(Timeout = 120000)]
+    public async Task DriftMath_PopulationStabilityIndex()
     {
         // PSI = sum((actual_i - expected_i) * ln(actual_i / expected_i))
         double[] expected = { 0.10, 0.20, 0.30, 0.25, 0.15 }; // Reference distribution
@@ -249,8 +250,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedTotalBytes, totalBytes);
     }
 
-    [Fact]
-    public void StorageMath_DeltaStorage_SavingsEstimate()
+    [Fact(Timeout = 120000)]
+    public async Task StorageMath_DeltaStorage_SavingsEstimate()
     {
         // If only 10% of data changes between versions, delta storage saves 90%
         long fullVersionSize = 1000000; // 1 MB
@@ -269,8 +270,8 @@ public class DataVersionControlDeepMathIntegrationTests
     // Lineage Math: DAG Properties
     // ============================
 
-    [Fact]
-    public void LineageMath_DAG_TransitiveReachability()
+    [Fact(Timeout = 120000)]
+    public async Task LineageMath_DAG_TransitiveReachability()
     {
         // Dataset lineage forms a DAG (Directed Acyclic Graph)
         // If A -> B -> C, then C is reachable from A (transitive closure)
@@ -306,8 +307,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Contains("validation_set", reachable);
     }
 
-    [Fact]
-    public void LineageMath_DAG_NoCycles()
+    [Fact(Timeout = 120000)]
+    public async Task LineageMath_DAG_NoCycles()
     {
         // A proper lineage DAG has no cycles
         // DFS-based cycle detection
@@ -322,8 +323,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.False(hasCycle, "Lineage graph should not contain cycles");
     }
 
-    [Fact]
-    public void LineageMath_TopologicalSort_ValidOrdering()
+    [Fact(Timeout = 120000)]
+    public async Task LineageMath_TopologicalSort_ValidOrdering()
     {
         // Topological sort gives valid processing order
         var graph = new Dictionary<string, List<string>>
@@ -346,8 +347,8 @@ public class DataVersionControlDeepMathIntegrationTests
     // Data Integrity: Checksum Verification
     // ============================
 
-    [Fact]
-    public void IntegrityMath_ChecksumVerification_ValidData()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrityMath_ChecksumVerification_ValidData()
     {
         byte[] data = Encoding.UTF8.GetBytes("important dataset contents");
         string expectedHash = ComputeSHA256(data);
@@ -357,8 +358,8 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedHash, actualHash);
     }
 
-    [Fact]
-    public void IntegrityMath_ChecksumVerification_CorruptedData()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrityMath_ChecksumVerification_CorruptedData()
     {
         byte[] originalData = Encoding.UTF8.GetBytes("important dataset contents");
         string originalHash = ComputeSHA256(originalData);

@@ -5,13 +5,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class WeightedCrossEntropyLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
@@ -29,8 +30,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 5);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithDifferentPredictions_ReturnsPositiveValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithDifferentPredictions_ReturnsPositiveValue()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
@@ -48,8 +49,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithoutWeights_UsesDefaultWeights()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithoutWeights_UsesDefaultWeights()
     {
         // Arrange
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -66,8 +67,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithHighWeights_IncreasesLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithHighWeights_IncreasesLoss()
     {
         // Arrange
         var lowWeights = new Vector<double>(new double[] { 0.5, 0.5 });
@@ -90,8 +91,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(resultHigh > resultLow);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithImbalancedWeights_AffectsLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithImbalancedWeights_AffectsLoss()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 5.0, 1.0 });
@@ -109,8 +110,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -119,8 +120,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -132,8 +133,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -145,8 +146,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var weights = new Vector<float>(new float[] { 1.0f, 1.0f });
@@ -164,8 +165,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Training);
@@ -175,8 +176,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new WeightedCrossEntropyLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Testing);
@@ -186,8 +187,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMultiClassPredictions_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMultiClassPredictions_HandlesCorrectly()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0, 1.0, 1.0 });
@@ -205,8 +206,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithEqualProbabilities_HighLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithEqualProbabilities_HighLoss()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0 });
@@ -224,8 +225,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result > 0.3); // Should have significant loss for uncertain prediction
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithConfidentPredictions_LowLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithConfidentPredictions_LowLoss()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0 });
@@ -243,8 +244,8 @@ public class WeightedCrossEntropyLossFitnessCalculatorTests
         Assert.True(result < 0.1); // Should have low loss for confident correct prediction
     }
 
-    [Fact]
-    public void CalculateFitnessScore_AutoCreatesWeights_WhenMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_AutoCreatesWeights_WhenMismatch()
     {
         // Arrange
         var weights = new Vector<double>(new double[] { 1.0, 1.0 }); // Wrong size

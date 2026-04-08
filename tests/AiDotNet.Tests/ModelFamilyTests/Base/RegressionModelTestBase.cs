@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,8 +24,8 @@ public abstract class RegressionModelTestBase
     // Any regression model violating this has a bias bug.
     // =====================================================
 
-    [Fact]
-    public void TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -63,8 +64,8 @@ public abstract class RegressionModelTestBase
     // Scaling all targets by factor K must scale predictions by K.
     // =====================================================
 
-    [Fact]
-    public void ScalingEquivariance_ScalingTargets_ScalesPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -107,8 +108,8 @@ public abstract class RegressionModelTestBase
     // Violation indicates a bug in Train or Predict.
     // =====================================================
 
-    [Fact]
-    public void TrainingError_ShouldNotExceedTestError_OnAverage()
+    [Fact(Timeout = 60000)]
+    public async Task TrainingError_ShouldNotExceedTestError_OnAverage()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -136,8 +137,8 @@ public abstract class RegressionModelTestBase
     // Doubling training data should not make R² worse by more than noise.
     // =====================================================
 
-    [Fact]
-    public void MoreData_ShouldNotDegrade_R2()
+    [Fact(Timeout = 60000)]
+    public async Task MoreData_ShouldNotDegrade_R2()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -174,8 +175,8 @@ public abstract class RegressionModelTestBase
     // Adding a random noise feature should not improve predictions.
     // =====================================================
 
-    [Fact]
-    public void IrrelevantFeature_ShouldNotImprove_Predictions()
+    [Fact(Timeout = 60000)]
+    public async Task IrrelevantFeature_ShouldNotImprove_Predictions()
     {
         if (Features < 2)
         {
@@ -233,8 +234,8 @@ public abstract class RegressionModelTestBase
     // must increase prediction. Tests the model learned correct sign/direction.
     // =====================================================
 
-    [Fact]
-    public void MonotonicResponse_IncreasingFeature_IncreasesPrediction()
+    [Fact(Timeout = 60000)]
+    public async Task MonotonicResponse_IncreasingFeature_IncreasesPrediction()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -274,8 +275,8 @@ public abstract class RegressionModelTestBase
     // Large residual mean indicates systematic bias in the model.
     // =====================================================
 
-    [Fact]
-    public void ResidualMean_ShouldBeNearZero()
+    [Fact(Timeout = 60000)]
+    public async Task ResidualMean_ShouldBeNearZero()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -311,8 +312,8 @@ public abstract class RegressionModelTestBase
     // both features have positive effect on prediction.
     // =====================================================
 
-    [Fact]
-    public void CoefficientSigns_ShouldMatchDataGeneratingProcess()
+    [Fact(Timeout = 60000)]
+    public async Task CoefficientSigns_ShouldMatchDataGeneratingProcess()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -360,8 +361,8 @@ public abstract class RegressionModelTestBase
     // structure should give equivalent predictions.
     // =====================================================
 
-    [Fact]
-    public void FeaturePermutation_ShouldGiveConsistentPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task FeaturePermutation_ShouldGiveConsistentPredictions()
     {
         if (Features < 2)
         {
@@ -418,8 +419,8 @@ public abstract class RegressionModelTestBase
     // that is actually linear. R²≤0 means the model is worse than guessing the mean.
     // =====================================================
 
-    [Fact]
-    public void R2_ShouldBePositive_OnLinearData()
+    [Fact(Timeout = 60000)]
+    public async Task R2_ShouldBePositive_OnLinearData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -443,8 +444,8 @@ public abstract class RegressionModelTestBase
     // No NaN, no Infinity. Violations indicate numerical instability.
     // =====================================================
 
-    [Fact]
-    public void Predictions_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -469,8 +470,8 @@ public abstract class RegressionModelTestBase
     // Same trained model + same input = same output. Always.
     // =====================================================
 
-    [Fact]
-    public void Predict_ShouldBeDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -490,8 +491,8 @@ public abstract class RegressionModelTestBase
     // Predict(N×F matrix) must return length-N vector.
     // =====================================================
 
-    [Fact]
-    public void OutputDimension_ShouldMatchInputRows()
+    [Fact(Timeout = 60000)]
+    public async Task OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -512,8 +513,8 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Clone Produces Identical Predictions
     // =====================================================
 
-    [Fact]
-    public void Clone_ShouldProduceIdenticalPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Clone_ShouldProduceIdenticalPredictions()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -534,8 +535,8 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Metadata Should Exist After Training
     // =====================================================
 
-    [Fact]
-    public void Metadata_ShouldExistAfterTraining()
+    [Fact(Timeout = 60000)]
+    public async Task Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -549,8 +550,8 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Parameters Should Be Non-Empty After Training
     // =====================================================
 
-    [Fact]
-    public void Parameters_ShouldBeNonEmpty_AfterTraining()
+    [Fact(Timeout = 60000)]
+    public async Task Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -570,8 +571,8 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Active Feature Indices Should Be Valid
     // =====================================================
 
-    [Fact]
-    public void ActiveFeatureIndices_ShouldBeValid()
+    [Fact(Timeout = 60000)]
+    public async Task ActiveFeatureIndices_ShouldBeValid()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -599,8 +600,8 @@ public abstract class RegressionModelTestBase
     // If not, the bias/intercept term is broken.
     // =====================================================
 
-    [Fact]
-    public void InterceptRecovery_ConstantTarget_ShouldPredictConstant()
+    [Fact(Timeout = 60000)]
+    public async Task InterceptRecovery_ConstantTarget_ShouldPredictConstant()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -636,8 +637,8 @@ public abstract class RegressionModelTestBase
     // Perfectly correlated features should not cause NaN/Infinity.
     // =====================================================
 
-    [Fact]
-    public void CollinearFeatures_ShouldNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task CollinearFeatures_ShouldNotCrash()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -670,8 +671,8 @@ public abstract class RegressionModelTestBase
     // Regression model should handle 1-dimensional input.
     // =====================================================
 
-    [Fact]
-    public void SingleFeature_ShouldWork()
+    [Fact(Timeout = 60000)]
+    public async Task SingleFeature_ShouldWork()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -700,8 +701,8 @@ public abstract class RegressionModelTestBase
     // INTEGRATION: Builder Pipeline Produces Valid Result
     // =====================================================
 
-    [Fact]
-    public void Builder_ShouldProduceResult()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -717,8 +718,8 @@ public abstract class RegressionModelTestBase
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void Builder_R2ShouldBePositive()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_R2ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);

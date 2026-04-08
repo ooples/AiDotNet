@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using AiDotNet.FederatedLearning.Privacy.Accounting;
@@ -13,8 +14,8 @@ public class RdpPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RdpPrivacyAccountant(clipNorm));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidOrders_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidOrders_Throws()
     {
         Assert.Throws<ArgumentException>(() => new RdpPrivacyAccountant(clipNorm: 1.0, orders: Array.Empty<double>()));
         Assert.Throws<ArgumentException>(() => new RdpPrivacyAccountant(clipNorm: 1.0, orders: new[] { 1.0, 2.0 }));
@@ -33,8 +34,8 @@ public class RdpPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.AddRound(epsilon, delta, samplingRate));
     }
 
-    [Fact]
-    public void AddRound_AccumulatesDeltaAndIncreasesEpsilon()
+    [Fact(Timeout = 60000)]
+    public async Task AddRound_AccumulatesDeltaAndIncreasesEpsilon()
     {
         var accountant = new RdpPrivacyAccountant(clipNorm: 1.0);
 

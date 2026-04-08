@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.Fixtures;
 ///         _fixture = fixture;
 ///     }
 ///
-///     [Fact]
+///     [Fact(Timeout = 60000)]
 ///     public void Test_Something()
 ///     {
 ///         var network = _fixture.MiniDenseNet;

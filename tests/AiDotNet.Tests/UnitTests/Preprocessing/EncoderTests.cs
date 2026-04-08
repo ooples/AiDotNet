@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Preprocessing;
 
@@ -13,8 +14,8 @@ public class EncoderTests
 
     #region OneHotEncoder Tests
 
-    [Fact]
-    public void OneHotEncoder_BasicEncoding_Works()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_BasicEncoding_Works()
     {
         // Arrange - Values 1, 2, 3 should become one-hot vectors
         var data = new Matrix<double>(new double[,]
@@ -56,8 +57,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[3, 2], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_DropFirst_AvoidsMulticollinearity()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_DropFirst_AvoidsMulticollinearity()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -90,8 +91,8 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 1], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_UnknownCategory_ErrorHandling()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_UnknownCategory_ErrorHandling()
     {
         // Arrange
         var trainData = new Matrix<double>(new double[,]
@@ -113,8 +114,8 @@ public class EncoderTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact]
-    public void OneHotEncoder_UnknownCategory_IgnoreHandling()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_UnknownCategory_IgnoreHandling()
     {
         // Arrange
         var trainData = new Matrix<double>(new double[,]
@@ -140,8 +141,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_InverseTransform_ReturnsOriginalValues()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -166,8 +167,8 @@ public class EncoderTests
         Assert.Equal(1.0, decoded[3, 0], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_MultipleColumns_EncodesAllSelected()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_MultipleColumns_EncodesAllSelected()
     {
         // Arrange - Two categorical columns
         var data = new Matrix<double>(new double[,]
@@ -188,8 +189,8 @@ public class EncoderTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
-    public void OneHotEncoder_SpecificColumns_OnlyEncodesSelected()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange - Only encode column 0
         var data = new Matrix<double>(new double[,]
@@ -212,8 +213,8 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0 } });
@@ -223,8 +224,8 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact]
-    public void OneHotEncoder_GetFeatureNamesOut_GeneratesCorrectNames()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_GetFeatureNamesOut_GeneratesCorrectNames()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -247,8 +248,8 @@ public class EncoderTests
         Assert.Equal("color_3", names[2]);
     }
 
-    [Fact]
-    public void OneHotEncoder_SupportsInverseTransform_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
         var encoder = new OneHotEncoder<double>();
@@ -257,8 +258,8 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void OneHotEncoder_Properties_ReturnCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_Properties_ReturnCorrectValues()
     {
         // Arrange
         var encoder = new OneHotEncoder<double>(dropFirst: true, handleUnknown: OneHotUnknownHandling.Ignore);
@@ -272,8 +273,8 @@ public class EncoderTests
 
     #region LabelEncoder Tests
 
-    [Fact]
-    public void LabelEncoder_BasicEncoding_Works()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_BasicEncoding_Works()
     {
         // Arrange - Values get encoded as 0, 1, 2
         var data = new Matrix<double>(new double[,]
@@ -297,8 +298,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[3, 0], Tolerance); // 10 -> 0
     }
 
-    [Fact]
-    public void LabelEncoder_InverseTransform_ReturnsOriginalValues()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -321,8 +322,8 @@ public class EncoderTests
         Assert.Equal(20.0, decoded[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void LabelEncoder_UnknownValue_ReturnsMinusOne()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_UnknownValue_ReturnsMinusOne()
     {
         // Arrange
         var trainData = new Matrix<double>(new double[,]
@@ -345,8 +346,8 @@ public class EncoderTests
         Assert.Equal(-1.0, result[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void LabelEncoder_MultipleColumns_EncodesAll()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_MultipleColumns_EncodesAll()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -370,8 +371,8 @@ public class EncoderTests
         Assert.Equal(1.0, result[1, 1], Tolerance); // 200 -> 1
     }
 
-    [Fact]
-    public void LabelEncoder_SpecificColumns_OnlyEncodesSelected()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -393,8 +394,8 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact]
-    public void LabelEncoder_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0 } });
@@ -404,8 +405,8 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact]
-    public void LabelEncoder_NClasses_ReturnsCorrectCounts()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_NClasses_ReturnsCorrectCounts()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -426,8 +427,8 @@ public class EncoderTests
         Assert.Equal(2, encoder.NClasses[1]); // 2 unique in column 1
     }
 
-    [Fact]
-    public void LabelEncoder_SupportsInverseTransform_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
         var encoder = new LabelEncoder<double>();
@@ -436,8 +437,8 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void LabelEncoder_GetFeatureNamesOut_ReturnsInputNames()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -455,8 +456,8 @@ public class EncoderTests
 
     #region OrdinalEncoder Tests
 
-    [Fact]
-    public void OrdinalEncoder_BasicEncoding_Works()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_BasicEncoding_Works()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -478,8 +479,8 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 0], Tolerance); // 20 -> 1
     }
 
-    [Fact]
-    public void OrdinalEncoder_CustomCategories_UsesProvidedOrder()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_CustomCategories_UsesProvidedOrder()
     {
         // Arrange - Custom order: [20, 10, 30] -> indices 0, 1, 2
         var categories = new List<double[]> { new[] { 20.0, 10.0, 30.0 } };
@@ -502,8 +503,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[2, 0], Tolerance); // 20 -> 0
     }
 
-    [Fact]
-    public void OrdinalEncoder_UnknownValue_ErrorHandling()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_UnknownValue_ErrorHandling()
     {
         // Arrange
         var trainData = new Matrix<double>(new double[,]
@@ -525,8 +526,8 @@ public class EncoderTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact]
-    public void OrdinalEncoder_UnknownValue_UseEncodedValue()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_UnknownValue_UseEncodedValue()
     {
         // Arrange
         var trainData = new Matrix<double>(new double[,]
@@ -551,8 +552,8 @@ public class EncoderTests
         Assert.Equal(-999.0, result[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void OrdinalEncoder_InverseTransform_ReturnsOriginalValues()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_InverseTransform_ReturnsOriginalValues()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -575,8 +576,8 @@ public class EncoderTests
         Assert.Equal(20.0, decoded[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void OrdinalEncoder_MultipleColumns_EncodesAll()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_MultipleColumns_EncodesAll()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -596,8 +597,8 @@ public class EncoderTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void OrdinalEncoder_SpecificColumns_OnlyEncodesSelected()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -619,8 +620,8 @@ public class EncoderTests
         Assert.Equal(200.0, result[1, 1], Tolerance); // Unchanged
     }
 
-    [Fact]
-    public void OrdinalEncoder_Transform_BeforeFit_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_Transform_BeforeFit_ThrowsException()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0 } });
@@ -630,8 +631,8 @@ public class EncoderTests
         Assert.Throws<InvalidOperationException>(() => encoder.Transform(data));
     }
 
-    [Fact]
-    public void OrdinalEncoder_SupportsInverseTransform_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_SupportsInverseTransform_ReturnsTrue()
     {
         // Arrange
         var encoder = new OrdinalEncoder<double>();
@@ -640,8 +641,8 @@ public class EncoderTests
         Assert.True(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void OrdinalEncoder_Properties_ReturnCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_Properties_ReturnCorrectValues()
     {
         // Arrange
         var encoder = new OrdinalEncoder<double>(
@@ -653,8 +654,8 @@ public class EncoderTests
         Assert.Equal(-42, encoder.UnknownValue);
     }
 
-    [Fact]
-    public void OrdinalEncoder_GetFeatureNamesOut_ReturnsInputNames()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_GetFeatureNamesOut_ReturnsInputNames()
     {
         // Arrange
         var data = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
@@ -672,8 +673,8 @@ public class EncoderTests
 
     #region FitTransform Tests
 
-    [Fact]
-    public void OneHotEncoder_FitTransform_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -692,8 +693,8 @@ public class EncoderTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void LabelEncoder_FitTransform_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -712,8 +713,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[1, 0], Tolerance); // 10 -> 0
     }
 
-    [Fact]
-    public void OrdinalEncoder_FitTransform_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalEncoder_FitTransform_WorksCorrectly()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -736,8 +737,8 @@ public class EncoderTests
 
     #region Edge Cases
 
-    [Fact]
-    public void OneHotEncoder_SingleCategory_Works()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_SingleCategory_Works()
     {
         // Arrange - Only one unique value
         var data = new Matrix<double>(new double[,]
@@ -761,8 +762,8 @@ public class EncoderTests
         Assert.Equal(1.0, result[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void LabelEncoder_SingleCategory_ReturnsZeros()
+    [Fact(Timeout = 60000)]
+    public async Task LabelEncoder_SingleCategory_ReturnsZeros()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -782,8 +783,8 @@ public class EncoderTests
         Assert.Equal(0.0, result[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void OneHotEncoder_LargeNumberOfCategories_Works()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_LargeNumberOfCategories_Works()
     {
         // Arrange - 10 unique values
         var data = new Matrix<double>(10, 1);
@@ -804,8 +805,8 @@ public class EncoderTests
         Assert.Equal(10, encoder.NOutputFeatures);
     }
 
-    [Fact]
-    public void OneHotEncoder_Categories_ReturnsLearnedCategories()
+    [Fact(Timeout = 60000)]
+    public async Task OneHotEncoder_Categories_ReturnsLearnedCategories()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]

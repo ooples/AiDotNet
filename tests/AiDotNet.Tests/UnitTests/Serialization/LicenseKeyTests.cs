@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -10,28 +11,28 @@ public class LicenseKeyTests
 {
     // ────────── AiDotNetLicenseKey construction ──────────
 
-    [Fact]
-    public void AiDotNetLicenseKey_ValidKey_SetsKeyProperty()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_ValidKey_SetsKeyProperty()
     {
         var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ");
 
         Assert.Equal("aidn.abc123.secretXYZ", license.Key);
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_NullKey_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_NullKey_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null));
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_WhitespaceKey_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_WhitespaceKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AiDotNetLicenseKey("   "));
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_DefaultProperties_HaveCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_DefaultProperties_HaveCorrectValues()
     {
         var license = new AiDotNetLicenseKey("test-key");
 
@@ -41,8 +42,8 @@ public class LicenseKeyTests
         Assert.True(license.EnableTelemetry);
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_CustomProperties_AreSettable()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_CustomProperties_AreSettable()
     {
         var license = new AiDotNetLicenseKey("test-key")
         {
@@ -60,8 +61,8 @@ public class LicenseKeyTests
 
     // ────────── LicenseKeyResolver ──────────
 
-    [Fact]
-    public void LicenseKeyResolver_ExplicitKey_ReturnsThatKey()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyResolver_ExplicitKey_ReturnsThatKey()
     {
         var license = new AiDotNetLicenseKey("explicit-key-value");
         string? resolved = LicenseKeyResolver.Resolve(license);
@@ -69,8 +70,8 @@ public class LicenseKeyTests
         Assert.Equal("explicit-key-value", resolved);
     }
 
-    [Fact]
-    public void LicenseKeyResolver_NullLicense_FallsThrough()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyResolver_NullLicense_FallsThrough()
     {
         // Save and clear env var to ensure clean state
         string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
@@ -89,8 +90,8 @@ public class LicenseKeyTests
         }
     }
 
-    [Fact]
-    public void LicenseKeyResolver_EnvVar_FallbackWhenNoExplicit()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyResolver_EnvVar_FallbackWhenNoExplicit()
     {
         string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
         string testKey = "env-var-test-key-" + Guid.NewGuid().ToString("N");
@@ -106,8 +107,8 @@ public class LicenseKeyTests
         }
     }
 
-    [Fact]
-    public void LicenseKeyResolver_ExplicitKey_TakesPriorityOverEnvVar()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyResolver_ExplicitKey_TakesPriorityOverEnvVar()
     {
         string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
         System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, "env-key");
@@ -125,16 +126,16 @@ public class LicenseKeyTests
 
     // ────────── MachineFingerprint ──────────
 
-    [Fact]
-    public void MachineFingerprint_GetMachineId_ReturnsNonEmptyString()
+    [Fact(Timeout = 60000)]
+    public async Task MachineFingerprint_GetMachineId_ReturnsNonEmptyString()
     {
         string id = MachineFingerprint.GetMachineId();
 
         Assert.False(string.IsNullOrWhiteSpace(id));
     }
 
-    [Fact]
-    public void MachineFingerprint_GetMachineId_IsConsistent()
+    [Fact(Timeout = 60000)]
+    public async Task MachineFingerprint_GetMachineId_IsConsistent()
     {
         string id1 = MachineFingerprint.GetMachineId();
         string id2 = MachineFingerprint.GetMachineId();
@@ -142,8 +143,8 @@ public class LicenseKeyTests
         Assert.Equal(id1, id2);
     }
 
-    [Fact]
-    public void MachineFingerprint_GetMachineId_IsHexEncoded()
+    [Fact(Timeout = 60000)]
+    public async Task MachineFingerprint_GetMachineId_IsHexEncoded()
     {
         string id = MachineFingerprint.GetMachineId();
 
@@ -154,8 +155,8 @@ public class LicenseKeyTests
 
     // ────────── LicenseValidator (offline mode) ──────────
 
-    [Fact]
-    public void LicenseValidator_ExplicitOffline_ReturnsActive()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_ExplicitOffline_ReturnsActive()
     {
         // Use empty ServerUrl for explicit offline-only mode.
         // Null ServerUrl now means "use DefaultServerUrl" (online validation).
@@ -170,8 +171,8 @@ public class LicenseKeyTests
         Assert.Equal(LicenseKeyStatus.Active, result.Status);
     }
 
-    [Fact]
-    public void LicenseValidator_ExplicitOffline_SetsOfflineMessage()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_ExplicitOffline_SetsOfflineMessage()
     {
         var license = new AiDotNetLicenseKey("aidn.test123.abc456")
         {
@@ -184,8 +185,8 @@ public class LicenseKeyTests
         Assert.Contains("Offline", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void LicenseValidator_UnreachableServer_ReturnsValidationPending()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_UnreachableServer_ReturnsValidationPending()
     {
         var license = new AiDotNetLicenseKey("test-key")
         {
@@ -200,8 +201,8 @@ public class LicenseKeyTests
 
     // ────────── LicenseValidationResult ──────────
 
-    [Fact]
-    public void LicenseValidationResult_DefaultsAreReasonable()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_DefaultsAreReasonable()
     {
         var result = new LicenseValidationResult(LicenseKeyStatus.Active);
 
@@ -216,16 +217,16 @@ public class LicenseKeyTests
 
     // ────────── AiModelBuilder integration ──────────
 
-    [Fact]
-    public void AiModelBuilder_DefaultConstructor_LicenseKeyIsNull()
+    [Fact(Timeout = 60000)]
+    public async Task AiModelBuilder_DefaultConstructor_LicenseKeyIsNull()
     {
         var builder = new AiModelBuilder<double, double[], double>();
 
         Assert.Null(builder.ConfiguredLicenseKey);
     }
 
-    [Fact]
-    public void AiModelBuilder_ConstructorWithLicenseKey_StoresKey()
+    [Fact(Timeout = 60000)]
+    public async Task AiModelBuilder_ConstructorWithLicenseKey_StoresKey()
     {
         var license = new AiDotNetLicenseKey("test-key-123");
         var builder = new AiModelBuilder<double, double[], double>(license);
@@ -234,8 +235,8 @@ public class LicenseKeyTests
         Assert.Equal("test-key-123", builder.ConfiguredLicenseKey.Key);
     }
 
-    [Fact]
-    public void AiModelBuilder_ConfigureLicenseKey_SetsKey()
+    [Fact(Timeout = 60000)]
+    public async Task AiModelBuilder_ConfigureLicenseKey_SetsKey()
     {
         var license = new AiDotNetLicenseKey("fluent-key");
         var builder = new AiModelBuilder<double, double[], double>();
@@ -246,8 +247,8 @@ public class LicenseKeyTests
         Assert.Equal("fluent-key", builder.ConfiguredLicenseKey.Key);
     }
 
-    [Fact]
-    public void AiModelBuilder_ConfigureLicenseKey_ReturnsSameBuilder()
+    [Fact(Timeout = 60000)]
+    public async Task AiModelBuilder_ConfigureLicenseKey_ReturnsSameBuilder()
     {
         var license = new AiDotNetLicenseKey("fluent-key");
         var builder = new AiModelBuilder<double, double[], double>();
@@ -257,8 +258,8 @@ public class LicenseKeyTests
         Assert.Same(builder, returned);
     }
 
-    [Fact]
-    public void AiModelBuilder_ConfigureLicenseKey_NullThrows()
+    [Fact(Timeout = 60000)]
+    public async Task AiModelBuilder_ConfigureLicenseKey_NullThrows()
     {
         var builder = new AiModelBuilder<double, double[], double>();
 

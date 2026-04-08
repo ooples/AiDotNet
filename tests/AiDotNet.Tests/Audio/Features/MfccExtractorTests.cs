@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Audio.Features;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Features
 {
@@ -22,8 +23,8 @@ namespace AiDotNet.Tests.Audio.Features
             return audio;
         }
 
-        [Fact]
-        public void MfccExtractor_DefaultOptions_ExtractsCorrectDimension()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_DefaultOptions_ExtractsCorrectDimension()
         {
             // Arrange
             var options = new MfccOptions
@@ -43,8 +44,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.True(mfccs.Shape[0] > 0, "Should have at least one frame");
         }
 
-        [Fact]
-        public void MfccExtractor_WithDelta_DoublesDimension()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_WithDelta_DoublesDimension()
         {
             // Arrange
             var options = new MfccOptions
@@ -63,8 +64,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(26, mfccs.Shape[1]); // 13 MFCC + 13 delta
         }
 
-        [Fact]
-        public void MfccExtractor_WithDeltaDelta_TriplesDimension()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_WithDeltaDelta_TriplesDimension()
         {
             // Arrange
             var options = new MfccOptions
@@ -84,8 +85,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(39, mfccs.Shape[1]); // 13 MFCC + 13 delta + 13 delta-delta
         }
 
-        [Fact]
-        public void MfccExtractor_Name_IsMFCC()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_Name_IsMFCC()
         {
             // Arrange
             var extractor = new MfccExtractor<float>();
@@ -94,8 +95,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("MFCC", extractor.Name);
         }
 
-        [Fact]
-        public void MfccExtractor_FeatureDimension_MatchesCoefficients()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_FeatureDimension_MatchesCoefficients()
         {
             // Arrange
             var options = new MfccOptions { NumCoefficients = 20 };
@@ -105,8 +106,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(20, extractor.FeatureDimension);
         }
 
-        [Fact]
-        public void MfccExtractor_OutputValues_AreFinite()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_OutputValues_AreFinite()
         {
             // Arrange
             var extractor = new MfccExtractor<float>();
@@ -127,8 +128,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void MfccExtractor_DifferentFrequencies_ProduceDifferentMFCCs()
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_DifferentFrequencies_ProduceDifferentMFCCs()
         {
             // Arrange
             var extractor = new MfccExtractor<float>(new MfccOptions { SampleRate = 16000 });

@@ -22,8 +22,8 @@ namespace AiDotNet.Tests.IntegrationTests;
 [Collection("NonParallelIntegration")]
 public sealed class UncertaintyQuantificationFacadeTests
 {
-    [Fact]
-    public void MCDropoutLayer_WithMonteCarloMode_ProducesStochasticOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_WithMonteCarloMode_ProducesStochasticOutput()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, mcMode: true, randomSeed: 123);
         layer.SetTrainingMode(false);
@@ -33,7 +33,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.True(HasAnyDifferenceAcrossSamples(() => layer.Forward(input).ToVector(), first, attempts: 8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithConfiguredUq_ReturnsVarianceWithSameShape()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -107,7 +107,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.True(uqResult.Metrics.ContainsKey("mutual_information"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithRandomSeed_IsDeterministicPerCall()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -201,7 +201,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithConformalCalibration_ReturnsRegressionInterval()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -261,7 +261,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithClassificationConformalCalibration_ReturnsPredictionSetAndCalibratedProbabilities()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -327,7 +327,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.True(uq.Metrics.ContainsKey("mutual_information"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithAdaptiveConformalClassification_ReturnsPredictionSet()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -379,7 +379,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.All(uq.ClassificationSet.ClassIndices, set => Assert.NotEmpty(set));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithBinaryPlattScaling_ReturnsNormalizedProbabilities()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -436,7 +436,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithLaplaceApproximation_ReturnsVariance()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -488,7 +488,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithBinaryIsotonicCalibration_ReturnsNormalizedProbabilities()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -546,7 +546,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithSwag_ReturnsVariance()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -602,7 +602,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EvaluateModel_WithUqCalibration_PopulatesExpectedCalibrationError()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -657,7 +657,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.True(eval.TrainingSet.UncertaintyStats?.Metrics.ContainsKey("expected_calibration_error") == true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithDeepEnsemble_ReturnsNonZeroVariance()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -700,7 +700,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.Contains(varianceVector, v => v > 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_WithBayesianNeuralNetwork_ReturnsVarianceAndMetrics()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -745,7 +745,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.True(uq.Metrics.ContainsKey("mutual_information"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PredictWithUncertainty_IsThreadSafeUnderConcurrentCalls()
     {
         var architecture = new NeuralNetworkArchitecture<double>(

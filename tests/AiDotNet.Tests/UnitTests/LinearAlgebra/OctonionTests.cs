@@ -1,12 +1,13 @@
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class OctonionTests
 {
-    [Fact]
-    public void Addition_AddsComponents()
+    [Fact(Timeout = 60000)]
+    public async Task Addition_AddsComponents()
     {
         var a = new Octonion<double>(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
         var b = new Octonion<double>(0.5, -1.0, 0.0, 1.0, -2.0, 0.0, 0.0, 1.5);
@@ -23,8 +24,8 @@ public class OctonionTests
         Assert.Equal(9.5, sum.E7, precision: 12);
     }
 
-    [Fact]
-    public void Multiplication_UsesStandardBasisRules()
+    [Fact(Timeout = 60000)]
+    public async Task Multiplication_UsesStandardBasisRules()
     {
         var e1 = new Octonion<double>(0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         var e2 = new Octonion<double>(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -34,8 +35,8 @@ public class OctonionTests
         AssertOctonionClose(e2 * e1, new Octonion<double>(0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0), 12);
     }
 
-    [Fact]
-    public void Multiplication_IsNotAssociative()
+    [Fact(Timeout = 60000)]
+    public async Task Multiplication_IsNotAssociative()
     {
         var e1 = new Octonion<double>(0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         var e2 = new Octonion<double>(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -47,8 +48,8 @@ public class OctonionTests
         Assert.False(left.Equals(right));
     }
 
-    [Fact]
-    public void Conjugate_ProductIsScalarNormSquared()
+    [Fact(Timeout = 60000)]
+    public async Task Conjugate_ProductIsScalarNormSquared()
     {
         var value = new Octonion<double>(1.5, -2.0, 0.5, 0.0, 1.0, -0.25, 0.0, 2.0);
 
@@ -64,8 +65,8 @@ public class OctonionTests
         Assert.Equal(0.0, product.E7, precision: 10);
     }
 
-    [Fact]
-    public void Inverse_MultipliesToIdentity()
+    [Fact(Timeout = 60000)]
+    public async Task Inverse_MultipliesToIdentity()
     {
         var value = new Octonion<double>(2.0, -1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0);
 

@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -61,8 +62,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
         var validator = new StratifiedKFoldCrossValidator<double, Matrix<double>, Vector<double>, double>();
@@ -71,8 +72,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -93,8 +94,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Class Proportion Tests
 
-    [Fact]
-    public void Validate_PreservesClassProportionsInEachFold()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_PreservesClassProportionsInEachFold()
     {
         // Arrange - 60 class 0, 40 class 1 (60%/40% split)
         var options = new CrossValidationOptions
@@ -127,8 +128,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_WorksWithMultipleClasses()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WorksWithMultipleClasses()
     {
         // Arrange - 3 classes
         var options = new CrossValidationOptions
@@ -168,8 +169,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Imbalanced Class Tests
 
-    [Fact]
-    public void Validate_HandlesImbalancedClasses()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_HandlesImbalancedClasses()
     {
         // Arrange - Highly imbalanced: 90% class 0, 10% class 1
         var options = new CrossValidationOptions
@@ -204,8 +205,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -268,8 +269,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Reproducibility Tests
 
-    [Fact]
-    public void Validate_WithSameSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -311,8 +312,8 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var options = new CrossValidationOptions { NumberOfFolds = 3 };

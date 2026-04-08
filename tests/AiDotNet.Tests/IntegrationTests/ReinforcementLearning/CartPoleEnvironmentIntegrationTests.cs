@@ -1,14 +1,15 @@
 using System;
 using AiDotNet.ReinforcementLearning.Environments;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
 public class CartPoleEnvironmentIntegrationTests
 {
-    [Fact]
-    public void Reset_ReturnsStateWithExpectedDimensionsAndRange()
+    [Fact(Timeout = 120000)]
+    public async Task Reset_ReturnsStateWithExpectedDimensionsAndRange()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 5, seed: 123);
 
@@ -21,8 +22,8 @@ public class CartPoleEnvironmentIntegrationTests
         }
     }
 
-    [Fact]
-    public void Step_MaxStepsReached_EndsEpisodeAndReturnsZeroReward()
+    [Fact(Timeout = 120000)]
+    public async Task Step_MaxStepsReached_EndsEpisodeAndReturnsZeroReward()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 1, seed: 7);
         environment.Reset();
@@ -39,8 +40,8 @@ public class CartPoleEnvironmentIntegrationTests
         Assert.True(info.ContainsKey("theta"));
     }
 
-    [Fact]
-    public void Step_InvalidActionIndex_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Step_InvalidActionIndex_Throws()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 5, seed: 5);
         environment.Reset();

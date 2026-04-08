@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,8 +18,8 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // networks. The model should handle it without producing NaN/Inf.
     // =====================================================
 
-    [Fact]
-    public void SelfLoops_ShouldNotCauseNumericalIssues()
+    [Fact(Timeout = 120000)]
+    public async Task SelfLoops_ShouldNotCauseNumericalIssues()
     {
         var network = CreateNetwork();
 
@@ -56,8 +57,8 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // The model should produce finite, non-empty output.
     // =====================================================
 
-    [Fact]
-    public void ZeroInput_ShouldNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
 
@@ -82,8 +83,8 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // A graph network that ignores structure is fundamentally broken.
     // =====================================================
 
-    [Fact]
-    public void DifferentStructures_ProduceDifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentStructures_ProduceDifferentOutputs()
     {
         var network = CreateNetwork();
 

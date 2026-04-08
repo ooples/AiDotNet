@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -141,8 +142,8 @@ public class CholeskyDecompositionIntegrationTests
             "L should be lower triangular");
     }
 
-    [Fact]
-    public void CholeskyDecomposition_L_HasPositiveDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_L_HasPositiveDiagonal()
     {
         // Arrange
         var A = CreateSpdMatrix(5);
@@ -190,8 +191,8 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Known Matrix Tests
 
-    [Fact]
-    public void CholeskyDecomposition_KnownMatrix_CorrectL()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_KnownMatrix_CorrectL()
     {
         // Arrange - Use a known SPD matrix with calculable Cholesky factor
         var A = CreateKnownSpdMatrix();
@@ -210,8 +211,8 @@ public class CholeskyDecompositionIntegrationTests
         Assert.True(IsLowerTriangular(chol.L), "L should be lower triangular");
     }
 
-    [Fact]
-    public void CholeskyDecomposition_IdentityMatrix_L_Is_Identity()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_IdentityMatrix_L_Is_Identity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -235,8 +236,8 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void CholeskyDecomposition_NonSquareMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4);
@@ -245,8 +246,8 @@ public class CholeskyDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new CholeskyDecomposition<double>(A));
     }
 
-    [Fact]
-    public void CholeskyDecomposition_NonSymmetricMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_NonSymmetricMatrix_ThrowsArgumentException()
     {
         // Arrange - Create a non-symmetric matrix
         var A = new Matrix<double>(3, 3);
@@ -262,8 +263,8 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void CholeskyDecomposition_WellConditionedMatrix_HighAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_WellConditionedMatrix_HighAccuracy()
     {
         // Arrange - Create a well-conditioned SPD matrix
         var A = CreateSpdMatrix(10, seed: 42);
@@ -279,8 +280,8 @@ public class CholeskyDecompositionIntegrationTests
             $"Well-conditioned matrix should have very high accuracy. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void CholeskyDecomposition_CovarianceMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_CovarianceMatrix_ValidDecomposition()
     {
         // Arrange - Simulate a covariance matrix (common use case)
         int n = 5;
@@ -332,8 +333,8 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Uniqueness Tests
 
-    [Fact]
-    public void CholeskyDecomposition_IsUnique()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyDecomposition_IsUnique()
     {
         // Arrange
         var A = CreateSpdMatrix(5, seed: 123);

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -146,8 +147,8 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 4: Activate(0) == 0 for zero-preserving activations
     // =========================================================================
 
-    [Fact]
-    public void Activate_ZeroInput()
+    [Fact(Timeout = 30000)]
+    public async Task Activate_ZeroInput()
     {
         if (!ZeroMapsToZero) return;
 
@@ -161,8 +162,8 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 5: Monotonicity — for monotonic activations, larger input → larger output
     // =========================================================================
 
-    [Fact]
-    public void Activate_ShouldBeMonotonic()
+    [Fact(Timeout = 30000)]
+    public async Task Activate_ShouldBeMonotonic()
     {
         if (!IsMonotonic) return;
 
@@ -181,8 +182,8 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 6: Bounded activations stay within bounds
     // =========================================================================
 
-    [Fact]
-    public void Activate_ShouldRespectBounds()
+    [Fact(Timeout = 30000)]
+    public async Task Activate_ShouldRespectBounds()
     {
         if (!IsBounded) return;
 
@@ -219,8 +220,8 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 8: Tensor-level Activate matches scalar Activate
     // =========================================================================
 
-    [Fact]
-    public void TensorActivate_ShouldMatchScalarActivate()
+    [Fact(Timeout = 30000)]
+    public async Task TensorActivate_ShouldMatchScalarActivate()
     {
         var fn = CreateTestActivation();
         var input = new Tensor<double>([5]);
@@ -243,8 +244,8 @@ public abstract class ActivationFunctionTestBase
     // For monotonically non-decreasing activations, f'(x) >= 0 everywhere.
     // =========================================================================
 
-    [Fact]
-    public void Derivative_ShouldBeNonNegativeForMonotonicActivation()
+    [Fact(Timeout = 30000)]
+    public async Task Derivative_ShouldBeNonNegativeForMonotonicActivation()
     {
         if (!IsMonotonic) return;
 

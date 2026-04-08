@@ -6,6 +6,7 @@ using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -17,8 +18,8 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderSerializeRoundTripTests
 {
-    [Fact]
-    public void RidgeRegression_SerializeDeserialize_PredictMatchesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_SerializeDeserialize_PredictMatchesOriginal()
     {
         // Arrange: Train a RidgeRegression model through the builder
         var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 42);
@@ -57,8 +58,8 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
-    public void MultipleRegression_SerializeDeserialize_PredictMatchesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_SerializeDeserialize_PredictMatchesOriginal()
     {
         // Arrange: Different model type to verify serializer generality
         var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 77);
@@ -88,8 +89,8 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
-    public void SerializeDeserialize_PreservesOptimizationResult()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeDeserialize_PreservesOptimizationResult()
     {
         // Arrange: Train with default optimizer that performs feature selection
         var (x, y) = CreateLinearDataset(samples: 60, features: 6, seed: 55);
@@ -124,8 +125,8 @@ public class AiModelBuilderSerializeRoundTripTests
         Assert.NotNull(restored.OptimizationResult?.BestSolution);
     }
 
-    [Fact]
-    public void SerializeDeserialize_PreservesPreprocessingInfo()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeDeserialize_PreservesPreprocessingInfo()
     {
         // Arrange: Train with explicit preprocessing
         var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 88);
@@ -166,8 +167,8 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
-    public void SerializeDeserialize_EmptyModel_RoundTripPreserveEmptyState()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeDeserialize_EmptyModel_RoundTripPreserveEmptyState()
     {
         // Arrange: Create an AiModelResult with no model set
         var emptyResult = new AiModelResult<double, Matrix<double>, Vector<double>>();

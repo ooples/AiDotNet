@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Performance;
 
@@ -17,8 +18,8 @@ public class Phase3GateTests
 {
     #region InferenceContext Tests
 
-    [Fact]
-    public void InferenceContext_Rent_ReturnsValidTensor()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Rent_ReturnsValidTensor()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         using var context = new InferenceContext<float>(pool);
@@ -32,8 +33,8 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[1]);
     }
 
-    [Fact]
-    public void InferenceContext_Rent1D_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Rent1D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
 
@@ -43,8 +44,8 @@ public class Phase3GateTests
         Assert.Equal(100, tensor.Shape[0]);
     }
 
-    [Fact]
-    public void InferenceContext_Rent2D_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Rent2D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
 
@@ -55,8 +56,8 @@ public class Phase3GateTests
         Assert.Equal(64, tensor.Shape[1]);
     }
 
-    [Fact]
-    public void InferenceContext_Rent3D_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Rent3D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
 
@@ -68,8 +69,8 @@ public class Phase3GateTests
         Assert.Equal(64, tensor.Shape[2]);
     }
 
-    [Fact]
-    public void InferenceContext_Rent4D_ReturnsCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Rent4D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
 
@@ -82,8 +83,8 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[3]);
     }
 
-    [Fact]
-    public void InferenceContext_RentLike_MatchesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_RentLike_MatchesTemplate()
     {
         using var context = new InferenceContext<float>();
         var template = new Tensor<float>(new[] { 8, 16, 32 });
@@ -96,8 +97,8 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[2]);
     }
 
-    [Fact]
-    public void InferenceContext_TracksRentedTensorCount()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_TracksRentedTensorCount()
     {
         using var context = new InferenceContext<float>();
 
@@ -113,8 +114,8 @@ public class Phase3GateTests
         Assert.Equal(3, context.RentedTensorCount);
     }
 
-    [Fact]
-    public void InferenceContext_DisposedReturnsToPool()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_DisposedReturnsToPool()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var shape = new[] { 32, 32 };
@@ -133,8 +134,8 @@ public class Phase3GateTests
         Assert.Equal(3, pool.TotalPooledTensors);
     }
 
-    [Fact]
-    public void InferenceContext_Release_ReturnsImmediately()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_Release_ReturnsImmediately()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         using var context = new InferenceContext<float>(pool);
@@ -146,8 +147,8 @@ public class Phase3GateTests
         Assert.Equal(1, pool.TotalPooledTensors);
     }
 
-    [Fact]
-    public void InferenceContext_DisablePooling_AllocatesNew()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_DisablePooling_AllocatesNew()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
 
@@ -167,8 +168,8 @@ public class Phase3GateTests
         Assert.Equal(1, pool.TotalPooledTensors);
     }
 
-    [Fact]
-    public void InferenceContext_DisposeAfterObjectDisposed_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_DisposeAfterObjectDisposed_ThrowsException()
     {
         var context = new InferenceContext<float>();
         context.Dispose();
@@ -180,8 +181,8 @@ public class Phase3GateTests
 
     #region InferenceScope Tests
 
-    [Fact]
-    public void InferenceScope_Current_IsNullByDefault()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_Current_IsNullByDefault()
     {
         // Ensure no context is set
         InferenceScope<float>.Current = null;
@@ -190,8 +191,8 @@ public class Phase3GateTests
         Assert.False(InferenceScope<float>.IsActive);
     }
 
-    [Fact]
-    public void InferenceScope_Begin_SetsCurrentContext()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_Begin_SetsCurrentContext()
     {
         var context = new InferenceContext<float>();
 
@@ -206,8 +207,8 @@ public class Phase3GateTests
         Assert.False(InferenceScope<float>.IsActive);
     }
 
-    [Fact]
-    public void InferenceScope_NestedScopes_RestoreCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_NestedScopes_RestoreCorrectly()
     {
         var context1 = new InferenceContext<float>();
         var context2 = new InferenceContext<float>();
@@ -229,8 +230,8 @@ public class Phase3GateTests
         Assert.Null(InferenceScope<float>.Current);
     }
 
-    [Fact]
-    public void InferenceScope_RentOrCreate_UsesPoolWhenActive()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_RentOrCreate_UsesPoolWhenActive()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
         var context = new InferenceContext<float>(pool);
@@ -250,8 +251,8 @@ public class Phase3GateTests
         }
     }
 
-    [Fact]
-    public void InferenceScope_RentOrCreateLike_MatchesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_RentOrCreateLike_MatchesTemplate()
     {
         var template = new Tensor<float>(new[] { 8, 16 });
         var context = new InferenceContext<float>();
@@ -265,8 +266,8 @@ public class Phase3GateTests
         }
     }
 
-    [Fact]
-    public void InferenceScope_IsThreadLocal()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_IsThreadLocal()
     {
         var context1 = new InferenceContext<float>();
         var context2 = new InferenceContext<float>();
@@ -305,8 +306,8 @@ public class Phase3GateTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact]
-    public void CrossAttentionLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task CrossAttentionLayer_Forward_ProducesValidOutput()
     {
         // Test that CrossAttentionLayer still works after refactoring
         // Constructor: (queryDim, contextDim, headCount, sequenceLength)
@@ -343,8 +344,8 @@ public class Phase3GateTests
         Assert.Equal(64, output.Shape[2]); // queryDim
     }
 
-    [Fact]
-    public void CrossAttentionLayer_Forward_DifferentContextLength()
+    [Fact(Timeout = 60000)]
+    public async Task CrossAttentionLayer_Forward_DifferentContextLength()
     {
         // Context can have different sequence length than query
         var layer = new CrossAttentionLayer<float>(
@@ -371,8 +372,8 @@ public class Phase3GateTests
         Assert.Equal(new[] { 1, 8, 32 }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void CrossAttentionLayer_Forward_IsDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task CrossAttentionLayer_Forward_IsDeterministic()
     {
         var layer = new CrossAttentionLayer<float>(
             queryDim: 32,
@@ -407,8 +408,8 @@ public class Phase3GateTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact]
-    public void SelfAttentionLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task SelfAttentionLayer_Forward_ProducesValidOutput()
     {
         // Constructor: (sequenceLength, embeddingDimension, headCount, activationFunction?)
         // Using explicit null cast to resolve constructor ambiguity
@@ -437,8 +438,8 @@ public class Phase3GateTests
         Assert.Equal(64, output.Shape[2]); // embeddingDim
     }
 
-    [Fact]
-    public void SelfAttentionLayer_Forward_IsDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task SelfAttentionLayer_Forward_IsDeterministic()
     {
         var layer = new SelfAttentionLayer<float>(
             sequenceLength: 8,
@@ -468,8 +469,8 @@ public class Phase3GateTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
-    public void GraphAttentionLayer_Forward_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task GraphAttentionLayer_Forward_ProducesValidOutput()
     {
         // Constructor: (inputFeatures, outputFeatures, numHeads, alpha, dropoutRate, ...)
         var layer = new GraphAttentionLayer<float>(
@@ -509,8 +510,8 @@ public class Phase3GateTests
 
     #region Performance Tests
 
-    [Fact]
-    public void InferenceContext_RentReturn_IsFast()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceContext_RentReturn_IsFast()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
         var shape = new[] { 64, 64 };
@@ -537,8 +538,8 @@ public class Phase3GateTests
         Assert.True(usPerIteration < 500, $"Context cycle took {usPerIteration:F2} microseconds, expected < 500");
     }
 
-    [Fact]
-    public void InferenceScope_RentOrCreate_WithPooling_IsFasterThanWithout()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceScope_RentOrCreate_WithPooling_IsFasterThanWithout()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
         var shape = new[] { 128, 128 };
@@ -581,8 +582,8 @@ public class Phase3GateTests
             $"Pooled ({swPooled.ElapsedMilliseconds}ms) should not be >10x slower than allocation ({swAlloc.ElapsedMilliseconds}ms)");
     }
 
-    [Fact]
-    public void CrossAttentionLayer_Forward_ExecutesInReasonableTime()
+    [Fact(Timeout = 60000)]
+    public async Task CrossAttentionLayer_Forward_ExecutesInReasonableTime()
     {
         var layer = new CrossAttentionLayer<float>(
             queryDim: 64,

@@ -2,6 +2,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Preprocessing.TimeSeries;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -64,8 +65,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region TimeSeriesFeatureOptions Tests
 
-    [Fact]
-    public void TimeSeriesFeatureOptions_DefaultValues_AreValid()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesFeatureOptions_DefaultValues_AreValid()
     {
         var options = new TimeSeriesFeatureOptions();
         var errors = options.Validate();
@@ -76,8 +77,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(RollingStatistics.All, options.EnabledStatistics);
     }
 
-    [Fact]
-    public void TimeSeriesFeatureOptions_CreateForFinance_HasValidSettings()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesFeatureOptions_CreateForFinance_HasValidSettings()
     {
         var options = TimeSeriesFeatureOptions.CreateForFinance();
         var errors = options.Validate();
@@ -89,8 +90,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains(252, options.WindowSizes);
     }
 
-    [Fact]
-    public void TimeSeriesFeatureOptions_CreateMinimal_HasValidSettings()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesFeatureOptions_CreateMinimal_HasValidSettings()
     {
         var options = TimeSeriesFeatureOptions.CreateMinimal();
         var errors = options.Validate();
@@ -101,8 +102,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.False(options.EnableCorrelation);
     }
 
-    [Fact]
-    public void TimeSeriesFeatureOptions_InvalidWindowSize_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesFeatureOptions_InvalidWindowSize_ReturnsError()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -114,8 +115,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains(errors, e => e.Contains("window size"));
     }
 
-    [Fact]
-    public void TimeSeriesFeatureOptions_InvalidLagStep_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesFeatureOptions_InvalidLagStep_ReturnsError()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -131,8 +132,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region RollingStatsTransformer Tests
 
-    [Fact]
-    public void RollingStatsTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -145,8 +146,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.False(transformer.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_FitTransform_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_FitTransform_ProducesOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -164,8 +165,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] > 0);   // Has output features
     }
 
-    [Fact]
-    public void RollingStatsTransformer_FitTransform_SameAsFitThenTransform()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_FitTransform_SameAsFitThenTransform()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -196,8 +197,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingStatsTransformer_MeanCalculation_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_MeanCalculation_IsCorrect()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -224,8 +225,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(!double.IsNaN(val) && val > 0, $"Expected positive mean at t=10, got {val}");
     }
 
-    [Fact]
-    public void RollingStatsTransformer_GeneratesFeatureNames()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_GeneratesFeatureNames()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -244,8 +245,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains(featureNames, n => n.Contains("volume") && n.Contains("max"));
     }
 
-    [Fact]
-    public void RollingStatsTransformer_MultipleWindowSizes_ProducesMoreFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_MultipleWindowSizes_ProducesMoreFeatures()
     {
         var optionsSingle = new TimeSeriesFeatureOptions
         {
@@ -270,8 +271,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(result1.Shape[1] * 3, result2.Shape[1]);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_Float_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions();
         var transformer = new RollingStatsTransformer<float>(options);
@@ -283,8 +284,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region RollingVolatilityTransformer Tests
 
-    [Fact]
-    public void RollingVolatilityTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -296,8 +297,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_FitTransform_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_FitTransform_ProducesOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -316,8 +317,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] > 0);
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_Returns_AreCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_Returns_AreCalculated()
     {
         // NOTE: The current implementation uses EnabledVolatilityMeasures to determine
         // which features to compute. CalculateReturns/CalculateMomentum flags are stored
@@ -341,8 +342,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
             $"Expected return features. Got: {string.Join(", ", featureNames)}");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_ParkinsonVolatility_WithOHLC()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_ParkinsonVolatility_WithOHLC()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -366,8 +367,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region LagLeadTransformer Tests
 
-    [Fact]
-    public void LagLeadTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -378,8 +379,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void LagLeadTransformer_LagFeatures_ProducesCorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_LagFeatures_ProducesCorrectOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -408,8 +409,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(double.IsNaN(result[0, 0]));
     }
 
-    [Fact]
-    public void LagLeadTransformer_LeadFeatures_ProducesCorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_LeadFeatures_ProducesCorrectOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -432,8 +433,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(double.IsNaN(result[4, 0]));
     }
 
-    [Fact]
-    public void LagLeadTransformer_GeneratesCorrectFeatureNames()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_GeneratesCorrectFeatureNames()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -457,8 +458,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region RollingCorrelationTransformer Tests
 
-    [Fact]
-    public void RollingCorrelationTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -470,8 +471,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_FitTransform_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_FitTransform_ProducesOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -491,8 +492,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(3, result.Shape[1]);
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_FullMatrix_ProducesMoreFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_FullMatrix_ProducesMoreFeatures()
     {
         var optionsTriangle = new TimeSeriesFeatureOptions
         {
@@ -519,8 +520,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result2.Shape[1] > result1.Shape[1]);
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_PerfectCorrelation_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_PerfectCorrelation_ReturnsOne()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -547,8 +548,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void RollingStatsTransformer_ValidateInput_ReturnsTrue_ForValidData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ValidateInput_ReturnsTrue_ForValidData()
     {
         var options = new TimeSeriesFeatureOptions { WindowSizes = [5] };
         var transformer = new RollingStatsTransformer<double>(options);
@@ -558,8 +559,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(transformer.ValidateInput(data));
     }
 
-    [Fact]
-    public void RollingStatsTransformer_GetValidationErrors_ReturnsErrors_ForShortData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_GetValidationErrors_ReturnsErrors_ForShortData()
     {
         var options = new TimeSeriesFeatureOptions { WindowSizes = [10] };
         var transformer = new RollingStatsTransformer<double>(options);
@@ -578,8 +579,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Parallel Processing Tests
 
-    [Fact]
-    public void RollingStatsTransformer_ParallelProcessing_ProducesSameResults()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ParallelProcessing_ProducesSameResults()
     {
         var optionsSerial = new TimeSeriesFeatureOptions
         {
@@ -623,8 +624,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void RollingStatsTransformer_SingleFeature_Works()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_SingleFeature_Works()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -641,8 +642,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] >= 1, $"Expected at least 1 output feature, got {result.Shape[1]}");
     }
 
-    [Fact]
-    public void RollingStatsTransformer_ManyFeatures_Works()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ManyFeatures_Works()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -659,8 +660,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] >= 10, $"Expected at least 10 output features for 10 inputs, got {result.Shape[1]}");
     }
 
-    [Fact]
-    public void LagLeadTransformer_EmptyLagAndLead_ProducesEmptyOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_EmptyLagAndLead_ProducesEmptyOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -679,8 +680,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region EdgeHandling Tests
 
-    [Fact]
-    public void RollingStatsTransformer_EdgeHandlingNaN_ProducesNaNForIncompleteWindows()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_EdgeHandlingNaN_ProducesNaNForIncompleteWindows()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -705,8 +706,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
             $"Expected valid value at t=4, got {result[4, 0]}");
     }
 
-    [Fact]
-    public void RollingStatsTransformer_EdgeHandlingPartial_ComputesWithAvailableData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_EdgeHandlingPartial_ComputesWithAvailableData()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -736,8 +737,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(30.0, result[4, 0], 5);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_EdgeHandlingTruncate_ShorterOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_EdgeHandlingTruncate_ShorterOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -761,8 +762,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingStatsTransformer_EdgeHandlingForwardFill_FillsEdgeRegion()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_EdgeHandlingForwardFill_FillsEdgeRegion()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -791,8 +792,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_EdgeHandlingPartial_ComputesWithAvailableData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_EdgeHandlingPartial_ComputesWithAvailableData()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -824,8 +825,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(hasValidLater, "Should have valid volatility values after enough data");
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_EdgeHandlingTruncate_ShorterOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_EdgeHandlingTruncate_ShorterOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -842,8 +843,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(21, result.Shape[0]);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_EdgeHandlingTruncate_EmptyOutput_ForShortData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_EdgeHandlingTruncate_EmptyOutput_ForShortData()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -860,8 +861,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.FitTransform(data));
     }
 
-    [Fact]
-    public void AllTransformers_EdgeHandlingConsistency_ParallelEqualsSequential()
+    [Fact(Timeout = 120000)]
+    public async Task AllTransformers_EdgeHandlingConsistency_ParallelEqualsSequential()
     {
         // Test that parallel and sequential produce identical results for all edge handling modes
         foreach (var edgeHandling in new[] { EdgeHandling.NaN, EdgeHandling.Partial, EdgeHandling.ForwardFill })
@@ -909,8 +910,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingStatsTransformer_MultipleWindowSizes_EdgeHandlingPartial()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_MultipleWindowSizes_EdgeHandlingPartial()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -950,8 +951,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Auto-Detection Tests
 
-    [Fact]
-    public void TimeSeriesTransformerBase_AutocorrelationDetection_DetectsPeriods()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_AutocorrelationDetection_DetectsPeriods()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -979,8 +980,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         // Due to autocorrelation, we might get 10 or harmonics/subharmonics
     }
 
-    [Fact]
-    public void TimeSeriesTransformerBase_SpectralDetection_FindsDominantFrequencies()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_SpectralDetection_FindsDominantFrequencies()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1007,8 +1008,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         // FFT should detect periods around 20 and/or 40
     }
 
-    [Fact]
-    public void TimeSeriesTransformerBase_GridSearchDetection_FindsOptimalWindows()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_GridSearchDetection_FindsOptimalWindows()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1031,8 +1032,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(windowSizes.All(w => w <= options.MaxWindowSize));
     }
 
-    [Fact]
-    public void TimeSeriesTransformerBase_HeuristicDetection_ReturnsValidWindows()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_HeuristicDetection_ReturnsValidWindows()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1055,8 +1056,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(windowSizes.Length <= options.MaxAutoDetectedWindows);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerBase_SpectralDetection_HandlesSingletons()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_SpectralDetection_HandlesSingletons()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1076,8 +1077,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Fit(data));
     }
 
-    [Fact]
-    public void TimeSeriesTransformerBase_SpectralDetection_MultipleFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerBase_SpectralDetection_MultipleFeatures()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1110,8 +1111,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region OHLC Volatility Tests
 
-    [Fact]
-    public void RollingVolatilityTransformer_ParkinsonVolatility_WithOhlcConfig_UsesHighLow()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_ParkinsonVolatility_WithOhlcConfig_UsesHighLow()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1148,8 +1149,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_GarmanKlassVolatility_WithOhlcConfig_UsesAllOhlc()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_GarmanKlassVolatility_WithOhlcConfig_UsesAllOhlc()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1179,8 +1180,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_HlcConfig_ParkinsonUsesHighLow()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_HlcConfig_ParkinsonUsesHighLow()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1224,8 +1225,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_WithoutOhlcConfig_UsesApproximation()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_WithoutOhlcConfig_UsesApproximation()
     {
         // When OHLC columns are not configured, transformer should fall back to approximation
         var options = new TimeSeriesFeatureOptions
@@ -1263,8 +1264,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_OhlcVsApproximation_ProducesDifferentValues()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_OhlcVsApproximation_ProducesDifferentValues()
     {
         // Test that OHLC-aware calculation differs from approximation
         var ohlcOptions = new TimeSeriesFeatureOptions
@@ -1323,8 +1324,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
             "OHLC-based and approximation-based Parkinson volatility should produce different values");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_AllVolatilityMeasures_WithOhlc_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_AllVolatilityMeasures_WithOhlc_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1363,8 +1364,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_Ohlc_ParallelEqualsSequential()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_Ohlc_ParallelEqualsSequential()
     {
         var baseOptions = new TimeSeriesFeatureOptions
         {
@@ -1425,8 +1426,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void OhlcColumnConfig_CreateStandard_HasCorrectIndices()
+    [Fact(Timeout = 120000)]
+    public async Task OhlcColumnConfig_CreateStandard_HasCorrectIndices()
     {
         var config = OhlcColumnConfig.CreateStandard();
 
@@ -1438,8 +1439,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(config.HasOhlc);
     }
 
-    [Fact]
-    public void OhlcColumnConfig_CreateHlc_HasCorrectIndices()
+    [Fact(Timeout = 120000)]
+    public async Task OhlcColumnConfig_CreateHlc_HasCorrectIndices()
     {
         var config = OhlcColumnConfig.CreateHlc(highIndex: 0, lowIndex: 1, closeIndex: 2);
 
@@ -1451,8 +1452,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.False(config.HasOhlc);
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_LargeHighLowSpread_HigherParkinsonVolatility()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_LargeHighLowSpread_HigherParkinsonVolatility()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1500,8 +1501,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Advanced Volatility Tests
 
-    [Fact]
-    public void RollingVolatilityTransformer_EwmaVolatility_RespondsToRecentData()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_EwmaVolatility_RespondsToRecentData()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1543,8 +1544,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
             $"EWMA should be higher in volatile period ({volatileEwma}) than stable period ({stableEwma})");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_EwmaVolatility_DecayFactorAffectsResult()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_EwmaVolatility_DecayFactorAffectsResult()
     {
         // High decay = smoother (older data matters more)
         var highDecayOptions = new TimeSeriesFeatureOptions
@@ -1587,8 +1588,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotEqual(highResult[25, 0], lowResult[25, 0], 5);
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_GarchVolatility_CapturesVolatilityClustering()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_GarchVolatility_CapturesVolatilityClustering()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1621,8 +1622,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 30, $"GARCH should produce valid values, got {validCount} out of 35");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_GarchVolatility_InvalidParametersFallback()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_GarchVolatility_InvalidParametersFallback()
     {
         // alpha + beta >= 1 is invalid for GARCH (non-stationary)
         var options = new TimeSeriesFeatureOptions
@@ -1652,8 +1653,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 10, "Should fall back to simple variance when GARCH is invalid");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_YangZhangVolatility_WithOhlc_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_YangZhangVolatility_WithOhlc_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1685,8 +1686,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 20, $"Yang-Zhang should produce valid values, got {validCount} out of 25");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_YangZhangVolatility_FallbackWithoutOhlc()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_YangZhangVolatility_FallbackWithoutOhlc()
     {
         // Without OHLC config, should fall back to realized volatility
         var options = new TimeSeriesFeatureOptions
@@ -1718,8 +1719,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 10, "Should fall back to realized volatility when OHLC is missing");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_RogersSatchellVolatility_DriftIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_RogersSatchellVolatility_DriftIndependent()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1762,8 +1763,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(volatilities.Count > 10, "Should have valid volatility estimates");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_RogersSatchellVolatility_FallbackWithoutOhlc()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_RogersSatchellVolatility_FallbackWithoutOhlc()
     {
         // Without OHLC config, should fall back to Parkinson approximation
         var options = new TimeSeriesFeatureOptions
@@ -1795,8 +1796,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 10, "Should fall back to Parkinson approximation when OHLC is missing");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_AllAdvancedVolatility_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_AllAdvancedVolatility_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1838,8 +1839,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 100, $"Should have many valid advanced volatility values, got {validCount}");
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_AdvancedVolatility_ParallelEqualsSequential()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_AdvancedVolatility_ParallelEqualsSequential()
     {
         var baseOptions = new TimeSeriesFeatureOptions
         {
@@ -1917,8 +1918,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region TechnicalIndicatorsTransformer Tests
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1931,8 +1932,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_SMA_ProducesCorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_SMA_ProducesCorrectOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1962,8 +1963,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(double.IsNaN(result[3, 0]));
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_EMA_RespondsToRecentPrices()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_EMA_RespondsToRecentPrices()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -1988,8 +1989,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result[19, 0] > result[12, 0], "EMA should continue approaching new price");
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_RSI_ReturnsValuesBetween0And100()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_RSI_ReturnsValuesBetween0And100()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2016,8 +2017,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_BollingerBands_UpperGreaterThanLower()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_BollingerBands_UpperGreaterThanLower()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2056,8 +2057,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_MACD_ProducesThreeOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_MACD_ProducesThreeOutputs()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2095,8 +2096,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_StochasticOscillator_ReturnsValuesBetween0And100()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_StochasticOscillator_ReturnsValuesBetween0And100()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2132,8 +2133,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_WilliamsR_ReturnsValuesBetweenMinus100And0()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_WilliamsR_ReturnsValuesBetweenMinus100And0()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2161,8 +2162,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_ATR_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_ATR_IsNonNegative()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2189,8 +2190,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_AllIndicators_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_AllIndicators_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2213,8 +2214,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] > 20, $"Expected many output features, got {result.Shape[1]}");
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_WMA_WeightsRecentPricesMore()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_WMA_WeightsRecentPricesMore()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2242,8 +2243,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(!double.IsNaN(sma) && !double.IsNaN(wma), "Both SMA and WMA should have values");
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_DEMA_ReducesLag()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_DEMA_ReducesLag()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2274,8 +2275,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_CCI_CanDetectOverboughtOversold()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_CCI_CanDetectOverboughtOversold()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2304,8 +2305,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 0, "CCI should produce valid values");
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_ADX_MeasuresTrendStrength()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_ADX_MeasuresTrendStrength()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2334,8 +2335,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_MultipleWindowSizes_ProducesCorrectFeatureCount()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_MultipleWindowSizes_ProducesCorrectFeatureCount()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2356,8 +2357,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(6, result.Shape[1]);
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_WithoutOhlc_UsesApproximations()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_WithoutOhlc_UsesApproximations()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2394,8 +2395,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region SeasonalityTransformer Tests
 
-    [Fact]
-    public void SeasonalityTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2410,8 +2411,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void SeasonalityTransformer_FourierFeatures_ProducesCorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_FourierFeatures_ProducesCorrectOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2450,8 +2451,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(result[0, 0], result[14, 0], 10);
     }
 
-    [Fact]
-    public void SeasonalityTransformer_TimeFeatures_WithDate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_TimeFeatures_WithDate_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2486,8 +2487,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SeasonalityTransformer_CalendarEvents_DetectsWeekend()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_CalendarEvents_DetectsWeekend()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2516,8 +2517,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[6, 0], 10); // Sunday
     }
 
-    [Fact]
-    public void SeasonalityTransformer_HolidayFeatures_DetectsHolidays()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_HolidayFeatures_DetectsHolidays()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2550,8 +2551,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(0.0, result[1, 1], 10); // Not "near" (it's the actual holiday)
     }
 
-    [Fact]
-    public void SeasonalityTransformer_TradingFeatures_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_TradingFeatures_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2585,8 +2586,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SeasonalityTransformer_AllFeatures_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_AllFeatures_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2621,8 +2622,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SeasonalityTransformer_WithoutDate_UsesIndexBasedFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_WithoutDate_UsesIndexBasedFeatures()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2649,8 +2650,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[49, 0], 10);
     }
 
-    [Fact]
-    public void SeasonalityTransformer_MonthStartEnd_DetectsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_MonthStartEnd_DetectsCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2685,8 +2686,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[30, 1], 10); // Jan 31
     }
 
-    [Fact]
-    public void SeasonalityTransformer_FourierFeatures_CaptureCycles()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_FourierFeatures_CaptureCycles()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2723,8 +2724,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region DifferencingTransformer Tests
 
-    [Fact]
-    public void DifferencingTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2737,8 +2738,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void DifferencingTransformer_FirstDifference_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_FirstDifference_ComputesCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2770,8 +2771,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(10.0, result[4, 0], 10);
     }
 
-    [Fact]
-    public void DifferencingTransformer_SecondDifference_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_SecondDifference_ComputesCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2799,8 +2800,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(2.0, result[4, 0], 10);
     }
 
-    [Fact]
-    public void DifferencingTransformer_SeasonalDifference_RemovesSeasonality()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_SeasonalDifference_RemovesSeasonality()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2831,8 +2832,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DifferencingTransformer_PercentChange_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_PercentChange_ComputesCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2856,8 +2857,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[2, 0], 10);     // (400-200)/200 = 1.0 = 100%
     }
 
-    [Fact]
-    public void DifferencingTransformer_LogDifference_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_LogDifference_ComputesCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2882,8 +2883,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[3, 0], 10);
     }
 
-    [Fact]
-    public void DifferencingTransformer_LinearDetrend_RemovesLinearTrend()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_LinearDetrend_RemovesLinearTrend()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2917,8 +2918,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(Math.Abs(mean) < 1.0, $"Mean of detrended data should be near zero, got {mean}");
     }
 
-    [Fact]
-    public void DifferencingTransformer_HodrickPrescott_SeparatesTrendAndCycle()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_HodrickPrescott_SeparatesTrendAndCycle()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2961,8 +2962,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DifferencingTransformer_StlDecomposition_ProducesThreeComponents()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_StlDecomposition_ProducesThreeComponents()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -2998,8 +2999,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DifferencingTransformer_AllFeatures_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_AllFeatures_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3031,8 +3032,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DifferencingTransformer_MultipleFeatures_ComputesForAll()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_MultipleFeatures_ComputesForAll()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3069,8 +3070,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region RollingRegressionTransformer Tests
 
-    [Fact]
-    public void RollingRegressionTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3084,8 +3085,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_Beta_MeasuresMarketSensitivity()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_Beta_MeasuresMarketSensitivity()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3124,8 +3125,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(beta > 1.5 && beta < 2.5, $"Beta should be ~2, got {beta}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_SharpeRatio_PositiveForGoodReturns()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_SharpeRatio_PositiveForGoodReturns()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3156,8 +3157,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(sharpe > 0, $"Sharpe should be positive for upward trend, got {sharpe}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_SortinoRatio_IgnoresUpsideVolatility()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_SortinoRatio_IgnoresUpsideVolatility()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3191,8 +3192,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(sortino >= 0, $"Sortino should be non-negative, got {sortino}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_RSquared_HighForCorrelatedAssets()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_RSquared_HighForCorrelatedAssets()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3222,8 +3223,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(rSquared > 0.9, $"R² should be high for correlated assets, got {rSquared}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_Alpha_MeasuresExcessReturn()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_Alpha_MeasuresExcessReturn()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3260,8 +3261,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(alpha > 0, $"Alpha should be positive for outperforming asset, got {alpha}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_Correlation_DetectsRelationship()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_Correlation_DetectsRelationship()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3302,8 +3303,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(negCorr < -0.5, $"Negative correlation should be <-0.5, got {negCorr}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_TrackingError_MeasuresDeviation()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_TrackingError_MeasuresDeviation()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3342,8 +3343,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(wideTe > closeTe, $"Wide tracking error ({wideTe}) should exceed close ({closeTe})");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_InformationRatio_MeasuresConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_InformationRatio_MeasuresConsistency()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3379,8 +3380,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(ir > 0, $"IR should be positive for consistent outperformance, got {ir}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_AllFeatures_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_AllFeatures_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3416,8 +3417,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 100, $"Should have many valid regression values, got {validCount}");
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_ParallelEqualsSequential()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_ParallelEqualsSequential()
     {
         var baseOptions = new TimeSeriesFeatureOptions
         {
@@ -3482,8 +3483,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region AnomalyFeaturesTransformer Tests
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_Construction_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3496,8 +3497,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.NotNull(transformer);
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_ZScore_DetectsOutliers()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_ZScore_DetectsOutliers()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3529,8 +3530,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(Math.Abs(normalZScore) < 1, $"Normal Z-score should be < 1, got {normalZScore}");
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_ZScoreFlag_FlagsAnomalies()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_ZScoreFlag_FlagsAnomalies()
     {
         // Note: With window size n, the maximum Z-score for a single extreme outlier
         // approaches sqrt(n-1) as the outlier becomes more extreme.
@@ -3565,8 +3566,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(0.0, normalFlag, 5);
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_ModifiedZScore_RobustToOutliers()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_ModifiedZScore_RobustToOutliers()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3593,8 +3594,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(Math.Abs(outlierModZ) > 3, $"Outlier modified Z-score should be > 3, got {outlierModZ}");
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_IqrOutlierScore_IdentifiesExtremes()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_IqrOutlierScore_IdentifiesExtremes()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3626,8 +3627,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(0.0, normalScore, 5);
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_IqrOutlierFlag_FlagsBothEnds()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_IqrOutlierFlag_FlagsBothEnds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3656,8 +3657,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1.0, result[20, 0], 5);
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_CusumStatistic_DetectsMeanShift()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_CusumStatistic_DetectsMeanShift()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3688,8 +3689,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         // After mean shift, CUSUM accumulates deviations
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_IsolationScore_HigherForAnomalies()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_IsolationScore_HigherForAnomalies()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3719,8 +3720,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(outlierScore >= 0.5, $"Outlier isolation score should be >= 0.5, got {outlierScore}");
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_PercentileRank_CorrectOrdering()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_PercentileRank_CorrectOrdering()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3747,8 +3748,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(highRank > 0.5, $"High value should have percentile rank > 0.5, got {highRank}");
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_AllFeatures_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_AllFeatures_ProducesValidOutput()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -3786,8 +3787,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(validCount > 100, $"Should have many valid anomaly values, got {validCount}");
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_ParallelEqualsSequential()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_ParallelEqualsSequential()
     {
         var baseOptions = new TimeSeriesFeatureOptions
         {
@@ -3849,8 +3850,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region TimeSeriesTransformerPipeline Tests
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_Construction_Succeeds()
     {
         var pipeline = new TimeSeriesTransformerPipeline<double>();
 
@@ -3859,8 +3860,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.False(pipeline.IsFitted);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_AddTransformer_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_AddTransformer_Succeeds()
     {
         var statsOptions = new TimeSeriesFeatureOptions
         {
@@ -3875,8 +3876,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(1, pipeline.TransformerCount);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_ParallelMode_CombinesTransformerOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_ParallelMode_CombinesTransformerOutputs()
     {
         // Create two transformers with different features
         var lagOptions = new TimeSeriesFeatureOptions
@@ -3912,8 +3913,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(pipeline.OutputFeatureCount, result.Shape[1]);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_WithOriginalFeatures_IncludesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_WithOriginalFeatures_IncludesOriginal()
     {
         var statsOptions = new TimeSeriesFeatureOptions
         {
@@ -3941,8 +3942,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         // Note: With truncation, the output may have fewer rows
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_SequentialMode_ChainsTransformers()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_SequentialMode_ChainsTransformers()
     {
         // In sequential mode, each transformer receives previous output
         // For simplicity, use a single transformer in sequential mode
@@ -3970,8 +3971,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(result.Shape[1] > 0);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_GetFeatureNamesOut_ReturnsAllNames()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_GetFeatureNamesOut_ReturnsAllNames()
     {
         var options1 = new TimeSeriesFeatureOptions
         {
@@ -4004,8 +4005,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(featureNames.Length > 0);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_CannotAddAfterFitting()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_CannotAddAfterFitting()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4027,8 +4028,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
             pipeline.AddTransformer(new RollingStatsTransformer<double>(options)));
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_EmptyPipeline_ThrowsOnFit()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_EmptyPipeline_ThrowsOnFit()
     {
         var pipeline = new TimeSeriesTransformerPipeline<double>();
 
@@ -4039,8 +4040,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => pipeline.Fit(data));
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_GetSummary_ReturnsDescription()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_GetSummary_ReturnsDescription()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4059,8 +4060,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains("RollingStatsTransformer", summary);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_Clone_CreatesNewPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_Clone_CreatesNewPipeline()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4078,8 +4079,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(pipeline.TransformerCount, clone.TransformerCount);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_MultipleFeatures_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_MultipleFeatures_HandlesCorrectly()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4113,8 +4114,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Incremental/Streaming Tests
 
-    [Fact]
-    public void RollingStatsTransformer_SupportsIncrementalTransform()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_SupportsIncrementalTransform()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4133,8 +4134,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(transformer.SupportsIncrementalTransform);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_InitializeIncremental_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_InitializeIncremental_Succeeds()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4156,8 +4157,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(20, state.PointsProcessed);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_TransformIncremental_ProducesFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_TransformIncremental_ProducesFeatures()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4181,8 +4182,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(features.Length > 0);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_TransformIncremental_UpdatesState()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_TransformIncremental_UpdatesState()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4211,8 +4212,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(pointsBefore + 5, stateAfter!.PointsProcessed);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_SupportsIncrementalTransform()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_SupportsIncrementalTransform()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4233,8 +4234,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(pipeline.SupportsIncrementalTransform);
     }
 
-    [Fact]
-    public void TimeSeriesTransformerPipeline_TransformIncremental_ProducesFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesTransformerPipeline_TransformIncremental_ProducesFeatures()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4260,8 +4261,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(features.Length > 1);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_Incremental_MatchesBatch()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4311,8 +4312,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_Incremental_MatchesBatch()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4365,8 +4366,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_Incremental_MatchesBatch()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4420,8 +4421,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LagLeadTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_Incremental_MatchesBatch()
     {
         // Setup - explicitly set WindowSizes to smaller values for this test
         var options = new TimeSeriesFeatureOptions
@@ -4481,8 +4482,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SeasonalityTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalityTransformer_Incremental_MatchesBatch()
     {
         // Setup - time features only (don't require windows)
         var options = new TimeSeriesFeatureOptions
@@ -4533,8 +4534,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DifferencingTransformer_Incremental_MatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task DifferencingTransformer_Incremental_MatchesBatch()
     {
         // Setup - simple differencing (supported incrementally)
         var options = new TimeSeriesFeatureOptions
@@ -4589,8 +4590,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_IncrementalNotSupported_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_IncrementalNotSupported_ThrowsException()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4612,8 +4613,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Throws<NotSupportedException>(() => transformer.TransformIncremental([1.0, 2.0]));
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_IncrementalNotSupported_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_IncrementalNotSupported_ThrowsException()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4635,8 +4636,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Throws<NotSupportedException>(() => transformer.TransformIncremental([1.0, 2.0]));
     }
 
-    [Fact]
-    public void TechnicalIndicatorsTransformer_IncrementalNotSupported_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TechnicalIndicatorsTransformer_IncrementalNotSupported_ThrowsException()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4665,8 +4666,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void RollingStatsTransformer_ExportState_ReturnsFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ExportState_ReturnsFittedState()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4693,8 +4694,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains("RollingStatsTransformer", state.TransformerType);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_ImportState_RestoresTransformer()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ImportState_RestoresTransformer()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4729,8 +4730,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(originalResult.Shape[1], restoredResult.Shape[1]);
     }
 
-    [Fact]
-    public void RollingStatsTransformer_ExportState_IncludesIncrementalState()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_ExportState_IncludesIncrementalState()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4752,8 +4753,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(state.IncrementalState.BufferFilled);
     }
 
-    [Fact]
-    public void TransformerState_ContainsOptions()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerState_ContainsOptions()
     {
         var options = new TimeSeriesFeatureOptions
         {
@@ -4776,8 +4777,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.True(state.Options.ContainsKey("WindowSizes"));
     }
 
-    [Fact]
-    public void RollingStatsTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingStatsTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4829,8 +4830,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingVolatilityTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingVolatilityTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4884,8 +4885,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LagLeadTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LagLeadTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4935,8 +4936,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void AnomalyFeaturesTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyFeaturesTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -4990,8 +4991,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingCorrelationTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingCorrelationTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -5043,8 +5044,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RollingRegressionTransformer_RoundTrip_ProducesIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RollingRegressionTransformer_RoundTrip_ProducesIdenticalOutput()
     {
         // Setup
         var options = new TimeSeriesFeatureOptions
@@ -5099,8 +5100,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
 
     #region TimeSeriesSplit Tests
 
-    [Fact]
-    public void TimeSeriesSplit_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_Construction_Succeeds()
     {
         var splitter = new TimeSeriesSplit(nSplits: 5);
 
@@ -5111,8 +5112,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(0, splitter.Gap);
     }
 
-    [Fact]
-    public void TimeSeriesSplit_Split_GeneratesCorrectNumberOfSplits()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_Split_GeneratesCorrectNumberOfSplits()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3);
         int nSamples = 100;
@@ -5122,8 +5123,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Equal(3, splits.Count);
     }
 
-    [Fact]
-    public void TimeSeriesSplit_Split_TrainBeforeTest()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_Split_TrainBeforeTest()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3);
         int nSamples = 100;
@@ -5138,8 +5139,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_WithGap_MaintainsGapBetweenTrainAndTest()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_WithGap_MaintainsGapBetweenTrainAndTest()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3, gap: 5);
         int nSamples = 100;
@@ -5153,8 +5154,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_WithMaxTrainSize_LimitsTrainingSize()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_WithMaxTrainSize_LimitsTrainingSize()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3, maxTrainSize: 20);
         int nSamples = 100;
@@ -5165,8 +5166,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_ExpandingWindow_TrainSizeGrows()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_ExpandingWindow_TrainSizeGrows()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3);
         int nSamples = 100;
@@ -5182,8 +5183,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_CrossValidate_ReturnsScores()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_CrossValidate_ReturnsScores()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3);
         var data = Enumerable.Range(0, 100).Select(i => (double)i).ToArray();
@@ -5196,8 +5197,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.All(scores, s => Assert.True(!double.IsNaN(s)));
     }
 
-    [Fact]
-    public void TimeSeriesSplit_GetSplitSummary_ReturnsDescription()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_GetSplitSummary_ReturnsDescription()
     {
         var splitter = new TimeSeriesSplit(nSplits: 3, maxTrainSize: 30, gap: 5);
 
@@ -5209,8 +5210,8 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         Assert.Contains("Gap: 5", summary);
     }
 
-    [Fact]
-    public void TimeSeriesValidation_WalkForward_GeneratesSplits()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesValidation_WalkForward_GeneratesSplits()
     {
         var splits = TimeSeriesValidation.WalkForward(
             nSamples: 100,
@@ -5227,14 +5228,14 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TimeSeriesSplit_InvalidNSplits_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_InvalidNSplits_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TimeSeriesSplit(nSplits: 1));
     }
 
-    [Fact]
-    public void TimeSeriesSplit_NotEnoughData_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesSplit_NotEnoughData_Throws()
     {
         var splitter = new TimeSeriesSplit(nSplits: 10, testSize: 100);
 

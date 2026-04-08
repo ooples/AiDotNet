@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -30,8 +31,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With nComponents=4 and 1 input column (all columns processed),
     /// output should have exactly 4 columns (one per hash bucket).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_SingleColumn_OutputHas_NComponents_Columns()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_SingleColumn_OutputHas_NComponents_Columns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
         var data = M(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
@@ -46,8 +47,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With nComponents=8 (default) and 2 input columns,
     /// output should have 8*2=16 columns when all columns are encoded.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_TwoColumns_OutputHas_2xNComponents_Columns()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_TwoColumns_OutputHas_2xNComponents_Columns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8);
         var data = M(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
@@ -62,8 +63,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With columnIndices specifying only column 0, column 1 should pass through.
     /// Output = nComponents (for col 0) + 1 (pass-through for col 1).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_PartialColumns_PassThrough()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_PartialColumns_PassThrough()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4, columnIndices: new[] { 0 });
         var data = M(new double[,] { { 1.0, 99.0 }, { 2.0, 88.0 } });
@@ -86,8 +87,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// The same value in the same column should always hash to the same bucket.
     /// Two rows with identical values should produce identical hash encodings.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_SameValue_SameColumn_DeterministicBucket()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_SameValue_SameColumn_DeterministicBucket()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         var data = M(new double[,] { { 5.0 }, { 5.0 }, { 5.0 } });
@@ -106,8 +107,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Each row's hash encoding should have exactly one non-zero element (with alternateSign=false)
     /// since each value hashes to exactly one bucket with count 1.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_SingleValue_ExactlyOneBucketNonZero()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_SingleValue_ExactlyOneBucketNonZero()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         var data = M(new double[,] { { 42.0 } });
@@ -132,8 +133,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With 8 components, the probability of collision for 2 values is 1/8 = 12.5%.
     /// We test 10 distinct values and expect at least 2 different bucket assignments.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_DifferentValues_DifferentBuckets()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_DifferentValues_DifferentBuckets()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         var data = M(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 },
@@ -167,8 +168,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, the non-zero value should be +1.0 or -1.0
     /// depending on the hash sign bit (MurmurHash3 output).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_AlternateSign_ValueIsPlusOrMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_AlternateSign_ValueIsPlusOrMinusOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: true);
         var data = M(new double[,] { { 42.0 } });
@@ -194,8 +195,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=false, the non-zero value should always be +1.0.
     /// The sign is always positive.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_NoAlternateSign_ValueIsAlwaysPositive()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_NoAlternateSign_ValueIsAlwaysPositive()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         // Test multiple values to ensure none produce negative results
@@ -220,8 +221,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, the MurmurHash3 should produce both positive and negative
     /// hashes for different inputs, resulting in both +1 and -1 values across many inputs.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_AlternateSign_ProducesBothSigns()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_AlternateSign_ProducesBothSigns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 16, alternateSign: true);
         // Use many different values to ensure both signs appear
@@ -257,8 +258,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With two columns both encoding to the same bucket with alternateSign=false,
     /// the bucket value should be 2.0.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_MultipleColumns_CollisionSumsContributions()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_MultipleColumns_CollisionSumsContributions()
     {
         // With nComponents=1, ALL values must hash to bucket 0 (only one bucket)
         var encoder = new HashingEncoder<double>(nComponents: 1, alternateSign: false);
@@ -281,8 +282,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=false, each row's sum for a single encoded column should be 1.0
     /// (exactly one bucket gets value 1.0).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_NoAlternateSign_RowSumEqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_NoAlternateSign_RowSumEqualsOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         var data = M(new double[,] { { 7.5 }, { -3.2 }, { 0.0 }, { 100.0 } });
@@ -305,8 +306,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, each row's absolute sum for a single encoded column should be 1.0
     /// (exactly one bucket gets |value| = 1.0).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_AlternateSign_AbsRowSumEqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_AlternateSign_AbsRowSumEqualsOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: true);
         var data = M(new double[,] { { 7.5 }, { -3.2 }, { 0.0 }, { 100.0 } });
@@ -332,8 +333,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// GetFeatureNamesOut should produce correct names for encoded and pass-through columns.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_FeatureNames_EncodedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_FeatureNames_EncodedColumns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 3);
         var data = M(new double[,] { { 1.0 } });
@@ -349,8 +350,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// With custom input feature names, those names are used as base.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_FeatureNames_CustomInputNames()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_FeatureNames_CustomInputNames()
     {
         var encoder = new HashingEncoder<double>(nComponents: 2);
         var data = M(new double[,] { { 1.0 } });
@@ -365,8 +366,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// Pass-through columns keep their original name (not hash-suffixed).
     /// </summary>
-    [Fact]
-    public void HashingEncoder_FeatureNames_PassThroughColumn()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_FeatureNames_PassThroughColumn()
     {
         var encoder = new HashingEncoder<double>(nComponents: 2, columnIndices: new[] { 0 });
         var data = M(new double[,] { { 1.0, 2.0 } });
@@ -386,8 +387,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// nComponents=1 means every value hashes to bucket 0.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_NComponents1_AllSameBucket()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_NComponents1_AllSameBucket()
     {
         var encoder = new HashingEncoder<double>(nComponents: 1, alternateSign: false);
         var data = M(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
@@ -405,8 +406,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// nComponents must be >= 1, constructor should throw for 0.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_NComponents0_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_NComponents0_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new HashingEncoder<double>(nComponents: 0));
     }
@@ -414,8 +415,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// Transform before Fit should throw InvalidOperationException.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_TransformBeforeFit_ThrowsInvalidOperation()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_TransformBeforeFit_ThrowsInvalidOperation()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
         var data = M(new double[,] { { 1.0 } });
@@ -426,8 +427,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Inverse transform is not supported for hash encoding.
     /// SupportsInverseTransform should be false.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_SupportsInverseTransform_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_SupportsInverseTransform_IsFalse()
     {
         var encoder = new HashingEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
@@ -436,8 +437,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// GetFeatureNamesOut before Fit should return empty array.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_FeatureNamesBeforeFit_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_FeatureNamesBeforeFit_ReturnsEmpty()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
         var names = encoder.GetFeatureNamesOut();
@@ -448,8 +449,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Fitting and transforming with multiple rows should produce consistent results.
     /// The same value in the same column across different rows should hash identically.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_MultipleRows_ConsistentHashing()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_MultipleRows_ConsistentHashing()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4, alternateSign: true);
         var data = M(new double[,] { { 3.14 }, { 2.71 }, { 3.14 } }); // rows 0 and 2 are same
@@ -481,8 +482,8 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// because the column index is mixed into the hash.
     /// With many columns, we should see different bucket assignments.
     /// </summary>
-    [Fact]
-    public void HashingEncoder_SameValueDifferentColumns_DifferentHashes()
+    [Fact(Timeout = 120000)]
+    public async Task HashingEncoder_SameValueDifferentColumns_DifferentHashes()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
         // Create a 1-row matrix with the same value (1.0) in 20 columns

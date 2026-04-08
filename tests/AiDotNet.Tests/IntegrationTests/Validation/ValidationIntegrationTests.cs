@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Validation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Validation;
 
@@ -16,29 +17,29 @@ public class ValidationIntegrationTests
 {
     #region Guard - NotNull
 
-    [Fact]
-    public void Guard_NotNull_WithNonNullValue_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNull_WithNonNullValue_DoesNotThrow()
     {
         var obj = new object();
         Guard.NotNull(obj);
     }
 
-    [Fact]
-    public void Guard_NotNull_WithNullValue_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNull_WithNullValue_ThrowsArgumentNullException()
     {
         object? obj = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNull(obj));
     }
 
-    [Fact]
-    public void Guard_NotNull_WithString_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNull_WithString_DoesNotThrow()
     {
         string value = "hello";
         Guard.NotNull(value);
     }
 
-    [Fact]
-    public void Guard_NotNull_WithNullString_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNull_WithNullString_ThrowsArgumentNullException()
     {
         string? value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNull(value));
@@ -48,27 +49,27 @@ public class ValidationIntegrationTests
 
     #region Guard - NotNullOrEmpty
 
-    [Fact]
-    public void Guard_NotNullOrEmpty_WithValidString_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrEmpty_WithValidString_DoesNotThrow()
     {
         Guard.NotNullOrEmpty("hello");
     }
 
-    [Fact]
-    public void Guard_NotNullOrEmpty_WithNullString_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrEmpty_WithNullString_ThrowsArgumentNullException()
     {
         string? value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNullOrEmpty(value));
     }
 
-    [Fact]
-    public void Guard_NotNullOrEmpty_WithEmptyString_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrEmpty_WithEmptyString_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrEmpty(""));
     }
 
-    [Fact]
-    public void Guard_NotNullOrEmpty_WithWhitespaceString_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrEmpty_WithWhitespaceString_DoesNotThrow()
     {
         // NotNullOrEmpty only checks for empty, not whitespace
         Guard.NotNullOrEmpty("   ");
@@ -78,33 +79,33 @@ public class ValidationIntegrationTests
 
     #region Guard - NotNullOrWhiteSpace
 
-    [Fact]
-    public void Guard_NotNullOrWhiteSpace_WithValidString_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrWhiteSpace_WithValidString_DoesNotThrow()
     {
         Guard.NotNullOrWhiteSpace("hello");
     }
 
-    [Fact]
-    public void Guard_NotNullOrWhiteSpace_WithNullString_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrWhiteSpace_WithNullString_ThrowsArgumentNullException()
     {
         string? value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNullOrWhiteSpace(value));
     }
 
-    [Fact]
-    public void Guard_NotNullOrWhiteSpace_WithEmptyString_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrWhiteSpace_WithEmptyString_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace(""));
     }
 
-    [Fact]
-    public void Guard_NotNullOrWhiteSpace_WithWhitespaceString_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrWhiteSpace_WithWhitespaceString_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace("   "));
     }
 
-    [Fact]
-    public void Guard_NotNullOrWhiteSpace_WithTabOnly_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NotNullOrWhiteSpace_WithTabOnly_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace("\t"));
     }
@@ -113,22 +114,22 @@ public class ValidationIntegrationTests
 
     #region Guard - Positive (int)
 
-    [Fact]
-    public void Guard_Positive_Int_WithPositiveValue_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Int_WithPositiveValue_DoesNotThrow()
     {
         Guard.Positive(1);
         Guard.Positive(100);
         Guard.Positive(int.MaxValue);
     }
 
-    [Fact]
-    public void Guard_Positive_Int_WithZero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Int_WithZero_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(0));
     }
 
-    [Fact]
-    public void Guard_Positive_Int_WithNegative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Int_WithNegative_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(-100));
@@ -138,34 +139,34 @@ public class ValidationIntegrationTests
 
     #region Guard - Positive (double)
 
-    [Fact]
-    public void Guard_Positive_Double_WithPositiveValue_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Double_WithPositiveValue_DoesNotThrow()
     {
         Guard.Positive(0.001);
         Guard.Positive(1.0);
         Guard.Positive(1e10);
     }
 
-    [Fact]
-    public void Guard_Positive_Double_WithZero_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Double_WithZero_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(0.0));
     }
 
-    [Fact]
-    public void Guard_Positive_Double_WithNegative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Double_WithNegative_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(-0.001));
     }
 
-    [Fact]
-    public void Guard_Positive_Double_WithNaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Double_WithNaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(double.NaN));
     }
 
-    [Fact]
-    public void Guard_Positive_Double_WithInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_Positive_Double_WithInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(double.PositiveInfinity));
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(double.NegativeInfinity));
@@ -175,21 +176,21 @@ public class ValidationIntegrationTests
 
     #region Guard - NonNegative (int)
 
-    [Fact]
-    public void Guard_NonNegative_Int_WithPositive_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Int_WithPositive_DoesNotThrow()
     {
         Guard.NonNegative(1);
         Guard.NonNegative(100);
     }
 
-    [Fact]
-    public void Guard_NonNegative_Int_WithZero_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Int_WithZero_DoesNotThrow()
     {
         Guard.NonNegative(0);
     }
 
-    [Fact]
-    public void Guard_NonNegative_Int_WithNegative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Int_WithNegative_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(-1));
     }
@@ -198,33 +199,33 @@ public class ValidationIntegrationTests
 
     #region Guard - NonNegative (double)
 
-    [Fact]
-    public void Guard_NonNegative_Double_WithPositive_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Double_WithPositive_DoesNotThrow()
     {
         Guard.NonNegative(0.001);
         Guard.NonNegative(1.0);
     }
 
-    [Fact]
-    public void Guard_NonNegative_Double_WithZero_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Double_WithZero_DoesNotThrow()
     {
         Guard.NonNegative(0.0);
     }
 
-    [Fact]
-    public void Guard_NonNegative_Double_WithNegative_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Double_WithNegative_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(-0.001));
     }
 
-    [Fact]
-    public void Guard_NonNegative_Double_WithNaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Double_WithNaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(double.NaN));
     }
 
-    [Fact]
-    public void Guard_NonNegative_Double_WithInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_NonNegative_Double_WithInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(double.PositiveInfinity));
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(double.NegativeInfinity));
@@ -234,34 +235,34 @@ public class ValidationIntegrationTests
 
     #region Guard - InRange (int)
 
-    [Fact]
-    public void Guard_InRange_Int_WithinRange_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Int_WithinRange_DoesNotThrow()
     {
         Guard.InRange(5, 1, 10);
         Guard.InRange(1, 1, 10); // min boundary
         Guard.InRange(10, 1, 10); // max boundary
     }
 
-    [Fact]
-    public void Guard_InRange_Int_BelowMin_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Int_BelowMin_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0, 1, 10));
     }
 
-    [Fact]
-    public void Guard_InRange_Int_AboveMax_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Int_AboveMax_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(11, 1, 10));
     }
 
-    [Fact]
-    public void Guard_InRange_Int_MinGreaterThanMax_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Int_MinGreaterThanMax_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.InRange(5, 10, 1));
     }
 
-    [Fact]
-    public void Guard_InRange_Int_SameMinMax_WorksForExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Int_SameMinMax_WorksForExactValue()
     {
         Guard.InRange(5, 5, 5);
     }
@@ -270,52 +271,52 @@ public class ValidationIntegrationTests
 
     #region Guard - InRange (double)
 
-    [Fact]
-    public void Guard_InRange_Double_WithinRange_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_WithinRange_DoesNotThrow()
     {
         Guard.InRange(0.5, 0.0, 1.0);
         Guard.InRange(0.0, 0.0, 1.0); // min boundary
         Guard.InRange(1.0, 0.0, 1.0); // max boundary
     }
 
-    [Fact]
-    public void Guard_InRange_Double_BelowMin_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_BelowMin_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(-0.1, 0.0, 1.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_AboveMax_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_AboveMax_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(1.1, 0.0, 1.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_NaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_NaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.NaN, 0.0, 1.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_Infinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_Infinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.PositiveInfinity, 0.0, 1.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_MinGreaterThanMax_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_MinGreaterThanMax_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.InRange(0.5, 1.0, 0.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_NaNMin_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_NaNMin_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, double.NaN, 1.0));
     }
 
-    [Fact]
-    public void Guard_InRange_Double_InfinityMax_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Guard_InRange_Double_InfinityMax_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, 0.0, double.PositiveInfinity));
     }
@@ -324,45 +325,45 @@ public class ValidationIntegrationTests
 
     #region VectorValidator Tests
 
-    [Fact]
-    public void VectorValidator_ValidateLength_WithMatchingLength_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLength_WithMatchingLength_Succeeds()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         VectorValidator.ValidateLength(vector, 3);
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLength_WithMismatchedLength_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLength_WithMismatchedLength_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         Assert.ThrowsAny<Exception>(() => VectorValidator.ValidateLength(vector, 5));
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLengthForShape_WithMatchingShape_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLengthForShape_WithMatchingShape_Succeeds()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         var shape = new[] { 2, 3 }; // 2 * 3 = 6
         VectorValidator.ValidateLengthForShape(vector, shape);
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLengthForShape_WithMismatchedShape_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLengthForShape_WithMismatchedShape_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var shape = new[] { 2, 2 }; // 2 * 2 = 4, but vector has 3 elements
         Assert.ThrowsAny<Exception>(() => VectorValidator.ValidateLengthForShape(vector, shape));
     }
 
-    [Fact]
-    public void VectorValidator_Float_ValidateLength_Works()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_Float_ValidateLength_Works()
     {
         var vector = new Vector<float>(new[] { 1.0f, 2.0f, 3.0f });
         VectorValidator.ValidateLength(vector, 3);
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLength_WithDifferentSizes_Works()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLength_WithDifferentSizes_Works()
     {
         var vector1 = new Vector<double>(new[] { 1.0 });
         var vector5 = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -373,22 +374,22 @@ public class ValidationIntegrationTests
         VectorValidator.ValidateLength(vector10, 10);
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLength_WithComponentAndOperation_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLength_WithComponentAndOperation_Succeeds()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         VectorValidator.ValidateLength(vector, 3, "TestComponent", "TestOperation");
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLengthForShape_3DShape_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLengthForShape_3DShape_Succeeds()
     {
         var vector = new Vector<double>(new double[24]); // 2 * 3 * 4 = 24
         VectorValidator.ValidateLengthForShape(vector, new[] { 2, 3, 4 });
     }
 
-    [Fact]
-    public void VectorValidator_ValidateLengthForShape_SingleDim_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorValidator_ValidateLengthForShape_SingleDim_Succeeds()
     {
         var vector = new Vector<double>(new double[5]);
         VectorValidator.ValidateLengthForShape(vector, new[] { 5 });
@@ -398,100 +399,100 @@ public class ValidationIntegrationTests
 
     #region TensorValidator Tests
 
-    [Fact]
-    public void TensorValidator_ValidateShape_WithMatchingShape_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_WithMatchingShape_Succeeds()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
         TensorValidator.ValidateShape(tensor, new[] { 2, 3, 4 });
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShape_WithMismatchedShape_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_WithMismatchedShape_ThrowsException()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
         Assert.ThrowsAny<Exception>(() => TensorValidator.ValidateShape(tensor, new[] { 2, 4, 3 }));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShape_WithDifferentDimensions_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_WithDifferentDimensions_ThrowsException()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         Assert.ThrowsAny<Exception>(() => TensorValidator.ValidateShape(tensor, new[] { 2, 3, 4 }));
     }
 
-    [Fact]
-    public void TensorValidator_Float_ValidateShape_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_Float_ValidateShape_Works()
     {
         var tensor = new Tensor<float>(new[] { 3, 4 });
         TensorValidator.ValidateShape(tensor, new[] { 3, 4 });
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShape_WithSingleDimension_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_WithSingleDimension_Works()
     {
         var tensor = new Tensor<double>(new[] { 10 });
         TensorValidator.ValidateShape(tensor, new[] { 10 });
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShape_With4DDimension_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_With4DDimension_Works()
     {
         var tensor = new Tensor<double>(new[] { 1, 3, 28, 28 });
         TensorValidator.ValidateShape(tensor, new[] { 1, 3, 28, 28 });
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShape_WithComponentAndOperation_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShape_WithComponentAndOperation_Succeeds()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         TensorValidator.ValidateShape(tensor, new[] { 2, 3 }, "TestComponent", "TestOperation");
     }
 
-    [Fact]
-    public void TensorValidator_ValidateForwardPassPerformed_WithTensor_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateForwardPassPerformed_WithTensor_DoesNotThrow()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         TensorValidator.ValidateForwardPassPerformed<double>(tensor);
     }
 
-    [Fact]
-    public void TensorValidator_ValidateForwardPassPerformed_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateForwardPassPerformed_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             TensorValidator.ValidateForwardPassPerformed<double>(null));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateForwardPassPerformed_WithComponentInfo_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateForwardPassPerformed_WithComponentInfo_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             TensorValidator.ValidateForwardPassPerformed<double>(null, "DenseLayer", "Dense", "Backward"));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateForwardPassPerformedForLayer_WithTensor_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateForwardPassPerformedForLayer_WithTensor_DoesNotThrow()
     {
         var tensor = new Tensor<double>(new[] { 3 });
         TensorValidator.ValidateForwardPassPerformedForLayer<double>(tensor, "TestLayer", "Dense");
     }
 
-    [Fact]
-    public void TensorValidator_ValidateForwardPassPerformedForLayer_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateForwardPassPerformedForLayer_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             TensorValidator.ValidateForwardPassPerformedForLayer<double>(null, "TestLayer", "Dense"));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShapesMatch_MatchingShapes_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShapesMatch_MatchingShapes_DoesNotThrow()
     {
         var tensor1 = new Tensor<double>(new[] { 2, 3 });
         var tensor2 = new Tensor<double>(new[] { 2, 3 });
         TensorValidator.ValidateShapesMatch(tensor1, tensor2);
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShapesMatch_DifferentShapes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShapesMatch_DifferentShapes_Throws()
     {
         var tensor1 = new Tensor<double>(new[] { 2, 3 });
         var tensor2 = new Tensor<double>(new[] { 3, 2 });
@@ -499,8 +500,8 @@ public class ValidationIntegrationTests
             TensorValidator.ValidateShapesMatch(tensor1, tensor2));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShapesMatch_DifferentRanks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShapesMatch_DifferentRanks_Throws()
     {
         var tensor1 = new Tensor<double>(new[] { 6 });
         var tensor2 = new Tensor<double>(new[] { 2, 3 });
@@ -508,44 +509,44 @@ public class ValidationIntegrationTests
             TensorValidator.ValidateShapesMatch(tensor1, tensor2));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateShapesMatch_WithComponentInfo()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateShapesMatch_WithComponentInfo()
     {
         var tensor1 = new Tensor<double>(new[] { 2, 3 });
         var tensor2 = new Tensor<double>(new[] { 2, 3 });
         TensorValidator.ValidateShapesMatch(tensor1, tensor2, "TestComponent", "Addition");
     }
 
-    [Fact]
-    public void TensorValidator_ValidateRank_MatchingRank_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateRank_MatchingRank_DoesNotThrow()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
         TensorValidator.ValidateRank(tensor, 3);
     }
 
-    [Fact]
-    public void TensorValidator_ValidateRank_MismatchedRank_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateRank_MismatchedRank_Throws()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         Assert.ThrowsAny<Exception>(() => TensorValidator.ValidateRank(tensor, 3));
     }
 
-    [Fact]
-    public void TensorValidator_ValidateRank_1D_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateRank_1D_Works()
     {
         var tensor = new Tensor<double>(new[] { 10 });
         TensorValidator.ValidateRank(tensor, 1);
     }
 
-    [Fact]
-    public void TensorValidator_ValidateRank_4D_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateRank_4D_Works()
     {
         var tensor = new Tensor<double>(new[] { 1, 3, 28, 28 });
         TensorValidator.ValidateRank(tensor, 4);
     }
 
-    [Fact]
-    public void TensorValidator_ValidateRank_WithComponentInfo()
+    [Fact(Timeout = 120000)]
+    public async Task TensorValidator_ValidateRank_WithComponentInfo()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         TensorValidator.ValidateRank(tensor, 2, "ConvLayer", "Forward");
@@ -555,8 +556,8 @@ public class ValidationIntegrationTests
 
     #region ArchitectureValidator Tests
 
-    [Fact]
-    public void ArchitectureValidator_ValidateInputType_MatchingType_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ArchitectureValidator_ValidateInputType_MatchingType_DoesNotThrow()
     {
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -567,8 +568,8 @@ public class ValidationIntegrationTests
         ArchitectureValidator.ValidateInputType(arch, InputType.OneDimensional, "TestNetwork");
     }
 
-    [Fact]
-    public void ArchitectureValidator_ValidateInputType_MismatchedType_ThrowsInvalidInputTypeException()
+    [Fact(Timeout = 120000)]
+    public async Task ArchitectureValidator_ValidateInputType_MismatchedType_ThrowsInvalidInputTypeException()
     {
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -580,8 +581,8 @@ public class ValidationIntegrationTests
             ArchitectureValidator.ValidateInputType(arch, InputType.TwoDimensional, "TestNetwork"));
     }
 
-    [Fact]
-    public void ArchitectureValidator_ValidateInputType_2DArchWith2DExpected_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ArchitectureValidator_ValidateInputType_2DArchWith2DExpected_DoesNotThrow()
     {
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -593,8 +594,8 @@ public class ValidationIntegrationTests
         ArchitectureValidator.ValidateInputType(arch, InputType.TwoDimensional, "CNN");
     }
 
-    [Fact]
-    public void ArchitectureValidator_ValidateInputType_3DArchWith1DExpected_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ArchitectureValidator_ValidateInputType_3DArchWith1DExpected_Throws()
     {
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional,
@@ -612,38 +613,38 @@ public class ValidationIntegrationTests
 
     #region RegressionValidator Tests
 
-    [Fact]
-    public void RegressionValidator_ValidateFeatureCount_MatchingColumns_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateFeatureCount_MatchingColumns_DoesNotThrow()
     {
         var x = new Matrix<double>(5, 3);
         RegressionValidator.ValidateFeatureCount(x, 3);
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateFeatureCount_MismatchedColumns_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateFeatureCount_MismatchedColumns_Throws()
     {
         var x = new Matrix<double>(5, 3);
         Assert.ThrowsAny<Exception>(() =>
             RegressionValidator.ValidateFeatureCount(x, 4));
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateFeatureCount_WithComponentInfo()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateFeatureCount_WithComponentInfo()
     {
         var x = new Matrix<double>(5, 3);
         RegressionValidator.ValidateFeatureCount(x, 3, "LinearRegression", "Predict");
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateInputOutputDimensions_Matching_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateInputOutputDimensions_Matching_DoesNotThrow()
     {
         var x = new Matrix<double>(10, 3);
         var y = new Vector<double>(new double[10]);
         RegressionValidator.ValidateInputOutputDimensions(x, y);
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateInputOutputDimensions_Mismatched_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateInputOutputDimensions_Mismatched_Throws()
     {
         var x = new Matrix<double>(10, 3);
         var y = new Vector<double>(new double[5]); // 5 != 10
@@ -651,8 +652,8 @@ public class ValidationIntegrationTests
             RegressionValidator.ValidateInputOutputDimensions(x, y));
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateDataValues_ValidData_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateDataValues_ValidData_DoesNotThrow()
     {
         var x = new Matrix<double>(3, 2);
         for (int i = 0; i < 3; i++)
@@ -663,8 +664,8 @@ public class ValidationIntegrationTests
         RegressionValidator.ValidateDataValues(x, y);
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateDataValues_NaNInMatrix_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateDataValues_NaNInMatrix_Throws()
     {
         var x = new Matrix<double>(3, 2);
         x[1, 0] = double.NaN;
@@ -674,8 +675,8 @@ public class ValidationIntegrationTests
             RegressionValidator.ValidateDataValues(x, y));
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateDataValues_InfinityInMatrix_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateDataValues_InfinityInMatrix_Throws()
     {
         var x = new Matrix<double>(3, 2);
         x[0, 1] = double.PositiveInfinity;
@@ -685,8 +686,8 @@ public class ValidationIntegrationTests
             RegressionValidator.ValidateDataValues(x, y));
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateDataValues_NaNInVector_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateDataValues_NaNInVector_Throws()
     {
         var x = new Matrix<double>(3, 2);
         for (int i = 0; i < 3; i++)
@@ -699,8 +700,8 @@ public class ValidationIntegrationTests
             RegressionValidator.ValidateDataValues(x, y));
     }
 
-    [Fact]
-    public void RegressionValidator_ValidateDataValues_InfinityInVector_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RegressionValidator_ValidateDataValues_InfinityInVector_Throws()
     {
         var x = new Matrix<double>(3, 2);
         for (int i = 0; i < 3; i++)
@@ -717,134 +718,134 @@ public class ValidationIntegrationTests
 
     #region SerializationValidator Tests
 
-    [Fact]
-    public void SerializationValidator_ValidateWriter_WithValidWriter_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateWriter_WithValidWriter_DoesNotThrow()
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         SerializationValidator.ValidateWriter(writer);
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateWriter_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateWriter_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateWriter(null));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateWriter_WithComponentInfo()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateWriter_WithComponentInfo()
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         SerializationValidator.ValidateWriter(writer, "DenseLayer", "Serialize");
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateReader_WithValidReader_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateReader_WithValidReader_DoesNotThrow()
     {
         using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
         using var reader = new BinaryReader(stream);
         SerializationValidator.ValidateReader(reader);
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateReader_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateReader_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateReader(null));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateStream_WithValidReadStream_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateStream_WithValidReadStream_DoesNotThrow()
     {
         using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
         SerializationValidator.ValidateStream(stream, requireRead: true);
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateStream_WithValidWriteStream_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateStream_WithValidWriteStream_DoesNotThrow()
     {
         using var stream = new MemoryStream();
         SerializationValidator.ValidateStream(stream, requireWrite: true);
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateStream_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateStream_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateStream(null));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateFilePath_WithValidPath_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateFilePath_WithValidPath_DoesNotThrow()
     {
         SerializationValidator.ValidateFilePath("/some/path/model.bin");
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateFilePath_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateFilePath_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateFilePath(null));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateFilePath_WithEmpty_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateFilePath_WithEmpty_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateFilePath(""));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateFilePath_WithWhitespace_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateFilePath_WithWhitespace_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateFilePath("   "));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateVersion_MatchingVersion_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateVersion_MatchingVersion_DoesNotThrow()
     {
         SerializationValidator.ValidateVersion(1, 1);
         SerializationValidator.ValidateVersion(42, 42);
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateVersion_MismatchedVersion_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateVersion_MismatchedVersion_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateVersion(1, 2));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateLayerTypeName_WithValidName_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateLayerTypeName_WithValidName_DoesNotThrow()
     {
         SerializationValidator.ValidateLayerTypeName("DenseLayer");
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateLayerTypeName_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateLayerTypeName_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateLayerTypeName(null));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateLayerTypeName_WithEmpty_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateLayerTypeName_WithEmpty_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateLayerTypeName(""));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateLayerTypeExists_WithValidType_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateLayerTypeExists_WithValidType_DoesNotThrow()
     {
         SerializationValidator.ValidateLayerTypeExists("System.String", typeof(string));
     }
 
-    [Fact]
-    public void SerializationValidator_ValidateLayerTypeExists_WithNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationValidator_ValidateLayerTypeExists_WithNull_Throws()
     {
         Assert.ThrowsAny<Exception>(() =>
             SerializationValidator.ValidateLayerTypeExists("UnknownLayer", null));
@@ -854,8 +855,8 @@ public class ValidationIntegrationTests
 
     #region GNNBenchmarkValidator Result Classes
 
-    [Fact]
-    public void NodeClassificationResults_DefaultProperties()
+    [Fact(Timeout = 120000)]
+    public async Task NodeClassificationResults_DefaultProperties()
     {
         var results = new GNNBenchmarkValidator<double>.NodeClassificationResults();
         Assert.Equal(0.0, results.TestAccuracy);
@@ -865,8 +866,8 @@ public class ValidationIntegrationTests
         Assert.Equal(string.Empty, results.DatasetName);
     }
 
-    [Fact]
-    public void NodeClassificationResults_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task NodeClassificationResults_SetProperties()
     {
         var results = new GNNBenchmarkValidator<double>.NodeClassificationResults
         {
@@ -884,8 +885,8 @@ public class ValidationIntegrationTests
         Assert.Equal("Cora", results.DatasetName);
     }
 
-    [Fact]
-    public void GraphClassificationResults_DefaultProperties()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClassificationResults_DefaultProperties()
     {
         var results = new GNNBenchmarkValidator<double>.GraphClassificationResults();
         Assert.Equal(0.0, results.TestAccuracy);
@@ -894,8 +895,8 @@ public class ValidationIntegrationTests
         Assert.Equal(string.Empty, results.DatasetName);
     }
 
-    [Fact]
-    public void GraphClassificationResults_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClassificationResults_SetProperties()
     {
         var results = new GNNBenchmarkValidator<double>.GraphClassificationResults
         {
@@ -910,8 +911,8 @@ public class ValidationIntegrationTests
         Assert.Equal("ZINC", results.DatasetName);
     }
 
-    [Fact]
-    public void LinkPredictionResults_DefaultProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictionResults_DefaultProperties()
     {
         var results = new GNNBenchmarkValidator<double>.LinkPredictionResults();
         Assert.Equal(0.0, results.AUC);
@@ -920,8 +921,8 @@ public class ValidationIntegrationTests
         Assert.Equal(string.Empty, results.DatasetName);
     }
 
-    [Fact]
-    public void LinkPredictionResults_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictionResults_SetProperties()
     {
         var results = new GNNBenchmarkValidator<double>.LinkPredictionResults
         {
@@ -936,8 +937,8 @@ public class ValidationIntegrationTests
         Assert.Equal(0.85, results.ExpectedAUC);
     }
 
-    [Fact]
-    public void GNNBenchmarkValidator_CanInstantiate()
+    [Fact(Timeout = 120000)]
+    public async Task GNNBenchmarkValidator_CanInstantiate()
     {
         var validator = new GNNBenchmarkValidator<double>();
         Assert.NotNull(validator);
@@ -947,8 +948,8 @@ public class ValidationIntegrationTests
 
     #region Cross-Validator Tests
 
-    [Fact]
-    public void AllValidators_WorkWithDifferentNumericTypes()
+    [Fact(Timeout = 120000)]
+    public async Task AllValidators_WorkWithDifferentNumericTypes()
     {
         var doubleVector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         VectorValidator.ValidateLength(doubleVector, 3);
@@ -957,8 +958,8 @@ public class ValidationIntegrationTests
         VectorValidator.ValidateLength(floatVector, 3);
     }
 
-    [Fact]
-    public void TensorAndVectorValidators_WorkTogether()
+    [Fact(Timeout = 120000)]
+    public async Task TensorAndVectorValidators_WorkTogether()
     {
         var vector = new Vector<double>(new double[12]);
         var tensor = new Tensor<double>(new[] { 3, 4 });

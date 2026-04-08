@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Aggregators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -14,16 +15,16 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
 
     public override string GetStrategyName() => "TestParameterDictionaryBase";
 
-    [Fact]
-    public void AggregateWeightedAverage_ValidatesInputs()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateWeightedAverage_ValidatesInputs()
     {
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(null!, new Dictionary<int, double>()));
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>>(), new Dictionary<int, double>()));
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>> { [1] = new Dictionary<string, double[]>() }, null!));
     }
 
-    [Fact]
-    public void AggregateWeightedAverage_ThrowsWhenClientMissingLayerOrLengthMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateWeightedAverage_ThrowsWhenClientMissingLayerOrLengthMismatch()
     {
         var reference = new Dictionary<string, double[]>
         {
@@ -52,8 +53,8 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(modelsLengthMismatch, new Dictionary<int, double> { [1] = 1.0, [2] = 1.0 }));
     }
 
-    [Fact]
-    public void AggregateWeightedAverage_ComputesWeightedAverage()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateWeightedAverage_ComputesWeightedAverage()
     {
         var client1 = new Dictionary<string, double[]>
         {
@@ -83,8 +84,8 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Equal((3.0 * 1.0 + 7.0 * 3.0) / 4.0, aggregated["w"][1], precision: 12);
     }
 
-    [Fact]
-    public void AggregateLayerWeightedAverageInto_UpdatesDestination()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateLayerWeightedAverageInto_UpdatesDestination()
     {
         var client1 = new Dictionary<string, double[]> { ["w"] = new[] { 1.0, 3.0 } };
         var client2 = new Dictionary<string, double[]> { ["w"] = new[] { 5.0, 7.0 } };
@@ -108,8 +109,8 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
         Assert.Equal((3.0 * 1.0 + 7.0 * 3.0) / 4.0, destination[1], precision: 12);
     }
 
-    [Fact]
-    public void AggregateLayerWeightedAverageInto_ThrowsForNullDestination()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateLayerWeightedAverageInto_ThrowsForNullDestination()
     {
         Assert.Throws<ArgumentNullException>(() => AggregateLayerWeightedAverageInto(
             layerName: "w",

@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AdversarialRobustness;
 
@@ -122,8 +123,8 @@ public class RandomizedSmoothingTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithValidOptions_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidOptions_CreatesInstance()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -141,15 +142,15 @@ public class RandomizedSmoothingTests
         Assert.NotNull(smoothing.GetOptions());
     }
 
-    [Fact]
-    public void Constructor_WithNullOptions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double, Vector<double>, Vector<double>>(null!));
     }
 
-    [Fact]
-    public void Constructor_WithRandomSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithRandomSeed_ProducesReproducibleResults()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -178,8 +179,8 @@ public class RandomizedSmoothingTests
 
     #region CertifyPrediction Tests
 
-    [Fact]
-    public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
@@ -190,8 +191,8 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(null!, model));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
@@ -202,8 +203,8 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(input, null!));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithStrongModel_ReturnsHighConfidence()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithStrongModel_ReturnsHighConfidence()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -227,8 +228,8 @@ public class RandomizedSmoothingTests
         Assert.True(result.CertifiedRadius > 0, "Certified radius should be positive");
     }
 
-    [Fact]
-    public void CertifyPrediction_ContainsRequiredDetails()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_ContainsRequiredDetails()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -253,8 +254,8 @@ public class RandomizedSmoothingTests
         Assert.Equal(0.5, result.CertificationDetails["Sigma"]);
     }
 
-    [Fact]
-    public void CertifyPrediction_LowerBoundLessThanOrEqualToConfidence()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_LowerBoundLessThanOrEqualToConfidence()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -309,8 +310,8 @@ public class RandomizedSmoothingTests
 
     #region CertifyBatch Tests
 
-    [Fact]
-    public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
@@ -321,8 +322,8 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.CertifyBatch(null!, model));
     }
 
-    [Fact]
-    public void CertifyBatch_ReturnsResultForEachInput()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_ReturnsResultForEachInput()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -352,8 +353,8 @@ public class RandomizedSmoothingTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact]
-    public void ComputeCertifiedRadius_ReturnsValueFromCertification()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_ReturnsValueFromCertification()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -378,8 +379,8 @@ public class RandomizedSmoothingTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
@@ -392,8 +393,8 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(null!, labels, model, 0.5));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
@@ -406,8 +407,8 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, null!, model, 0.5));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
@@ -420,8 +421,8 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, labels, null!, 0.5));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
@@ -435,8 +436,8 @@ public class RandomizedSmoothingTests
             smoothing.EvaluateCertifiedAccuracy(testData, labels, model, 0.5));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -467,8 +468,8 @@ public class RandomizedSmoothingTests
             "Certification rate should be in [0,1]");
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_CertifiedAccuracyNotExceedsCleanAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_CertifiedAccuracyNotExceedsCleanAccuracy()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -497,8 +498,8 @@ public class RandomizedSmoothingTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_ReturnsNonEmptyByteArray()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_ReturnsNonEmptyByteArray()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -517,8 +518,8 @@ public class RandomizedSmoothingTests
         Assert.True(bytes.Length > 0, "Serialized data should not be empty");
     }
 
-    [Fact]
-    public void Deserialize_WithNullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
@@ -528,8 +529,8 @@ public class RandomizedSmoothingTests
         Assert.Throws<ArgumentNullException>(() => smoothing.Deserialize(null!));
     }
 
-    [Fact]
-    public void SerializeDeserialize_PreservesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task SerializeDeserialize_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -555,8 +556,8 @@ public class RandomizedSmoothingTests
 
     #region GetOptions and Reset Tests
 
-    [Fact]
-    public void GetOptions_ReturnsConfiguredOptions()
+    [Fact(Timeout = 60000)]
+    public async Task GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -576,8 +577,8 @@ public class RandomizedSmoothingTests
         Assert.Equal(0.95, returnedOptions.ConfidenceLevel);
     }
 
-    [Fact]
-    public void Reset_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DoesNotThrow()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
@@ -592,8 +593,8 @@ public class RandomizedSmoothingTests
 
     #region Median Calculation Tests
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_ComputesCorrectMedian_OddCount()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_ComputesCorrectMedian_OddCount()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -618,8 +619,8 @@ public class RandomizedSmoothingTests
         Assert.True(metrics.MedianCertifiedRadius >= 0 || metrics.CertificationRate == 0);
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_ComputesCorrectMedian_EvenCount()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_ComputesCorrectMedian_EvenCount()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -647,8 +648,8 @@ public class RandomizedSmoothingTests
 
     #region Integration Tests
 
-    [Fact]
-    public void RandomizedSmoothing_EndToEndWorkflow()
+    [Fact(Timeout = 60000)]
+    public async Task RandomizedSmoothing_EndToEndWorkflow()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>

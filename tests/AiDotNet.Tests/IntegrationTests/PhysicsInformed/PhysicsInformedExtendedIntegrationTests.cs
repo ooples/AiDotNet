@@ -6,6 +6,7 @@ using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PhysicsInformed;
 
@@ -19,8 +20,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region OperatorBenchmarkOptions
 
-    [Fact]
-    public void OperatorBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_DefaultValues()
     {
         var opts = new OperatorBenchmarkOptions();
 
@@ -31,8 +32,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(42, opts.Seed);
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_CustomValues()
     {
         var opts = new OperatorBenchmarkOptions
         {
@@ -50,36 +51,36 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(123, opts.Seed);
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new OperatorBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_Validate_SpatialPointsTooSmall_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_Validate_SpatialPointsTooSmall_Throws()
     {
         var opts = new OperatorBenchmarkOptions { SpatialPoints = 3 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_Validate_SampleCountZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_Validate_SampleCountZero_Throws()
     {
         var opts = new OperatorBenchmarkOptions { SampleCount = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_Validate_MaxFrequencyZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_Validate_MaxFrequencyZero_Throws()
     {
         var opts = new OperatorBenchmarkOptions { MaxFrequency = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void OperatorBenchmarkOptions_Validate_SmoothingWindowZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkOptions_Validate_SmoothingWindowZero_Throws()
     {
         var opts = new OperatorBenchmarkOptions { SmoothingWindow = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
@@ -89,8 +90,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region OperatorBenchmarkResult
 
-    [Fact]
-    public void OperatorBenchmarkResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkResult_DefaultValues()
     {
         var result = new OperatorBenchmarkResult();
 
@@ -103,8 +104,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.0, result.MaxError);
     }
 
-    [Fact]
-    public void OperatorBenchmarkResult_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorBenchmarkResult_CustomValues()
     {
         var result = new OperatorBenchmarkResult
         {
@@ -130,8 +131,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region OperatorDataset2D
 
-    [Fact]
-    public void OperatorDataset2D_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorDataset2D_DefaultValues()
     {
         var dataset = new OperatorDataset2D();
 
@@ -142,8 +143,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.NotNull(dataset.Outputs);
     }
 
-    [Fact]
-    public void OperatorDataset2D_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task OperatorDataset2D_CustomValues()
     {
         var inputs = new double[2, 4, 4];
         var outputs = new double[2, 4, 4];
@@ -167,8 +168,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PdeBenchmarkOptions
 
-    [Fact]
-    public void PdeBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_DefaultValues()
     {
         var opts = new PdeBenchmarkOptions();
 
@@ -179,36 +180,36 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1.0, opts.FinalTime);
     }
 
-    [Fact]
-    public void PdeBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new PdeBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void PdeBenchmarkOptions_Validate_SpatialPointsTooSmall_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_Validate_SpatialPointsTooSmall_Throws()
     {
         var opts = new PdeBenchmarkOptions { SpatialPoints = 2 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void PdeBenchmarkOptions_Validate_TimeStepsZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_Validate_TimeStepsZero_Throws()
     {
         var opts = new PdeBenchmarkOptions { TimeSteps = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void PdeBenchmarkOptions_Validate_DomainEndLessThanStart_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_Validate_DomainEndLessThanStart_Throws()
     {
         var opts = new PdeBenchmarkOptions { DomainStart = 1.0, DomainEnd = -1.0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void PdeBenchmarkOptions_Validate_FinalTimeZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkOptions_Validate_FinalTimeZero_Throws()
     {
         var opts = new PdeBenchmarkOptions { FinalTime = 0.0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
@@ -218,8 +219,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region BurgersBenchmarkOptions
 
-    [Fact]
-    public void BurgersBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersBenchmarkOptions_DefaultValues()
     {
         var opts = new BurgersBenchmarkOptions();
 
@@ -227,22 +228,22 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.NotNull(opts.InitialCondition);
     }
 
-    [Fact]
-    public void BurgersBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new BurgersBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void BurgersBenchmarkOptions_Validate_NegativeViscosity_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersBenchmarkOptions_Validate_NegativeViscosity_Throws()
     {
         var opts = new BurgersBenchmarkOptions { Viscosity = -0.01 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void BurgersBenchmarkOptions_InitialCondition_EvaluatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersBenchmarkOptions_InitialCondition_EvaluatesCorrectly()
     {
         var opts = new BurgersBenchmarkOptions();
         double result = opts.InitialCondition(0.0);
@@ -253,8 +254,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region AllenCahnBenchmarkOptions
 
-    [Fact]
-    public void AllenCahnBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnBenchmarkOptions_DefaultValues()
     {
         var opts = new AllenCahnBenchmarkOptions();
 
@@ -262,22 +263,22 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.NotNull(opts.InitialCondition);
     }
 
-    [Fact]
-    public void AllenCahnBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new AllenCahnBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void AllenCahnBenchmarkOptions_Validate_EpsilonZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnBenchmarkOptions_Validate_EpsilonZero_Throws()
     {
         var opts = new AllenCahnBenchmarkOptions { Epsilon = 0.0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void AllenCahnBenchmarkOptions_InitialCondition_EvaluatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnBenchmarkOptions_InitialCondition_EvaluatesCorrectly()
     {
         var opts = new AllenCahnBenchmarkOptions();
         double result = opts.InitialCondition(0.0);
@@ -288,8 +289,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region DarcyOperatorBenchmarkOptions
 
-    [Fact]
-    public void DarcyOperatorBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DarcyOperatorBenchmarkOptions_DefaultValues()
     {
         var opts = new DarcyOperatorBenchmarkOptions();
 
@@ -303,29 +304,29 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(42, opts.Seed);
     }
 
-    [Fact]
-    public void DarcyOperatorBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task DarcyOperatorBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new DarcyOperatorBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void DarcyOperatorBenchmarkOptions_Validate_GridSizeTooSmall_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DarcyOperatorBenchmarkOptions_Validate_GridSizeTooSmall_Throws()
     {
         var opts = new DarcyOperatorBenchmarkOptions { GridSize = 3 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void DarcyOperatorBenchmarkOptions_Validate_ToleranceZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DarcyOperatorBenchmarkOptions_Validate_ToleranceZero_Throws()
     {
         var opts = new DarcyOperatorBenchmarkOptions { Tolerance = 0.0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void DarcyOperatorBenchmarkOptions_Validate_LogPermeabilityScaleZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DarcyOperatorBenchmarkOptions_Validate_LogPermeabilityScaleZero_Throws()
     {
         var opts = new DarcyOperatorBenchmarkOptions { LogPermeabilityScale = 0.0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
@@ -335,8 +336,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PoissonOperatorBenchmarkOptions
 
-    [Fact]
-    public void PoissonOperatorBenchmarkOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonOperatorBenchmarkOptions_DefaultValues()
     {
         var opts = new PoissonOperatorBenchmarkOptions();
 
@@ -348,22 +349,22 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(42, opts.Seed);
     }
 
-    [Fact]
-    public void PoissonOperatorBenchmarkOptions_Validate_ValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonOperatorBenchmarkOptions_Validate_ValidOptions()
     {
         var opts = new PoissonOperatorBenchmarkOptions();
         opts.Validate(); // Should not throw
     }
 
-    [Fact]
-    public void PoissonOperatorBenchmarkOptions_Validate_SampleCountZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonOperatorBenchmarkOptions_Validate_SampleCountZero_Throws()
     {
         var opts = new PoissonOperatorBenchmarkOptions { SampleCount = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
     }
 
-    [Fact]
-    public void PoissonOperatorBenchmarkOptions_Validate_MaxIterationsZero_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonOperatorBenchmarkOptions_Validate_MaxIterationsZero_Throws()
     {
         var opts = new PoissonOperatorBenchmarkOptions { MaxIterations = 0 };
         Assert.Throws<ArgumentOutOfRangeException>(() => opts.Validate());
@@ -373,8 +374,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PdeBenchmarkResult
 
-    [Fact]
-    public void PdeBenchmarkResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkResult_DefaultValues()
     {
         var result = new PdeBenchmarkResult();
 
@@ -386,8 +387,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.0, result.MaxError);
     }
 
-    [Fact]
-    public void PdeBenchmarkResult_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task PdeBenchmarkResult_CustomValues()
     {
         var result = new PdeBenchmarkResult
         {
@@ -411,16 +412,16 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region TrainingHistory
 
-    [Fact]
-    public void TrainingHistory_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_Construction()
     {
         var history = new TrainingHistory<double>();
         Assert.NotNull(history.Losses);
         Assert.Empty(history.Losses);
     }
 
-    [Fact]
-    public void TrainingHistory_AddEpoch_MultipleLosses()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_AddEpoch_MultipleLosses()
     {
         var history = new TrainingHistory<double>();
         history.AddEpoch(1.0);
@@ -437,8 +438,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region DomainDecompositionTrainingHistory
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_Construction()
     {
         var history = new DomainDecompositionTrainingHistory<double>(3);
 
@@ -449,15 +450,15 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Empty(history.PhysicsLosses);
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_ZeroSubdomains_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_ZeroSubdomains_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DomainDecompositionTrainingHistory<double>(0));
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_AddEpoch_TracksAllMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
         var subLosses = new List<double> { 0.1, 0.2 };
@@ -476,8 +477,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.3, history.PhysicsLosses[0]);
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_AddEpoch_NullSubdomainLosses_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_AddEpoch_NullSubdomainLosses_Throws()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
 
@@ -485,8 +486,8 @@ public class PhysicsInformedExtendedIntegrationTests
             history.AddEpoch(0.5, null!, 0.05, 0.3));
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_AddEpoch_WrongSubdomainCount_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_AddEpoch_WrongSubdomainCount_Throws()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
         var wrongLosses = new List<double> { 0.1, 0.2, 0.3 }; // 3 instead of 2
@@ -495,8 +496,8 @@ public class PhysicsInformedExtendedIntegrationTests
             history.AddEpoch(0.5, wrongLosses, 0.05, 0.3));
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_MultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionTrainingHistory_MultipleEpochs()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
 
@@ -513,8 +514,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region MultiFidelityTrainingHistory
 
-    [Fact]
-    public void MultiFidelityTrainingHistory_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelityTrainingHistory_Construction()
     {
         var history = new MultiFidelityTrainingHistory<double>();
 
@@ -525,8 +526,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Empty(history.PhysicsLosses);
     }
 
-    [Fact]
-    public void MultiFidelityTrainingHistory_AddEpoch_TracksAllMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelityTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         var history = new MultiFidelityTrainingHistory<double>();
 
@@ -544,8 +545,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.4, history.PhysicsLosses[0]);
     }
 
-    [Fact]
-    public void MultiFidelityTrainingHistory_MultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelityTrainingHistory_MultipleEpochs()
     {
         var history = new MultiFidelityTrainingHistory<double>();
 
@@ -567,8 +568,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region GpuPINNTrainingOptions
 
-    [Fact]
-    public void GpuPINNTrainingOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_DefaultValues()
     {
         var opts = new GpuPINNTrainingOptions();
 
@@ -584,8 +585,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, opts.NumStreams);
     }
 
-    [Fact]
-    public void GpuPINNTrainingOptions_Default_MatchesConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_Default_MatchesConstructor()
     {
         var opts = GpuPINNTrainingOptions.Default;
 
@@ -594,8 +595,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, opts.NumStreams);
     }
 
-    [Fact]
-    public void GpuPINNTrainingOptions_HighEnd_LargeBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_HighEnd_LargeBatchSize()
     {
         var opts = GpuPINNTrainingOptions.HighEnd;
 
@@ -608,8 +609,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(GpuUsageLevel.Aggressive, opts.GpuConfig.UsageLevel);
     }
 
-    [Fact]
-    public void GpuPINNTrainingOptions_LowMemory_SmallBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_LowMemory_SmallBatchSize()
     {
         var opts = GpuPINNTrainingOptions.LowMemory;
 
@@ -622,8 +623,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(GpuUsageLevel.Conservative, opts.GpuConfig.UsageLevel);
     }
 
-    [Fact]
-    public void GpuPINNTrainingOptions_CpuOnly_DisablesGpu()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_CpuOnly_DisablesGpu()
     {
         var opts = GpuPINNTrainingOptions.CpuOnly;
 
@@ -631,8 +632,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(GpuDeviceType.CPU, opts.GpuConfig.DeviceType);
     }
 
-    [Fact]
-    public void GpuPINNTrainingOptions_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task GpuPINNTrainingOptions_CustomValues()
     {
         var opts = new GpuPINNTrainingOptions
         {
@@ -662,85 +663,85 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region Options Classes Construction
 
-    [Fact]
-    public void PhysicsInformedNeuralNetworkOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedNeuralNetworkOptions_Construction()
     {
         var opts = new PhysicsInformedNeuralNetworkOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void DeepOperatorNetworkOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DeepOperatorNetworkOptions_Construction()
     {
         var opts = new DeepOperatorNetworkOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void FourierNeuralOperatorOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task FourierNeuralOperatorOptions_Construction()
     {
         var opts = new FourierNeuralOperatorOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void GraphNeuralOperatorOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task GraphNeuralOperatorOptions_Construction()
     {
         var opts = new GraphNeuralOperatorOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void DomainDecompositionPINNOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecompositionPINNOptions_Construction()
     {
         var opts = new DomainDecompositionPINNOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void MultiFidelityPINNOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelityPINNOptions_Construction()
     {
         var opts = new MultiFidelityPINNOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void DeepRitzMethodOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DeepRitzMethodOptions_Construction()
     {
         var opts = new DeepRitzMethodOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void VariationalPINNOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalPINNOptions_Construction()
     {
         var opts = new VariationalPINNOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void MultiScalePINNOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task MultiScalePINNOptions_Construction()
     {
         var opts = new MultiScalePINNOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void HamiltonianNeuralNetworkOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNeuralNetworkOptions_Construction()
     {
         var opts = new HamiltonianNeuralNetworkOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void LagrangianNeuralNetworkOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task LagrangianNeuralNetworkOptions_Construction()
     {
         var opts = new LagrangianNeuralNetworkOptions();
         Assert.NotNull(opts);
     }
 
-    [Fact]
-    public void UniversalDifferentialEquationsOptions_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task UniversalDifferentialEquationsOptions_Construction()
     {
         var opts = new UniversalDifferentialEquationsOptions();
         Assert.NotNull(opts);
@@ -750,8 +751,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region NavierStokesEquation
 
-    [Fact]
-    public void NavierStokesEquation_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task NavierStokesEquation_Construction_DefaultParams()
     {
         var ns = new NavierStokesEquation<double>();
 
@@ -760,8 +761,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(3, ns.OutputDimension); // [u, v, p]
     }
 
-    [Fact]
-    public void NavierStokesEquation_Construction_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task NavierStokesEquation_Construction_CustomParams()
     {
         var ns = new NavierStokesEquation<double>(viscosity: 0.001, density: 1000.0);
 
@@ -771,8 +772,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(3, ns.OutputDimension);
     }
 
-    [Fact]
-    public void NavierStokesEquation_ComputeResidual_SteadyUniformFlow_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task NavierStokesEquation_ComputeResidual_SteadyUniformFlow_ZeroResidual()
     {
         // Uniform flow: u = constant, v = 0, p = constant
         // All derivatives are zero for uniform flow
@@ -790,8 +791,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.0, residual, Tolerance);
     }
 
-    [Fact]
-    public void NavierStokesEquation_ComputeResidual_WrongOutputDim_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task NavierStokesEquation_ComputeResidual_WrongOutputDim_Throws()
     {
         var ns = new NavierStokesEquation<double>();
         var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
@@ -807,8 +808,8 @@ public class PhysicsInformedExtendedIntegrationTests
             ns.ComputeResidual(inputs, outputs, derivatives));
     }
 
-    [Fact]
-    public void NavierStokesEquation_ComputeResidualGradient_ReturnsGradient()
+    [Fact(Timeout = 120000)]
+    public async Task NavierStokesEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var ns = new NavierStokesEquation<double>();
         var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
@@ -830,8 +831,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region BlackScholesEquation
 
-    [Fact]
-    public void BlackScholesEquation_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task BlackScholesEquation_Construction_DefaultParams()
     {
         var bs = new BlackScholesEquation<double>();
 
@@ -840,8 +841,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, bs.OutputDimension); // [V]
     }
 
-    [Fact]
-    public void BlackScholesEquation_Construction_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task BlackScholesEquation_Construction_CustomParams()
     {
         var bs = new BlackScholesEquation<double>(volatility: 0.3, riskFreeRate: 0.08);
 
@@ -849,15 +850,15 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Contains("0.08", bs.Name);
     }
 
-    [Fact]
-    public void BlackScholesEquation_Construction_ZeroVolatility_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BlackScholesEquation_Construction_ZeroVolatility_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new BlackScholesEquation<double>(volatility: 0.0));
     }
 
-    [Fact]
-    public void BlackScholesEquation_ComputeResidual_ConstantOption_KnownResidual()
+    [Fact(Timeout = 120000)]
+    public async Task BlackScholesEquation_ComputeResidual_ConstantOption_KnownResidual()
     {
         // If V = constant and all derivatives are zero,
         // residual = 0 + 0 + 0 - r*V = -r*V
@@ -878,8 +879,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(-0.5, residual, Tolerance);
     }
 
-    [Fact]
-    public void BlackScholesEquation_ComputeResidualGradient_OutputGradient()
+    [Fact(Timeout = 120000)]
+    public async Task BlackScholesEquation_ComputeResidualGradient_OutputGradient()
     {
         var r = 0.05;
         var bs = new BlackScholesEquation<double>(volatility: 0.2, riskFreeRate: r);
@@ -904,8 +905,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region SchrodingerEquation
 
-    [Fact]
-    public void SchrodingerEquation_Construction_FreeParticle()
+    [Fact(Timeout = 120000)]
+    public async Task SchrodingerEquation_Construction_FreeParticle()
     {
         var se = new SchrodingerEquation<double>();
 
@@ -914,8 +915,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, se.OutputDimension); // [psi_r, psi_i]
     }
 
-    [Fact]
-    public void SchrodingerEquation_Construction_CustomPotential()
+    [Fact(Timeout = 120000)]
+    public async Task SchrodingerEquation_Construction_CustomPotential()
     {
         // Harmonic oscillator V(x) = 0.5 * x^2
         var se = new SchrodingerEquation<double>(x => 0.5 * x * x);
@@ -925,15 +926,15 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, se.OutputDimension);
     }
 
-    [Fact]
-    public void SchrodingerEquation_Construction_NullPotential_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SchrodingerEquation_Construction_NullPotential_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new SchrodingerEquation<double>(null!));
     }
 
-    [Fact]
-    public void SchrodingerEquation_ComputeResidual_ZeroState_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task SchrodingerEquation_ComputeResidual_ZeroState_ZeroResidual()
     {
         // Zero wavefunction with zero derivatives should give zero residual
         var se = new SchrodingerEquation<double>();
@@ -950,8 +951,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.0, residual, Tolerance);
     }
 
-    [Fact]
-    public void SchrodingerEquation_ComputeResidual_WrongOutputDim_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SchrodingerEquation_ComputeResidual_WrongOutputDim_Throws()
     {
         var se = new SchrodingerEquation<double>();
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -971,8 +972,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region AdvectionDiffusionEquation Extended
 
-    [Fact]
-    public void AdvectionDiffusionEquation_1D_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_1D_DefaultParams()
     {
         var ade = new AdvectionDiffusionEquation<double>();
 
@@ -981,8 +982,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, ade.OutputDimension); // [c]
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_2D_FourParams()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_2D_FourParams()
     {
         var ade = new AdvectionDiffusionEquation<double>(
             diffusionCoeff: 0.1, velocityX: 1.0, velocityY: 0.5, sourceTerm: 0.0);
@@ -992,15 +993,15 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, ade.OutputDimension); // [c]
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_NegativeDiffusion_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_NegativeDiffusion_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new AdvectionDiffusionEquation<double>(diffusionCoeff: -0.1));
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_1D_UniformConcentration_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_1D_UniformConcentration_ZeroResidual()
     {
         // Constant concentration with zero source: all derivatives are zero, residual = 0 - source
         var ade = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0, sourceTerm: 0.0);
@@ -1017,8 +1018,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.0, residual, Tolerance);
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_ComputeResidualGradient_1D()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_ComputeResidualGradient_1D()
     {
         var ade = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0, sourceTerm: 0.0);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1044,8 +1045,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region LinearElasticityEquation
 
-    [Fact]
-    public void LinearElasticityEquation_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task LinearElasticityEquation_Construction_DefaultParams()
     {
         var le = new LinearElasticityEquation<double>();
 
@@ -1054,8 +1055,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, le.OutputDimension); // [u, v]
     }
 
-    [Fact]
-    public void LinearElasticityEquation_Construction_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task LinearElasticityEquation_Construction_CustomParams()
     {
         var le = new LinearElasticityEquation<double>(lambda: 1.0, mu: 0.5);
 
@@ -1064,8 +1065,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(2, le.OutputDimension);
     }
 
-    [Fact]
-    public void LinearElasticityEquation_ComputeResidual_ZeroDisplacement_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task LinearElasticityEquation_ComputeResidual_ZeroDisplacement_ZeroResidual()
     {
         // Zero displacement with zero body forces: all derivatives are zero, residual = 0
         var le = new LinearElasticityEquation<double>(lambda: 1.0, mu: 0.5);
@@ -1086,8 +1087,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region MaxwellEquations
 
-    [Fact]
-    public void MaxwellEquations_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task MaxwellEquations_Construction_DefaultParams()
     {
         var maxwell = new MaxwellEquations<double>(permittivity: 1.0, permeability: 1.0);
 
@@ -1096,8 +1097,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(3, maxwell.OutputDimension); // [Ex, Ey, Bz]
     }
 
-    [Fact]
-    public void MaxwellEquations_ComputeResidual_ZeroFields_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task MaxwellEquations_ComputeResidual_ZeroFields_ZeroResidual()
     {
         // Zero fields with zero derivatives: residual = 0
         var maxwell = new MaxwellEquations<double>(permittivity: 1.0, permeability: 1.0);
@@ -1118,8 +1119,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region AllenCahnEquation Extended
 
-    [Fact]
-    public void AllenCahnEquation_Construction_CustomEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnEquation_Construction_CustomEpsilon()
     {
         var ac = new AllenCahnEquation<double>(epsilon: 0.1);
 
@@ -1128,15 +1129,15 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, ac.OutputDimension);
     }
 
-    [Fact]
-    public void AllenCahnEquation_Construction_ZeroEpsilon_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnEquation_Construction_ZeroEpsilon_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new AllenCahnEquation<double>(epsilon: 0.0));
     }
 
-    [Fact]
-    public void AllenCahnEquation_ComputeResidualGradient_ReturnsGradient()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var ac = new AllenCahnEquation<double>(epsilon: 0.01);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1160,8 +1161,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region BurgersEquation Extended
 
-    [Fact]
-    public void BurgersEquation_Construction_ZeroViscosity()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersEquation_Construction_ZeroViscosity()
     {
         // Zero viscosity = inviscid Burgers
         var burgers = new BurgersEquation<double>(viscosity: 0.0);
@@ -1171,8 +1172,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, burgers.OutputDimension);
     }
 
-    [Fact]
-    public void BurgersEquation_ComputeResidualGradient_ReturnsGradient()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var burgers = new BurgersEquation<double>(viscosity: 0.01);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1199,8 +1200,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region WaveEquation Extended
 
-    [Fact]
-    public void WaveEquation_Construction_2D()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_Construction_2D()
     {
         var wave = new WaveEquation<double>(waveSpeed: 2.0, spatialDimension: 2);
 
@@ -1209,8 +1210,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, wave.OutputDimension);
     }
 
-    [Fact]
-    public void WaveEquation_Construction_3D()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_Construction_3D()
     {
         var wave = new WaveEquation<double>(waveSpeed: 1.0, spatialDimension: 3);
 
@@ -1219,8 +1220,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, wave.OutputDimension);
     }
 
-    [Fact]
-    public void WaveEquation_Construction_InvalidDimension_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_Construction_InvalidDimension_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new WaveEquation<double>(waveSpeed: 1.0, spatialDimension: 0));
@@ -1229,8 +1230,8 @@ public class PhysicsInformedExtendedIntegrationTests
             new WaveEquation<double>(waveSpeed: 1.0, spatialDimension: 4));
     }
 
-    [Fact]
-    public void WaveEquation_ComputeResidualGradient_Returns()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_ComputeResidualGradient_Returns()
     {
         var wave = new WaveEquation<double>(waveSpeed: 2.0);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1255,8 +1256,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region HeatEquation Extended
 
-    [Fact]
-    public void HeatEquation_ComputeResidualGradient_Correctness()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_ComputeResidualGradient_Correctness()
     {
         var heat = new HeatEquation<double>(thermalDiffusivity: 0.5);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1280,8 +1281,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PoissonEquation Extended
 
-    [Fact]
-    public void PoissonEquation_1D()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_1D()
     {
         var poisson = new PoissonEquation<double>(spatialDimension: 1);
 
@@ -1289,8 +1290,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, poisson.OutputDimension);
     }
 
-    [Fact]
-    public void PoissonEquation_3D()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_3D()
     {
         var poisson = new PoissonEquation<double>(spatialDimension: 3);
 
@@ -1298,8 +1299,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Contains("3D", poisson.Name);
     }
 
-    [Fact]
-    public void PoissonEquation_InvalidDimension_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_InvalidDimension_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new PoissonEquation<double>(spatialDimension: 0));
@@ -1308,8 +1309,8 @@ public class PhysicsInformedExtendedIntegrationTests
             new PoissonEquation<double>(spatialDimension: 4));
     }
 
-    [Fact]
-    public void PoissonEquation_LaplaceCase_NoSource()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_LaplaceCase_NoSource()
     {
         // No source function = Laplace equation
         var laplace = new PoissonEquation<double>(sourceFunction: null, spatialDimension: 2);
@@ -1317,8 +1318,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Contains("Laplace", laplace.Name);
     }
 
-    [Fact]
-    public void PoissonEquation_ComputeResidualGradient_Returns()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_ComputeResidualGradient_Returns()
     {
         var poisson = new PoissonEquation<double>(spatialDimension: 2);
         var inputs = new Vector<double>(new double[] { 0.5, 0.5 });
@@ -1342,8 +1343,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region KortewegDeVriesEquation
 
-    [Fact]
-    public void KortewegDeVriesEquation_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task KortewegDeVriesEquation_Construction_DefaultParams()
     {
         var kdv = new KortewegDeVriesEquation<double>();
 
@@ -1352,16 +1353,16 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1, kdv.OutputDimension); // [u]
     }
 
-    [Fact]
-    public void KortewegDeVriesEquation_Construction_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task KortewegDeVriesEquation_Construction_CustomParams()
     {
         var kdv = new KortewegDeVriesEquation<double>(alpha: 6.0, beta: 1.0);
 
         Assert.Contains("Korteweg-de Vries", kdv.Name);
     }
 
-    [Fact]
-    public void KortewegDeVriesEquation_ConstantSolution_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task KortewegDeVriesEquation_ConstantSolution_ZeroResidual()
     {
         var kdv = new KortewegDeVriesEquation<double>(alpha: 6.0, beta: 1.0);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -1382,8 +1383,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PDEDerivatives Extended
 
-    [Fact]
-    public void PDEDerivatives_HigherDerivatives_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_HigherDerivatives_SetAndGet()
     {
         var derivatives = new PDEDerivatives<double>();
         var higher = new double[1, 2, 2, 2];
@@ -1394,8 +1395,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(1.5, derivatives.HigherDerivatives[0, 0, 0, 0]);
     }
 
-    [Fact]
-    public void PDEDerivatives_AllPropertiesNullByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_AllPropertiesNullByDefault()
     {
         var derivatives = new PDEDerivatives<double>();
 
@@ -1409,8 +1410,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PDEResidualGradient Extended
 
-    [Fact]
-    public void PDEResidualGradient_CorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task PDEResidualGradient_CorrectDimensions()
     {
         var gradient = new PDEResidualGradient<double>(outputDimension: 3, inputDimension: 4);
 
@@ -1430,15 +1431,15 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region PhysicsInformedLoss Extended
 
-    [Fact]
-    public void PhysicsInformedLoss_Name()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_Name()
     {
         var loss = new PhysicsInformedLoss<double>();
         Assert.Equal("Physics-Informed Loss", loss.Name);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputeDerivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputeDerivative_ReturnsCorrectGradient()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new double[] { 1.0, 2.0, 3.0 };
@@ -1456,8 +1457,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
     #region Cross-Module Integration
 
-    [Fact]
-    public void HeatEquation_WithPhysicsInformedLoss_ComputesLoss()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_WithPhysicsInformedLoss_ComputesLoss()
     {
         var heat = new HeatEquation<double>(thermalDiffusivity: 1.0);
         var loss = new PhysicsInformedLoss<double>(pdeSpecification: heat);
@@ -1476,8 +1477,8 @@ public class PhysicsInformedExtendedIntegrationTests
         Assert.Equal(0.01, totalLoss, 1e-6);
     }
 
-    [Fact]
-    public void TrainingHistories_InheritFromBase()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistories_InheritFromBase()
     {
         // Both DomainDecomposition and MultiFidelity inherit from TrainingHistory
         var ddHistory = new DomainDecompositionTrainingHistory<double>(2);

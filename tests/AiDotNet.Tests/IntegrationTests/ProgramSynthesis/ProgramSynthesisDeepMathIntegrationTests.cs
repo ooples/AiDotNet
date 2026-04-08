@@ -1,6 +1,7 @@
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ProgramSynthesis;
 
@@ -17,8 +18,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodePosition: Defaults
     // ============================
 
-    [Fact]
-    public void CodePosition_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodePosition_Defaults()
     {
         var pos = new CodePosition();
         Assert.Equal(1, pos.Line);
@@ -26,8 +27,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0, pos.Offset);
     }
 
-    [Fact]
-    public void CodePosition_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodePosition_SetProperties()
     {
         var pos = new CodePosition { Line = 42, Column = 15, Offset = 1024 };
         Assert.Equal(42, pos.Line);
@@ -39,16 +40,16 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeSpan: Defaults
     // ============================
 
-    [Fact]
-    public void CodeSpan_Defaults_StartAndEndNotNull()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSpan_Defaults_StartAndEndNotNull()
     {
         var span = new CodeSpan();
         Assert.NotNull(span.Start);
         Assert.NotNull(span.End);
     }
 
-    [Fact]
-    public void CodeSpan_SetStartEnd()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSpan_SetStartEnd()
     {
         var span = new CodeSpan
         {
@@ -65,8 +66,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeAstNode: Defaults
     // ============================
 
-    [Fact]
-    public void CodeAstNode_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstNode_Defaults()
     {
         var node = new CodeAstNode();
         Assert.Equal(0, node.NodeId);
@@ -76,8 +77,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.NotNull(node.Span);
     }
 
-    [Fact]
-    public void CodeAstNode_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstNode_SetProperties()
     {
         var node = new CodeAstNode
         {
@@ -103,16 +104,16 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeAstEdge: Defaults
     // ============================
 
-    [Fact]
-    public void CodeAstEdge_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstEdge_Defaults()
     {
         var edge = new CodeAstEdge();
         Assert.Equal(0, edge.ParentNodeId);
         Assert.Equal(0, edge.ChildNodeId);
     }
 
-    [Fact]
-    public void CodeAstEdge_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstEdge_SetProperties()
     {
         var edge = new CodeAstEdge { ParentNodeId = 1, ChildNodeId = 5 };
         Assert.Equal(1, edge.ParentNodeId);
@@ -123,8 +124,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeLocation: Defaults
     // ============================
 
-    [Fact]
-    public void CodeLocation_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeLocation_Defaults()
     {
         var loc = new CodeLocation();
         Assert.Null(loc.FilePath);
@@ -132,8 +133,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Null(loc.NodePath);
     }
 
-    [Fact]
-    public void CodeLocation_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeLocation_SetProperties()
     {
         var loc = new CodeLocation
         {
@@ -152,8 +153,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssue: Defaults and Properties
     // ============================
 
-    [Fact]
-    public void CodeIssue_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeIssue_Defaults()
     {
         var issue = new CodeIssue();
         Assert.Equal(CodeIssueSeverity.Warning, issue.Severity);
@@ -166,8 +167,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.NotNull(issue.Location);
     }
 
-    [Fact]
-    public void CodeIssue_SetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeIssue_SetAllProperties()
     {
         var issue = new CodeIssue
         {
@@ -190,16 +191,16 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCompletionCandidate: Defaults
     // ============================
 
-    [Fact]
-    public void CodeCompletionCandidate_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCompletionCandidate_Defaults()
     {
         var candidate = new CodeCompletionCandidate();
         Assert.Equal(string.Empty, candidate.CompletionText);
         Assert.Equal(0.0, candidate.Score);
     }
 
-    [Fact]
-    public void CodeCompletionCandidate_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCompletionCandidate_SetProperties()
     {
         var candidate = new CodeCompletionCandidate
         {
@@ -214,8 +215,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeComplexityMetrics: Defaults
     // ============================
 
-    [Fact]
-    public void CodeComplexityMetrics_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeComplexityMetrics_Defaults()
     {
         var metrics = new CodeComplexityMetrics();
         Assert.Equal(0, metrics.LineCount);
@@ -223,8 +224,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0, metrics.EstimatedCyclomaticComplexity);
     }
 
-    [Fact]
-    public void CodeComplexityMetrics_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeComplexityMetrics_SetProperties()
     {
         var metrics = new CodeComplexityMetrics
         {
@@ -241,8 +242,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeEditOperation: Defaults
     // ============================
 
-    [Fact]
-    public void CodeEditOperation_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeEditOperation_Defaults()
     {
         var op = new CodeEditOperation();
         Assert.Equal(CodeEditOperationType.Insert, op.OperationType);
@@ -250,8 +251,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Null(op.Text);
     }
 
-    [Fact]
-    public void CodeEditOperation_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeEditOperation_SetProperties()
     {
         var op = new CodeEditOperation
         {
@@ -271,8 +272,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeHotspot: Defaults
     // ============================
 
-    [Fact]
-    public void CodeHotspot_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeHotspot_Defaults()
     {
         var hotspot = new CodeHotspot();
         Assert.Equal(string.Empty, hotspot.SymbolName);
@@ -280,8 +281,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Equal(0.0, hotspot.Score);
     }
 
-    [Fact]
-    public void CodeHotspot_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeHotspot_SetProperties()
     {
         var hotspot = new CodeHotspot
         {
@@ -298,8 +299,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeFixSuggestion: Defaults
     // ============================
 
-    [Fact]
-    public void CodeFixSuggestion_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeFixSuggestion_Defaults()
     {
         var fix = new CodeFixSuggestion();
         Assert.Equal(string.Empty, fix.Summary);
@@ -313,8 +314,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneGroup: Defaults
     // ============================
 
-    [Fact]
-    public void CodeCloneGroup_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneGroup_Defaults()
     {
         var group = new CodeCloneGroup();
         Assert.Equal(0.0, group.Similarity);
@@ -325,8 +326,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
         Assert.Empty(group.RefactorSuggestions);
     }
 
-    [Fact]
-    public void CodeCloneGroup_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneGroup_SetProperties()
     {
         var group = new CodeCloneGroup
         {
@@ -351,8 +352,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneInstance: Defaults
     // ============================
 
-    [Fact]
-    public void CodeCloneInstance_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneInstance_Defaults()
     {
         var instance = new CodeCloneInstance();
         Assert.NotNull(instance.Location);
@@ -363,8 +364,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // SynthesisType Enum
     // ============================
 
-    [Fact]
-    public void SynthesisType_HasSixValues()
+    [Fact(Timeout = 120000)]
+    public async Task SynthesisType_HasSixValues()
     {
         var values = (((SynthesisType[])Enum.GetValues(typeof(SynthesisType))));
         Assert.Equal(6, values.Length);
@@ -386,8 +387,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // ProgramLanguage Enum
     // ============================
 
-    [Fact]
-    public void ProgramLanguage_HasElevenValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramLanguage_HasElevenValues()
     {
         var values = (((ProgramLanguage[])Enum.GetValues(typeof(ProgramLanguage))));
         Assert.Equal(11, values.Length);
@@ -414,8 +415,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeTask Enum
     // ============================
 
-    [Fact]
-    public void CodeTask_HasThirteenValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTask_HasThirteenValues()
     {
         var values = (((CodeTask[])Enum.GetValues(typeof(CodeTask))));
         Assert.Equal(13, values.Length);
@@ -444,8 +445,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // SqlDialect Enum
     // ============================
 
-    [Fact]
-    public void SqlDialect_HasThreeValues()
+    [Fact(Timeout = 120000)]
+    public async Task SqlDialect_HasThreeValues()
     {
         var values = (((SqlDialect[])Enum.GetValues(typeof(SqlDialect))));
         Assert.Equal(3, values.Length);
@@ -464,8 +465,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeCloneType Enum
     // ============================
 
-    [Fact]
-    public void CodeCloneType_HasFourValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneType_HasFourValues()
     {
         var values = (((CodeCloneType[])Enum.GetValues(typeof(CodeCloneType))));
         Assert.Equal(4, values.Length);
@@ -475,8 +476,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeEditOperationType Enum
     // ============================
 
-    [Fact]
-    public void CodeEditOperationType_HasThreeValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeEditOperationType_HasThreeValues()
     {
         var values = (((CodeEditOperationType[])Enum.GetValues(typeof(CodeEditOperationType))));
         Assert.Equal(3, values.Length);
@@ -486,8 +487,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssueCategory Enum
     // ============================
 
-    [Fact]
-    public void CodeIssueCategory_HasElevenValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeIssueCategory_HasElevenValues()
     {
         var values = (((CodeIssueCategory[])Enum.GetValues(typeof(CodeIssueCategory))));
         Assert.Equal(11, values.Length);
@@ -497,8 +498,8 @@ public class ProgramSynthesisDeepMathIntegrationTests
     // CodeIssueSeverity Enum
     // ============================
 
-    [Fact]
-    public void CodeIssueSeverity_HasFourValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeIssueSeverity_HasFourValues()
     {
         var values = (((CodeIssueSeverity[])Enum.GetValues(typeof(CodeIssueSeverity))));
         Assert.Equal(4, values.Length);

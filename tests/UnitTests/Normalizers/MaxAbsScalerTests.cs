@@ -3,13 +3,14 @@ using AiDotNet.Normalizers;
 using AiDotNet.Models;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Normalizers
 {
     public class MaxAbsScalerTests
     {
-        [Fact]
-        public void NormalizeOutput_WithPositiveValues_ScalesToOneOrLess()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithPositiveValues_ScalesToOneOrLess()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -27,8 +28,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithNegativeAndPositiveValues_PreservesSign()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithNegativeAndPositiveValues_PreservesSign()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -45,8 +46,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithZeros_PreservesZeros()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithZeros_PreservesZeros()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithAllZeros_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithAllZeros_HandlesGracefully()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -80,8 +81,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.0, normalized[2], 10);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithSingleValue_NormalizesToOne()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithSingleValue_NormalizesToOne()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -95,8 +96,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[0], 10);
         }
 
-        [Fact]
-        public void NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -124,8 +125,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.25, normalized[2, 1], 10);
         }
 
-        [Fact]
-        public void Denormalize_WithVector_RestoresOriginalValues()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_WithVector_RestoresOriginalValues()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -142,8 +143,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(original[3], denormalized[3], 10);
         }
 
-        [Fact]
-        public void Denormalize_Coefficients_ReturnsCorrectValues()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_Coefficients_ReturnsCorrectValues()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.25, denormalized[1], 10);
         }
 
-        [Fact]
-        public void Denormalize_Intercept_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_Intercept_ReturnsZero()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.0, intercept, 10);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var scaler = new MaxAbsScaler<float, Matrix<float>, Vector<float>>();
@@ -209,8 +210,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0f, normalized[3], 5);
         }
 
-        [Fact]
-        public void NormalizeInput_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeInput_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var scaler = new MaxAbsScaler<float, Matrix<float>, Vector<float>>();
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(400.0f, parametersList[1].MaxAbs);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithTensor_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithTensor_WorksCorrectly()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Tensor<double>>();
@@ -247,8 +248,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
-        public void NormalizeInput_WithTensor_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeInput_WithTensor_WorksCorrectly()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Tensor<double>, Vector<double>>();
@@ -266,8 +267,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(400.0, parametersList[1].MaxAbs);
         }
 
-        [Fact]
-        public void NormalizeOutput_WithLargeNegativeValue_NormalizesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithLargeNegativeValue_NormalizesCorrectly()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.5, normalized[3], 10);
         }
 
-        [Fact]
-        public void RoundTrip_NormalizeAndDenormalize_ReturnsOriginal()
+        [Fact(Timeout = 60000)]
+        public async Task RoundTrip_NormalizeAndDenormalize_ReturnsOriginal()
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Vector<double>>();

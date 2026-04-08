@@ -1,6 +1,7 @@
 using AiDotNet.Classification.Trees;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -14,8 +15,8 @@ public class DecisionTreeIntegrationTests
 
     #region Basic Training and Prediction Tests
 
-    [Fact]
-    public void DecisionTree_Train_BuildsTree()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Train_BuildsTree()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -39,8 +40,8 @@ public class DecisionTreeIntegrationTests
         Assert.True(dt.LeafCount > 0, "Tree should have at least one leaf");
     }
 
-    [Fact]
-    public void DecisionTree_Predict_BinaryClassification()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Predict_BinaryClassification()
     {
         // Arrange
         var x = new Matrix<double>(8, 2);
@@ -69,8 +70,8 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact]
-    public void DecisionTree_Predict_MultiClassClassification()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Predict_MultiClassClassification()
     {
         // Arrange: Three classes
         var x = new Matrix<double>(9, 2);
@@ -108,8 +109,8 @@ public class DecisionTreeIntegrationTests
 
     #region Probability Tests
 
-    [Fact]
-    public void DecisionTree_PredictProbabilities_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_PredictProbabilities_SumsToOne()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -149,8 +150,8 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact]
-    public void DecisionTree_PureSplit_HasProbabilityOne()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_PureSplit_HasProbabilityOne()
     {
         // Arrange: Perfectly separable data
         var x = new Matrix<double>(4, 1);
@@ -185,8 +186,8 @@ public class DecisionTreeIntegrationTests
 
     #region Tree Constraint Tests
 
-    [Fact]
-    public void DecisionTree_WithMaxDepth_LimitsDepth()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_WithMaxDepth_LimitsDepth()
     {
         // Arrange: Data that would create deep tree without constraint
         var x = new Matrix<double>(16, 2);
@@ -209,8 +210,8 @@ public class DecisionTreeIntegrationTests
         Assert.True(dt.MaxDepth <= 2, $"MaxDepth {dt.MaxDepth} exceeds limit of 2");
     }
 
-    [Fact]
-    public void DecisionTree_WithMinSamplesSplit_PreventsSplits()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_WithMinSamplesSplit_PreventsSplits()
     {
         // Arrange
         var x = new Matrix<double>(10, 1);
@@ -242,8 +243,8 @@ public class DecisionTreeIntegrationTests
             "High MinSamplesSplit should result in fewer or equal nodes");
     }
 
-    [Fact]
-    public void DecisionTree_WithMinSamplesLeaf_EnforcesMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_WithMinSamplesLeaf_EnforcesMinimum()
     {
         // Arrange
         var x = new Matrix<double>(10, 1);
@@ -273,8 +274,8 @@ public class DecisionTreeIntegrationTests
 
     #region Feature Importance Tests
 
-    [Fact]
-    public void DecisionTree_FeatureImportance_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_FeatureImportance_ReturnsValidValues()
     {
         // Arrange: Data where feature 0 is more important than feature 1
         var x = new Matrix<double>(8, 2);
@@ -314,8 +315,8 @@ public class DecisionTreeIntegrationTests
 
     #region Impurity Criterion Tests
 
-    [Fact]
-    public void DecisionTree_GiniImpurity_CalculatedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_GiniImpurity_CalculatedCorrectly()
     {
         // Arrange: Same data, Gini criterion
         var x = new Matrix<double>(6, 1);
@@ -344,8 +345,8 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact]
-    public void DecisionTree_Entropy_CalculatedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Entropy_CalculatedCorrectly()
     {
         // Arrange: Same data, Entropy criterion
         var x = new Matrix<double>(6, 1);
@@ -378,8 +379,8 @@ public class DecisionTreeIntegrationTests
 
     #region Serialization and Clone Tests
 
-    [Fact]
-    public void DecisionTree_Serialize_Deserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Serialize_Deserialize_PreservesPredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -413,8 +414,8 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(originalProbs[0, 1], newProbs[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void DecisionTree_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -452,8 +453,8 @@ public class DecisionTreeIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void DecisionTree_SingleFeature_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_SingleFeature_WorksCorrectly()
     {
         // Arrange
         var x = new Matrix<double>(4, 1);
@@ -475,8 +476,8 @@ public class DecisionTreeIntegrationTests
         }
     }
 
-    [Fact]
-    public void DecisionTree_PureNode_StopsSplitting()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_PureNode_StopsSplitting()
     {
         // Arrange: All same class
         var x = new Matrix<double>(4, 2);
@@ -497,8 +498,8 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(1, dt.NodeCount);
     }
 
-    [Fact]
-    public void DecisionTree_RandomSeed_ProducesConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_RandomSeed_ProducesConsistentResults()
     {
         // Arrange
         var x = new Matrix<double>(10, 3);
@@ -538,8 +539,8 @@ public class DecisionTreeIntegrationTests
         Assert.Equal(pred1[0], pred2[0], Tolerance);
     }
 
-    [Fact]
-    public void DecisionTree_IdenticalSamples_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTree_IdenticalSamples_HandlesGracefully()
     {
         // Arrange: Multiple identical samples with different labels
         var x = new Matrix<double>(4, 2);

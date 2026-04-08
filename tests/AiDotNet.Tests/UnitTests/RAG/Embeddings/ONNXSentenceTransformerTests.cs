@@ -4,13 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class ONNXSentenceTransformerTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx", 384, 512);
@@ -21,8 +22,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -33,8 +34,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithNullModelPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullModelPath_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -42,8 +43,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithEmptyModelPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyModelPath_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -51,8 +52,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithWhitespaceModelPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithWhitespaceModelPath_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -60,8 +61,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithZeroDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -69,8 +70,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -78,8 +79,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -87,8 +88,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Embed_WithMissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx", 384, 512);
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
-        [Fact]
-        public void Embed_WithNullText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
-        public void Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
-        public void Embed_WithWhitespaceText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -136,8 +137,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
-        public void EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx", 384, 512);
@@ -147,8 +148,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<double>("test-model-path.onnx");
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange
             var model = new ONNXSentenceTransformer<float>("test-model-path.onnx", 384, 512);
@@ -178,8 +179,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
-        public void Embed_WithCustomDimension_MissingModelFile_ThrowsFileNotFoundException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithCustomDimension_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange
             var customDimension = 768;

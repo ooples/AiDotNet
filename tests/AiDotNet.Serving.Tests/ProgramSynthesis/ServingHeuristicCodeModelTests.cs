@@ -3,13 +3,14 @@ using AiDotNet.Models;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingHeuristicCodeModelTests
 {
-    [Fact]
-    public void GetModelMetadata_IncludesExpectedFields()
+    [Fact(Timeout = 60000)]
+    public async Task GetModelMetadata_IncludesExpectedFields()
     {
         var model = CreateDefaultModel(ProgramLanguage.Generic);
         var metadata = (ModelMetadata<double>)Invoke(model, "GetModelMetadata")!;
@@ -19,8 +20,8 @@ public sealed class ServingHeuristicCodeModelTests
         Assert.Equal(ProgramLanguage.Generic.ToString(), metadata.AdditionalInfo["TargetLanguage"]);
     }
 
-    [Fact]
-    public void Deserialize_MismatchedArchitecture_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_MismatchedArchitecture_Throws()
     {
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
         {

@@ -3,6 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -53,7 +54,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
         Assert.Equal("SEAL", metadata.HomomorphicEncryptionProviderUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithHomomorphicEncryption_HybridWithSecureAgg_CompletesAndReportsMode()
     {
         var (x, y) = CreateToyData();

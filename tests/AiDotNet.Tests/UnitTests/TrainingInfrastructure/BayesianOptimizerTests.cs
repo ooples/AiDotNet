@@ -1,6 +1,7 @@
 using AiDotNet.HyperparameterOptimization;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TrainingInfrastructure;
 
@@ -11,8 +12,8 @@ public class BayesianOptimizerTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultParameters_InitializesCorrectly()
     {
         // Arrange & Act
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -26,8 +27,8 @@ public class BayesianOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
-    public void Constructor_WithMinimizationGoal_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMinimizationGoal_InitializesCorrectly()
     {
         // Arrange & Act
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -54,8 +55,8 @@ public class BayesianOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
-    public void Constructor_WithMinimumInitialPoints_UsesAtLeastTwo()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMinimumInitialPoints_UsesAtLeastTwo()
     {
         // Arrange & Act
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -70,8 +71,8 @@ public class BayesianOptimizerTests
 
     #region Optimize Tests
 
-    [Fact]
-    public void Optimize_WithSimpleQuadraticFunction_FindsMinimum()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithSimpleQuadraticFunction_FindsMinimum()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -102,8 +103,8 @@ public class BayesianOptimizerTests
         Assert.True(Math.Abs(bestX) < 3.0, $"Best x={bestX} should be close to 0");
     }
 
-    [Fact]
-    public void Optimize_WithMultipleParameters_ReturnsValidResult()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithMultipleParameters_ReturnsValidResult()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -138,8 +139,8 @@ public class BayesianOptimizerTests
         Assert.Equal(10, result.AllTrials.Count);
     }
 
-    [Fact]
-    public void Optimize_WithMaximization_FindsMaximum()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithMaximization_FindsMaximum()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -166,8 +167,8 @@ public class BayesianOptimizerTests
         Assert.True(result.BestObjectiveValue > -10.0, $"Best score={result.BestObjectiveValue} should be close to 0");
     }
 
-    [Fact]
-    public void Optimize_WithNullObjectiveFunction_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithNullObjectiveFunction_ThrowsArgumentException()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(seed: 42);
@@ -178,8 +179,8 @@ public class BayesianOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null!, searchSpace, nTrials: 5));
     }
 
-    [Fact]
-    public void Optimize_WithNullSearchSpace_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithNullSearchSpace_ThrowsArgumentException()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(seed: 42);
@@ -189,8 +190,8 @@ public class BayesianOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(objective, null!, nTrials: 5));
     }
 
-    [Fact]
-    public void Optimize_WithZeroTrials_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithZeroTrials_ThrowsArgumentException()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(seed: 42);
@@ -206,8 +207,8 @@ public class BayesianOptimizerTests
 
     #region SuggestNext Tests
 
-    [Fact]
-    public void SuggestNext_BeforeOptimize_ThrowsInvalidOperationException()
+    [Fact(Timeout = 60000)]
+    public async Task SuggestNext_BeforeOptimize_ThrowsInvalidOperationException()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(seed: 42);
@@ -217,8 +218,8 @@ public class BayesianOptimizerTests
         Assert.Throws<InvalidOperationException>(() => optimizer.SuggestNext(trial));
     }
 
-    [Fact]
-    public void SuggestNext_AfterOptimize_ReturnsValidParameters()
+    [Fact(Timeout = 60000)]
+    public async Task SuggestNext_AfterOptimize_ReturnsValidParameters()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -248,8 +249,8 @@ public class BayesianOptimizerTests
 
     #region Integration Tests
 
-    [Fact]
-    public void Optimize_WithBooleanParameter_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithBooleanParameter_HandlesCorrectly()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -278,8 +279,8 @@ public class BayesianOptimizerTests
         Assert.True(result.BestParameters.ContainsKey("use_dropout"));
     }
 
-    [Fact]
-    public void Optimize_WithIntegerStepParameter_RespectsStepSize()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithIntegerStepParameter_RespectsStepSize()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -306,8 +307,8 @@ public class BayesianOptimizerTests
         Assert.InRange(bestBatchSize, 16, 128);
     }
 
-    [Fact]
-    public void Optimize_WithLogScaleContinuous_SamplesAcrossOrders()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithLogScaleContinuous_SamplesAcrossOrders()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -334,8 +335,8 @@ public class BayesianOptimizerTests
         Assert.True(bestLr >= 0.0001 && bestLr <= 0.1, $"learning_rate={bestLr} should be in [0.0001, 0.1]");
     }
 
-    [Fact]
-    public void Optimize_RecordsAllTrials()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_RecordsAllTrials()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -366,8 +367,8 @@ public class BayesianOptimizerTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Optimize_WithObjectiveThatThrows_ContinuesWithOtherTrials()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithObjectiveThatThrows_ContinuesWithOtherTrials()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(
@@ -397,8 +398,8 @@ public class BayesianOptimizerTests
         Assert.Equal(5, result.AllTrials.Count);
     }
 
-    [Fact]
-    public void Optimize_WithSingleTrial_CompletesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithSingleTrial_CompletesSuccessfully()
     {
         // Arrange
         var optimizer = new BayesianOptimizer<double, double[], double>(

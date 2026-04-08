@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Issue357;
 
@@ -13,8 +14,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Node Construction
 
-    [Fact]
-    public void DecisionTreeNode_DefaultConstructor_CreatesLeafNode()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_DefaultConstructor_CreatesLeafNode()
     {
         var node = new DecisionTreeNode<double>();
 
@@ -26,8 +27,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(0.0, node.Threshold);
     }
 
-    [Fact]
-    public void DecisionTreeNode_SplitConstructor_CreatesInternalNode()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_SplitConstructor_CreatesInternalNode()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 2, splitValue: 5.0);
 
@@ -36,8 +37,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(5.0, node.SplitValue);
     }
 
-    [Fact]
-    public void DecisionTreeNode_PredictionConstructor_CreatesLeafWithValue()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_PredictionConstructor_CreatesLeafWithValue()
     {
         var node = new DecisionTreeNode<double>(prediction: 42.5);
 
@@ -49,8 +50,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Tree Structure
 
-    [Fact]
-    public void DecisionTreeNode_CanBuildSimpleTree()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_CanBuildSimpleTree()
     {
         // Create a simple decision tree:
         //        [Feature 0 <= 5]
@@ -72,8 +73,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(20.0, root.Right.Prediction);
     }
 
-    [Fact]
-    public void DecisionTreeNode_CanBuildMultiLevelTree()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_CanBuildMultiLevelTree()
     {
         // Create a deeper tree:
         //            [Feature 0 <= 5]
@@ -103,8 +104,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Sample Management
 
-    [Fact]
-    public void DecisionTreeNode_Samples_DefaultsToEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_Samples_DefaultsToEmptyList()
     {
         var node = new DecisionTreeNode<double>();
 
@@ -112,8 +113,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Empty(node.Samples);
     }
 
-    [Fact]
-    public void DecisionTreeNode_SampleValues_DefaultsToEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_SampleValues_DefaultsToEmptyList()
     {
         var node = new DecisionTreeNode<double>();
 
@@ -121,8 +122,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Empty(node.SampleValues);
     }
 
-    [Fact]
-    public void DecisionTreeNode_SampleCounts_TrackLeftRightDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_SampleCounts_TrackLeftRightDistribution()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
         {
@@ -138,8 +139,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Node Statistics
 
-    [Fact]
-    public void DecisionTreeNode_UpdateStatistics_CalculatesSumSquaredError()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_UpdateStatistics_CalculatesSumSquaredError()
     {
         var node = new DecisionTreeNode<double>(prediction: 5.0);
 
@@ -154,8 +155,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(2.0, node.SumSquaredError, Tolerance);
     }
 
-    [Fact]
-    public void DecisionTreeNode_UpdateStatistics_EmptySamples_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_UpdateStatistics_EmptySamples_ReturnsZero()
     {
         var node = new DecisionTreeNode<double>(prediction: 5.0);
 
@@ -164,8 +165,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(0.0, node.SumSquaredError);
     }
 
-    [Fact]
-    public void DecisionTreeNode_UpdateStatistics_PerfectPrediction_ReturnsZeroSSE()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_UpdateStatistics_PerfectPrediction_ReturnsZeroSSE()
     {
         var node = new DecisionTreeNode<double>(prediction: 10.0);
 
@@ -182,8 +183,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Properties
 
-    [Fact]
-    public void DecisionTreeNode_Threshold_CanBeSetAndRetrieved()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_Threshold_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>
         {
@@ -193,8 +194,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(7.5, node.Threshold);
     }
 
-    [Fact]
-    public void DecisionTreeNode_FeatureIndex_CanBeSetAndRetrieved()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_FeatureIndex_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>
         {
@@ -204,8 +205,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(3, node.FeatureIndex);
     }
 
-    [Fact]
-    public void DecisionTreeNode_Predictions_Vector_CanBeSetAndRetrieved()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_Predictions_Vector_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>();
         var predictions = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -217,8 +218,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(1.0, node.Predictions[0]);
     }
 
-    [Fact]
-    public void DecisionTreeNode_LinearModel_DefaultsToNull()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_LinearModel_DefaultsToNull()
     {
         var node = new DecisionTreeNode<double>();
 
@@ -229,8 +230,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Tree Traversal Simulation
 
-    [Fact]
-    public void DecisionTreeNode_TreeTraversal_ReachesCorrectLeaf()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_TreeTraversal_ReachesCorrectLeaf()
     {
         // Build tree for: if x[0] <= 5 then 10 else 20
         var root = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
@@ -250,8 +251,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(20.0, result2);
     }
 
-    [Fact]
-    public void DecisionTreeNode_DeepTreeTraversal_ReachesCorrectLeaf()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_DeepTreeTraversal_ReachesCorrectLeaf()
     {
         // Build tree for more complex decision
         var root = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
@@ -306,8 +307,8 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void DecisionTreeNode_LeafWithNoChildren_IsValidLeaf()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_LeafWithNoChildren_IsValidLeaf()
     {
         var leaf = new DecisionTreeNode<double>(prediction: 42.0);
 
@@ -316,8 +317,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Null(leaf.Right);
     }
 
-    [Fact]
-    public void DecisionTreeNode_InternalWithOnlyLeftChild_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_InternalWithOnlyLeftChild_IsValid()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
         {
@@ -329,8 +330,8 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Null(node.Right);
     }
 
-    [Fact]
-    public void DecisionTreeNode_InternalWithOnlyRightChild_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeNode_InternalWithOnlyRightChild_IsValid()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
         {

@@ -14,6 +14,7 @@ using AiDotNet.ReinforcementLearning.Agents.Planning;
 using AiDotNet.ReinforcementLearning.Agents.SARSA;
 using AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
@@ -26,8 +27,8 @@ public class ClassicAgentsIntegrationTests
     private const double LearningRate = 0.1;
     private const double DiscountFactor = 0.9;
 
-    [Fact]
-    public void BanditAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task BanditAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
             "EpsilonGreedyBanditAgent",
@@ -86,8 +87,8 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
-    public void TabularAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task TabularAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
             "SARSAAgent",
@@ -302,8 +303,8 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
-    public void MonteCarloAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarloAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
             "OnPolicyMonteCarloAgent",
@@ -389,8 +390,8 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
-    public void AdvancedClassicAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task AdvancedClassicAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
             "LinearQLearningAgent",
@@ -475,8 +476,8 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
-    public void DynamicProgrammingAgents_RunBasicWorkflow()
+    [Fact(Timeout = 120000)]
+    public async Task DynamicProgrammingAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
             "ValueIterationAgent",

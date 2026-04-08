@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -11,8 +12,8 @@ using Xunit;
 public class ModelPayloadEncryptionTests
 {
 #if !NET471
-    [Fact]
-    public void EncryptDecrypt_RoundTrip_ProducesIdenticalBytes()
+    [Fact(Timeout = 60000)]
+    public async Task EncryptDecrypt_RoundTrip_ProducesIdenticalBytes()
     {
         var plaintext = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF, 0x42, 0x00, 0xFF };
         var licenseKey = "test-license-key-12345";
@@ -38,8 +39,8 @@ public class ModelPayloadEncryptionTests
         Assert.Equal(plaintext, decrypted);
     }
 
-    [Fact]
-    public void EncryptDecrypt_EmptyPayload_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task EncryptDecrypt_EmptyPayload_RoundTrip()
     {
         var plaintext = Array.Empty<byte>();
         var licenseKey = "my-empty-payload-key";
@@ -55,8 +56,8 @@ public class ModelPayloadEncryptionTests
         Assert.Empty(decrypted);
     }
 
-    [Fact]
-    public void EncryptDecrypt_LargePayload_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task EncryptDecrypt_LargePayload_RoundTrip()
     {
         var plaintext = new byte[1024 * 1024]; // 1 MB
         new Random(42).NextBytes(plaintext);
@@ -70,8 +71,8 @@ public class ModelPayloadEncryptionTests
         Assert.Equal(plaintext, decrypted);
     }
 
-    [Fact]
-    public void Decrypt_WrongKey_ThrowsCryptographicException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_WrongKey_ThrowsCryptographicException()
     {
         var plaintext = new byte[] { 1, 2, 3, 4, 5 };
         var correctKey = "correct-key-abc";
@@ -85,8 +86,8 @@ public class ModelPayloadEncryptionTests
                 encrypted.Ciphertext, wrongKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
-    public void Decrypt_WrongAad_ThrowsCryptographicException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_WrongAad_ThrowsCryptographicException()
     {
         var plaintext = new byte[] { 10, 20, 30 };
         var licenseKey = "aad-test-key";
@@ -100,64 +101,64 @@ public class ModelPayloadEncryptionTests
                 encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, wrongAad));
     }
 
-    [Fact]
-    public void Encrypt_NullPayload_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypt_NullPayload_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Encrypt(null, "key", "aad"));
     }
 
-    [Fact]
-    public void Encrypt_NullKey_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypt_NullKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelPayloadEncryption.Encrypt(new byte[] { 1 }, null, "aad"));
     }
 
-    [Fact]
-    public void Encrypt_EmptyKey_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypt_EmptyKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelPayloadEncryption.Encrypt(new byte[] { 1 }, "", "aad"));
     }
 
-    [Fact]
-    public void Decrypt_NullCiphertext_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_NullCiphertext_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Decrypt(null, "key", new byte[16], new byte[12], new byte[16], "aad"));
     }
 
-    [Fact]
-    public void Decrypt_NullKey_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_NullKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelPayloadEncryption.Decrypt(new byte[] { 1 }, null, new byte[16], new byte[12], new byte[16], "aad"));
     }
 
-    [Fact]
-    public void Decrypt_NullSalt_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_NullSalt_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", null, new byte[12], new byte[16], "aad"));
     }
 
-    [Fact]
-    public void Decrypt_NullNonce_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_NullNonce_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], null, new byte[16], "aad"));
     }
 
-    [Fact]
-    public void Decrypt_NullTag_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Decrypt_NullTag_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], new byte[12], null, "aad"));
     }
 
-    [Fact]
-    public void Encrypt_ProducesDifferentSaltAndNonce_EachCall()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypt_ProducesDifferentSaltAndNonce_EachCall()
     {
         var plaintext = new byte[] { 1, 2, 3 };
         var licenseKey = "determinism-test-key";
@@ -171,8 +172,8 @@ public class ModelPayloadEncryptionTests
         Assert.NotEqual(encrypted1.Nonce, encrypted2.Nonce);
     }
 
-    [Fact]
-    public void BuildAad_ProducesDeterministicString()
+    [Fact(Timeout = 60000)]
+    public async Task BuildAad_ProducesDeterministicString()
     {
         var aad1 = ModelPayloadEncryption.BuildAad("MyModel", new[] { 3, 224, 224 }, new[] { 1000 });
         var aad2 = ModelPayloadEncryption.BuildAad("MyModel", new[] { 3, 224, 224 }, new[] { 1000 });
@@ -181,15 +182,15 @@ public class ModelPayloadEncryptionTests
         Assert.Equal("MyModel|3,224,224|1000", aad1);
     }
 
-    [Fact]
-    public void BuildAad_EmptyShapes()
+    [Fact(Timeout = 60000)]
+    public async Task BuildAad_EmptyShapes()
     {
         var aad = ModelPayloadEncryption.BuildAad("Model", Array.Empty<int>(), Array.Empty<int>());
         Assert.Equal("Model||", aad);
     }
 
-    [Fact]
-    public void BuildAad_NullInputs()
+    [Fact(Timeout = 60000)]
+    public async Task BuildAad_NullInputs()
     {
         var aad = ModelPayloadEncryption.BuildAad(null, null, null);
         Assert.Equal("||", aad);
@@ -199,8 +200,8 @@ public class ModelPayloadEncryptionTests
     // Header encryption round-trip tests (these work on all targets because
     // they don't use actual AES-GCM, they just test the header format)
 
-    [Fact]
-    public void WrapWithHeaderEncrypted_ReadHeader_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeaderEncrypted_ReadHeader_RoundTrip()
     {
         var model = new StubModelSerializer
         {
@@ -244,8 +245,8 @@ public class ModelPayloadEncryptionTests
         Assert.Equal(fakeCiphertext, extractedPayload);
     }
 
-    [Fact]
-    public void WrapWithHeader_Unencrypted_HasEncryptionNone()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeader_Unencrypted_HasEncryptionNone()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1, 2, 3 } };
 
@@ -261,8 +262,8 @@ public class ModelPayloadEncryptionTests
         Assert.Null(info.Tag);
     }
 
-    [Fact]
-    public void WrapWithHeaderEncrypted_ThrowsOnNullSalt()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeaderEncrypted_ThrowsOnNullSalt()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1 } };
         Assert.Throws<ArgumentNullException>(() =>
@@ -271,8 +272,8 @@ public class ModelPayloadEncryptionTests
                 SerializationFormat.Binary, null, new byte[12], new byte[16]));
     }
 
-    [Fact]
-    public void WrapWithHeaderEncrypted_ThrowsOnNullNonce()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeaderEncrypted_ThrowsOnNullNonce()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1 } };
         Assert.Throws<ArgumentNullException>(() =>
@@ -281,8 +282,8 @@ public class ModelPayloadEncryptionTests
                 SerializationFormat.Binary, new byte[16], null, new byte[16]));
     }
 
-    [Fact]
-    public void WrapWithHeaderEncrypted_ThrowsOnNullTag()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeaderEncrypted_ThrowsOnNullTag()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1 } };
         Assert.Throws<ArgumentNullException>(() =>
@@ -291,8 +292,8 @@ public class ModelPayloadEncryptionTests
                 SerializationFormat.Binary, new byte[16], new byte[12], null));
     }
 
-    [Fact]
-    public void Inspect_EncryptedFile_ShowsIsEncrypted()
+    [Fact(Timeout = 60000)]
+    public async Task Inspect_EncryptedFile_ShowsIsEncrypted()
     {
         var model = new StubModelSerializer
         {
@@ -333,8 +334,8 @@ public class ModelPayloadEncryptionTests
     }
 
 #if !NET471
-    [Fact]
-    public void SaveEncrypted_Load_WithCorrectKey_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task SaveEncrypted_Load_WithCorrectKey_RoundTrip()
     {
         // Register the stub so the registry can resolve it
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -377,8 +378,8 @@ public class ModelPayloadEncryptionTests
         }
     }
 
-    [Fact]
-    public void Load_Encrypted_WithoutKey_ThrowsInvalidOperation()
+    [Fact(Timeout = 60000)]
+    public async Task Load_Encrypted_WithoutKey_ThrowsInvalidOperation()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
 
@@ -411,8 +412,8 @@ public class ModelPayloadEncryptionTests
         }
     }
 
-    [Fact]
-    public void Load_Encrypted_WithWrongKey_ThrowsCryptographicException()
+    [Fact(Timeout = 60000)]
+    public async Task Load_Encrypted_WithWrongKey_ThrowsCryptographicException()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
 
@@ -442,8 +443,8 @@ public class ModelPayloadEncryptionTests
         }
     }
 
-    [Fact]
-    public void Load_Unencrypted_WithKey_StillWorks()
+    [Fact(Timeout = 60000)]
+    public async Task Load_Unencrypted_WithKey_StillWorks()
     {
         // Providing a key for an unencrypted file should just work (key is ignored)
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
@@ -460,31 +461,31 @@ public class ModelPayloadEncryptionTests
         Assert.Equal(payload, ((StubModelSerializer)loaded).GetDeserializedData());
     }
 
-    [Fact]
-    public void SaveEncrypted_ThrowsOnNullModel()
+    [Fact(Timeout = 60000)]
+    public async Task SaveEncrypted_ThrowsOnNullModel()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelLoader.SaveEncrypted(null, "file.aimf", "key", Array.Empty<int>(), Array.Empty<int>()));
     }
 
-    [Fact]
-    public void SaveEncrypted_ThrowsOnEmptyPath()
+    [Fact(Timeout = 60000)]
+    public async Task SaveEncrypted_ThrowsOnEmptyPath()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1 } };
         Assert.Throws<ArgumentException>(() =>
             ModelLoader.SaveEncrypted(model, "", "key", Array.Empty<int>(), Array.Empty<int>()));
     }
 
-    [Fact]
-    public void SaveEncrypted_ThrowsOnEmptyKey()
+    [Fact(Timeout = 60000)]
+    public async Task SaveEncrypted_ThrowsOnEmptyKey()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 1 } };
         Assert.Throws<ArgumentException>(() =>
             ModelLoader.SaveEncrypted(model, "file.aimf", "", Array.Empty<int>(), Array.Empty<int>()));
     }
 
-    [Fact]
-    public void Encrypted_File_Does_Not_Contain_Plaintext_Payload()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypted_File_Does_Not_Contain_Plaintext_Payload()
     {
         // Proves that the raw bytes on disk do NOT contain the original model weights
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_no_plaintext_{Guid.NewGuid():N}.bin");
@@ -539,8 +540,8 @@ public class ModelPayloadEncryptionTests
         }
     }
 
-    [Fact]
-    public void Encrypted_Payload_Cannot_Be_Deserialized_Directly()
+    [Fact(Timeout = 60000)]
+    public async Task Encrypted_Payload_Cannot_Be_Deserialized_Directly()
     {
         // Proves that if someone extracts the raw payload from an encrypted file,
         // they cannot directly deserialize it as a model
@@ -574,8 +575,8 @@ public class ModelPayloadEncryptionTests
         Assert.NotEqual(payload, rawData);
     }
 
-    [Fact]
-    public void Tampering_With_Encrypted_Payload_Causes_Auth_Failure()
+    [Fact(Timeout = 60000)]
+    public async Task Tampering_With_Encrypted_Payload_Causes_Auth_Failure()
     {
         // Proves GCM authentication catches any modification
         var payload = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -593,8 +594,8 @@ public class ModelPayloadEncryptionTests
             ModelPayloadEncryption.Decrypt(tampered, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
-    public void Different_Keys_Produce_Different_Ciphertexts()
+    [Fact(Timeout = 60000)]
+    public async Task Different_Keys_Produce_Different_Ciphertexts()
     {
         // Even with the same plaintext, different keys should produce different ciphertexts.
         // Note: salt and nonce are independently generated per Encrypt call.
@@ -613,8 +614,8 @@ public class ModelPayloadEncryptionTests
             ModelPayloadEncryption.Decrypt(enc1.Ciphertext, "key-beta", enc1.Salt, enc1.Nonce, enc1.Tag, aad));
     }
 
-    [Fact]
-    public void Full_File_RoundTrip_With_Shape_And_Type_Preservation()
+    [Fact(Timeout = 60000)]
+    public async Task Full_File_RoundTrip_With_Shape_And_Type_Preservation()
     {
         // Full integration: save encrypted, inspect (no key needed), load (key needed)
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));

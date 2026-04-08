@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -13,8 +14,8 @@ public class AdvancedAlgebraNetworkTests
 {
     #region OctonionNeuralNetwork Tests
 
-    [Fact]
-    public void OctonionNeuralNetwork_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange - Create architecture with custom octonion layers
         var layers = new List<ILayer<double>>
@@ -38,8 +39,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -65,8 +66,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(8, output.Shape[0]);
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_Train_CompletesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -91,8 +92,8 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -117,8 +118,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.True((int)metadata.AdditionalInfo["ParameterCount"] > 0);
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_MultiLayer_CreatesCorrectLayers()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -146,8 +147,8 @@ public class AdvancedAlgebraNetworkTests
 
     #region HyperbolicNeuralNetwork Tests
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -171,8 +172,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_Construction_RejectsPositiveCurvature()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_Construction_RejectsPositiveCurvature()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -192,8 +193,8 @@ public class AdvancedAlgebraNetworkTests
             new HyperbolicNeuralNetwork<double>(architecture, curvature: 1.0));
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -222,8 +223,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(5, output.Shape[0]);
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_Train_CompletesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -248,8 +249,8 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_GetModelMetadata_IncludesCurvature()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_GetModelMetadata_IncludesCurvature()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -273,8 +274,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(-2.0, (double)metadata.AdditionalInfo["Curvature"]);
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_MultiLayer_CreatesCorrectLayers()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -302,8 +303,8 @@ public class AdvancedAlgebraNetworkTests
 
     #region SparseNeuralNetwork Tests
 
-    [Fact]
-    public void SparseNeuralNetwork_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -327,8 +328,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_Construction_RejectsInvalidSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_Construction_RejectsInvalidSparsity()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -352,8 +353,8 @@ public class AdvancedAlgebraNetworkTests
             new SparseNeuralNetwork<double>(architecture, sparsity: 1.5));
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -381,8 +382,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_ParameterCount_ReflectsSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_ParameterCount_ReflectsSparsity()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -409,8 +410,8 @@ public class AdvancedAlgebraNetworkTests
             $"Sparse network should have at least bias parameters. Got: {paramCount}");
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_Train_CompletesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -435,8 +436,8 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_GetModelMetadata_IncludesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_GetModelMetadata_IncludesSparsity()
     {
         // Arrange
         var layers = new List<ILayer<double>>
@@ -460,8 +461,8 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(0.95, (double)metadata.AdditionalInfo["Sparsity"]);
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_MultiLayer_CreatesCorrectLayers()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange
         var layers = new List<ILayer<double>>

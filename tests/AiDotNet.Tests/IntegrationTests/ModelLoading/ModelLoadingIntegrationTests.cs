@@ -1,5 +1,6 @@
 using AiDotNet.ModelLoading;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelLoading;
 
@@ -10,22 +11,22 @@ public class ModelLoadingIntegrationTests
 {
     #region SafeTensorsLoader Tests
 
-    [Fact]
-    public void SafeTensorsLoader_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task SafeTensorsLoader_Construction()
     {
         var loader = new SafeTensorsLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void SafeTensorsLoader_Load_NonexistentFile_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SafeTensorsLoader_Load_NonexistentFile_Throws()
     {
         var loader = new SafeTensorsLoader<double>();
         Assert.ThrowsAny<Exception>(() => loader.Load("nonexistent_file.safetensors"));
     }
 
-    [Fact]
-    public void SafeTensorsLoader_GetTensorInfo_NonexistentFile_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SafeTensorsLoader_GetTensorInfo_NonexistentFile_Throws()
     {
         var loader = new SafeTensorsLoader<double>();
         Assert.ThrowsAny<Exception>(() => loader.GetTensorInfo("nonexistent.safetensors"));
@@ -35,15 +36,15 @@ public class ModelLoadingIntegrationTests
 
     #region WeightMapping Tests
 
-    [Fact]
-    public void WeightMapping_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_Construction_WithDefaults()
     {
         var mapping = new WeightMapping();
         Assert.NotNull(mapping);
     }
 
-    [Fact]
-    public void WeightMapping_Construction_WithMappings_PreservesMappings()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_Construction_WithMappings_PreservesMappings()
     {
         var mappings = new Dictionary<string, string>
         {
@@ -58,8 +59,8 @@ public class ModelLoadingIntegrationTests
         Assert.Equal("target.layer2.bias", mapping.Map("source.layer2.bias"));
     }
 
-    [Fact]
-    public void WeightMapping_AddMapping_CanBeLookedUp()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_AddMapping_CanBeLookedUp()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("old_name", "new_name");
@@ -68,16 +69,16 @@ public class ModelLoadingIntegrationTests
         Assert.Equal("new_name", result);
     }
 
-    [Fact]
-    public void WeightMapping_Map_ReturnsNullForUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_Map_ReturnsNullForUnknown()
     {
         var mapping = new WeightMapping();
         var result = mapping.Map("unknown_key");
         Assert.Null(result);
     }
 
-    [Fact]
-    public void WeightMapping_AddPatternMapping_MatchesRegex()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_AddPatternMapping_MatchesRegex()
     {
         var mapping = new WeightMapping();
         mapping.AddPatternMapping(@"model\.layers\.(\d+)\.weight", "layer_$1_weight");
@@ -90,8 +91,8 @@ public class ModelLoadingIntegrationTests
 
     #region ParameterRegistry Tests
 
-    [Fact]
-    public void ParameterRegistry_Construction_EmptyRegistry()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Construction_EmptyRegistry()
     {
         var registry = new ParameterRegistry<double>();
         Assert.NotNull(registry);
@@ -99,8 +100,8 @@ public class ModelLoadingIntegrationTests
         Assert.Empty(registry.GetNames());
     }
 
-    [Fact]
-    public void ParameterRegistry_Register_IncrementsCount()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Register_IncrementsCount()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? storedTensor = null;
@@ -115,8 +116,8 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("layer1.weight", registry.GetNames());
     }
 
-    [Fact]
-    public void ParameterRegistry_TryGet_ReturnsTensorFromGetter()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TryGet_ReturnsTensorFromGetter()
     {
         var registry = new ParameterRegistry<double>();
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -134,8 +135,8 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(42.0, result[0]);
     }
 
-    [Fact]
-    public void ParameterRegistry_TryGet_ReturnsFalseForUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TryGet_ReturnsFalseForUnknown()
     {
         var registry = new ParameterRegistry<double>();
         bool found = registry.TryGet("nonexistent", out var result);
@@ -143,8 +144,8 @@ public class ModelLoadingIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_InvokesSetter()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_InvokesSetter()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? storedTensor = null;
@@ -164,8 +165,8 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(99.0, storedTensor[0]);
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_ShapeMismatch_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_ShapeMismatch_ThrowsArgumentException()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? storedTensor = null;
@@ -180,8 +181,8 @@ public class ModelLoadingIntegrationTests
         Assert.Throws<ArgumentException>(() => registry.TrySet("layer1.weight", wrongShape));
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_UnknownName_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_UnknownName_ReturnsFalse()
     {
         var registry = new ParameterRegistry<double>();
         var tensor = new Tensor<double>(new[] { 2 });
@@ -189,8 +190,8 @@ public class ModelLoadingIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void ParameterRegistry_GetShape_ReturnsRegisteredShape()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_GetShape_ReturnsRegisteredShape()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("param", new[] { 5, 10 }, () => null, _ => { });
@@ -200,15 +201,15 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(new[] { 5, 10 }, shape);
     }
 
-    [Fact]
-    public void ParameterRegistry_GetShape_UnknownName_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_GetShape_UnknownName_ReturnsNull()
     {
         var registry = new ParameterRegistry<double>();
         Assert.Null(registry.GetShape("nonexistent"));
     }
 
-    [Fact]
-    public void ParameterRegistry_CaseInsensitive_LookupWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_CaseInsensitive_LookupWorks()
     {
         var registry = new ParameterRegistry<double>();
         var tensor = new Tensor<double>(new[] { 3 });
@@ -223,8 +224,8 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(7.0, result[0]);
     }
 
-    [Fact]
-    public void ParameterRegistry_RegisterChild_PrefixesNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_RegisterChild_PrefixesNames()
     {
         var parent = new ParameterRegistry<double>();
         var child = new ParameterRegistry<double>();
@@ -239,8 +240,8 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("encoder.layer1.bias", parent.GetNames());
     }
 
-    [Fact]
-    public void ParameterRegistry_Validate_IdentifiesMatchedAndMissing()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_IdentifiesMatchedAndMissing()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("layer1.weight", new[] { 3 }, () => null, _ => { });
@@ -257,8 +258,8 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("extra.param", validation.UnmatchedWeights);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_SetsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_SetsParameters()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? storedWeight = null;
@@ -287,8 +288,8 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(0.5, storedBias[0]);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_Strict_FailsOnMissingParameter()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_Strict_FailsOnMissingParameter()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("weight", new[] { 3 }, () => null, _ => { });
@@ -308,15 +309,15 @@ public class ModelLoadingIntegrationTests
 
     #region ONNXImporter Tests
 
-    [Fact]
-    public void ONNXImporter_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task ONNXImporter_Construction_WithDefaults()
     {
         var importer = new ONNXImporter<double>();
         Assert.NotNull(importer);
     }
 
-    [Fact]
-    public void ONNXImporter_Construction_Verbose()
+    [Fact(Timeout = 120000)]
+    public async Task ONNXImporter_Construction_Verbose()
     {
         var importer = new ONNXImporter<double>(verbose: true);
         Assert.NotNull(importer);
@@ -326,15 +327,15 @@ public class ModelLoadingIntegrationTests
 
     #region PretrainedModelLoader Tests
 
-    [Fact]
-    public void PretrainedModelLoader_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task PretrainedModelLoader_Construction_WithDefaults()
     {
         var loader = new PretrainedModelLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void PretrainedModelLoader_Construction_Verbose()
+    [Fact(Timeout = 120000)]
+    public async Task PretrainedModelLoader_Construction_Verbose()
     {
         var loader = new PretrainedModelLoader<double>(verbose: true);
         Assert.NotNull(loader);
@@ -344,15 +345,15 @@ public class ModelLoadingIntegrationTests
 
     #region HuggingFaceModelLoader Tests
 
-    [Fact]
-    public void HuggingFaceModelLoader_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task HuggingFaceModelLoader_Construction_WithDefaults()
     {
         var loader = new HuggingFaceModelLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void HuggingFaceModelLoader_Construction_WithCacheDir()
+    [Fact(Timeout = 120000)]
+    public async Task HuggingFaceModelLoader_Construction_WithCacheDir()
     {
         var tempDir = Path.GetTempPath();
         var loader = new HuggingFaceModelLoader<double>(cacheDir: tempDir);

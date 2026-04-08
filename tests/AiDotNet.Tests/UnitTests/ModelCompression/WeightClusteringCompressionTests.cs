@@ -2,13 +2,14 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class WeightClusteringCompressionTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new WeightClusteringCompression<double>(
@@ -21,8 +22,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidNumClusters_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidNumClusters_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -31,8 +32,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new WeightClusteringCompression<double>(numClusters: -1));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidMaxIterations_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidMaxIterations_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -41,8 +42,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new WeightClusteringCompression<double>(maxIterations: -1));
         }
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<WeightClusteringMetadata<double>>(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
@@ -69,8 +70,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
-        public void Compress_ProducesClusteringMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ProducesClusteringMetadata()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -97,8 +98,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(6, clusterMetadata.OriginalLength);
         }
 
-        [Fact]
-        public void Decompress_ReconstructsApproximateWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void GetCompressedSize_ReturnsReasonableSize()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsReasonableSize()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -158,8 +159,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize < originalSize);
         }
 
-        [Fact]
-        public void CalculateCompressionRatio_WithValidSizes_ReturnsCorrectRatio()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateCompressionRatio_WithValidSizes_ReturnsCorrectRatio()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10.0, ratio);
         }
 
-        [Fact]
-        public void CalculateCompressionRatio_WithZeroCompressedSize_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateCompressionRatio_WithZeroCompressedSize_ThrowsException()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.CalculateCompressionRatio(1000, 0));
         }
 
-        [Fact]
-        public void Compress_WithFewerWeightsThanClusters_AdjustsClusters()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFewerWeightsThanClusters_AdjustsClusters()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(clusterMetadata.NumClusters <= weights.Length);
         }
 
-        [Fact]
-        public void Compress_WithIdenticalWeights_CreatesOneCluster()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithIdenticalWeights_CreatesOneCluster()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -220,8 +221,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new WeightClusteringCompression<float>(
@@ -240,8 +241,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Compress_WithReproducibleSeed_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithReproducibleSeed_ProducesSameResults()
         {
             // Arrange
             var compression1 = new WeightClusteringCompression<double>(
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Compress_AchievesReasonableCompressionRatio()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_AchievesReasonableCompressionRatio()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(

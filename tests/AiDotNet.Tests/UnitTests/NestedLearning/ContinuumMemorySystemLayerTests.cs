@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NestedLearning
 {
     public class ContinuumMemorySystemLayerTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -25,8 +26,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(3, layer.GetMLPBlocks().Length);
         }
 
-        [Fact]
-        public void Constructor_WithNullInputShape_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullInputShape_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -35,8 +36,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
-        public void Constructor_WithEmptyInputShape_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyInputShape_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -45,8 +46,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeInputDim_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeInputDim_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -55,8 +56,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeHiddenDim_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeHiddenDim_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -65,8 +66,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
-        public void Constructor_WithZeroFrequencyLevels_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroFrequencyLevels_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -75,8 +76,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 0));
         }
 
-        [Fact]
-        public void Constructor_WithTooManyFrequencyLevels_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithTooManyFrequencyLevels_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -85,8 +86,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 15));
         }
 
-        [Fact]
-        public void Constructor_WithMismatchedUpdateFrequenciesLength_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithMismatchedUpdateFrequenciesLength_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 updateFrequencies: new[] { 1, 10 })); // Wrong length
         }
 
-        [Fact]
-        public void Constructor_WithNegativeUpdateFrequency_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeUpdateFrequency_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
@@ -107,8 +108,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 updateFrequencies: new[] { 1, -10, 100 }));
         }
 
-        [Fact]
-        public void Constructor_WithDefaultUpdateFrequencies_CreatesCorrectSequence()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultUpdateFrequencies_CreatesCorrectSequence()
         {
             // Arrange & Act
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -123,8 +124,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1000, layer.UpdateFrequencies[3]); // 10^3
         }
 
-        [Fact]
-        public void Constructor_CalculatesChunkSizesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_CalculatesChunkSizesCorrectly()
         {
             // Arrange & Act
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -140,8 +141,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1, layer.ChunkSizes[2]);   // 100/100
         }
 
-        [Fact]
-        public void Forward_WithValidInput_ReturnsCorrectShape()
+        [Fact(Timeout = 60000)]
+        public async Task Forward_WithValidInput_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -165,8 +166,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(128, output.Shape[1]); // Hidden dim
         }
 
-        [Fact]
-        public void Forward_WithNullInput_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Forward_WithNullInput_ThrowsArgumentNullException()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -178,8 +179,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Throws<ArgumentNullException>(() => layer.Forward((Tensor<double>)null!));
         }
 
-        [Fact]
-        public void Forward_ProcessesSequentiallyThroughAllMLPBlocks()
+        [Fact(Timeout = 60000)]
+        public async Task Forward_ProcessesSequentiallyThroughAllMLPBlocks()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -210,8 +211,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
 
 
 
-        [Fact]
-        public void ResetMemory_ResetsAllMLPBlocksSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task ResetMemory_ResetsAllMLPBlocksSuccessfully()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -236,8 +237,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(3, mlpBlocks.Length);
         }
 
-        [Fact]
-        public void ConsolidateMemory_TransfersKnowledgeBetweenLevels()
+        [Fact(Timeout = 60000)]
+        public async Task ConsolidateMemory_TransfersKnowledgeBetweenLevels()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -266,8 +267,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact]
-        public void UpdateFrequencies_DefaultValues_MatchPaperSpecification()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateFrequencies_DefaultValues_MatchPaperSpecification()
         {
             // Arrange & Act
             var layer = new ContinuumMemorySystemLayer<double>(
@@ -283,8 +284,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1000, frequencies[3]);
         }
 
-        [Fact]
-        public void GetMLPBlocks_ReturnsCorrectNumberOfBlocks()
+        [Fact(Timeout = 60000)]
+        public async Task GetMLPBlocks_ReturnsCorrectNumberOfBlocks()
         {
             // Arrange
             var layer = new ContinuumMemorySystemLayer<double>(

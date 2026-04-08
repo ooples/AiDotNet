@@ -2,6 +2,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -12,8 +13,8 @@ public class VGGNetworkTests
 {
     #region VGGConfiguration Tests
 
-    [Fact]
-    public void VGGConfiguration_Constructor_ValidParameters_CreatesConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_Constructor_ValidParameters_CreatesConfiguration()
     {
         // Arrange & Act
         var config = new VGGConfiguration(VGGVariant.VGG16, numClasses: 10);
@@ -29,8 +30,8 @@ public class VGGNetworkTests
         Assert.True(config.IncludeClassifier);
     }
 
-    [Fact]
-    public void VGGConfiguration_BNVariant_UsesBatchNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_BNVariant_UsesBatchNormalization()
     {
         // Arrange & Act
         var config = new VGGConfiguration(VGGVariant.VGG16_BN, numClasses: 10);
@@ -39,24 +40,24 @@ public class VGGNetworkTests
         Assert.True(config.UseBatchNormalization);
     }
 
-    [Fact]
-    public void VGGConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new VGGConfiguration(VGGVariant.VGG16, numClasses: 0));
     }
 
-    [Fact]
-    public void VGGConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new VGGConfiguration(VGGVariant.VGG16, numClasses: 10, inputHeight: 16));
     }
 
-    [Fact]
-    public void VGGConfiguration_InvalidDropoutRate_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_InvalidDropoutRate_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -95,8 +96,8 @@ public class VGGNetworkTests
         Assert.Equal(expectedWeightLayers, config.NumWeightLayers);
     }
 
-    [Fact]
-    public void VGGConfiguration_InputShape_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_InputShape_ReturnsCorrectShape()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG16, numClasses: 10,
@@ -112,8 +113,8 @@ public class VGGNetworkTests
         Assert.Equal(224, inputShape[2]); // width
     }
 
-    [Fact]
-    public void VGGConfiguration_BlockConfiguration_VGG16_ReturnsCorrectBlocks()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_BlockConfiguration_VGG16_ReturnsCorrectBlocks()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG16, numClasses: 10);
@@ -130,8 +131,8 @@ public class VGGNetworkTests
         Assert.Equal(new[] { 512, 512, 512 }, blocks[4]);
     }
 
-    [Fact]
-    public void VGGConfiguration_CreateVGG16BN_CreatesCorrectConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_CreateVGG16BN_CreatesCorrectConfiguration()
     {
         // Act
         var config = VGGConfiguration.CreateVGG16BN(numClasses: 1000);
@@ -142,8 +143,8 @@ public class VGGNetworkTests
         Assert.True(config.UseBatchNormalization);
     }
 
-    [Fact]
-    public void VGGConfiguration_CreateForCIFAR_Creates32x32Input()
+    [Fact(Timeout = 120000)]
+    public async Task VGGConfiguration_CreateForCIFAR_Creates32x32Input()
     {
         // Act
         var config = VGGConfiguration.CreateForCIFAR(VGGVariant.VGG16, numClasses: 10);
@@ -158,8 +159,8 @@ public class VGGNetworkTests
 
     #region VGGNetwork Construction Tests
 
-    [Fact]
-    public void VGGNetwork_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -184,8 +185,8 @@ public class VGGNetworkTests
         Assert.True(network.LayerCount > 0);
     }
 
-    [Fact]
-    public void VGGNetwork_WithBatchNormalization_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_WithBatchNormalization_CreatesValidNetwork()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11_BN, numClasses: 10,
@@ -206,8 +207,8 @@ public class VGGNetworkTests
         Assert.True(network.UsesBatchNormalization);
     }
 
-    [Fact]
-    public void VGGNetwork_NullConfiguration_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_NullConfiguration_ThrowsArgumentNullException()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -224,8 +225,8 @@ public class VGGNetworkTests
             new VGGNetwork<float>(architecture, null!));
     }
 
-    [Fact]
-    public void VGGNetwork_MismatchedOutputSize_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_MismatchedOutputSize_ThrowsArgumentException()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -244,8 +245,8 @@ public class VGGNetworkTests
             new VGGNetwork<float>(architecture, config));
     }
 
-    [Fact]
-    public void VGGNetwork_MismatchedInputShape_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_MismatchedInputShape_ThrowsArgumentException()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -268,8 +269,8 @@ public class VGGNetworkTests
 
     #region VGGNetwork Forward Pass Tests
 
-    [Fact]
-    public void VGGNetwork_Forward_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -299,8 +300,8 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void VGGNetwork_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -328,8 +329,8 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void VGGNetwork_Predict_With4DInput_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_Predict_With4DInput_ReturnsCorrectShape()
     {
         // Arrange - test with batch dimension [B, C, H, W]
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -429,8 +430,8 @@ public class VGGNetworkTests
 
     #region VGGNetwork Metadata Tests
 
-    [Fact]
-    public void VGGNetwork_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG16_BN, numClasses: 10,
@@ -459,8 +460,8 @@ public class VGGNetworkTests
         Assert.Equal(16, metadata.AdditionalInfo["NumWeightLayers"]);
     }
 
-    [Fact]
-    public void VGGNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
@@ -486,8 +487,8 @@ public class VGGNetworkTests
 
     #region VGGVariant Enum Tests
 
-    [Fact]
-    public void VGGVariant_AllVariantsAreDefined()
+    [Fact(Timeout = 120000)]
+    public async Task VGGVariant_AllVariantsAreDefined()
     {
         // Act - use non-generic Enum.GetValues for .NET Framework compatibility
         var variants = Enum.GetValues(typeof(VGGVariant)).Cast<VGGVariant>().ToArray();

@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -145,8 +146,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -159,8 +160,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_WithCustomNumQueries_SetsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomNumQueries_SetsCorrectly()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithCustomTopK_SetsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomTopK_SetsCorrectly()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -185,16 +186,16 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_NullBaseRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullBaseRetriever_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiQueryRetriever<double>(null!));
         }
 
-        [Fact]
-        public void Constructor_ZeroNumQueries_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ZeroNumQueries_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiQueryRetriever<double>(baseRetriever, numQueries: 0));
         }
 
-        [Fact]
-        public void Constructor_NegativeNumQueries_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NegativeNumQueries_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -215,8 +216,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiQueryRetriever<double>(baseRetriever, numQueries: -1));
         }
 
-        [Fact]
-        public void Constructor_ZeroTopK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ZeroTopK_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -226,8 +227,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiQueryRetriever<double>(baseRetriever, numQueries: 3, defaultTopK: 0));
         }
 
-        [Fact]
-        public void Constructor_NegativeTopK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NegativeTopK_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -241,8 +242,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
-        public void Retrieve_EmptyRetriever_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyRetriever_ReturnsEmptyResults()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -255,8 +256,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_SingleDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleDocument_ReturnsDocument()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -271,8 +272,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_MultipleDocuments_ReturnsMergedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleDocuments_ReturnsMergedResults()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -287,8 +288,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_GeneratesCorrectNumberOfQueries()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_GeneratesCorrectNumberOfQueries()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -303,8 +304,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(4, baseRetriever.QueriesReceived.Count);
         }
 
-        [Fact]
-        public void Retrieve_QueriesContainOriginalQuery()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_QueriesContainOriginalQuery()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -318,8 +319,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("original query", baseRetriever.QueriesReceived);
         }
 
-        [Fact]
-        public void Retrieve_QueriesContainVariations()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_QueriesContainVariations()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -335,8 +336,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(baseRetriever.QueriesReceived, q => q.Contains("variation 2"));
         }
 
-        [Fact]
-        public void Retrieve_WithTopK_ReturnsLimitedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
-        public void Retrieve_NullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -366,8 +367,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_EmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -378,8 +379,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
-        public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -394,8 +395,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Score Merging Tests
 
-        [Fact]
-        public void Retrieve_DuplicateDocuments_SumsScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DuplicateDocuments_SumsScores()
         {
             // Arrange - Same document will be returned for each query variation
             var baseRetriever = CreateMockRetriever(
@@ -411,8 +412,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1.5, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_ResultsOrderedByMergedScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ResultsOrderedByMergedScore()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -431,8 +432,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_SingleQueryVariation_NoScoreSumming()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleQueryVariation_NoScoreSumming()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.5, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_DocumentsHaveRelevanceScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -467,8 +468,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_FiltersResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_FiltersResults()
         {
             // Arrange
             var baseRetriever = CreateMockRetrieverWithMetadata(
@@ -485,8 +486,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var baseRetriever = CreateMockRetrieverWithMetadata(
@@ -501,8 +502,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -518,8 +519,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(("doc1", "fox", 0.9));
@@ -534,8 +535,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_DocumentWithoutScore_NotIncluded()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentWithoutScore_NotIncluded()
         {
             // Arrange
             var documents = new List<Document<double>>
@@ -557,8 +558,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_TopKGreaterThanResults_ReturnsAllAvailable()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TopKGreaterThanResults_ReturnsAllAvailable()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -573,8 +574,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -585,8 +586,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
-        public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever();
@@ -597,8 +598,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact]
-        public void Retrieve_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -624,8 +625,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_LargeNumQueries_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_LargeNumQueries_HandlesCorrectly()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -642,8 +643,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, baseRetriever.QueriesReceived.Count);
         }
 
-        [Fact]
-        public void Retrieve_ManyDocuments_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ManyDocuments_HandlesCorrectly()
         {
             // Arrange
             var docsList = Enumerable.Range(1, 50)
@@ -668,8 +669,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Query Generation Tests
 
-        [Fact]
-        public void Retrieve_OriginalQueryIsFirst()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_OriginalQueryIsFirst()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -683,8 +684,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("original query", baseRetriever.QueriesReceived[0]);
         }
 
-        [Fact]
-        public void Retrieve_VariationsAppendToOriginal()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_VariationsAppendToOriginal()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -706,8 +707,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Default Values Tests
 
-        [Fact]
-        public void Constructor_DefaultNumQueries_UsesThree()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_DefaultNumQueries_UsesThree()
         {
             // Arrange
             var baseRetriever = CreateMockRetriever(
@@ -721,8 +722,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(3, baseRetriever.QueriesReceived.Count);
         }
 
-        [Fact]
-        public void Retrieve_WithDefaultTopK_UsesFive()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDefaultTopK_UsesFive()
         {
             // Arrange
             var docsList = Enumerable.Range(1, 10)

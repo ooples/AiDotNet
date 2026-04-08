@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using AiDotNet.Pruning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.EndToEndTests;
 
@@ -20,8 +21,8 @@ public class ModelCompressionEndToEndTests
 {
     #region Full Pipeline Tests
 
-    [Fact]
-    public void FullPipeline_Prune_Cluster_Huffman_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_Prune_Cluster_Huffman_RoundTrip()
     {
         // Arrange - Create realistic weights simulating a neural network layer
         var weights = CreateRealisticWeights(1000);
@@ -60,8 +61,8 @@ public class ModelCompressionEndToEndTests
             $"Should have ~50% non-zero weights, got {nonZeroRatio:P}");
     }
 
-    [Fact]
-    public void FullPipeline_DeepCompression_HanEtAl2015()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_DeepCompression_HanEtAl2015()
     {
         // Arrange - Simulate Han et al. 2015 "Deep Compression" pipeline
         // 1. Pruning (magnitude-based)
@@ -100,8 +101,8 @@ public class ModelCompressionEndToEndTests
         Assert.True(achievedSparsity >= 0.5, $"Should achieve at least 50% sparsity, got {achievedSparsity:P}");
     }
 
-    [Fact]
-    public void FullPipeline_StructuredSparsity_2to4_ThenQuantize()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_StructuredSparsity_2to4_ThenQuantize()
     {
         // Arrange - Simulate NVIDIA Ampere structured sparsity pipeline
         // 1. 2:4 structured pruning (hardware-accelerated pattern)
@@ -137,8 +138,8 @@ public class ModelCompressionEndToEndTests
         Assert.Equal(tensorSize, decompressed.Length);
     }
 
-    [Fact]
-    public void FullPipeline_LowRank_ThenQuantize_ForConvLayers()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_LowRank_ThenQuantize_ForConvLayers()
     {
         // Arrange - Simulate low-rank + quantization for conv layers
         // Create a low-rank weight matrix (common in conv filters)
@@ -182,8 +183,8 @@ public class ModelCompressionEndToEndTests
         Assert.True(rmse < 0.5, $"RMSE {rmse} should be reasonable for low-rank matrix");
     }
 
-    [Fact]
-    public void FullPipeline_IterativePruning_LotteryTicket()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_IterativePruning_LotteryTicket()
     {
         // Arrange - Simulate Lottery Ticket Hypothesis iterative pruning
         var initialWeights = new Matrix<double>(10, 10);
@@ -225,8 +226,8 @@ public class ModelCompressionEndToEndTests
         }
     }
 
-    [Fact]
-    public void FullPipeline_CompressionAnalyzer_SelectsBestStrategy()
+    [Fact(Timeout = 60000)]
+    public async Task FullPipeline_CompressionAnalyzer_SelectsBestStrategy()
     {
         // Arrange - Create weights with different characteristics
         // Sparse weights (good for pruning)
@@ -259,8 +260,8 @@ public class ModelCompressionEndToEndTests
 
     #region Stress Tests
 
-    [Fact]
-    public void StressTest_LargeModel_CompressionPipeline()
+    [Fact(Timeout = 60000)]
+    public async Task StressTest_LargeModel_CompressionPipeline()
     {
         // Arrange - Simulate a large layer (10K weights)
         var weights = CreateRealisticWeights(10000);
@@ -285,8 +286,8 @@ public class ModelCompressionEndToEndTests
         Assert.Equal(weights.Length, decompressed.Length);
     }
 
-    [Fact]
-    public void StressTest_MultipleCompressionRoundTrips()
+    [Fact(Timeout = 60000)]
+    public async Task StressTest_MultipleCompressionRoundTrips()
     {
         // Arrange - Test stability across multiple compression cycles
         var weights = CreateRealisticWeights(500);

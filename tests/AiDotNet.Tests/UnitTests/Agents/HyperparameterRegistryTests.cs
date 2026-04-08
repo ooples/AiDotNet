@@ -1,6 +1,7 @@
 using AiDotNet.Agents;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Agents;
 
@@ -39,8 +40,8 @@ public class HyperparameterRegistryTests
         Assert.Equal(expectedProperty, result);
     }
 
-    [Fact]
-    public void GetPropertyName_DecisionTree_HasMaxDepthAndMinSamples()
+    [Fact(Timeout = 60000)]
+    public async Task GetPropertyName_DecisionTree_HasMaxDepthAndMinSamples()
     {
         Assert.Equal("MaxDepth", _registry.GetPropertyName(typeof(DecisionTreeRegression<>), "max_depth"));
         Assert.Equal("MinSamplesSplit", _registry.GetPropertyName(typeof(DecisionTreeRegression<>), "min_samples_split"));
@@ -103,8 +104,8 @@ public class HyperparameterRegistryTests
         Assert.Equal(expectedProperty, result);
     }
 
-    [Fact]
-    public void GetPropertyName_SVR_ReturnsCAndEpsilon()
+    [Fact(Timeout = 60000)]
+    public async Task GetPropertyName_SVR_ReturnsCAndEpsilon()
     {
         Assert.Equal("C", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "C"));
         Assert.Equal("C", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "cost"));
@@ -116,8 +117,8 @@ public class HyperparameterRegistryTests
 
     #region Time Series Lookups
 
-    [Fact]
-    public void GetPropertyName_TimeSeries_ReturnsLagAndSeasonal()
+    [Fact(Timeout = 60000)]
+    public async Task GetPropertyName_TimeSeries_ReturnsLagAndSeasonal()
     {
         Assert.Equal("LagOrder", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "lag_order"));
         Assert.Equal("LagOrder", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "lags"));
@@ -147,8 +148,8 @@ public class HyperparameterRegistryTests
             new object[] { typeof(PolynomialRegression<>) },
         };
 
-    [Fact]
-    public void GetPropertyName_SharedUseIntercept_Works()
+    [Fact(Timeout = 60000)]
+    public async Task GetPropertyName_SharedUseIntercept_Works()
     {
         Assert.Equal("UseIntercept", _registry.GetPropertyName(typeof(RidgeRegression<>), "use_intercept"));
         Assert.Equal("UseIntercept", _registry.GetPropertyName(typeof(RidgeRegression<>), "fit_intercept"));
@@ -158,16 +159,16 @@ public class HyperparameterRegistryTests
 
     #region Unknown Parameters
 
-    [Fact]
-    public void GetPropertyName_UnknownParameter_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetPropertyName_UnknownParameter_ReturnsNull()
     {
         var result = _registry.GetPropertyName(typeof(RandomForestRegression<>), "nonexistent_param");
 
         Assert.Null(result);
     }
 
-    [Fact]
-    public void GetDefinition_UnknownParameter_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefinition_UnknownParameter_ReturnsNull()
     {
         var result = _registry.GetDefinition(typeof(RandomForestRegression<>), "nonexistent_param");
 
@@ -194,8 +195,8 @@ public class HyperparameterRegistryTests
 
     #region Validation
 
-    [Fact]
-    public void Validate_InRange_ReturnsValid()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_InRange_ReturnsValid()
     {
         var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 100);
 
@@ -203,8 +204,8 @@ public class HyperparameterRegistryTests
         Assert.False(result.HasWarning);
     }
 
-    [Fact]
-    public void Validate_BelowMinimum_ReturnsWarning()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_BelowMinimum_ReturnsWarning()
     {
         var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 0);
 
@@ -213,8 +214,8 @@ public class HyperparameterRegistryTests
         Assert.Contains("below", result.Warning);
     }
 
-    [Fact]
-    public void Validate_AboveMaximum_ReturnsWarning()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_AboveMaximum_ReturnsWarning()
     {
         var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 50000);
 
@@ -223,8 +224,8 @@ public class HyperparameterRegistryTests
         Assert.Contains("above", result.Warning);
     }
 
-    [Fact]
-    public void Validate_UnknownParameter_ReturnsValid()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_UnknownParameter_ReturnsValid()
     {
         var result = _registry.Validate(typeof(RandomForestRegression<>), "unknown_param", 42);
 
@@ -232,8 +233,8 @@ public class HyperparameterRegistryTests
         Assert.False(result.HasWarning);
     }
 
-    [Fact]
-    public void Validate_NonNumericValue_ReturnsValid()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_NonNumericValue_ReturnsValid()
     {
         var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", "not_a_number");
 
@@ -245,8 +246,8 @@ public class HyperparameterRegistryTests
 
     #region Custom Registration
 
-    [Fact]
-    public void Register_CustomDefinition_IsAccessible()
+    [Fact(Timeout = 60000)]
+    public async Task Register_CustomDefinition_IsAccessible()
     {
         _registry.Register(typeof(RandomForestRegression<>), new HyperparameterDefinition
         {
@@ -261,8 +262,8 @@ public class HyperparameterRegistryTests
         Assert.Equal("CustomParam", _registry.GetPropertyName(typeof(RandomForestRegression<>), "my_param"));
     }
 
-    [Fact]
-    public void Register_CustomDefinition_ValidationWorks()
+    [Fact(Timeout = 60000)]
+    public async Task Register_CustomDefinition_ValidationWorks()
     {
         _registry.Register(typeof(RandomForestRegression<>), new HyperparameterDefinition
         {
@@ -286,8 +287,8 @@ public class HyperparameterRegistryTests
 
     #region GetDefinition
 
-    [Fact]
-    public void GetDefinition_KnownParameter_ReturnsFullDefinition()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefinition_KnownParameter_ReturnsFullDefinition()
     {
         var def = _registry.GetDefinition(typeof(RandomForestRegression<>), "n_estimators");
 
@@ -298,8 +299,8 @@ public class HyperparameterRegistryTests
         Assert.Equal(10000, def.MaxValue);
     }
 
-    [Fact]
-    public void GetDefinition_SharedParameter_ReturnsDefinition()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefinition_SharedParameter_ReturnsDefinition()
     {
         var def = _registry.GetDefinition(typeof(RandomForestRegression<>), "seed");
 

@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
@@ -29,8 +30,8 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
-    public void GetSlopes_GeometricSequence()
+    [Fact(Timeout = 120000)]
+    public async Task GetSlopes_GeometricSequence()
     {
         // For 8 heads, slopes should be: 2^(-1), 2^(-2), ..., 2^(-8)
         int numHeads = 8;
@@ -44,8 +45,8 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
-    public void ComputeBias_CorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_CorrectShape()
     {
         int numHeads = 4;
         int queryLen = 8;
@@ -57,8 +58,8 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Equal(new[] { numHeads, queryLen, keyLen }, bias.Shape.ToArray());
     }
 
-    [Fact]
-    public void ComputeBias_DiagonalIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_DiagonalIsZero()
     {
         int numHeads = 4;
         int seqLen = 6;
@@ -76,8 +77,8 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
-    public void ComputeBias_FuturePositionsMasked()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_FuturePositionsMasked()
     {
         int numHeads = 2;
         int seqLen = 4;
@@ -99,8 +100,8 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
-    public void ComputeBias_DistancePenaltyIncreases()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_DistancePenaltyIncreases()
     {
         int numHeads = 2;
         int seqLen = 6;
@@ -122,8 +123,8 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
-    public void ComputeBias_CachingWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_CachingWorks()
     {
         int numHeads = 4;
         var layer = new ALiBiPositionalBiasLayer<float>(numHeads);
@@ -135,8 +136,8 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Same(bias1, bias2);
     }
 
-    [Fact]
-    public void ComputeBias_DifferentSizeInvalidatesCache()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeBias_DifferentSizeInvalidatesCache()
     {
         int numHeads = 4;
         var layer = new ALiBiPositionalBiasLayer<float>(numHeads);
@@ -148,8 +149,8 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Equal(new[] { numHeads, 16, 16 }, bias2.Shape.ToArray());
     }
 
-    [Fact]
-    public void Forward_3D_PreservesShape()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_3D_PreservesShape()
     {
         int numHeads = 4;
         int seqLen = 8;
@@ -162,8 +163,8 @@ public class ALiBiPositionalBiasLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Forward_4D_PreservesShape()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_4D_PreservesShape()
     {
         int numHeads = 4;
         int seqLen = 8;
@@ -178,15 +179,15 @@ public class ALiBiPositionalBiasLayerTests
     }
 
 
-    [Fact]
-    public void GetParameters_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_ReturnsEmpty()
     {
         var layer = new ALiBiPositionalBiasLayer<float>(4);
         Assert.Equal(0, layer.GetParameters().Length);
     }
 
-    [Fact]
-    public void ResetState_ClearsBiasCache()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsBiasCache()
     {
         var layer = new ALiBiPositionalBiasLayer<float>(4);
         layer.ComputeBias(8, 8);

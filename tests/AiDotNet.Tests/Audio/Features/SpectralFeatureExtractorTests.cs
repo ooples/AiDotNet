@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Audio.Features;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Features
 {
@@ -22,8 +23,8 @@ namespace AiDotNet.Tests.Audio.Features
             return audio;
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_DefaultOptions_ExtractsBasicFeatures()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_DefaultOptions_ExtractsBasicFeatures()
         {
             // Arrange
             var extractor = new SpectralFeatureExtractor<float>();
@@ -37,8 +38,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.True(features.Shape[0] > 0, "Should have at least one frame");
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_Name_IsSpectralFeatures()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_Name_IsSpectralFeatures()
         {
             // Arrange
             var extractor = new SpectralFeatureExtractor<float>();
@@ -47,8 +48,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("SpectralFeatures", extractor.Name);
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_CentroidOnly_ExtractsSingleFeature()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_CentroidOnly_ExtractsSingleFeature()
         {
             // Arrange
             var options = new SpectralFeatureOptions
@@ -65,8 +66,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(1, features.Shape[1]);
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_AllFeatures_ExtractsAllFeatures()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_AllFeatures_ExtractsAllFeatures()
         {
             // Arrange
             var options = new SpectralFeatureOptions
@@ -83,8 +84,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(12, features.Shape[1]);
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_OutputValues_AreFinite()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_OutputValues_AreFinite()
         {
             // Arrange
             var extractor = new SpectralFeatureExtractor<float>();
@@ -105,8 +106,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_SpectralCentroid_IsPositive()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_SpectralCentroid_IsPositive()
         {
             // Arrange
             var options = new SpectralFeatureOptions
@@ -126,8 +127,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_SpectralFlatness_IsBetweenZeroAndOne()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_SpectralFlatness_IsBetweenZeroAndOne()
         {
             // Arrange
             var options = new SpectralFeatureOptions
@@ -149,8 +150,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void SpectralFeatureExtractor_Contrast_ExtractsSixBands()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureExtractor_Contrast_ExtractsSixBands()
         {
             // Arrange
             var options = new SpectralFeatureOptions
@@ -167,8 +168,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(6, features.Shape[1]);
         }
 
-        [Fact]
-        public void SpectralFeatureType_BasicFlag_CombinesCorrectFeatures()
+        [Fact(Timeout = 60000)]
+        public async Task SpectralFeatureType_BasicFlag_CombinesCorrectFeatures()
         {
             // Assert
             Assert.True(SpectralFeatureType.Basic.HasFlag(SpectralFeatureType.Centroid));

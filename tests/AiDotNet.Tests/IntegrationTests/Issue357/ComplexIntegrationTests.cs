@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Issue357;
 
@@ -13,8 +14,8 @@ public class ComplexIntegrationTests
 
     #region Construction and Basic Properties
 
-    [Fact]
-    public void Complex_DefaultConstructor_CreatesZeroComplex()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_DefaultConstructor_CreatesZeroComplex()
     {
         // Arrange & Act
         var z = new Complex<double>();
@@ -82,8 +83,8 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedImag, result.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Multiplication_FollowsFoilRule()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Multiplication_FollowsFoilRule()
     {
         // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
         // (3 + 2i)(1 + 4i) = (3*1 - 2*4) + (3*4 + 2*1)i = (3 - 8) + (12 + 2)i = -5 + 14i
@@ -96,8 +97,8 @@ public class ComplexIntegrationTests
         Assert.Equal(14.0, result.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Division_ProducesCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Division_ProducesCorrectResult()
     {
         // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c^2 + d^2)
         // (3 + 2i)/(1 + 1i) = ((3 + 2) + (2 - 3)i) / 2 = (5 - i) / 2 = 2.5 - 0.5i
@@ -110,8 +111,8 @@ public class ComplexIntegrationTests
         Assert.Equal(-0.5, result.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_MultiplyByScalar_ScalesBothParts()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_MultiplyByScalar_ScalesBothParts()
     {
         var z = new Complex<double>(3, 4);
         var scalar = new Complex<double>(2, 0);
@@ -140,8 +141,8 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedMagnitude, magnitude, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Phase_ComputesCorrectAngle()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Phase_ComputesCorrectAngle()
     {
         // 1 + i has phase pi/4
         var z = new Complex<double>(1, 1);
@@ -176,8 +177,8 @@ public class ComplexIntegrationTests
         Assert.Equal(expectedImag, conj.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_MultiplyByConjugate_ProducesRealNumber()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_MultiplyByConjugate_ProducesRealNumber()
     {
         // z * conj(z) = |z|^2 (a real number)
         var z = new Complex<double>(3, 4);
@@ -193,8 +194,8 @@ public class ComplexIntegrationTests
 
     #region Polar Coordinates
 
-    [Fact]
-    public void Complex_FromPolarCoordinates_CreatesCorrectComplex()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_FromPolarCoordinates_CreatesCorrectComplex()
     {
         // r=2, theta=pi/4 -> 2*(cos(pi/4) + i*sin(pi/4)) = sqrt(2) + sqrt(2)*i
         double r = 2.0;
@@ -206,8 +207,8 @@ public class ComplexIntegrationTests
         Assert.Equal(Math.Sqrt(2), z.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_PolarRoundTrip_PreservesValue()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_PolarRoundTrip_PreservesValue()
     {
         var original = new Complex<double>(3, 4);
 
@@ -223,8 +224,8 @@ public class ComplexIntegrationTests
 
     #region Mathematical Properties
 
-    [Fact]
-    public void Complex_Addition_IsCommutative()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Addition_IsCommutative()
     {
         var z1 = new Complex<double>(3, 4);
         var z2 = new Complex<double>(1, 2);
@@ -236,8 +237,8 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Multiplication_IsCommutative()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Multiplication_IsCommutative()
     {
         var z1 = new Complex<double>(3, 4);
         var z2 = new Complex<double>(1, 2);
@@ -249,8 +250,8 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Addition_IsAssociative()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Addition_IsAssociative()
     {
         var z1 = new Complex<double>(1, 2);
         var z2 = new Complex<double>(3, 4);
@@ -263,8 +264,8 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Multiplication_IsAssociative()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Multiplication_IsAssociative()
     {
         var z1 = new Complex<double>(1, 2);
         var z2 = new Complex<double>(3, 4);
@@ -277,8 +278,8 @@ public class ComplexIntegrationTests
         Assert.Equal(result1.Imaginary, result2.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_Multiplication_DistributesOverAddition()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Multiplication_DistributesOverAddition()
     {
         var z1 = new Complex<double>(1, 2);
         var z2 = new Complex<double>(3, 4);
@@ -292,8 +293,8 @@ public class ComplexIntegrationTests
         Assert.Equal(left.Imaginary, right.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_DivisionThenMultiplication_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_DivisionThenMultiplication_ReturnsOriginal()
     {
         var z1 = new Complex<double>(6, 8);
         var z2 = new Complex<double>(2, 1);
@@ -305,8 +306,8 @@ public class ComplexIntegrationTests
         Assert.Equal(z1.Imaginary, restored.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_ISquared_EqualsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_ISquared_EqualsMinusOne()
     {
         // i^2 = -1
         var i = new Complex<double>(0, 1);
@@ -320,8 +321,8 @@ public class ComplexIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Complex_AddZero_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_AddZero_ReturnsOriginal()
     {
         var z = new Complex<double>(3, 4);
         var zero = new Complex<double>(0, 0);
@@ -332,8 +333,8 @@ public class ComplexIntegrationTests
         Assert.Equal(z.Imaginary, result.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_MultiplyByOne_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_MultiplyByOne_ReturnsOriginal()
     {
         var z = new Complex<double>(3, 4);
         var one = new Complex<double>(1, 0);
@@ -344,8 +345,8 @@ public class ComplexIntegrationTests
         Assert.Equal(z.Imaginary, result.Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void Complex_MultiplyByI_RotatesBy90Degrees()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_MultiplyByI_RotatesBy90Degrees()
     {
         // Multiplying by i rotates by 90 degrees counterclockwise
         var z = new Complex<double>(3, 4);
@@ -362,8 +363,8 @@ public class ComplexIntegrationTests
 
     #region Equality
 
-    [Fact]
-    public void Complex_Equality_TrueForSameValues()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Equality_TrueForSameValues()
     {
         var z1 = new Complex<double>(3, 4);
         var z2 = new Complex<double>(3, 4);
@@ -372,8 +373,8 @@ public class ComplexIntegrationTests
         Assert.False(z1 != z2);
     }
 
-    [Fact]
-    public void Complex_Equality_FalseForDifferentValues()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_Equality_FalseForDifferentValues()
     {
         var z1 = new Complex<double>(3, 4);
         var z2 = new Complex<double>(3, 5);
@@ -382,8 +383,8 @@ public class ComplexIntegrationTests
         Assert.True(z1 != z2);
     }
 
-    [Fact]
-    public void Complex_GetHashCode_SameForEqualValues()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_GetHashCode_SameForEqualValues()
     {
         var z1 = new Complex<double>(3, 4);
         var z2 = new Complex<double>(3, 4);
@@ -395,16 +396,16 @@ public class ComplexIntegrationTests
 
     #region ToString
 
-    [Fact]
-    public void Complex_ToString_PositiveImaginary()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_ToString_PositiveImaginary()
     {
         var z = new Complex<double>(3, 4);
 
         Assert.Equal("3 + 4i", z.ToString());
     }
 
-    [Fact]
-    public void Complex_ToString_NegativeImaginary()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_ToString_NegativeImaginary()
     {
         var z = new Complex<double>(3, -4);
 

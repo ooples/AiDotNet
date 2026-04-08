@@ -6,13 +6,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class PoissonLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -33,8 +34,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithDifferentPredictions_ReturnsValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithDifferentPredictions_ReturnsValue()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -51,8 +52,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithCountData_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithCountData_HandlesCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -70,8 +71,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithLargeCounts_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithLargeCounts_WorksCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -88,8 +89,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithSmallPositiveValues_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithSmallPositiveValues_HandlesCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -107,8 +108,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -117,8 +118,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -130,8 +131,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -143,8 +144,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -161,8 +162,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!float.IsNaN(result) && !float.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -171,8 +172,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -182,8 +183,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
@@ -193,8 +194,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithSmallCounts_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithSmallCounts_HandlesCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -211,8 +212,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMixedCounts_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMixedCounts_WorksCorrectly()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -230,8 +231,8 @@ public class PoissonLossFitnessCalculatorTests
         Assert.True(!double.IsNaN(result) && !double.IsInfinity(result));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_BetterPredictions_LowerLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_BetterPredictions_LowerLoss()
     {
         // Arrange
         var calculator = new PoissonLossFitnessCalculator<double, Vector<double>, Vector<double>>();

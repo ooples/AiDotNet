@@ -3,6 +3,7 @@ using Moq;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Models;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Reasoning.Strategies;
 
@@ -20,7 +21,7 @@ public class ChainOfThoughtStrategyTests
         _strategy = new ChainOfThoughtStrategy<double>(_mockChatModel.Object);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithSimpleMathProblem_ReturnsSuccessfulResult()
     {
         // Arrange
@@ -49,7 +50,7 @@ Final Answer: 4";
         Assert.Contains("4", result.FinalAnswer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithConfiguration_RespectsMaxSteps()
     {
         // Arrange
@@ -81,7 +82,7 @@ Step 11: 10";
         Assert.True(result.Chain.Steps.Count <= 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -93,7 +94,7 @@ Step 11: 10";
         );
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithCancellation_ThrowsOperationCanceledException()
     {
         // Arrange
@@ -111,7 +112,7 @@ Step 11: 10";
         );
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithJsonFormattedSteps_ParsesCorrectly()
     {
         // Arrange
@@ -148,15 +149,15 @@ Step 11: 10";
         Assert.Contains("12", result.FinalAnswer);
     }
 
-    [Fact]
-    public void StrategyName_ReturnsCorrectName()
+    [Fact(Timeout = 60000)]
+    public async Task StrategyName_ReturnsCorrectName()
     {
         // Assert
         Assert.Equal("Chain-of-Thought", _strategy.StrategyName);
     }
 
-    [Fact]
-    public void Description_ContainsRelevantKeywords()
+    [Fact(Timeout = 60000)]
+    public async Task Description_ContainsRelevantKeywords()
     {
         // Assert
         Assert.Contains("step-by-step", _strategy.Description.ToLowerInvariant());
@@ -188,7 +189,7 @@ Final Answer: {expectedAnswer}";
         Assert.Contains(expectedAnswer, result.FinalAnswer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReasonAsync_WithFastConfig_CompletesQuickly()
     {
         // Arrange

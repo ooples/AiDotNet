@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 
@@ -62,8 +63,8 @@ public class ARIMAStabilityTests
 
     #region Stationarity Enforcement Tests
 
-    [Fact]
-    public void EstimateARCoefficients_ShouldProduceStationaryCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateARCoefficients_ShouldProduceStationaryCoefficients()
     {
         // Arrange — trending data that previously produced unstable coefficients
         var (_, y) = CreateTrendingData();
@@ -87,8 +88,8 @@ public class ARIMAStabilityTests
             $"Coefficients: [{string.Join(", ", Enumerable.Range(0, arCoeffs.Length).Select(i => arCoeffs[i].ToString("F6")))}]");
     }
 
-    [Fact]
-    public void EstimateMACoefficients_ShouldProduceInvertibleCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateMACoefficients_ShouldProduceInvertibleCoefficients()
     {
         // Arrange
         var (_, y) = CreateTrendingData();
@@ -270,8 +271,8 @@ public class ARIMAStabilityTests
 
     #region GuardPrediction Safety Net Tests
 
-    [Fact]
-    public void GuardPrediction_ShouldClampNaNToZero()
+    [Fact(Timeout = 120000)]
+    public async Task GuardPrediction_ShouldClampNaNToZero()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);
@@ -281,8 +282,8 @@ public class ARIMAStabilityTests
         Assert.Equal(0.0, result);
     }
 
-    [Fact]
-    public void GuardPrediction_ShouldClampPositiveInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task GuardPrediction_ShouldClampPositiveInfinity()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);
@@ -292,8 +293,8 @@ public class ARIMAStabilityTests
         Assert.Equal(1e15, result);
     }
 
-    [Fact]
-    public void GuardPrediction_ShouldClampNegativeInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task GuardPrediction_ShouldClampNegativeInfinity()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);
@@ -303,8 +304,8 @@ public class ARIMAStabilityTests
         Assert.Equal(-1e15, result);
     }
 
-    [Fact]
-    public void GuardPrediction_ShouldClampOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task GuardPrediction_ShouldClampOverflow()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);
@@ -315,8 +316,8 @@ public class ARIMAStabilityTests
         Assert.Equal(1e15, result);
     }
 
-    [Fact]
-    public void GuardPrediction_ShouldPassThroughFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task GuardPrediction_ShouldPassThroughFiniteValues()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);

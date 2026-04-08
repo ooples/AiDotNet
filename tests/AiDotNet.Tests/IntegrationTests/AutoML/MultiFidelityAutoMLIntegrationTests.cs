@@ -4,12 +4,13 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
 
 public class MultiFidelityAutoMLIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SearchAsync_MatrixVector_ProducesBestModelAndTrialHistory()
     {
         // Arrange

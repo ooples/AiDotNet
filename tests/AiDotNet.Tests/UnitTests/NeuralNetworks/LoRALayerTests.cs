@@ -4,13 +4,14 @@ using AiDotNet.LoRA;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
     public class LoRALayerTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new LoRALayer<double>(inputSize: 10, outputSize: 5, rank: 3);
@@ -23,29 +24,29 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal((10 * 3) + (3 * 5), layer.ParameterCount);
         }
 
-        [Fact]
-        public void Constructor_WithZeroRank_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithZeroRank_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeRank_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithNegativeRank_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: -1));
         }
 
-        [Fact]
-        public void Constructor_WithRankExceedingDimensions_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithRankExceedingDimensions_ThrowsArgumentOutOfRangeException()
         {
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 11));
         }
 
-        [Fact]
-        public void Constructor_WithCustomAlpha_UsesSpecifiedAlpha()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithCustomAlpha_UsesSpecifiedAlpha()
         {
             // Arrange & Act
             var layer = new LoRALayer<double>(10, 5, rank: 3, alpha: 16);
@@ -55,8 +56,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(16.0 / 3.0, layer.Scaling);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultAlpha_UsesRankAsAlpha()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithDefaultAlpha_UsesRankAsAlpha()
         {
             // Arrange & Act
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -66,8 +67,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(1.0, layer.Scaling);
         }
 
-        [Fact]
-        public void Forward_WithValidInput_ProducesCorrectOutputShape()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithValidInput_ProducesCorrectOutputShape()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]); // Output size correct
         }
 
-        [Fact]
-        public void Forward_WithInvalidInputSize_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithInvalidInputSize_ThrowsArgumentException()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -92,8 +93,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Throws<ArgumentException>(() => layer.Forward(input));
         }
 
-        [Fact]
-        public void Forward_InitiallyProducesZeroOutput_DueToZeroInitializationOfB()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_InitiallyProducesZeroOutput_DueToZeroInitializationOfB()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -115,8 +116,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
 
 
-        [Fact]
-        public void GetParameters_ReturnsCorrectParameterCount()
+        [Fact(Timeout = 120000)]
+        public async Task GetParameters_ReturnsCorrectParameterCount()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal((10 * 3) + (3 * 5), parameters.Length);
         }
 
-        [Fact]
-        public void SetParameters_ThenGetParameters_ReturnsSetValues()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_ThenGetParameters_ReturnsSetValues()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -151,8 +152,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void SetParameters_WithWrongSize_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithWrongSize_ThrowsArgumentException()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -163,8 +164,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact]
-        public void MergeWeights_ProducesCorrectDimensions()
+        [Fact(Timeout = 120000)]
+        public async Task MergeWeights_ProducesCorrectDimensions()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -177,8 +178,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedWeights.Columns);   // outputSize
         }
 
-        [Fact]
-        public void MergeWeights_InitiallyProducesZeroMatrix()
+        [Fact(Timeout = 120000)]
+        public async Task MergeWeights_InitiallyProducesZeroMatrix()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void GetMatrixA_ReturnsCorrectDimensions()
+        [Fact(Timeout = 120000)]
+        public async Task GetMatrixA_ReturnsCorrectDimensions()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -210,8 +211,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(3, matrixA.Columns);
         }
 
-        [Fact]
-        public void GetMatrixB_ReturnsCorrectDimensions()
+        [Fact(Timeout = 120000)]
+        public async Task GetMatrixB_ReturnsCorrectDimensions()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -224,8 +225,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, matrixB.Columns);
         }
 
-        [Fact]
-        public void GetMatrixA_ReturnsClone_NotOriginal()
+        [Fact(Timeout = 120000)]
+        public async Task GetMatrixA_ReturnsClone_NotOriginal()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -239,8 +240,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.NotEqual(999.0, matrixA2[0, 0]);
         }
 
-        [Fact]
-        public void GetMatrixB_InitializedToZero()
+        [Fact(Timeout = 120000)]
+        public async Task GetMatrixB_InitializedToZero()
         {
             // Arrange
             var layer = new LoRALayer<double>(10, 5, rank: 3);
@@ -259,8 +260,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact]
-        public void ParameterCount_ReflectsCorrectFormula()
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_ReflectsCorrectFormula()
         {
             // Arrange & Act
             var layer = new LoRALayer<double>(inputSize: 100, outputSize: 50, rank: 8);
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
 
-        [Fact]
-        public void LoRALayer_WithFloat_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task LoRALayer_WithFloat_WorksCorrectly()
         {
             // Arrange & Act
             var layer = new LoRALayer<float>(inputSize: 10, outputSize: 5, rank: 3);

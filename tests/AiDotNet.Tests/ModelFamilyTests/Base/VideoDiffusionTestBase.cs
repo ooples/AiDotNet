@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
 {
-    [Fact]
-    public void TemporalCoherence_AdjacentFrames()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalCoherence_AdjacentFrames()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -30,8 +31,8 @@ public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
         }
     }
 
-    [Fact]
-    public void FrameCount_ShouldBePositive()
+    [Fact(Timeout = 120000)]
+    public async Task FrameCount_ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

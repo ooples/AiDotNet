@@ -1,5 +1,6 @@
 using AiDotNet.Video.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Video;
 
@@ -15,8 +16,8 @@ public class VideoDeepMathIntegrationTests
     // VideoModelOptions: Defaults (all null)
     // ============================
 
-    [Fact]
-    public void VideoModelOptions_Defaults_AllNull()
+    [Fact(Timeout = 120000)]
+    public async Task VideoModelOptions_Defaults_AllNull()
     {
         var options = new VideoModelOptions<double>();
         Assert.Null(options.HiddenDimension);
@@ -37,8 +38,8 @@ public class VideoDeepMathIntegrationTests
         Assert.Null(options.RandomSeed);
     }
 
-    [Fact]
-    public void VideoModelOptions_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VideoModelOptions_SetProperties()
     {
         var options = new VideoModelOptions<double>
         {
@@ -74,22 +75,22 @@ public class VideoDeepMathIntegrationTests
     // VideoEnhancementOptions: Defaults
     // ============================
 
-    [Fact]
-    public void VideoEnhancementOptions_InheritsVideoModelOptions()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_InheritsVideoModelOptions()
     {
         var options = new VideoEnhancementOptions<double>();
         Assert.IsAssignableFrom<VideoModelOptions<double>>(options);
     }
 
-    [Fact]
-    public void VideoEnhancementOptions_Defaults_ScaleFactorNull()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_Defaults_ScaleFactorNull()
     {
         var options = new VideoEnhancementOptions<double>();
         Assert.Null(options.ScaleFactor);
     }
 
-    [Fact]
-    public void VideoEnhancementOptions_SetScaleFactor()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_SetScaleFactor()
     {
         var options = new VideoEnhancementOptions<double> { ScaleFactor = 4 };
         Assert.Equal(4, options.ScaleFactor);

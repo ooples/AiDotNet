@@ -13,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 {
     public class GradientBasedNASTests
     {
-        [Fact]
-        public void SuperNet_Constructor_Initializes_Correctly()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_Constructor_Initializes_Correctly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -27,8 +27,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(supernet.ParameterCount > 0);
         }
 
-        [Fact]
-        public void SuperNet_Implements_IFullModel_Interface()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_Implements_IFullModel_Interface()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -48,8 +48,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotSame(supernet, clone);
         }
 
-        [Fact]
-        public void SuperNet_Predict_Returns_Valid_Output()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_Predict_Returns_Valid_Output()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -66,8 +66,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         }
 
-        [Fact]
-        public void SuperNet_GetArchitectureParameters_Returns_Valid_Alphas()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_GetArchitectureParameters_Returns_Valid_Alphas()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -85,8 +85,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(alphas[3].Rows == 4); // Fourth node has 4 previous nodes
         }
 
-        [Fact]
-        public void SuperNet_DeriveArchitecture_Returns_Valid_Architecture()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_DeriveArchitecture_Returns_Valid_Architecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -103,8 +103,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Contains("Architecture with", description);
         }
 
-        [Fact]
-        public void SuperNet_ComputeValidationLoss_Returns_Numeric_Value()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_ComputeValidationLoss_Returns_Numeric_Value()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -124,8 +124,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(loss >= 0.0);
         }
 
-        [Fact]
-        public void SuperNet_BackwardArchitecture_Updates_Gradients()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_BackwardArchitecture_Updates_Gradients()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -147,8 +147,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(2, gradients.Count);
         }
 
-        [Fact]
-        public void SuperNet_BackwardWeights_Updates_Weight_Gradients()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_BackwardWeights_Updates_Weight_Gradients()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -172,7 +172,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotNull(weightGrads);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public async Task NeuralArchitectureSearch_GradientBased_Completes_Successfully()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(nas.BestScore >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public async Task NeuralArchitectureSearch_RandomSearch_Completes_Successfully()
         {
             // Arrange
@@ -246,8 +246,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(AutoMLStatus.Completed, nas.Status);
         }
 
-        [Fact]
-        public void SearchSpace_Has_Valid_Default_Operations()
+        [Fact(Timeout = 300000)]
+        public async Task SearchSpace_Has_Valid_Default_Operations()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -259,8 +259,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(searchSpace.MaxNodes > 0);
         }
 
-        [Fact]
-        public void Architecture_AddOperation_Increases_NodeCount()
+        [Fact(Timeout = 300000)]
+        public async Task Architecture_AddOperation_Increases_NodeCount()
         {
             // Arrange
             var arch = new Architecture<double>();
@@ -275,8 +275,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(3, arch.NodeCount);
         }
 
-        [Fact]
-        public void Architecture_GetDescription_Returns_Valid_String()
+        [Fact(Timeout = 300000)]
+        public async Task Architecture_GetDescription_Returns_Valid_String()
         {
             // Arrange
             var arch = new Architecture<double>();
@@ -293,8 +293,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Contains("maxpool", description);
         }
 
-        [Fact]
-        public void SuperNet_SetParameters_And_GetParameters_Roundtrip()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_SetParameters_And_GetParameters_Roundtrip()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -317,8 +317,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             }
         }
 
-        [Fact]
-        public void SuperNet_WithParameters_Creates_New_Instance()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_WithParameters_Creates_New_Instance()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -333,8 +333,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotSame(supernet, newSupernet);
         }
 
-        [Fact]
-        public void SuperNet_Clone_Creates_Independent_Copy()
+        [Fact(Timeout = 300000)]
+        public async Task SuperNet_Clone_Creates_Independent_Copy()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

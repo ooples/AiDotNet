@@ -15,6 +15,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TrainingMonitoring;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests;
 
@@ -26,8 +27,8 @@ public class MergedPRBugFixTests
 {
     #region Evaluation PR #765 - PredictionTypeInference Integer Overflow Bug
 
-    [Fact]
-    public void PredictionTypeInference_LargeClassRange_DoesNotOverflow()
+    [Fact(Timeout = 60000)]
+    public async Task PredictionTypeInference_LargeClassRange_DoesNotOverflow()
     {
         // ARRANGE: Create a vector with class labels that span a large range
         // This would cause integer overflow with the old code: maxClass - minClass
@@ -59,8 +60,8 @@ public class MergedPRBugFixTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact]
-    public void PredictionTypeInference_ExtremeClassValues_DoesNotOverflow()
+    [Fact(Timeout = 60000)]
+    public async Task PredictionTypeInference_ExtremeClassValues_DoesNotOverflow()
     {
         // ARRANGE: Extreme case - minimum and maximum integer values
         var actual = new Vector<double>(2);
@@ -78,8 +79,8 @@ public class MergedPRBugFixTests
         Assert.Equal(PredictionType.Regression, result);
     }
 
-    [Fact]
-    public void PredictionTypeInference_NormalClassRange_StillWorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task PredictionTypeInference_NormalClassRange_StillWorksCorrectly()
     {
         // ARRANGE: Normal multiclass scenario with small contiguous labels
         var actual = new Vector<double>(100);
@@ -103,8 +104,8 @@ public class MergedPRBugFixTests
 
     #region PromptEngineering PR #762 - GeneticOptimizer IndexOf Bug
 
-    [Fact]
-    public void GeneticOptimizer_TournamentSelect_WorksWithDuplicatePrompts()
+    [Fact(Timeout = 60000)]
+    public async Task GeneticOptimizer_TournamentSelect_WorksWithDuplicatePrompts()
     {
         // ARRANGE: Create optimizer and test with population containing duplicates
         // The old code used IndexOf which returns the FIRST occurrence index,
@@ -134,8 +135,8 @@ public class MergedPRBugFixTests
         Assert.True(callCount > 0, "Evaluator should have been called");
     }
 
-    [Fact]
-    public void GeneticOptimizer_OptimizesPrompts_ReturnsValidTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task GeneticOptimizer_OptimizesPrompts_ReturnsValidTemplate()
     {
         // ARRANGE
         var optimizer = new GeneticOptimizer<double>(
@@ -160,8 +161,8 @@ public class MergedPRBugFixTests
 
     #region TrainingMonitoring PR #755 - CSV Export Missing Data Bug
 
-    [Fact]
-    public void TrainingMonitor_CSVExport_EmptyMetricShowsEmpty_NotZero()
+    [Fact(Timeout = 60000)]
+    public async Task TrainingMonitor_CSVExport_EmptyMetricShowsEmpty_NotZero()
     {
         // ARRANGE: Create monitor with sparse metrics (not every step has every metric)
         var monitor = new TrainingMonitor<double>();
@@ -214,8 +215,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void TrainingMonitor_CSVExport_AllMetricsPresent_NoEmptyValues()
+    [Fact(Timeout = 60000)]
+    public async Task TrainingMonitor_CSVExport_AllMetricsPresent_NoEmptyValues()
     {
         // ARRANGE: Create monitor where all metrics are present at all steps
         var monitor = new TrainingMonitor<double>();
@@ -266,8 +267,8 @@ public class MergedPRBugFixTests
 
     #region ProgramSynthesis PR #763 - Relative Error Comparison Bug
 
-    [Fact]
-    public void OutputMatch_LargeNumbers_UsesRelativeComparison()
+    [Fact(Timeout = 60000)]
+    public async Task OutputMatch_LargeNumbers_UsesRelativeComparison()
     {
         // ARRANGE: The old code used absolute tolerance (1e-6) which fails for large numbers
         // For example, 1e12 + 0.5 vs 1e12 has absolute error 0.5 > 1e-6, but relative error is ~5e-13
@@ -303,8 +304,8 @@ public class MergedPRBugFixTests
         Assert.False(result3, "1% relative error should not match");
     }
 
-    [Fact]
-    public void OutputMatch_SmallNumbers_UsesAbsoluteComparison()
+    [Fact(Timeout = 60000)]
+    public async Task OutputMatch_SmallNumbers_UsesAbsoluteComparison()
     {
         // Numbers near zero should use absolute comparison
         var assembly = typeof(ProgramSynthesis.Engines.NeuralProgramSynthesizer<>).Assembly;
@@ -328,8 +329,8 @@ public class MergedPRBugFixTests
 
     #region FineTuning PR #753 - Log Probability Always Zero Bug
 
-    [Fact]
-    public void SupervisedFineTuning_CanBeInstantiated_WithSingleParameterConstructor()
+    [Fact(Timeout = 60000)]
+    public async Task SupervisedFineTuning_CanBeInstantiated_WithSingleParameterConstructor()
     {
         // ARRANGE: The old SupervisedFineTuning only had a constructor with optional second parameter:
         // SupervisedFineTuning(FineTuningOptions<T> options, ILossFunction<T>? lossFunction = null)
@@ -361,8 +362,8 @@ public class MergedPRBugFixTests
         Assert.IsAssignableFrom(typeof(FineTuning.FineTuningBase<double, double[], double[]>), sftInstance);
     }
 
-    [Fact]
-    public void FineTuningBase_ComputeLogProbability_ArrayOutputs_NotAlwaysZero()
+    [Fact(Timeout = 60000)]
+    public async Task FineTuningBase_ComputeLogProbability_ArrayOutputs_NotAlwaysZero()
     {
         // ARRANGE: The old code always returned 0.0 for log probability
         // which made DPO/RLHF/etc. compute constant loss regardless of inputs
@@ -408,8 +409,8 @@ public class MergedPRBugFixTests
             $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
     }
 
-    [Fact]
-    public void FineTuningBase_ComputeLogProbability_ScalarOutputs_NotAlwaysZero()
+    [Fact(Timeout = 60000)]
+    public async Task FineTuningBase_ComputeLogProbability_ScalarOutputs_NotAlwaysZero()
     {
         // ARRANGE: Use DPO with double[] types since we know it has the right constructor
         // We're testing the base class method which handles scalar conversion internally
@@ -439,8 +440,8 @@ public class MergedPRBugFixTests
             $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
     }
 
-    [Fact]
-    public void FineTuningBase_ComputeLogProbability_StringOutputs_NotAlwaysZero()
+    [Fact(Timeout = 60000)]
+    public async Task FineTuningBase_ComputeLogProbability_StringOutputs_NotAlwaysZero()
     {
         // ARRANGE: Use DPO with string types
         var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
@@ -469,8 +470,8 @@ public class MergedPRBugFixTests
             $"Similar strings should have higher log prob ({logProbSimilar}) than different ({logProbDifferent})");
     }
 
-    [Fact]
-    public void DirectPreferenceOptimization_DPOLoss_VariesWithInputs()
+    [Fact(Timeout = 60000)]
+    public async Task DirectPreferenceOptimization_DPOLoss_VariesWithInputs()
     {
         // This test verifies that DPO loss actually varies based on inputs
         // Before the fix, loss was always ~0.693 (constant) because log probs were always 0
@@ -517,8 +518,8 @@ public class MergedPRBugFixTests
 
     #region Diagnostics PR #777 - Production Bug Fixes
 
-    [Fact]
-    public void MemoryTracker_EnforcesMaxHistorySize_PreventsUnboundedGrowth()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_EnforcesMaxHistorySize_PreventsUnboundedGrowth()
     {
         // ARRANGE: The old code had no limit on history size, causing memory leaks
         // in long-running applications
@@ -551,8 +552,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ProfilerSession_ThreadSafeRandomSampling_DoesNotCorrupt()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_ThreadSafeRandomSampling_DoesNotCorrupt()
     {
         // ARRANGE: The old code used a single Random instance which is NOT thread-safe
         // Multiple threads would corrupt the Random state
@@ -599,8 +600,8 @@ public class MergedPRBugFixTests
         Assert.True(session.OperationCount > 0, "Some operations should be recorded");
     }
 
-    [Fact]
-    public void ProfilerSession_SampleVariance_UsesUnbiasedEstimator()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_SampleVariance_UsesUnbiasedEstimator()
     {
         // ARRANGE: The old code used population variance (_m2 / _count)
         // which underestimates variance. Fixed to use sample variance (_m2 / (_count - 1))
@@ -638,8 +639,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_CleansUpCallStack_EvenWithExceptionOrder()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSessionTimer_CleansUpCallStack_EvenWithExceptionOrder()
     {
         // ARRANGE: The old code only popped from call stack if timer was at top
         // This caused memory leaks when nested timers were stopped out of order
@@ -666,8 +667,8 @@ public class MergedPRBugFixTests
         Assert.Equal(1, stats.Count);
     }
 
-    [Fact]
-    public void MemoryTracker_MaxHistorySize_CanBeConfigured()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_MaxHistorySize_CanBeConfigured()
     {
         // ARRANGE
         MemoryTracker.Reset();
@@ -691,8 +692,8 @@ public class MergedPRBugFixTests
 
     #region ModelRegistry PR #774 - Production Bug Fixes
 
-    [Fact]
-    public void ModelRegistry_GetModel_ReturnsClone_NotInternalState()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_GetModel_ReturnsClone_NotInternalState()
     {
         // ARRANGE: The old code returned the internal model object directly
         // External code could modify it, causing inconsistency between memory and disk
@@ -729,8 +730,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_GetModelByStage_ReturnsClone_NotInternalState()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_GetModelByStage_ReturnsClone_NotInternalState()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
@@ -764,8 +765,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_DeleteModelVersion_ValidatesModelName()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_DeleteModelVersion_ValidatesModelName()
     {
         // ARRANGE: Other methods validate model name, DeleteModelVersion should too
         var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
@@ -785,8 +786,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_LoadErrors_ExposedForDiagnostics()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_LoadErrors_ExposedForDiagnostics()
     {
         // ARRANGE: The old code used Console.WriteLine for errors which is bad for production
         // Now errors are exposed via LoadErrors property
@@ -807,8 +808,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_LineageTracking_WorksForNewModels()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_LineageTracking_WorksForNewModels()
     {
         // ARRANGE: The old code never populated _lineage dictionary
         var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
@@ -839,8 +840,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_LineageTracking_TracksParentForNewVersions()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_LineageTracking_TracksParentForNewVersions()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
@@ -872,8 +873,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ModelRegistry_SearchModels_ReturnsClones()
+    [Fact(Timeout = 60000)]
+    public async Task ModelRegistry_SearchModels_ReturnsClones()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
@@ -931,8 +932,8 @@ public class MergedPRBugFixTests
 
     #region Metrics PR #773 - Production Bug Fixes
 
-    [Fact]
-    public void PSNR_ComputeBatch_ValidatesNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task PSNR_ComputeBatch_ValidatesNullArguments()
     {
         // ARRANGE: The old code didn't validate null arguments in ComputeBatch
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -943,8 +944,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null!));
     }
 
-    [Fact]
-    public void STOI_Compute_ValidatesNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task STOI_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
         var stoi = new ShortTimeObjectiveIntelligibility<double>();
@@ -955,8 +956,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null!));
     }
 
-    [Fact]
-    public void SISDR_Compute_ValidatesNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task SISDR_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -967,8 +968,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null!));
     }
 
-    [Fact]
-    public void SISDR_Compute_HandlesEmptyTensors()
+    [Fact(Timeout = 60000)]
+    public async Task SISDR_Compute_HandlesEmptyTensors()
     {
         // ARRANGE: The old code would divide by zero in ComputeMean for empty tensors
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -981,8 +982,8 @@ public class MergedPRBugFixTests
         Assert.Equal(-100.0, result, 5);
     }
 
-    [Fact]
-    public void SNR_Compute_ValidatesNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task SNR_Compute_ValidatesNullArguments()
     {
         // ARRANGE: Missing null checks could cause NullReferenceException
         var snr = new SignalToNoiseRatio<double>();
@@ -993,8 +994,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null!));
     }
 
-    [Fact]
-    public void IoU3D_ComputeBoxIoU_ValidatesBoxCoordinates()
+    [Fact(Timeout = 60000)]
+    public async Task IoU3D_ComputeBoxIoU_ValidatesBoxCoordinates()
     {
         // ARRANGE: The old code didn't validate that min <= max for each dimension
         // This could produce negative volumes and incorrect IoU
@@ -1009,8 +1010,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentException>(() => iou3d.ComputeBoxIoU(validBoxB, invalidBoxA));
     }
 
-    [Fact]
-    public void IoU3D_ComputeBoxIoU_ValidatesNullArguments()
+    [Fact(Timeout = 60000)]
+    public async Task IoU3D_ComputeBoxIoU_ValidatesNullArguments()
     {
         // ARRANGE
         var iou3d = new IoU3D<double>();
@@ -1021,8 +1022,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null!));
     }
 
-    [Fact]
-    public void ChamferDistance_ComputeOneWay_ThrowsForEmptyTargetWithNonEmptySource()
+    [Fact(Timeout = 60000)]
+    public async Task ChamferDistance_ComputeOneWay_ThrowsForEmptyTargetWithNonEmptySource()
     {
         // ARRANGE: The old code returned 0 for empty target, which is semantically wrong
         // If source has points but target is empty, there's nothing to match to
@@ -1038,8 +1039,8 @@ public class MergedPRBugFixTests
         Assert.Throws<ArgumentException>(() => chamfer.ComputeOneWay(source, target));
     }
 
-    [Fact]
-    public void ChamferDistance_ComputeOneWay_ReturnsZeroForEmptySource()
+    [Fact(Timeout = 60000)]
+    public async Task ChamferDistance_ComputeOneWay_ReturnsZeroForEmptySource()
     {
         // ARRANGE: Empty source is fine - no points to match means zero distance (vacuously true)
         var chamfer = new ChamferDistance<double>();
@@ -1059,8 +1060,8 @@ public class MergedPRBugFixTests
 
     #region Logging PR #772 - Production Bug Fixes
 
-    [Fact]
-    public void SummaryWriter_AddScalars_ValidatesNullDictionary()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_AddScalars_ValidatesNullDictionary()
     {
         // ARRANGE: The old code didn't validate null arguments
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1078,8 +1079,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_AddHistogram_ValidatesNullArray()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_AddHistogram_ValidatesNullArray()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1098,8 +1099,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_AddImage_ValidatesDataformats()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_AddImage_ValidatesDataformats()
     {
         // ARRANGE: The old code silently used HWC for any invalid dataformats value
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1120,8 +1121,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_AddImages_ValidatesNullArray()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_AddImages_ValidatesNullArray()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1139,8 +1140,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_AddPrCurve_ValidatesArguments()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_AddPrCurve_ValidatesArguments()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1162,8 +1163,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_LogWeights_ValidatesNullArray()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_LogWeights_ValidatesNullArray()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1181,8 +1182,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void SummaryWriter_LogWeights_HandlesEmptyArray()
+    [Fact(Timeout = 60000)]
+    public async Task SummaryWriter_LogWeights_HandlesEmptyArray()
     {
         // ARRANGE: The old code would throw InvalidOperationException on Average() for empty array
         var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
@@ -1205,8 +1206,8 @@ public class MergedPRBugFixTests
 
     #region LanguageModels PR #771 - Production Bug Fixes
 
-    [Fact]
-    public void OpenAIChatModel_NullModelName_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task OpenAIChatModel_NullModelName_ThrowsArgumentNullException()
     {
         // ARRANGE: The old code would throw NullReferenceException in GetMaxContextTokens
         // when modelName.ToLowerInvariant() was called on a null modelName
@@ -1219,8 +1220,8 @@ public class MergedPRBugFixTests
                 modelName: null!));
     }
 
-    [Fact]
-    public void OpenAIChatModel_EmptyModelName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task OpenAIChatModel_EmptyModelName_ThrowsArgumentException()
     {
         // ARRANGE: The old code would silently use default context tokens for empty model names
         // Now it validates that model name is not empty or whitespace
@@ -1237,8 +1238,8 @@ public class MergedPRBugFixTests
                 modelName: "   "));
     }
 
-    [Fact]
-    public void OpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task OpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
     {
         // ARRANGE: The old code let maxTokens <= 0 through to base class
         // which threw confusing "Maximum generation tokens must be positive" error
@@ -1258,8 +1259,8 @@ public class MergedPRBugFixTests
         Assert.Contains("Max tokens", ex2.Message);
     }
 
-    [Fact]
-    public void AnthropicChatModel_NullModelName_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task AnthropicChatModel_NullModelName_ThrowsArgumentNullException()
     {
         // ARRANGE: Same issue as OpenAIChatModel - null modelName caused NullReferenceException
 
@@ -1270,8 +1271,8 @@ public class MergedPRBugFixTests
                 modelName: null!));
     }
 
-    [Fact]
-    public void AnthropicChatModel_EmptyModelName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AnthropicChatModel_EmptyModelName_ThrowsArgumentException()
     {
         // ARRANGE: Empty model name should be validated
 
@@ -1287,8 +1288,8 @@ public class MergedPRBugFixTests
                 modelName: "   "));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_NullApiVersion_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AzureOpenAIChatModel_NullApiVersion_ThrowsArgumentException()
     {
         // ARRANGE: The old code didn't validate apiVersion, causing invalid URL
         // like "?api-version=null" to be constructed
@@ -1302,8 +1303,8 @@ public class MergedPRBugFixTests
                 apiVersion: null!));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_EmptyApiVersion_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AzureOpenAIChatModel_EmptyApiVersion_ThrowsArgumentException()
     {
         // ARRANGE: Empty apiVersion should also be rejected
 
@@ -1323,8 +1324,8 @@ public class MergedPRBugFixTests
                 apiVersion: "   "));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AzureOpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
     {
         // ARRANGE: Same issue as OpenAIChatModel - maxTokens <= 0 should be caught early
 
@@ -1338,8 +1339,8 @@ public class MergedPRBugFixTests
         Assert.Contains("Max tokens", ex.Message);
     }
 
-    [Fact]
-    public void OpenAIChatModel_ValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task OpenAIChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
 
@@ -1356,8 +1357,8 @@ public class MergedPRBugFixTests
         Assert.Equal(1024, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_ValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task AnthropicChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
 
@@ -1374,8 +1375,8 @@ public class MergedPRBugFixTests
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_ValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task AzureOpenAIChatModel_ValidParameters_CreatesInstance()
     {
         // ARRANGE: Verify valid parameters work correctly
 
@@ -1399,8 +1400,8 @@ public class MergedPRBugFixTests
 
     #region Interpretability PR #769 - Production Bug Fixes
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_GetUniqueGroups_ThrowsForNullSensitiveFeature()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_GetUniqueGroups_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE: The old code would throw NullReferenceException
         Vector<double>? nullVector = null;
@@ -1411,8 +1412,8 @@ public class MergedPRBugFixTests
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_GetGroupIndices_ThrowsForNullSensitiveFeature()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_GetGroupIndices_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE
         Vector<double>? nullVector = null;
@@ -1423,8 +1424,8 @@ public class MergedPRBugFixTests
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullVector()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_GetSubset_ThrowsForNullVector()
     {
         // ARRANGE
         Vector<double>? nullVector = null;
@@ -1436,8 +1437,8 @@ public class MergedPRBugFixTests
         Assert.Equal("vector", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullIndices()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_GetSubset_ThrowsForNullIndices()
     {
         // ARRANGE
         var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -1449,8 +1450,8 @@ public class MergedPRBugFixTests
         Assert.Equal("indices", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ComputePositiveRate_ThrowsForNullPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ComputePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
         Vector<double>? nullVector = null;
@@ -1461,8 +1462,8 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
         Vector<double>? nullPredictions = null;
@@ -1474,8 +1475,8 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullActualLabels()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullActualLabels()
     {
         // ARRANGE
         var predictions = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
@@ -1487,8 +1488,8 @@ public class MergedPRBugFixTests
         Assert.Equal("actualLabels", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_ThrowsForNullPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ComputeFalsePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
         Vector<double>? nullPredictions = null;
@@ -1500,8 +1501,8 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ComputePrecision_ThrowsForNullPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ComputePrecision_ThrowsForNullPredictions()
     {
         // ARRANGE
         Vector<double>? nullPredictions = null;
@@ -1513,8 +1514,8 @@ public class MergedPRBugFixTests
         Assert.Equal("predictions", ex.ParamName);
     }
 
-    [Fact]
-    public void InterpretabilityMetricsHelper_ValidFunctions_ReturnCorrectResults()
+    [Fact(Timeout = 60000)]
+    public async Task InterpretabilityMetricsHelper_ValidFunctions_ReturnCorrectResults()
     {
         // ARRANGE
         var sensitiveFeature = new Vector<double>(new double[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
@@ -1538,8 +1539,8 @@ public class MergedPRBugFixTests
 
     #region InferenceOptimization PR #768 - Production Bug Fixes
 
-    [Fact]
-    public void OptimizationNode_AddInput_ThrowsForNullInputNode()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationNode_AddInput_ThrowsForNullInputNode()
     {
         // ARRANGE
         var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
@@ -1550,8 +1551,8 @@ public class MergedPRBugFixTests
         Assert.Equal("inputNode", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationNode_RemoveInput_ThrowsForNullInputNode()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationNode_RemoveInput_ThrowsForNullInputNode()
     {
         // ARRANGE
         var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
@@ -1562,8 +1563,8 @@ public class MergedPRBugFixTests
         Assert.Equal("inputNode", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationNode_ReplaceInput_ThrowsForNullOldInput()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationNode_ReplaceInput_ThrowsForNullOldInput()
     {
         // ARRANGE
         var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
@@ -1575,8 +1576,8 @@ public class MergedPRBugFixTests
         Assert.Equal("oldInput", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationNode_ReplaceInput_ThrowsForNullNewInput()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationNode_ReplaceInput_ThrowsForNullNewInput()
     {
         // ARRANGE
         var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
@@ -1588,8 +1589,8 @@ public class MergedPRBugFixTests
         Assert.Equal("newInput", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationGraph_FindNodeById_ThrowsForNullId()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationGraph_FindNodeById_ThrowsForNullId()
     {
         // ARRANGE
         var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
@@ -1600,8 +1601,8 @@ public class MergedPRBugFixTests
         Assert.Equal("id", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationGraph_FindNodesByName_ThrowsForNullName()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationGraph_FindNodesByName_ThrowsForNullName()
     {
         // ARRANGE
         var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
@@ -1612,8 +1613,8 @@ public class MergedPRBugFixTests
         Assert.Equal("name", ex.ParamName);
     }
 
-    [Fact]
-    public void IRDataTypeExtensions_FromSystemType_ThrowsForNullType()
+    [Fact(Timeout = 60000)]
+    public async Task IRDataTypeExtensions_FromSystemType_ThrowsForNullType()
     {
         // ARRANGE
         Type? nullType = null;
@@ -1624,8 +1625,8 @@ public class MergedPRBugFixTests
         Assert.Equal("type", ex.ParamName);
     }
 
-    [Fact]
-    public void TensorType_IsBroadcastCompatible_ThrowsForNullOther()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_IsBroadcastCompatible_ThrowsForNullOther()
     {
         // ARRANGE
         var tensorType = new AiDotNet.InferenceOptimization.IR.Common.TensorType
@@ -1639,8 +1640,8 @@ public class MergedPRBugFixTests
         Assert.Equal("other", ex.ParamName);
     }
 
-    [Fact]
-    public void GraphOptimizer_Optimize_ThrowsForNullGraph()
+    [Fact(Timeout = 60000)]
+    public async Task GraphOptimizer_Optimize_ThrowsForNullGraph()
     {
         // ARRANGE
         var optimizer = new AiDotNet.InferenceOptimization.Core.GraphOptimizer<double>();
@@ -1651,8 +1652,8 @@ public class MergedPRBugFixTests
         Assert.Equal("graph", ex.ParamName);
     }
 
-    [Fact]
-    public void GraphOptimizer_AddPass_ThrowsForNullPass()
+    [Fact(Timeout = 60000)]
+    public async Task GraphOptimizer_AddPass_ThrowsForNullPass()
     {
         // ARRANGE
         var optimizer = new AiDotNet.InferenceOptimization.Core.GraphOptimizer<double>();
@@ -1663,8 +1664,8 @@ public class MergedPRBugFixTests
         Assert.Equal("pass", ex.ParamName);
     }
 
-    [Fact]
-    public void OptimizationNode_AddInputRemoveInput_ValidInputs_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationNode_AddInputRemoveInput_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
         var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "output" };
@@ -1685,8 +1686,8 @@ public class MergedPRBugFixTests
         Assert.DoesNotContain(node, inputNode.Outputs);
     }
 
-    [Fact]
-    public void OptimizationGraph_FindNodesByIdAndName_ValidInputs_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationGraph_FindNodesByIdAndName_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
         var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
@@ -1710,8 +1711,8 @@ public class MergedPRBugFixTests
         Assert.Null(notFound);
     }
 
-    [Fact]
-    public void TensorType_IsBroadcastCompatible_ValidInputs_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_IsBroadcastCompatible_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
         var type1 = new AiDotNet.InferenceOptimization.IR.Common.TensorType { Shape = new int[] { 3, 4 } };
@@ -1725,8 +1726,8 @@ public class MergedPRBugFixTests
         Assert.False(type1.IsBroadcastCompatible(type4)); // Not compatible (4 != 5)
     }
 
-    [Fact]
-    public void IRDataTypeExtensions_FromSystemType_ValidTypes_ReturnsCorrectDataType()
+    [Fact(Timeout = 60000)]
+    public async Task IRDataTypeExtensions_FromSystemType_ValidTypes_ReturnsCorrectDataType()
     {
         // ACT & ASSERT
         Assert.Equal(AiDotNet.InferenceOptimization.IR.Common.IRDataType.Float32,
@@ -1743,8 +1744,8 @@ public class MergedPRBugFixTests
 
     #region HyperparameterOptimization PR #767 - Production Bug Fixes
 
-    [Fact]
-    public void TrialPruner_ReportAndCheckPrune_ThrowsForNullTrial()
+    [Fact(Timeout = 60000)]
+    public async Task TrialPruner_ReportAndCheckPrune_ThrowsForNullTrial()
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
@@ -1755,8 +1756,8 @@ public class MergedPRBugFixTests
         Assert.Equal("trial", ex.ParamName);
     }
 
-    [Fact]
-    public void TrialPruner_ReportAndCheckPruneString_ThrowsForNullTrialId()
+    [Fact(Timeout = 60000)]
+    public async Task TrialPruner_ReportAndCheckPruneString_ThrowsForNullTrialId()
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
@@ -1767,8 +1768,8 @@ public class MergedPRBugFixTests
         Assert.Equal("trialId", ex.ParamName);
     }
 
-    [Fact]
-    public void TrialPruner_MarkComplete_ThrowsForNullTrialId()
+    [Fact(Timeout = 60000)]
+    public async Task TrialPruner_MarkComplete_ThrowsForNullTrialId()
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
@@ -1779,8 +1780,8 @@ public class MergedPRBugFixTests
         Assert.Equal("trialId", ex.ParamName);
     }
 
-    [Fact]
-    public void ContinuousDistribution_Sample_ThrowsForNullRandom()
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
         var dist = new AiDotNet.Models.ContinuousDistribution { Min = 0.0, Max = 1.0 };
@@ -1791,8 +1792,8 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact]
-    public void IntegerDistribution_Sample_ThrowsForNullRandom()
+    [Fact(Timeout = 60000)]
+    public async Task IntegerDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
         var dist = new AiDotNet.Models.IntegerDistribution { Min = 0, Max = 10, Step = 1 };
@@ -1803,8 +1804,8 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact]
-    public void CategoricalDistribution_Sample_ThrowsForNullRandom()
+    [Fact(Timeout = 60000)]
+    public async Task CategoricalDistribution_Sample_ThrowsForNullRandom()
     {
         // ARRANGE
         var dist = new AiDotNet.Models.CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
@@ -1815,8 +1816,8 @@ public class MergedPRBugFixTests
         Assert.Equal("random", ex.ParamName);
     }
 
-    [Fact]
-    public void TrialPruner_ReportAndCheckPrune_ValidInputs_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task TrialPruner_ReportAndCheckPrune_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>(
@@ -1833,8 +1834,8 @@ public class MergedPRBugFixTests
         Assert.False(shouldPrune2);
     }
 
-    [Fact]
-    public void ParameterDistribution_Sample_ValidInputs_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ParameterDistribution_Sample_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
         var random = new Random(42);
@@ -1853,8 +1854,8 @@ public class MergedPRBugFixTests
         Assert.Contains(categoricalSample, categoricalDist.Choices);
     }
 
-    [Fact]
-    public void HyperparameterSearchSpace_AddMethods_ValidateInputs()
+    [Fact(Timeout = 60000)]
+    public async Task HyperparameterSearchSpace_AddMethods_ValidateInputs()
     {
         // ARRANGE
         var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
@@ -1876,8 +1877,8 @@ public class MergedPRBugFixTests
         Assert.True(searchSpace.Parameters.ContainsKey("use_dropout"));
     }
 
-    [Fact]
-    public void HyperparameterSearchSpace_AddContinuous_ThrowsForInvalidRange()
+    [Fact(Timeout = 60000)]
+    public async Task HyperparameterSearchSpace_AddContinuous_ThrowsForInvalidRange()
     {
         // ARRANGE
         var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
@@ -1887,8 +1888,8 @@ public class MergedPRBugFixTests
         Assert.Contains("less than", ex.Message);
     }
 
-    [Fact]
-    public void HyperparameterSearchSpace_AddInteger_ThrowsForInvalidStep()
+    [Fact(Timeout = 60000)]
+    public async Task HyperparameterSearchSpace_AddInteger_ThrowsForInvalidStep()
     {
         // ARRANGE
         var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
@@ -1898,8 +1899,8 @@ public class MergedPRBugFixTests
         Assert.Contains("positive", ex.Message);
     }
 
-    [Fact]
-    public void EarlyStopping_Check_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task EarlyStopping_Check_WorksCorrectly()
     {
         // ARRANGE
         var earlyStopping = new AiDotNet.HyperparameterOptimization.EarlyStopping<double>(
@@ -1930,8 +1931,8 @@ public class MergedPRBugFixTests
         Assert.True(earlyStopping.ShouldStop);
     }
 
-    [Fact]
-    public void TrialPruner_Strategies_WorkCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task TrialPruner_Strategies_WorkCorrectly()
     {
         // ARRANGE - Test median pruning strategy
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>(
@@ -1957,8 +1958,8 @@ public class MergedPRBugFixTests
 
     #region ExperimentTracking PR #766 - Production Bug Fixes
 
-    [Fact]
-    public void ExperimentTracker_GetExperiment_ThrowsForNullExperimentId()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_GetExperiment_ThrowsForNullExperimentId()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -1977,8 +1978,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_GetRun_ThrowsForNullRunId()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_GetRun_ThrowsForNullRunId()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -1997,8 +1998,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_SearchRuns_ThrowsForInvalidMaxResults()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_SearchRuns_ThrowsForInvalidMaxResults()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2020,8 +2021,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_StartRun_PersistsExperimentTimestamp()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_StartRun_PersistsExperimentTimestamp()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2056,8 +2057,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentRun_LogArtifact_ThrowsForEmptyExtractedFilename()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentRun_LogArtifact_ThrowsForEmptyExtractedFilename()
     {
         // ARRANGE
         var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
@@ -2068,8 +2069,8 @@ public class MergedPRBugFixTests
         Assert.Contains("explicit artifact path", ex.Message);
     }
 
-    [Fact]
-    public void ExperimentRun_GetLatestMetric_ThrowsForNullMetricName()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentRun_GetLatestMetric_ThrowsForNullMetricName()
     {
         // ARRANGE
         var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
@@ -2080,8 +2081,8 @@ public class MergedPRBugFixTests
         Assert.Equal("metricName", ex.ParamName);
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteExperiment_RemovesFromMemoryEvenIfDirectoryDeletionFails()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_DeleteExperiment_RemovesFromMemoryEvenIfDirectoryDeletionFails()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2104,8 +2105,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentRun_LogMetric_ThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentRun_LogMetric_ThreadSafe()
     {
         // ARRANGE
         var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
@@ -2145,8 +2146,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_ListRuns_ThrowsForNullExperimentId()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_ListRuns_ThrowsForNullExperimentId()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2165,8 +2166,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteExperiment_ThrowsForNullExperimentId()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_DeleteExperiment_ThrowsForNullExperimentId()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2185,8 +2186,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteRun_ThrowsForNullRunId()
+    [Fact(Timeout = 60000)]
+    public async Task ExperimentTracker_DeleteRun_ThrowsForNullRunId()
     {
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -2209,8 +2210,8 @@ public class MergedPRBugFixTests
 
     #region DistributedTraining PR #764 - Communication and Parameter Analysis Bugs
 
-    [Fact]
-    public void CommunicationManager_Broadcast_ThrowsForInvalidRoot()
+    [Fact(Timeout = 60000)]
+    public async Task CommunicationManager_Broadcast_ThrowsForInvalidRoot()
     {
         // ARRANGE
         var backend = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 4, "test-broadcast-root");
@@ -2230,8 +2231,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_Scatter_ThrowsForInvalidRoot()
+    [Fact(Timeout = 60000)]
+    public async Task CommunicationManager_Scatter_ThrowsForInvalidRoot()
     {
         // ARRANGE
         var backend = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 4, "test-scatter-root");
@@ -2251,8 +2252,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_ReduceScatter_ThrowsForNullData()
+    [Fact(Timeout = 60000)]
+    public async Task CommunicationManager_ReduceScatter_ThrowsForNullData()
     {
         // ARRANGE
         var backend = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1, "test-reduce-scatter-null");
@@ -2272,8 +2273,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_NullGroups_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_NullGroups_ThrowsArgumentNullException()
     {
         // ARRANGE
         var analyzer = new AiDotNet.DistributedTraining.ParameterAnalyzer<double>();
@@ -2284,8 +2285,8 @@ public class MergedPRBugFixTests
                 (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>)null));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_EmptyGroups_ReturnsEmptyDict()
+    [Fact(Timeout = 60000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_EmptyGroups_ReturnsEmptyDict()
     {
         // ARRANGE
         var analyzer = new AiDotNet.DistributedTraining.ParameterAnalyzer<double>();
@@ -2298,8 +2299,8 @@ public class MergedPRBugFixTests
         Assert.Empty(result);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateDefault_ThrowsForNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateDefault_ThrowsForNullBackend()
     {
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
@@ -2308,8 +2309,8 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForHighBandwidth_ThrowsForNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateForHighBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
@@ -2318,8 +2319,8 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForLowBandwidth_ThrowsForNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateForLowBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
@@ -2328,8 +2329,8 @@ public class MergedPRBugFixTests
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Receive_PreservesMessageOnSizeMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Receive_PreservesMessageOnSizeMismatch()
     {
         // ARRANGE - This tests that the Receive method validates size BEFORE dequeuing
         // to prevent data loss when caller requests wrong size
@@ -2363,8 +2364,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_AllReduce_SingleProcess_DoesNotModifyData()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_AllReduce_SingleProcess_DoesNotModifyData()
     {
         // ARRANGE - Test single process optimization path
         var backend = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1, "test-single-reduce");
@@ -2393,8 +2394,8 @@ public class MergedPRBugFixTests
 
     #region Reasoning PR #760 - Search Algorithm and Model Bugs
 
-    [Fact]
-    public void ReasoningChain_AddStep_ThrowsForNullStep()
+    [Fact(Timeout = 60000)]
+    public async Task ReasoningChain_AddStep_ThrowsForNullStep()
     {
         // ARRANGE
         var chain = new AiDotNet.Reasoning.Models.ReasoningChain<double>();
@@ -2405,8 +2406,8 @@ public class MergedPRBugFixTests
         Assert.Equal("step", ex.ParamName);
     }
 
-    [Fact]
-    public void ReasoningChain_AddStep_SetsStepNumberCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ReasoningChain_AddStep_SetsStepNumberCorrectly()
     {
         // ARRANGE
         var chain = new AiDotNet.Reasoning.Models.ReasoningChain<double>();
@@ -2423,8 +2424,8 @@ public class MergedPRBugFixTests
         Assert.Equal(2, chain.Steps.Count);
     }
 
-    [Fact]
-    public void MonteCarloTreeSearch_Constructor_ThrowsForNegativeExplorationConstant()
+    [Fact(Timeout = 60000)]
+    public async Task MonteCarloTreeSearch_Constructor_ThrowsForNegativeExplorationConstant()
     {
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -2432,8 +2433,8 @@ public class MergedPRBugFixTests
         Assert.Equal("explorationConstant", ex.ParamName);
     }
 
-    [Fact]
-    public void MonteCarloTreeSearch_Constructor_ThrowsForZeroSimulations()
+    [Fact(Timeout = 60000)]
+    public async Task MonteCarloTreeSearch_Constructor_ThrowsForZeroSimulations()
     {
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -2441,8 +2442,8 @@ public class MergedPRBugFixTests
         Assert.Equal("numSimulations", ex.ParamName);
     }
 
-    [Fact]
-    public void MonteCarloTreeSearch_Constructor_AcceptsValidParameters()
+    [Fact(Timeout = 60000)]
+    public async Task MonteCarloTreeSearch_Constructor_AcceptsValidParameters()
     {
         // ACT - should not throw
         var mcts = new AiDotNet.Reasoning.Search.MonteCarloTreeSearch<double>(
@@ -2454,8 +2455,8 @@ public class MergedPRBugFixTests
         Assert.Equal("Monte Carlo Tree Search (MCTS)", mcts.AlgorithmName);
     }
 
-    [Fact]
-    public void ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
+    [Fact(Timeout = 60000)]
+    public async Task ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
     {
         // ARRANGE - Create a simple tree structure
         var root = new AiDotNet.Reasoning.Models.ThoughtNode<double>
@@ -2486,8 +2487,8 @@ public class MergedPRBugFixTests
         Assert.Equal("Second step", path[2]);
     }
 
-    [Fact]
-    public void ThoughtNode_IsLeaf_ReturnsTrueForNodeWithNoChildren()
+    [Fact(Timeout = 60000)]
+    public async Task ThoughtNode_IsLeaf_ReturnsTrueForNodeWithNoChildren()
     {
         // ARRANGE
         var node = new AiDotNet.Reasoning.Models.ThoughtNode<double> { Thought = "Leaf node" };
@@ -2496,8 +2497,8 @@ public class MergedPRBugFixTests
         Assert.True(node.IsLeaf());
     }
 
-    [Fact]
-    public void ThoughtNode_IsRoot_ReturnsTrueForNodeWithNoParent()
+    [Fact(Timeout = 60000)]
+    public async Task ThoughtNode_IsRoot_ReturnsTrueForNodeWithNoParent()
     {
         // ARRANGE
         var root = new AiDotNet.Reasoning.Models.ThoughtNode<double> { Thought = "Root" };
@@ -2508,8 +2509,8 @@ public class MergedPRBugFixTests
         Assert.False(child.IsRoot());
     }
 
-    [Fact]
-    public void ReasoningConfig_DefaultValues_AreReasonable()
+    [Fact(Timeout = 60000)]
+    public async Task ReasoningConfig_DefaultValues_AreReasonable()
     {
         // ARRANGE & ACT
         var config = new AiDotNet.Reasoning.Models.ReasoningConfig();
@@ -2529,8 +2530,8 @@ public class MergedPRBugFixTests
 
     #region Serialization PR #759 - VectorJsonConverter and TensorJsonConverter Validation Bugs
 
-    [Fact]
-    public void VectorJsonConverter_NegativeLength_ThrowsJsonSerializationException()
+    [Fact(Timeout = 60000)]
+    public async Task VectorJsonConverter_NegativeLength_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with negative length that should be rejected
         var converter = new VectorJsonConverter();
@@ -2549,8 +2550,8 @@ public class MergedPRBugFixTests
         Assert.Contains("-5", ex.Message);
     }
 
-    [Fact]
-    public void VectorJsonConverter_ZeroLength_AcceptsValidEmptyVector()
+    [Fact(Timeout = 60000)]
+    public async Task VectorJsonConverter_ZeroLength_AcceptsValidEmptyVector()
     {
         // ARRANGE: JSON with zero length is valid
         var converter = new VectorJsonConverter();
@@ -2567,8 +2568,8 @@ public class MergedPRBugFixTests
         Assert.Equal(0, result.Length);
     }
 
-    [Fact]
-    public void TensorJsonConverter_NegativeDimension_ThrowsJsonSerializationException()
+    [Fact(Timeout = 60000)]
+    public async Task TensorJsonConverter_NegativeDimension_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with negative dimension that should be rejected
         var converter = new TensorJsonConverter();
@@ -2588,8 +2589,8 @@ public class MergedPRBugFixTests
         Assert.Contains("-3", ex.Message);
     }
 
-    [Fact]
-    public void TensorJsonConverter_EmptyShape_ThrowsJsonSerializationException()
+    [Fact(Timeout = 60000)]
+    public async Task TensorJsonConverter_EmptyShape_ThrowsJsonSerializationException()
     {
         // ARRANGE: JSON with empty shape array — the converter normalizes [] to [1] (scalar),
         // which then fails because the data array has 0 elements instead of the expected 1.
@@ -2608,8 +2609,8 @@ public class MergedPRBugFixTests
         Assert.Contains("Tensor data length mismatch", ex.Message);
     }
 
-    [Fact]
-    public void TensorJsonConverter_ValidShape_DeserializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task TensorJsonConverter_ValidShape_DeserializesCorrectly()
     {
         // ARRANGE: Valid tensor JSON
         var converter = new TensorJsonConverter();
@@ -2629,8 +2630,8 @@ public class MergedPRBugFixTests
         Assert.Equal(6, result.Length);
     }
 
-    [Fact]
-    public void TensorJsonConverter_AllZeroDimensions_ValidButEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task TensorJsonConverter_AllZeroDimensions_ValidButEmpty()
     {
         // ARRANGE: Tensor with zero dimension is valid but results in empty tensor
         var converter = new TensorJsonConverter();
@@ -2647,8 +2648,8 @@ public class MergedPRBugFixTests
         Assert.Equal(0, result.Length); // 2 * 0 * 3 = 0 elements
     }
 
-    [Fact]
-    public void VectorJsonConverter_RoundTrip_PreservesData()
+    [Fact(Timeout = 60000)]
+    public async Task VectorJsonConverter_RoundTrip_PreservesData()
     {
         // ARRANGE: Create a vector, serialize it, then deserialize
         var original = new Vector<double>(new double[] { 1.5, 2.5, 3.5, 4.5 });
@@ -2670,8 +2671,8 @@ public class MergedPRBugFixTests
         }
     }
 
-    [Fact]
-    public void TensorJsonConverter_RoundTrip_PreservesData()
+    [Fact(Timeout = 60000)]
+    public async Task TensorJsonConverter_RoundTrip_PreservesData()
     {
         // ARRANGE: Create a tensor, serialize it, then deserialize
         var original = new Tensor<double>(new int[] { 2, 2 });

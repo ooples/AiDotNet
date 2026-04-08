@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -15,8 +16,8 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region SolveLinearSystem with DecompositionType Tests
 
-    [Fact]
-    public void SolveLinearSystem_WithLuDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithLuDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Simple 3x3 system: Ax = b
         // 2x + y - z = 8
@@ -41,8 +42,8 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - (-1.0)) < Tolerance, $"Expected z=-1, got {result[2]}");
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithCholeskyDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithCholeskyDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite matrix (required for Cholesky)
         // A = [4 12 -16; 12 37 -43; -16 -43 98]
@@ -66,8 +67,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithQrDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithQrDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -90,8 +91,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithSvdDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithSvdDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -114,8 +115,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithCramerDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithCramerDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Small system (Cramer's rule is O(n!) so only practical for small systems)
         var A = new Matrix<double>(new double[,]
@@ -142,8 +143,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithGramSchmidtDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithGramSchmidtDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -166,8 +167,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithNormalDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithNormalDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite result after A^T*A
         var A = new Matrix<double>(new double[,]
@@ -192,8 +193,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithLqDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithLqDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -216,8 +217,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithHessenbergDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithHessenbergDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -240,8 +241,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithSchurDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithSchurDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -264,8 +265,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithEigenDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithEigenDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric matrix for reliable eigenvalue decomposition
         var A = new Matrix<double>(new double[,]
@@ -290,8 +291,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithTakagiDecomposition_ThrowsNotSupportedException()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithTakagiDecomposition_ThrowsNotSupportedException()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -306,8 +307,8 @@ public class MatrixSolutionHelperIntegrationTests
             MatrixSolutionHelper.SolveLinearSystem(A, b, MatrixDecompositionType.Takagi));
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithUnsupportedDecomposition_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithUnsupportedDecomposition_ThrowsArgumentException()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -327,8 +328,8 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region SolveLinearSystem with Pre-computed Decomposition Tests
 
-    [Fact]
-    public void SolveLinearSystem_WithPreComputedLuDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithPreComputedLuDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -349,8 +350,8 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - (-1.0)) < Tolerance, $"Expected z=-1, got {result[2]}");
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithPreComputedQrDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithPreComputedQrDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -374,8 +375,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithPreComputedSvdDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithPreComputedSvdDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<double>(new double[,]
@@ -399,8 +400,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_WithPreComputedCholeskyDecomposition_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithPreComputedCholeskyDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite matrix
         var A = new Matrix<double>(new double[,]
@@ -424,8 +425,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_PreComputedDecomposition_SolvesMultipleSystems()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_PreComputedDecomposition_SolvesMultipleSystems()
     {
         // Arrange - Test efficiency of pre-computed decomposition
         var A = new Matrix<double>(new double[,]
@@ -462,8 +463,8 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region Edge Cases and Special Matrix Tests
 
-    [Fact]
-    public void SolveLinearSystem_2x2Matrix_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_2x2Matrix_ReturnsCorrectSolution()
     {
         // Arrange - Simple 2x2 system
         var A = new Matrix<double>(new double[,]
@@ -486,8 +487,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_4x4Matrix_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_4x4Matrix_ReturnsCorrectSolution()
     {
         // Arrange - 4x4 system
         var A = new Matrix<double>(new double[,]
@@ -511,8 +512,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_DiagonalMatrix_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_DiagonalMatrix_ReturnsCorrectSolution()
     {
         // Arrange - Diagonal matrix (simplest case)
         var A = new Matrix<double>(new double[,]
@@ -533,8 +534,8 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - 4.0) < Tolerance);
     }
 
-    [Fact]
-    public void SolveLinearSystem_IdentityMatrix_ReturnsSameVector()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_IdentityMatrix_ReturnsSameVector()
     {
         // Arrange - Identity matrix: Ix = b => x = b
         var A = Matrix<double>.CreateIdentity(3);
@@ -551,8 +552,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_TridiagonalMatrix_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_TridiagonalMatrix_ReturnsCorrectSolution()
     {
         // Arrange - Tridiagonal matrix (common in numerical methods)
         var A = new Matrix<double>(new double[,]
@@ -576,8 +577,8 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void SolveLinearSystem_AllDecompositions_ProduceSimilarResults()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_AllDecompositions_ProduceSimilarResults()
     {
         // Arrange - Test that all decompositions give the same solution for a well-conditioned matrix
         var A = new Matrix<double>(new double[,]
@@ -607,8 +608,8 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void SolveLinearSystem_WithFloatType_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task SolveLinearSystem_WithFloatType_ReturnsCorrectSolution()
     {
         // Arrange
         var A = new Matrix<float>(new float[,]

@@ -3,6 +3,7 @@ using AiDotNet.GaussianProcesses;
 using AiDotNet.Kernels;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.GaussianProcesses;
 
@@ -16,8 +17,8 @@ public class GPInferenceCorrectnessTests
 
     #region GPWithMCMC Tests
 
-    [Fact]
-    public void GPWithMCMC_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new GPWithMCMC<double>(kernel, numSamples: 10, burnIn: 5);
@@ -26,8 +27,8 @@ public class GPInferenceCorrectnessTests
         Assert.False(gp.IsTrained);
     }
 
-    [Fact]
-    public void GPWithMCMC_Fit_SetsIsTrained()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_Fit_SetsIsTrained()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new GPWithMCMC<double>(kernel, numSamples: 10, burnIn: 5, seed: 42);
@@ -47,8 +48,8 @@ public class GPInferenceCorrectnessTests
         Assert.True(gp.NumStoredSamples > 0);
     }
 
-    [Fact]
-    public void GPWithMCMC_Predict_ReturnsReasonableValues()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_Predict_ReturnsReasonableValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new GPWithMCMC<double>(kernel, numSamples: 50, burnIn: 20, seed: 42);
@@ -75,8 +76,8 @@ public class GPInferenceCorrectnessTests
             $"Variance should be positive, got {variance}");
     }
 
-    [Fact]
-    public void GPWithMCMC_Predict_UncertaintyIncreasesAwayFromData()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_Predict_UncertaintyIncreasesAwayFromData()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new GPWithMCMC<double>(kernel, numSamples: 50, burnIn: 20, seed: 42);
@@ -103,8 +104,8 @@ public class GPInferenceCorrectnessTests
             $"Variance should be higher far from data: var(near)={varNear}, var(far)={varFar}");
     }
 
-    [Fact]
-    public void GPWithMCMC_GetPosteriorStatistics_ReturnsValidStats()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_GetPosteriorStatistics_ReturnsValidStats()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new GPWithMCMC<double>(kernel, numSamples: 50, burnIn: 20, seed: 42);
@@ -130,8 +131,8 @@ public class GPInferenceCorrectnessTests
         Assert.True(lsStd >= 0, "Lengthscale std should be non-negative");
     }
 
-    [Fact]
-    public void GPWithMCMC_GetSamples_ReturnsCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task GPWithMCMC_GetSamples_ReturnsCorrectCount()
     {
         var kernel = new GaussianKernel<double>(1.0);
         int numSamples = 30;
@@ -157,8 +158,8 @@ public class GPInferenceCorrectnessTests
 
     #region BetaLikelihood Tests
 
-    [Fact]
-    public void BetaLikelihood_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_Construction_Succeeds()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -166,8 +167,8 @@ public class GPInferenceCorrectnessTests
         Assert.Equal(10.0, likelihood.Precision);
     }
 
-    [Fact]
-    public void BetaLikelihood_GetMeans_ReturnsBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_GetMeans_ReturnsBetweenZeroAndOne()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -181,8 +182,8 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
-    public void BetaLikelihood_GetMeans_SigmoidCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_GetMeans_SigmoidCorrect()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -194,8 +195,8 @@ public class GPInferenceCorrectnessTests
             $"sigmoid(0) should be 0.5, got {mu[0]}");
     }
 
-    [Fact]
-    public void BetaLikelihood_GetBetaParameters_ArePositive()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_GetBetaParameters_ArePositive()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -215,8 +216,8 @@ public class GPInferenceCorrectnessTests
         }
     }
 
-    [Fact]
-    public void BetaLikelihood_LogLikelihood_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_LogLikelihood_IsNegative()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -230,8 +231,8 @@ public class GPInferenceCorrectnessTests
             $"Log-likelihood should be negative and finite, got {logLik}");
     }
 
-    [Fact]
-    public void BetaLikelihood_LogLikelihood_HigherForGoodFit()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_LogLikelihood_HigherForGoodFit()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -250,8 +251,8 @@ public class GPInferenceCorrectnessTests
             $"Good fit should have higher log-likelihood: good={logLikGood}, bad={logLikBad}");
     }
 
-    [Fact]
-    public void BetaLikelihood_Gradient_IsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_Gradient_IsFinite()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -267,8 +268,8 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
-    public void BetaLikelihood_Hessian_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_Hessian_IsNegative()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -285,8 +286,8 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
-    public void BetaLikelihood_PredictiveMoments_AreReasonable()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_PredictiveMoments_AreReasonable()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
 
@@ -305,8 +306,8 @@ public class GPInferenceCorrectnessTests
             $"Predictive variance should increase: var(low)={varLowVar}, var(high)={varHighVar}");
     }
 
-    [Fact]
-    public void BetaLikelihood_Sample_IsInUnitInterval()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_Sample_IsInUnitInterval()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
         var random = new Random(42);
@@ -325,8 +326,8 @@ public class GPInferenceCorrectnessTests
         }
     }
 
-    [Fact]
-    public void BetaLikelihood_Sample_HasCorrectMean()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_Sample_HasCorrectMean()
     {
         var likelihood = new BetaLikelihood<double>(precision: 20.0);
         var random = new Random(42);
@@ -348,8 +349,8 @@ public class GPInferenceCorrectnessTests
             $"Sample mean {sampleMean} should be close to {mu} (stdErr={stdErr})");
     }
 
-    [Fact]
-    public void BetaLikelihood_FromData_EstimatesPrecision()
+    [Fact(Timeout = 120000)]
+    public async Task BetaLikelihood_FromData_EstimatesPrecision()
     {
         // Generate data from Beta(3, 7) which has mean 0.3 and variance 0.3*0.7/11 ≈ 0.019
         var random = new Random(42);
@@ -377,8 +378,8 @@ public class GPInferenceCorrectnessTests
 
     #region Heteroscedastic GP Tests
 
-    [Fact]
-    public void HeteroscedasticGP_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task HeteroscedasticGP_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new HeteroscedasticGaussianProcess<double>(kernel);
@@ -386,8 +387,8 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
-    public void HeteroscedasticGP_Fit_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task HeteroscedasticGP_Fit_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new HeteroscedasticGaussianProcess<double>(kernel);
@@ -407,8 +408,8 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(noiseVars);
     }
 
-    [Fact]
-    public void HeteroscedasticGP_GetNoiseVariances_ReturnsPositiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task HeteroscedasticGP_GetNoiseVariances_ReturnsPositiveValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new HeteroscedasticGaussianProcess<double>(kernel);
@@ -437,8 +438,8 @@ public class GPInferenceCorrectnessTests
 
     #region Student-t GP Tests
 
-    [Fact]
-    public void StudentTGP_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new StudentTGaussianProcess<double>(kernel);
@@ -446,8 +447,8 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
-    public void StudentTGP_Fit_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_Fit_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new StudentTGaussianProcess<double>(kernel);
@@ -467,8 +468,8 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(weights);
     }
 
-    [Fact]
-    public void StudentTGP_Predict_ReturnsReasonableValues()
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_Predict_ReturnsReasonableValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new StudentTGaussianProcess<double>(kernel);
@@ -490,8 +491,8 @@ public class GPInferenceCorrectnessTests
         Assert.True(variance > 0, "Prediction variance should be positive");
     }
 
-    [Fact]
-    public void StudentTGP_GetOutlierWeights_ReturnsValidWeights()
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_GetOutlierWeights_ReturnsValidWeights()
     {
         var kernel = new GaussianKernel<double>(1.0);
         var gp = new StudentTGaussianProcess<double>(kernel);
@@ -518,8 +519,8 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
-    public void StudentTGP_DetectsOutliers()
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_DetectsOutliers()
     {
         var kernel = new GaussianKernel<double>(2.0);
         var gp = new StudentTGaussianProcess<double>(kernel, nu: 3.0);

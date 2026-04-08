@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -14,8 +15,8 @@ public class MatrixHelperIntegrationTests
 
     #region CalculateDeterminantRecursive Tests
 
-    [Fact]
-    public void CalculateDeterminantRecursive_1x1Matrix_ReturnsElement()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_1x1Matrix_ReturnsElement()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,] { { 5.0 } });
@@ -27,8 +28,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateDeterminantRecursive_2x2Matrix_ReturnsCorrectDeterminant()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_2x2Matrix_ReturnsCorrectDeterminant()
     {
         // Arrange - det = ad - bc = 3*4 - 2*1 = 10
         var matrix = new Matrix<double>(new double[,]
@@ -44,8 +45,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(10.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateDeterminantRecursive_3x3Matrix_ReturnsCorrectDeterminant()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_3x3Matrix_ReturnsCorrectDeterminant()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -65,8 +66,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(-3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateDeterminantRecursive_IdentityMatrix_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_IdentityMatrix_ReturnsOne()
     {
         // Arrange
         var matrix = Matrix<double>.CreateIdentity(4);
@@ -78,8 +79,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateDeterminantRecursive_SingularMatrix_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_SingularMatrix_ReturnsZero()
     {
         // Arrange - Third row is sum of first two rows, so det = 0
         var matrix = new Matrix<double>(new double[,]
@@ -96,8 +97,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
-    public void CalculateDeterminantRecursive_NonSquareMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -115,8 +116,8 @@ public class MatrixHelperIntegrationTests
 
     #region ExtractDiagonal Tests
 
-    [Fact]
-    public void ExtractDiagonal_3x3Matrix_ReturnsCorrectDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task ExtractDiagonal_3x3Matrix_ReturnsCorrectDiagonal()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -136,8 +137,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(9.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void ExtractDiagonal_IdentityMatrix_ReturnsOnes()
+    [Fact(Timeout = 120000)]
+    public async Task ExtractDiagonal_IdentityMatrix_ReturnsOnes()
     {
         // Arrange
         var matrix = Matrix<double>.CreateIdentity(4);
@@ -153,8 +154,8 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExtractDiagonal_DiagonalMatrix_ReturnsAllDiagonalValues()
+    [Fact(Timeout = 120000)]
+    public async Task ExtractDiagonal_DiagonalMatrix_ReturnsAllDiagonalValues()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -177,8 +178,8 @@ public class MatrixHelperIntegrationTests
 
     #region OuterProduct Tests
 
-    [Fact]
-    public void OuterProduct_TwoVectors_ReturnsCorrectMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task OuterProduct_TwoVectors_ReturnsCorrectMatrix()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -201,8 +202,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(18.0, result[2, 2], Tolerance); // 3*6
     }
 
-    [Fact]
-    public void OuterProduct_UnitVectors_ReturnsCorrectMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task OuterProduct_UnitVectors_ReturnsCorrectMatrix()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 0 });
@@ -222,8 +223,8 @@ public class MatrixHelperIntegrationTests
 
     #region Hypotenuse Tests
 
-    [Fact]
-    public void Hypotenuse_TwoValues_ReturnsCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_TwoValues_ReturnsCorrectResult()
     {
         // Arrange - Classic 3-4-5 triangle
         double x = 3.0;
@@ -236,8 +237,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Hypotenuse_ZeroValue_ReturnsOtherValue()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_ZeroValue_ReturnsOtherValue()
     {
         // Arrange
         double x = 0.0;
@@ -250,8 +251,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Hypotenuse_NegativeValues_ReturnsPositiveResult()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_NegativeValues_ReturnsPositiveResult()
     {
         // Arrange
         double x = -3.0;
@@ -264,8 +265,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Hypotenuse_ArrayOfValues_ReturnsEuclideanNorm()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_ArrayOfValues_ReturnsEuclideanNorm()
     {
         // Arrange - sqrt(1^2 + 2^2 + 2^2) = sqrt(9) = 3
         var values = new double[] { 1.0, 2.0, 2.0 };
@@ -277,8 +278,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Hypotenuse_SingleValue_ReturnsAbsoluteValue()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_SingleValue_ReturnsAbsoluteValue()
     {
         // Arrange
         var values = new double[] { -5.0 };
@@ -294,8 +295,8 @@ public class MatrixHelperIntegrationTests
 
     #region IsUpperHessenberg Tests
 
-    [Fact]
-    public void IsUpperHessenberg_UpperTriangularMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsUpperHessenberg_UpperTriangularMatrix_ReturnsTrue()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -312,8 +313,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsUpperHessenberg_HessenbergMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsUpperHessenberg_HessenbergMatrix_ReturnsTrue()
     {
         // Arrange - Hessenberg has zeros below first subdiagonal
         var matrix = new Matrix<double>(new double[,]
@@ -331,8 +332,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsUpperHessenberg_FullMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsUpperHessenberg_FullMatrix_ReturnsFalse()
     {
         // Arrange - Has non-zero below first subdiagonal
         var matrix = new Matrix<double>(new double[,]
@@ -353,8 +354,8 @@ public class MatrixHelperIntegrationTests
 
     #region OrthogonalizeColumns Tests
 
-    [Fact]
-    public void OrthogonalizeColumns_NonOrthogonalMatrix_ReturnsOrthonormalColumns()
+    [Fact(Timeout = 120000)]
+    public async Task OrthogonalizeColumns_NonOrthogonalMatrix_ReturnsOrthonormalColumns()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -378,8 +379,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(col1.Norm() - 1.0) < Tolerance, $"Column 1 not normalized: norm = {col1.Norm()}");
     }
 
-    [Fact]
-    public void OrthogonalizeColumns_IdentityMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task OrthogonalizeColumns_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange - Identity columns are already orthonormal
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -402,8 +403,8 @@ public class MatrixHelperIntegrationTests
 
     #region ComputeGivensRotation Tests
 
-    [Fact]
-    public void ComputeGivensRotation_ZeroB_ReturnsCosOne()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeGivensRotation_ZeroB_ReturnsCosOne()
     {
         // Arrange
         double a = 5.0;
@@ -417,8 +418,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(0.0, s, Tolerance);
     }
 
-    [Fact]
-    public void ComputeGivensRotation_NonZeroValues_ReturnsValidRotation()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeGivensRotation_NonZeroValues_ReturnsValidRotation()
     {
         // Arrange
         double a = 3.0;
@@ -436,8 +437,8 @@ public class MatrixHelperIntegrationTests
 
     #region ApplyGivensRotation Tests
 
-    [Fact]
-    public void ApplyGivensRotation_ToMatrix_ModifiesCorrectElements()
+    [Fact(Timeout = 120000)]
+    public async Task ApplyGivensRotation_ToMatrix_ModifiesCorrectElements()
     {
         // Arrange
         var H = new Matrix<double>(new double[,]
@@ -463,8 +464,8 @@ public class MatrixHelperIntegrationTests
 
     #region CreateHouseholderVector Tests
 
-    [Fact]
-    public void CreateHouseholderVector_ValidVector_ReturnsNormalizedVector()
+    [Fact(Timeout = 120000)]
+    public async Task CreateHouseholderVector_ValidVector_ReturnsNormalizedVector()
     {
         // Arrange
         var xVector = new Vector<double>(new double[] { 1, 2, 3 });
@@ -486,8 +487,8 @@ public class MatrixHelperIntegrationTests
 
     #region PowerIteration Tests
 
-    [Fact]
-    public void PowerIteration_SymmetricMatrix_FindsDominantEigenvalue()
+    [Fact(Timeout = 120000)]
+    public async Task PowerIteration_SymmetricMatrix_FindsDominantEigenvalue()
     {
         // Arrange - Symmetric matrix with known eigenvalues
         var matrix = new Matrix<double>(new double[,]
@@ -505,8 +506,8 @@ public class MatrixHelperIntegrationTests
         Assert.Equal(2, eigenvector.Length);
     }
 
-    [Fact]
-    public void PowerIteration_DiagonalMatrix_FindsLargestDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task PowerIteration_DiagonalMatrix_FindsLargestDiagonal()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -528,8 +529,8 @@ public class MatrixHelperIntegrationTests
 
     #region SpectralNorm Tests
 
-    [Fact]
-    public void SpectralNorm_IdentityMatrix_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNorm_IdentityMatrix_ReturnsOne()
     {
         // Arrange
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -541,8 +542,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result - 1.0) < 0.1, $"Expected ~1.0, got {result}");
     }
 
-    [Fact]
-    public void SpectralNorm_ScaledIdentity_ReturnsScaleFactor()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNorm_ScaledIdentity_ReturnsScaleFactor()
     {
         // Arrange - 2*I has spectral norm = 2
         var matrix = new Matrix<double>(new double[,]
@@ -562,8 +563,8 @@ public class MatrixHelperIntegrationTests
 
     #region IsInvertible Tests
 
-    [Fact]
-    public void IsInvertible_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_IdentityMatrix_ReturnsTrue()
     {
         // Arrange
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -575,8 +576,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsInvertible_SingularMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_SingularMatrix_ReturnsFalse()
     {
         // Arrange - Third row is sum of first two
         var matrix = new Matrix<double>(new double[,]
@@ -593,8 +594,8 @@ public class MatrixHelperIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void IsInvertible_NonSquareMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_NonSquareMatrix_ReturnsFalse()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -610,8 +611,8 @@ public class MatrixHelperIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void IsInvertible_InvertibleMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_InvertibleMatrix_ReturnsTrue()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -632,8 +633,8 @@ public class MatrixHelperIntegrationTests
 
     #region InvertUsingDecomposition Tests
 
-    [Fact]
-    public void InvertUsingDecomposition_WithLuDecomposition_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InvertUsingDecomposition_WithLuDecomposition_ReturnsCorrectInverse()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -665,8 +666,8 @@ public class MatrixHelperIntegrationTests
 
     #region TridiagonalSolve Tests
 
-    [Fact]
-    public void TridiagonalSolve_SimpleSystem_ReturnsCorrectSolution()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalSolve_SimpleSystem_ReturnsCorrectSolution()
     {
         // Arrange - Tridiagonal system
         // [ 2 -1  0  0] [x1]   [1]
@@ -699,8 +700,8 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void TridiagonalSolve_ZeroDiagonal_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalSolve_ZeroDiagonal_ThrowsInvalidOperationException()
     {
         // Arrange - Zero on main diagonal
         var lower = new Vector<double>(new double[] { 0, 1 });
@@ -718,8 +719,8 @@ public class MatrixHelperIntegrationTests
 
     #region CalculateHatMatrix Tests
 
-    [Fact]
-    public void CalculateHatMatrix_SimpleFeatureMatrix_ReturnsSymmetricMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateHatMatrix_SimpleFeatureMatrix_ReturnsSymmetricMatrix()
     {
         // Arrange - Simple feature matrix
         var features = new Matrix<double>(new double[,]
@@ -745,8 +746,8 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void CalculateHatMatrix_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateHatMatrix_IsIdempotent()
     {
         // Arrange
         var features = new Matrix<double>(new double[,]
@@ -772,8 +773,8 @@ public class MatrixHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void CalculateHatMatrix_DiagonalSumEqualsRank()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateHatMatrix_DiagonalSumEqualsRank()
     {
         // Arrange
         var features = new Matrix<double>(new double[,]
@@ -800,8 +801,8 @@ public class MatrixHelperIntegrationTests
 
     #region ReduceToHessenbergFormat Tests
 
-    [Fact]
-    public void ReduceToHessenbergFormat_GeneralMatrix_ProducesHessenbergForm()
+    [Fact(Timeout = 120000)]
+    public async Task ReduceToHessenbergFormat_GeneralMatrix_ProducesHessenbergForm()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -823,8 +824,8 @@ public class MatrixHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void CalculateDeterminantRecursive_FloatType_ReturnsCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDeterminantRecursive_FloatType_ReturnsCorrectResult()
     {
         // Arrange
         var matrix = new Matrix<float>(new float[,]
@@ -840,8 +841,8 @@ public class MatrixHelperIntegrationTests
         Assert.True(Math.Abs(result - 10f) < 1e-4f);
     }
 
-    [Fact]
-    public void Hypotenuse_FloatType_ReturnsCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task Hypotenuse_FloatType_ReturnsCorrectResult()
     {
         // Arrange
         float x = 3f;

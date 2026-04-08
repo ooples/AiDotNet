@@ -4,6 +4,7 @@ using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class AttentiveNASTests
     {
-        [Fact]
-        public void AttentiveNAS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -23,8 +24,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(attentive);
         }
 
-        [Fact]
-        public void AttentiveNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -39,8 +40,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(attentive);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveSample_ReturnsValidConfig()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveSample_ReturnsValidConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -59,8 +60,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveSample_ReturnsConfigWithEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveSample_ReturnsConfigWithEmbedding()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -77,8 +78,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(64, config.Embedding.Length);
         }
 
-        [Fact]
-        public void AttentiveNAS_CreateContextVector_ReturnsCorrectSize()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_CreateContextVector_ReturnsCorrectSize()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -93,8 +94,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(hiddenSize, context.Length);
         }
 
-        [Fact]
-        public void AttentiveNAS_CreateContextVector_WithoutPerformanceMemory_ReturnsExplorationContext()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_CreateContextVector_WithoutPerformanceMemory_ReturnsExplorationContext()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -112,8 +113,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_UpdatesPerformanceMemory()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_UpdatesPerformanceMemory()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -131,8 +132,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_GetAttentionWeights_ReturnsValidMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_GetAttentionWeights_ReturnsValidMatrix()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -154,8 +155,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(7, weights.Columns);
         }
 
-        [Fact]
-        public void AttentiveNAS_GetPerformanceMemory_InitiallyEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_GetPerformanceMemory_InitiallyEmpty()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -169,8 +170,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(memory);
         }
 
-        [Fact]
-        public void AttentiveNAS_Search_ReturnsValidConfig()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Search_ReturnsValidConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -195,8 +196,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_Search_PopulatesPerformanceMemory()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Search_PopulatesPerformanceMemory()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -219,8 +220,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveSample_ConfigWithinElasticRange()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveSample_ConfigWithinElasticRange()
         {
             // Arrange
             var elasticDepths = new List<int> { 2, 4, 6 };
@@ -245,8 +246,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains(config.KernelSize, elasticKernels);
         }
 
-        [Fact]
-        public void AttentiveNAS_MultipleSamples_ProducesVariedConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_MultipleSamples_ProducesVariedConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -268,8 +269,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(allKernels.Count >= 2);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveNASConfig_HasCorrectDefaults()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveNASConfig_HasCorrectDefaults()
         {
             // Arrange & Act
             var config = new AttentiveNASConfig<double>();
@@ -280,8 +281,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0, config.KernelSize);
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_WithMultipleConfigs_AccumulatesMemory()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_WithMultipleConfigs_AccumulatesMemory()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -305,8 +306,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(memory.Count >= 1); // At least one entry (could be same config)
         }
 
-        [Fact]
-        public void AttentiveNAS_Search_WithTightConstraints_ReturnsValidConfig()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Search_WithTightConstraints_ReturnsValidConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -329,8 +330,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_CreateContextVector_AfterUpdates_IncludesPerformanceInfo()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_CreateContextVector_AfterUpdates_IncludesPerformanceInfo()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -350,8 +351,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
-        public void AttentiveNAS_SingleElementElasticLists_SamplesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_SingleElementElasticLists_SamplesCorrectly()
         {
             // Arrange - boundary condition with single choices
             var searchSpace = new SearchSpaceBase<double>();
@@ -373,8 +374,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, config.KernelSize);
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_WithNegativePerformance_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_WithNegativePerformance_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -392,8 +393,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains(memory.Values, v => v < 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_WithConfigNotInElasticLists_ReturnsEarly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_WithConfigNotInElasticLists_ReturnsEarly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -423,8 +424,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(weightsBefore, weightsAfter);
         }
 
-        [Fact]
-        public void AttentiveNAS_Search_ZeroIterations_ReturnsDefaultConfig()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_Search_ZeroIterations_ReturnsDefaultConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -442,8 +443,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(config);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveSample_WithShortContextVector_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveSample_WithShortContextVector_HandlesGracefully()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -460,8 +461,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_WithZeroLearningRate_NoWeightChange()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_WithZeroLearningRate_NoWeightChange()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -484,8 +485,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(weightsBefore, weightsAfter);
         }
 
-        [Fact]
-        public void AttentiveNAS_AttentiveSample_WithVeryLargeContext_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_AttentiveSample_WithVeryLargeContext_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -502,8 +503,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
-        public void AttentiveNAS_UpdateAttention_WithZeroPerformance_RecordsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AttentiveNAS_UpdateAttention_WithZeroPerformance_RecordsCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

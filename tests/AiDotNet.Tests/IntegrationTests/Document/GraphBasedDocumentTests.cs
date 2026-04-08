@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class GraphBasedDocumentTests
 
     #region DocGCN Tests
 
-    [Fact]
-    public void DocGCN_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DocGCN<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DocGCN_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new DocGCN<double>(arch);
@@ -55,8 +56,8 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DocGCN_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DocGCN<double>(arch);
@@ -68,16 +69,16 @@ public class GraphBasedDocumentTests
 
     #region PICK Tests
 
-    [Fact]
-    public void PICK_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PICK_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void PICK_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PICK_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
@@ -88,8 +89,8 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void PICK_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task PICK_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
@@ -101,16 +102,16 @@ public class GraphBasedDocumentTests
 
     #region TRIE Tests
 
-    [Fact]
-    public void TRIE_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new TRIE<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void TRIE_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new TRIE<double>(arch);
@@ -121,8 +122,8 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void TRIE_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new TRIE<double>(arch);
@@ -134,16 +135,16 @@ public class GraphBasedDocumentTests
 
     #region LayoutGraph Tests
 
-    [Fact]
-    public void LayoutGraph_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LayoutGraph<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LayoutGraph_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LayoutGraph<double>(arch);
@@ -154,8 +155,8 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LayoutGraph_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LayoutGraph<double>(arch);
@@ -167,8 +168,8 @@ public class GraphBasedDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllGraphBasedModels_SupportsTraining_InNativeMode()
+    [Fact(Timeout = 120000)]
+    public async Task AllGraphBasedModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]

@@ -2,13 +2,14 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class HuffmanEncodingCompressionTests
     {
-        [Fact]
-        public void Constructor_WithValidPrecision_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidPrecision_CreatesInstance()
         {
             // Arrange & Act
             var compression = new HuffmanEncodingCompression<double>(precision: 6);
@@ -17,16 +18,16 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithNegativePrecision_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativePrecision_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new HuffmanEncodingCompression<double>(precision: -1));
         }
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
@@ -41,8 +42,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<HuffmanEncodingMetadata<double>>(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
@@ -51,8 +52,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
@@ -61,8 +62,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
-        public void Decompress_ReconstructsExactWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsExactWeights()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
@@ -82,8 +83,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
@@ -105,8 +106,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void Compress_WithFrequentValues_AchievesBetterCompression()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFrequentValues_AchievesBetterCompression()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 1);
@@ -127,8 +128,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize < originalSize);
         }
 
-        [Fact]
-        public void GetCompressedSize_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsPositiveValue()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
@@ -142,8 +143,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<float>(precision: 2);
@@ -161,8 +162,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Compress_WithDifferentPrecisions_ProducesDifferentResults()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithDifferentPrecisions_ProducesDifferentResults()
         {
             // Arrange
             var compression1 = new HuffmanEncodingCompression<double>(precision: 1);
@@ -180,8 +181,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(huffmanMetadata2.EncodingTable.Count >= huffmanMetadata1.EncodingTable.Count);
         }
 
-        [Fact]
-        public void Compress_IsLosslessWithinPrecision()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_IsLosslessWithinPrecision()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 3);
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void CalculateCompressionRatio_WithValidSizes_ReturnsCorrectRatio()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateCompressionRatio_WithValidSizes_ReturnsCorrectRatio()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
@@ -215,8 +216,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(5.0, ratio);
         }
 
-        [Fact]
-        public void Compress_WithSingleUniqueValue_HandlesDegenerateCase()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithSingleUniqueValue_HandlesDegenerateCase()
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 1);

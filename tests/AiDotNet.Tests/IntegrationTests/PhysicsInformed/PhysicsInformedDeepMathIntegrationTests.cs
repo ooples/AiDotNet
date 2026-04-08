@@ -1,5 +1,6 @@
 using AiDotNet.PhysicsInformed;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PhysicsInformed;
 
@@ -16,16 +17,16 @@ public class PhysicsInformedDeepMathIntegrationTests
     // TrainingHistory: Basics
     // ============================
 
-    [Fact]
-    public void TrainingHistory_Defaults_EmptyLosses()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_Defaults_EmptyLosses()
     {
         var history = new TrainingHistory<double>();
         Assert.NotNull(history.Losses);
         Assert.Empty(history.Losses);
     }
 
-    [Fact]
-    public void TrainingHistory_AddEpoch_TracksLoss()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_AddEpoch_TracksLoss()
     {
         var history = new TrainingHistory<double>();
         history.AddEpoch(1.5);
@@ -56,15 +57,15 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Empty(history.PhysicsLosses);
     }
 
-    [Fact]
-    public void DomainDecomposition_Construction_ZeroThrows()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_Construction_ZeroThrows()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DomainDecompositionTrainingHistory<double>(0));
     }
 
-    [Fact]
-    public void DomainDecomposition_Construction_NegativeThrows()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_Construction_NegativeThrows()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DomainDecompositionTrainingHistory<double>(-1));
@@ -74,8 +75,8 @@ public class PhysicsInformedDeepMathIntegrationTests
     // DomainDecompositionTrainingHistory: AddEpoch
     // ============================
 
-    [Fact]
-    public void DomainDecomposition_AddEpoch_TracksAllLosses()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_AddEpoch_TracksAllLosses()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
         history.AddEpoch(
@@ -96,24 +97,24 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Equal(1.5, history.Losses[0]);
     }
 
-    [Fact]
-    public void DomainDecomposition_AddEpoch_WrongSubdomainCountThrows()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_AddEpoch_WrongSubdomainCountThrows()
     {
         var history = new DomainDecompositionTrainingHistory<double>(3);
         Assert.Throws<ArgumentException>(() =>
             history.AddEpoch(1.0, new List<double> { 0.5, 0.5 }, 0.1, 0.2)); // Only 2 instead of 3
     }
 
-    [Fact]
-    public void DomainDecomposition_AddEpoch_NullSubdomainLossesThrows()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_AddEpoch_NullSubdomainLossesThrows()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
         Assert.Throws<ArgumentNullException>(() =>
             history.AddEpoch(1.0, null!, 0.1, 0.2));
     }
 
-    [Fact]
-    public void DomainDecomposition_AddEpoch_MultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task DomainDecomposition_AddEpoch_MultipleEpochs()
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
 
@@ -136,8 +137,8 @@ public class PhysicsInformedDeepMathIntegrationTests
     // MultiFidelityTrainingHistory: Construction
     // ============================
 
-    [Fact]
-    public void MultiFidelity_Defaults_EmptyLists()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelity_Defaults_EmptyLists()
     {
         var history = new MultiFidelityTrainingHistory<double>();
         Assert.Empty(history.LowFidelityLosses);
@@ -147,8 +148,8 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Empty(history.Losses);
     }
 
-    [Fact]
-    public void MultiFidelity_AddEpoch_TracksAllLosses()
+    [Fact(Timeout = 120000)]
+    public async Task MultiFidelity_AddEpoch_TracksAllLosses()
     {
         var history = new MultiFidelityTrainingHistory<double>();
         history.AddEpoch(
@@ -208,8 +209,8 @@ public class PhysicsInformedDeepMathIntegrationTests
     // Physics Math: Laplacian
     // ============================
 
-    [Fact]
-    public void PhysicsMath_Laplacian_1D()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsMath_Laplacian_1D()
     {
         // Laplacian of f(x) = x^2 is f''(x) = 2
         double x = 1.0;
@@ -221,8 +222,8 @@ public class PhysicsInformedDeepMathIntegrationTests
         Assert.Equal(2.0, laplacian, 1e-4);
     }
 
-    [Fact]
-    public void PhysicsMath_Laplacian_SinFunction()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsMath_Laplacian_SinFunction()
     {
         // Laplacian of f(x) = sin(x) is f''(x) = -sin(x)
         double x = Math.PI / 3;

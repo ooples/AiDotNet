@@ -5,6 +5,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -15,8 +16,8 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderErrorTests
 {
-    [Fact]
-    public void Predict_WithNoModel_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WithNoModel_ThrowsInvalidOperationException()
     {
         // Arrange: Create an AiModelResult with no model
         var result = new AiModelResult<double, Matrix<double>, Vector<double>>();
@@ -30,8 +31,8 @@ public class AiModelBuilderErrorTests
         Assert.Contains("not initialized", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Predict_WrongDimensionInput_ThrowsDimensionError()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WrongDimensionInput_ThrowsDimensionError()
     {
         // Arrange: Train on 4-feature data
         var random = new Random(42);
@@ -65,8 +66,8 @@ public class AiModelBuilderErrorTests
             $"Expected a dimension-related error, got {ex.GetType().Name}: {ex.Message}");
     }
 
-    [Fact]
-    public void BuildAsync_EmptyDataset_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task BuildAsync_EmptyDataset_ThrowsArgumentException()
     {
         // Arrange: Create an empty matrix and vector
         var x = new Matrix<double>(0, 3);
@@ -86,8 +87,8 @@ public class AiModelBuilderErrorTests
         Assert.NotEmpty(ex.Message);
     }
 
-    [Fact]
-    public void BuildAsync_SingleSampleDataset_ThrowsInsufficientDataError()
+    [Fact(Timeout = 120000)]
+    public async Task BuildAsync_SingleSampleDataset_ThrowsInsufficientDataError()
     {
         // Arrange: Only 1 sample — can't meaningfully split train/test
         var x = new Matrix<double>(1, 2);

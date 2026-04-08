@@ -1,5 +1,6 @@
 using AiDotNet.TimeSeries.AnomalyDetection;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
@@ -10,16 +11,16 @@ public class DeepANTTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new DeepANT<double>();
 
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new DeepANTOptions<double>
         {
@@ -38,8 +39,8 @@ public class DeepANTTests
 
     #region Training Tests
 
-    [Fact]
-    public void Train_WithValidData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithValidData_CompletesWithoutError()
     {
         var options = new DeepANTOptions<double>
         {
@@ -57,8 +58,8 @@ public class DeepANTTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Train_WithMinimalData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new DeepANTOptions<double>
         {
@@ -80,8 +81,8 @@ public class DeepANTTests
 
     #region Prediction Tests
 
-    [Fact]
-    public void PredictSingle_AfterTraining_ReturnsFiniteValue()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new DeepANTOptions<double>
         {
@@ -107,8 +108,8 @@ public class DeepANTTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
-    public void Predict_WithMatrix_ReturnsValidPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new DeepANTOptions<double>
         {
@@ -138,8 +139,8 @@ public class DeepANTTests
 
     #region Anomaly Detection Tests
 
-    [Fact]
-    public void DetectAnomalies_AfterTraining_ReturnsValidResults()
+    [Fact(Timeout = 60000)]
+    public async Task DetectAnomalies_AfterTraining_ReturnsValidResults()
     {
         var options = new DeepANTOptions<double>
         {
@@ -166,8 +167,8 @@ public class DeepANTTests
         Assert.Equal(testData.Length - options.WindowSize, anomalies.Length);
     }
 
-    [Fact]
-    public void DetectAnomalies_WithDataShorterThanWindowSize_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task DetectAnomalies_WithDataShorterThanWindowSize_ThrowsArgumentException()
     {
         var options = new DeepANTOptions<double>
         {
@@ -188,8 +189,8 @@ public class DeepANTTests
         Assert.Throws<ArgumentException>(() => model.DetectAnomalies(shortData));
     }
 
-    [Fact]
-    public void ComputeAnomalyScores_AfterTraining_ReturnsValidScores()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeAnomalyScores_AfterTraining_ReturnsValidScores()
     {
         var options = new DeepANTOptions<double>
         {
@@ -222,8 +223,8 @@ public class DeepANTTests
         }
     }
 
-    [Fact]
-    public void ComputeAnomalyScores_WithDataShorterThanWindowSize_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeAnomalyScores_WithDataShorterThanWindowSize_ThrowsArgumentException()
     {
         var options = new DeepANTOptions<double>
         {
@@ -243,8 +244,8 @@ public class DeepANTTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_AndDeserialize_PreservesModel()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_AndDeserialize_PreservesModel()
     {
         var options = new DeepANTOptions<double>
         {
@@ -281,8 +282,8 @@ public class DeepANTTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new DeepANTOptions<float>
         {

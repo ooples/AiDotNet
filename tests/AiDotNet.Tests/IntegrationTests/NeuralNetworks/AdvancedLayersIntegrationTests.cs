@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.RadialBasisFunctions;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -17,8 +18,8 @@ public class AdvancedLayersIntegrationTests
 {
     #region TransformerEncoderLayer Tests
 
-    [Fact]
-    public void TransformerEncoderLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int embeddingSize = 64;
@@ -39,8 +40,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void TransformerEncoderLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int embeddingSize = 64;
@@ -64,8 +65,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void TransformerEncoderLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int embeddingSize = 64;
@@ -82,8 +83,8 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<TransformerEncoderLayer<float>>(clone);
     }
 
-    [Fact]
-    public void TransformerEncoderLayer_ParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         int embeddingSize = 64;
@@ -102,8 +103,8 @@ public class AdvancedLayersIntegrationTests
 
     #region TransformerDecoderLayer Tests
 
-    [Fact]
-    public void TransformerDecoderLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int embeddingSize = 64;
@@ -124,8 +125,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void TransformerDecoderLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int embeddingSize = 64;
@@ -148,8 +149,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void TransformerDecoderLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int embeddingSize = 64;
@@ -171,8 +172,8 @@ public class AdvancedLayersIntegrationTests
 
     #region FeedForwardLayer Tests
 
-    [Fact]
-    public void FeedForwardLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 64;
@@ -193,8 +194,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void FeedForwardLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 32;
@@ -210,8 +211,8 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<FeedForwardLayer<float>>(clone);
     }
 
-    [Fact]
-    public void FeedForwardLayer_ParameterCount_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_ParameterCount_ReturnsCorrectValue()
     {
         // Arrange
         int inputSize = 64;
@@ -227,8 +228,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(expectedParams, paramCount);
     }
 
-    [Fact]
-    public void FeedForwardLayer_WithReLU_ProducesNonNegativeOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -253,8 +254,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ResidualLayer Tests
 
-    [Fact]
-    public void ResidualLayer_ForwardPass_WithoutInnerLayer_PreservesInput()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_ForwardPass_WithoutInnerLayer_PreservesInput()
     {
         // Arrange
         int[] inputShape = [32];
@@ -270,8 +271,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ResidualLayer_ForwardPass_WithInnerLayer_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_ForwardPass_WithInnerLayer_ProducesValidOutput()
     {
         // Arrange
         int size = 32;
@@ -290,8 +291,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ResidualLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int size = 32;
@@ -312,8 +313,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DeconvolutionalLayer Tests
 
-    [Fact]
-    public void DeconvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DeconvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int[] inputShape = [1, 4, 8, 8]; // batch, channels, height, width
@@ -338,8 +339,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void DeconvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DeconvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [1, 4, 8, 8];
@@ -358,8 +359,8 @@ public class AdvancedLayersIntegrationTests
 
     #region UpsamplingLayer Tests
 
-    [Fact]
-    public void UpsamplingLayer_ForwardPass_IncreasesSize()
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_ForwardPass_IncreasesSize()
     {
         // Arrange
         int[] inputShape = [4, 8, 8]; // channels, height, width
@@ -381,8 +382,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void UpsamplingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
@@ -397,8 +398,8 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<UpsamplingLayer<float>>(clone);
     }
 
-    [Fact]
-    public void UpsamplingLayer_ScaleFactor4_ProducesCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_ScaleFactor4_ProducesCorrectSize()
     {
         // Arrange
         int[] inputShape = [2, 4, 4];
@@ -419,8 +420,8 @@ public class AdvancedLayersIntegrationTests
 
     #region AddLayer Tests
 
-    [Fact]
-    public void AddLayer_ForwardPass_AddsTwoInputs()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_ForwardPass_AddsTwoInputs()
     {
         // Arrange
         int[] shape = [4, 8];
@@ -441,8 +442,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(3.0f, output[0, 0, 0], 1e-5f);
     }
 
-    [Fact]
-    public void AddLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] shape = [4, 8];
@@ -462,8 +463,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ConcatenateLayer Tests
 
-    [Fact]
-    public void ConcatenateLayer_ForwardPass_ConcatenatesAlongAxis()
+    [Fact(Timeout = 120000)]
+    public async Task ConcatenateLayer_ForwardPass_ConcatenatesAlongAxis()
     {
         // Arrange
         int[] shape1 = [4, 8];
@@ -486,8 +487,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8, output.Shape[2]); // features preserved
     }
 
-    [Fact]
-    public void ConcatenateLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ConcatenateLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] shape = [4, 8];
@@ -507,8 +508,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SqueezeAndExcitationLayer Tests
 
-    [Fact]
-    public void SqueezeAndExcitationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int channels = 64;
@@ -530,8 +531,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(channels, output.Shape[3]); // channels preserved
     }
 
-    [Fact]
-    public void SqueezeAndExcitationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int channels = 64;
@@ -547,8 +548,8 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<SqueezeAndExcitationLayer<float>>(clone);
     }
 
-    [Fact]
-    public void SqueezeAndExcitationLayer_ParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_ParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         int channels = 64;
@@ -566,8 +567,8 @@ public class AdvancedLayersIntegrationTests
 
     #region Cross-Layer Integration Tests
 
-    [Fact]
-    public void TransformerEncoderDecoderStack_ForwardPass_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderDecoderStack_ForwardPass_Works()
     {
         // Arrange
         int embeddingSize = 64;
@@ -590,8 +591,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, decoderOutput.Shape[^1]);
     }
 
-    [Fact]
-    public void ResidualWithFeedForward_ForwardPass_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualWithFeedForward_ForwardPass_Works()
     {
         // Arrange
         int size = 64;
@@ -609,8 +610,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ConvDeconvPipeline_ForwardPass_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ConvDeconvPipeline_ForwardPass_Works()
     {
         // Arrange
         int[] convInputShape = [1, 4, 16, 16]; // batch, channels, height, width
@@ -632,8 +633,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(upsampled.Shape[2] > downsampled.Shape[2], "Deconv should increase spatial size");
     }
 
-    [Fact]
-    public void ResidualChain_MultipleBlocks_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualChain_MultipleBlocks_Works()
     {
         // Arrange
         int size = 32;
@@ -659,8 +660,8 @@ public class AdvancedLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void TransformerEncoderLayer_SmallEmbedding_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_SmallEmbedding_Works()
     {
         // Arrange - minimum valid configuration
         int embeddingSize = 8;
@@ -678,8 +679,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void FeedForwardLayer_LargeInputOutput_Works()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_LargeInputOutput_Works()
     {
         // Arrange
         int inputSize = 1024;
@@ -696,8 +697,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void UpsamplingLayer_SmallInput_Works()
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_SmallInput_Works()
     {
         // Arrange
         int[] inputShape = [2, 2, 2]; // Very small spatial dimensions
@@ -718,8 +719,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ConvLSTMLayer Tests
 
-    [Fact]
-    public void ConvLSTMLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvLSTMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - ConvLSTM for spatiotemporal data
         int[] inputShape = [4, 8, 8, 3]; // [timeSteps, height, width, channels]
@@ -738,8 +739,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void ConvLSTMLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ConvLSTMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [2, 4, 4, 1];
@@ -761,8 +762,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GatedLinearUnitLayer Tests
 
-    [Fact]
-    public void GatedLinearUnitLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputDim = 64;
@@ -781,8 +782,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputDim, output.Shape[1]);
     }
 
-    [Fact]
-    public void GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new GatedLinearUnitLayer<float>(32, 16, (IActivationFunction<float>?)null);
@@ -799,8 +800,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void GatedLinearUnitLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
         // Arrange
         var layer = new GatedLinearUnitLayer<float>(64, 32, (IActivationFunction<float>?)null);
@@ -818,8 +819,8 @@ public class AdvancedLayersIntegrationTests
 
     #region HighwayLayer Tests
 
-    [Fact]
-    public void HighwayLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Highway layers preserve dimensions
         int inputDim = 64;
@@ -835,8 +836,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void HighwayLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new HighwayLayer<float>(32, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
@@ -853,8 +854,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void HighwayLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_ParameterCount_IsPositive()
     {
         // Arrange
         var layer = new HighwayLayer<float>(64, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
@@ -872,8 +873,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MaxPool3DLayer Tests
 
-    [Fact]
-    public void MaxPool3DLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
         int[] inputShape = [3, 8, 8, 8]; // C, D, H, W
@@ -895,8 +896,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[4]); // W halved
     }
 
-    [Fact]
-    public void MaxPool3DLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange - input shape must be [channels, depth, height, width]
         int[] inputShape = [2, 4, 4, 4];
@@ -918,8 +919,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MultiplyLayer Tests
 
-    [Fact]
-    public void MultiplyLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Element-wise multiplication of multiple inputs
         int[] shape = [8, 16];
@@ -937,8 +938,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MultiplyLayer_ElementWiseMultiplication_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_ElementWiseMultiplication_IsCorrect()
     {
         // Arrange
         int[] shape = [2, 2];
@@ -960,8 +961,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(20f, output[3]); // 5 * 4
     }
 
-    [Fact]
-    public void MultiplyLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] shape = [4, 8];
@@ -985,8 +986,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MaskingLayer Tests
 
-    [Fact]
-    public void MaskingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MaskingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int[] inputShape = [10, 32]; // sequence, features
@@ -1002,8 +1003,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MaskingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MaskingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [5, 16];
@@ -1025,8 +1026,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SplitLayer Tests
 
-    [Fact]
-    public void SplitLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SplitLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Split tensor along last dimension
         int[] inputShape = [32];
@@ -1049,8 +1050,8 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void SplitLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SplitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [16];
@@ -1072,8 +1073,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ReshapeLayer Tests
 
-    [Fact]
-    public void ReshapeLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Reshape from [8, 4] to [32]
         int[] inputShape = [8, 4];
@@ -1091,8 +1092,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(32, output.Shape[1]); // reshaped
     }
 
-    [Fact]
-    public void ReshapeLayer_FlattenToExpand_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_FlattenToExpand_Works()
     {
         // Arrange - Reshape from [16] to [4, 4]
         int[] inputShape = [16];
@@ -1111,8 +1112,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[2]);
     }
 
-    [Fact]
-    public void ReshapeLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [8, 4];
@@ -1135,8 +1136,8 @@ public class AdvancedLayersIntegrationTests
 
     #region Conv3DLayer Tests
 
-    [Fact]
-    public void Conv3DLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Conv3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D convolution for volumetric data
         int inputChannels = 1;
@@ -1158,8 +1159,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // channels
     }
 
-    [Fact]
-    public void Conv3DLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Conv3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 1;
@@ -1184,8 +1185,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GRULayer Tests
 
-    [Fact]
-    public void GRULayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - GRU for sequence data
         int inputSize = 16;
@@ -1204,8 +1205,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch
     }
 
-    [Fact]
-    public void GRULayer_ReturnSequences_ProducesSequenceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ReturnSequences_ProducesSequenceOutput()
     {
         // Arrange - GRU returning full sequence
         int inputSize = 16;
@@ -1224,8 +1225,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch
     }
 
-    [Fact]
-    public void GRULayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -1248,8 +1249,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact]
-    public void SelfAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int sequenceLength = 10;
@@ -1267,8 +1268,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int sequenceLength = 4;
@@ -1287,8 +1288,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void SelfAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int sequenceLength = 4;
@@ -1308,8 +1309,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void SelfAttentionLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int sequenceLength = 10;
@@ -1328,8 +1329,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MultiHeadAttentionLayer Tests
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int sequenceLength = 10;
@@ -1347,8 +1348,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int sequenceLength = 4;
@@ -1366,8 +1367,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int sequenceLength = 4;
@@ -1387,8 +1388,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int sequenceLength = 10;
@@ -1407,8 +1408,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DenseLayer Tests
 
-    [Fact]
-    public void DenseLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 64;
@@ -1428,8 +1429,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void DenseLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -1448,8 +1449,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void DenseLayer_ParameterCount_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ParameterCount_IsCorrect()
     {
         // Arrange
         int inputSize = 64;
@@ -1464,8 +1465,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(expected, paramCount);
     }
 
-    [Fact]
-    public void DenseLayer_WithReLU_ProducesNonNegativeOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -1488,8 +1489,8 @@ public class AdvancedLayersIntegrationTests
 
     #region LSTMLayer Tests
 
-    [Fact]
-    public void LSTMLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -1508,8 +1509,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void LSTMLayer_ForwardPass_DifferentSequenceLengths_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ForwardPass_DifferentSequenceLengths_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -1529,8 +1530,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void LSTMLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -1551,8 +1552,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void LSTMLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int inputSize = 16;
@@ -1572,8 +1573,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DropoutLayer Tests
 
-    [Fact]
-    public void DropoutLayer_ForwardPass_Training_AppliesDropout()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_ForwardPass_Training_AppliesDropout()
     {
         // Arrange
         double dropoutRate = 0.5;
@@ -1595,8 +1596,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(zeroCount > 0, "Dropout should zero some values during training");
     }
 
-    [Fact]
-    public void DropoutLayer_ForwardPass_Inference_PreservesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_ForwardPass_Inference_PreservesInput()
     {
         // Arrange
         double dropoutRate = 0.5;
@@ -1619,8 +1620,8 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void DropoutLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new DropoutLayer<float>(0.3);
@@ -1642,8 +1643,8 @@ public class AdvancedLayersIntegrationTests
 
     #region FlattenLayer Tests
 
-    [Fact]
-    public void FlattenLayer_ForwardPass_3DInput_FlattensCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_ForwardPass_3DInput_FlattensCorrectly()
     {
         // Arrange
         int[] inputShape = [8, 8, 3]; // H, W, C
@@ -1661,8 +1662,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8 * 8 * 3, output.Shape[1]); // flattened
     }
 
-    [Fact]
-    public void FlattenLayer_ForwardPass_4DInput_FlattensCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_ForwardPass_4DInput_FlattensCorrectly()
     {
         // Arrange
         int[] inputShape = [4, 4, 4, 8]; // D, H, W, C
@@ -1681,8 +1682,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void FlattenLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
@@ -1704,8 +1705,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ActivationLayer Tests
 
-    [Fact]
-    public void ActivationLayer_ReLU_ProducesNonNegativeOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_ReLU_ProducesNonNegativeOutput()
     {
         // Arrange
         int[] inputShape = [64];
@@ -1728,8 +1729,8 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_Sigmoid_ProducesOutputInRange()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Sigmoid_ProducesOutputInRange()
     {
         // Arrange
         int[] inputShape = [32];
@@ -1748,8 +1749,8 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_Tanh_ProducesOutputInRange()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Tanh_ProducesOutputInRange()
     {
         // Arrange
         int[] inputShape = [32];
@@ -1769,8 +1770,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ActivationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [16];
@@ -1792,8 +1793,8 @@ public class AdvancedLayersIntegrationTests
 
     #region InputLayer Tests
 
-    [Fact]
-    public void InputLayer_ForwardPass_PreservesInput()
+    [Fact(Timeout = 120000)]
+    public async Task InputLayer_ForwardPass_PreservesInput()
     {
         // Arrange
         int inputSize = 64;
@@ -1815,8 +1816,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void InputLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InputLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 784;
@@ -1838,8 +1839,8 @@ public class AdvancedLayersIntegrationTests
 
     #region PaddingLayer Tests
 
-    [Fact]
-    public void PaddingLayer_ForwardPass_AddsPadding()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingLayer_ForwardPass_AddsPadding()
     {
         // Arrange
         // Input shape includes batch dimension; padding must match full input dimensions
@@ -1858,8 +1859,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void PaddingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [1, 4, 4, 2];
@@ -1882,8 +1883,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GaussianNoiseLayer Tests
 
-    [Fact]
-    public void GaussianNoiseLayer_ForwardPass_Training_AddsNoise()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_ForwardPass_Training_AddsNoise()
     {
         // Arrange
         int[] inputShape = [64];
@@ -1913,8 +1914,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(hasDifference, "Gaussian noise should modify values during training");
     }
 
-    [Fact]
-    public void GaussianNoiseLayer_ForwardPass_Inference_PreservesInput()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_ForwardPass_Inference_PreservesInput()
     {
         // Arrange
         int[] inputShape = [64];
@@ -1938,8 +1939,8 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void GaussianNoiseLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [32];
@@ -1962,8 +1963,8 @@ public class AdvancedLayersIntegrationTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact]
-    public void CrossAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int queryDim = 64;
@@ -1984,8 +1985,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int queryDim = 32;
@@ -2007,8 +2008,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void CrossAttentionLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int queryDim = 64;
@@ -2027,8 +2028,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact]
-    public void ConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputDepth = 3;  // e.g., RGB image
@@ -2050,8 +2051,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputDepth = 1;
@@ -2073,8 +2074,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void ConvolutionalLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int inputDepth = 3;
@@ -2095,8 +2096,8 @@ public class AdvancedLayersIntegrationTests
 
     #region BatchNormalizationLayer Tests
 
-    [Fact]
-    public void BatchNormalizationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numFeatures = 64;
@@ -2113,8 +2114,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void BatchNormalizationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numFeatures = 16;
@@ -2132,8 +2133,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void BatchNormalizationLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int numFeatures = 64;
@@ -2150,8 +2151,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MaxPoolingLayer Tests
 
-    [Fact]
-    public void MaxPoolingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         // inputShape = [C, H, W] format (channels, height, width)
@@ -2175,8 +2176,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         // inputShape = [C, H, W] format
@@ -2202,8 +2203,8 @@ public class AdvancedLayersIntegrationTests
 
     #region AveragePoolingLayer Tests
 
-    [Fact]
-    public void AveragePoolingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         // inputShape = [C, H, W] format
@@ -2227,8 +2228,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void AveragePoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         // inputShape = [C, H, W] format
@@ -2254,8 +2255,8 @@ public class AdvancedLayersIntegrationTests
 
     #region EmbeddingLayer Tests
 
-    [Fact]
-    public void EmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int vocabSize = 1000;
@@ -2280,8 +2281,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingDim, output.Shape[2]); // embedding dimension
     }
 
-    [Fact]
-    public void EmbeddingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int vocabSize = 500;
@@ -2305,8 +2306,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void EmbeddingLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int vocabSize = 1000;
@@ -2325,8 +2326,8 @@ public class AdvancedLayersIntegrationTests
 
     #region LayerNormalizationLayer Tests
 
-    [Fact]
-    public void LayerNormalizationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int featureSize = 64;
@@ -2343,8 +2344,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void LayerNormalizationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int featureSize = 16;
@@ -2362,8 +2363,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
-    public void LayerNormalizationLayer_ParameterCount_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_ParameterCount_IsPositive()
     {
         // Arrange
         int featureSize = 64;
@@ -2380,8 +2381,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GlobalPoolingLayer Tests
 
-    [Fact]
-    public void GlobalPoolingLayer_MaxPooling_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_MaxPooling_ProducesValidOutput()
     {
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
@@ -2400,8 +2401,8 @@ public class AdvancedLayersIntegrationTests
         // Output is [batch, 1, 1, channels] -> spatial dimensions are pooled
     }
 
-    [Fact]
-    public void GlobalPoolingLayer_AveragePooling_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_AveragePooling_ProducesValidOutput()
     {
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
@@ -2417,8 +2418,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void GlobalPoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
@@ -2441,8 +2442,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GroupNormalizationLayer Tests
 
-    [Fact]
-    public void GroupNormalizationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GroupNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numGroups = 4;
@@ -2461,8 +2462,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void GroupNormalizationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GroupNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numGroups = 2;
@@ -2485,8 +2486,8 @@ public class AdvancedLayersIntegrationTests
 
     #region InstanceNormalizationLayer Tests
 
-    [Fact]
-    public void InstanceNormalizationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InstanceNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numChannels = 16;
@@ -2504,8 +2505,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void InstanceNormalizationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InstanceNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numChannels = 8;
@@ -2527,8 +2528,8 @@ public class AdvancedLayersIntegrationTests
 
     #region PositionalEncodingLayer Tests
 
-    [Fact]
-    public void PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int maxSequenceLength = 32;
@@ -2547,8 +2548,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void PositionalEncodingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int maxSequenceLength = 16;
@@ -2571,8 +2572,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DepthwiseSeparableConvolutionalLayer Tests
 
-    [Fact]
-    public void DepthwiseSeparableConvLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputChannels = 3;
@@ -2596,8 +2597,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // output channels
     }
 
-    [Fact]
-    public void DepthwiseSeparableConvLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 3;
@@ -2625,8 +2626,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DilatedConvolutionalLayer Tests
 
-    [Fact]
-    public void DilatedConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputChannels = 3;
@@ -2651,8 +2652,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // output channels
     }
 
-    [Fact]
-    public void DilatedConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 3;
@@ -2681,8 +2682,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SeparableConvolutionalLayer Tests
 
-    [Fact]
-    public void SeparableConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int batchSize = 2;
@@ -2707,8 +2708,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(batchSize, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void SeparableConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int batchSize = 1;
@@ -2738,8 +2739,8 @@ public class AdvancedLayersIntegrationTests
 
     #region AdaptiveAveragePoolingLayer Tests
 
-    [Fact]
-    public void AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputChannels = 3;
@@ -2762,8 +2763,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(inputChannels, output.Shape[1]); // channels preserved
     }
 
-    [Fact]
-    public void AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 3;
@@ -2788,8 +2789,8 @@ public class AdvancedLayersIntegrationTests
 
     #region TimeEmbeddingLayer Tests
 
-    [Fact]
-    public void TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int embeddingDim = 64;
@@ -2807,8 +2808,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void TimeEmbeddingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int embeddingDim = 32;
@@ -2831,8 +2832,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MeanLayer Tests
 
-    [Fact]
-    public void MeanLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MeanLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int[] inputShape = [4, 8, 16];
@@ -2848,8 +2849,8 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void MeanLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MeanLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [4, 8];
@@ -2872,8 +2873,8 @@ public class AdvancedLayersIntegrationTests
 
     #region LambdaLayer Tests
 
-    [Fact]
-    public void LambdaLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int[] inputShape = [10];
@@ -2893,8 +2894,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void LambdaLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [8];
@@ -2919,8 +2920,8 @@ public class AdvancedLayersIntegrationTests
 
     #region LocallyConnectedLayer Tests
 
-    [Fact]
-    public void LocallyConnectedLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyConnectedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputHeight = 16;
@@ -2944,8 +2945,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void LocallyConnectedLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyConnectedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputHeight = 8;
@@ -2975,8 +2976,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SpectralNormalizationLayer Tests
 
-    [Fact]
-    public void SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         var innerLayer = new DenseLayer<float>(64, 32);
@@ -2993,8 +2994,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(32, output.Shape[1]); // output features
     }
 
-    [Fact]
-    public void SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var innerLayer = new DenseLayer<float>(32, 16);
@@ -3016,8 +3017,8 @@ public class AdvancedLayersIntegrationTests
 
     #region CroppingLayer Tests
 
-    [Fact]
-    public void CroppingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CroppingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         // CroppingLayer constructor: (inputShape, cropTop[], cropBottom[], cropLeft[], cropRight[], activation)
@@ -3041,8 +3042,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void CroppingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CroppingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         // Each crop array must have the same length as inputShape
@@ -3070,8 +3071,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SubpixelConvolutionalLayer Tests
 
-    [Fact]
-    public void SubpixelConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SubpixelConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         // Constructor: (inputDepth, outputDepth, upscaleFactor, kernelSize, inputHeight, inputWidth, activation)
@@ -3096,8 +3097,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void SubpixelConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SubpixelConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputDepth = 4;
@@ -3124,8 +3125,8 @@ public class AdvancedLayersIntegrationTests
 
     #region PoolingLayer Tests
 
-    [Fact]
-    public void PoolingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputDepth = 3;
@@ -3149,8 +3150,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8, output.Shape[3]); // width halved
     }
 
-    [Fact]
-    public void PoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputDepth = 3;
@@ -3176,8 +3177,8 @@ public class AdvancedLayersIntegrationTests
 
     #region RecurrentLayer Tests
 
-    [Fact]
-    public void RecurrentLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 10;
@@ -3196,8 +3197,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void RecurrentLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -3221,8 +3222,8 @@ public class AdvancedLayersIntegrationTests
 
     #region FullyConnectedLayer Tests
 
-    [Fact]
-    public void FullyConnectedLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FullyConnectedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 64;
@@ -3241,8 +3242,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void FullyConnectedLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task FullyConnectedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 32;
@@ -3266,8 +3267,8 @@ public class AdvancedLayersIntegrationTests
 
     #region BidirectionalLayer Tests
 
-    [Fact]
-    public void BidirectionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 10;
@@ -3290,8 +3291,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void BidirectionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -3318,8 +3319,8 @@ public class AdvancedLayersIntegrationTests
 
     #region TimeDistributedLayer Tests
 
-    [Fact]
-    public void TimeDistributedLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TimeDistributedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -3339,8 +3340,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void TimeDistributedLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TimeDistributedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -3365,8 +3366,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SequenceLastLayer Tests
 
-    [Fact]
-    public void SequenceLastLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceLastLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int featureSize = 32;
@@ -3383,8 +3384,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SequenceLastLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceLastLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int featureSize = 16;
@@ -3406,8 +3407,8 @@ public class AdvancedLayersIntegrationTests
 
     #region Upsample3DLayer Tests
 
-    [Fact]
-    public void Upsample3DLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Upsample3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         // inputShape: [channels, depth, height, width]
@@ -3426,8 +3427,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void Upsample3DLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Upsample3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [2, 2, 4, 4];
@@ -3450,8 +3451,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphConvolutionalLayer Tests
 
-    [Fact]
-    public void GraphConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numNodes = 10;
@@ -3475,8 +3476,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numNodes = 5;
@@ -3511,8 +3512,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
-    public void GraphAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numNodes = 10;
@@ -3537,8 +3538,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numNodes = 5;
@@ -3573,8 +3574,8 @@ public class AdvancedLayersIntegrationTests
 
     #region AttentionLayer Tests
 
-    [Fact]
-    public void AttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -3593,8 +3594,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void AttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -3618,8 +3619,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DecoderLayer Tests
 
-    [Fact]
-    public void DecoderLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DecoderLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -3639,8 +3640,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DecoderLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DecoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -3665,8 +3666,8 @@ public class AdvancedLayersIntegrationTests
 
     #region RBMLayer Tests
 
-    [Fact]
-    public void RBMLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RBMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int visibleUnits = 64;
@@ -3685,8 +3686,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void RBMLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task RBMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int visibleUnits = 32;
@@ -3710,8 +3711,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ReservoirLayer Tests
 
-    [Fact]
-    public void ReservoirLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ReservoirLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -3729,8 +3730,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ReservoirLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ReservoirLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -3753,8 +3754,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SparseLinearLayer Tests
 
-    [Fact]
-    public void SparseLinearLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SparseLinearLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputFeatures = 64;
@@ -3772,8 +3773,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SparseLinearLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SparseLinearLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputFeatures = 32;
@@ -3796,8 +3797,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SpatialTransformerLayer Tests
 
-    [Fact]
-    public void SpatialTransformerLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SpatialTransformerLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputHeight = 28;
@@ -3818,8 +3819,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SpatialTransformerLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SpatialTransformerLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputHeight = 16;
@@ -3845,8 +3846,8 @@ public class AdvancedLayersIntegrationTests
 
     #region PatchEmbeddingLayer Tests
 
-    [Fact]
-    public void PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int imageHeight = 28;
@@ -3867,8 +3868,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void PatchEmbeddingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int imageHeight = 16;
@@ -3894,8 +3895,8 @@ public class AdvancedLayersIntegrationTests
 
     #region TransitionLayer Tests
 
-    [Fact]
-    public void TransitionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputChannels = 64;
@@ -3915,8 +3916,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void TransitionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 32;
@@ -3941,8 +3942,8 @@ public class AdvancedLayersIntegrationTests
 
     #region BasicBlock Tests
 
-    [Fact]
-    public void BasicBlock_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inChannels = 64;
@@ -3962,8 +3963,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void BasicBlock_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inChannels = 32;
@@ -3988,8 +3989,8 @@ public class AdvancedLayersIntegrationTests
 
     #region BottleneckBlock Tests
 
-    [Fact]
-    public void BottleneckBlock_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inChannels = 64;
@@ -4009,8 +4010,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void BottleneckBlock_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inChannels = 32;
@@ -4035,8 +4036,8 @@ public class AdvancedLayersIntegrationTests
 
     #region CapsuleLayer Tests
 
-    [Fact]
-    public void CapsuleLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputCapsules = 32;
@@ -4057,8 +4058,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void CapsuleLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputCapsules = 16;
@@ -4084,8 +4085,8 @@ public class AdvancedLayersIntegrationTests
 
     #region DenseBlock Tests
 
-    [Fact]
-    public void DenseBlock_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputChannels = 64;
@@ -4106,8 +4107,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DenseBlock_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputChannels = 32;
@@ -4133,8 +4134,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphIsomorphismLayer Tests
 
-    [Fact]
-    public void GraphIsomorphismLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numNodes = 10;
@@ -4158,8 +4159,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GraphIsomorphismLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numNodes = 5;
@@ -4187,8 +4188,8 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphSAGELayer Tests
 
-    [Fact]
-    public void GraphSAGELayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGELayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numNodes = 10;
@@ -4213,8 +4214,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GraphSAGELayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGELayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numNodes = 5;
@@ -4243,8 +4244,8 @@ public class AdvancedLayersIntegrationTests
 
     #region InvertedResidualBlock Tests
 
-    [Fact]
-    public void InvertedResidualBlock_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inChannels = 32;
@@ -4265,8 +4266,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void InvertedResidualBlock_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inChannels = 16;
@@ -4292,8 +4293,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MessagePassingLayer Tests
 
-    [Fact]
-    public void MessagePassingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MessagePassingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int numNodes = 10;
@@ -4317,8 +4318,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MessagePassingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MessagePassingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int numNodes = 5;
@@ -4346,8 +4347,8 @@ public class AdvancedLayersIntegrationTests
 
     #region SpikingLayer Tests
 
-    [Fact]
-    public void SpikingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SpikingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 32;
@@ -4366,8 +4367,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SpikingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SpikingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -4391,8 +4392,8 @@ public class AdvancedLayersIntegrationTests
 
     #region QuantumLayer Tests
 
-    [Fact]
-    public void QuantumLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 4;
@@ -4411,8 +4412,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void QuantumLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 4;
@@ -4436,8 +4437,8 @@ public class AdvancedLayersIntegrationTests
 
     #region AnomalyDetectorLayer Tests
 
-    [Fact]
-    public void AnomalyDetectorLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyDetectorLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -4455,8 +4456,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void AnomalyDetectorLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyDetectorLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -4479,8 +4480,8 @@ public class AdvancedLayersIntegrationTests
 
     #region RBFLayer Tests
 
-    [Fact]
-    public void RBFLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RBFLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -4499,8 +4500,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void RBFLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task RBFLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -4524,8 +4525,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ExpertLayer Tests
 
-    [Fact]
-    public void ExpertLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ExpertLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 16;
@@ -4549,8 +4550,8 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ExpertLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ExpertLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 8;
@@ -4577,8 +4578,8 @@ public class AdvancedLayersIntegrationTests
 
     #region HyperbolicLinearLayer Tests
 
-    [Fact]
-    public void HyperbolicLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicLinearLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int inputFeatures = 6;
@@ -4594,8 +4595,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([3, outputFeatures], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void HyperbolicLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicLinearLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int inputFeatures = 5;
@@ -4615,8 +4616,8 @@ public class AdvancedLayersIntegrationTests
 
     #region OctonionLinearLayer Tests
 
-    [Fact]
-    public void OctonionLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionLinearLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int inputFeatures = 3;
@@ -4631,8 +4632,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([4, outputFeatures * 8], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void OctonionLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionLinearLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int inputFeatures = 2;
@@ -4652,8 +4653,8 @@ public class AdvancedLayersIntegrationTests
 
     #region ReadoutLayer Tests
 
-    [Fact]
-    public void ReadoutLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ReadoutLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 8;
@@ -4668,8 +4669,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([3, outputSize], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ReadoutLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ReadoutLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 6;
@@ -4689,8 +4690,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MeasurementLayer Tests
 
-    [Fact]
-    public void MeasurementLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MeasurementLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
         int size = 8;
@@ -4704,8 +4705,8 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MeasurementLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MeasurementLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int size = 6;
@@ -4724,8 +4725,8 @@ public class AdvancedLayersIntegrationTests
 
     #region MixtureOfExpertsLayer Tests
 
-    [Fact]
-    public void MixtureOfExpertsLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 6;
@@ -4748,8 +4749,8 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()
     {
         // Arrange
         int inputSize = 5;

@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -18,7 +19,7 @@ namespace AiDotNet.Tests.IntegrationTests.Classification;
 /// </summary>
 public class AiModelBuilderClassificationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RidgeClassifier_BuildAndPredict_ProducesValidClassLabels()
     {
         // Arrange: Generate linearly separable 2-class data
@@ -60,7 +61,7 @@ public class AiModelBuilderClassificationTests
             $"Accuracy {accuracy:P1} is too low for linearly separable data (expected > 60%)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DecisionTreeClassifier_BuildAndPredict_ProducesValidClassLabels()
     {
         // Arrange: Generate 2-class data with clear structure
@@ -99,7 +100,7 @@ public class AiModelBuilderClassificationTests
             $"Accuracy {accuracy:P1} is too low for separable data (expected > 70%)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GaussianNaiveBayes_BuildAndPredict_ProducesValidClassLabels()
     {
         // Arrange: Generate Gaussian-distributed 2-class data
@@ -138,7 +139,7 @@ public class AiModelBuilderClassificationTests
             $"Accuracy {accuracy:P1} is too low for Gaussian-distributed data (expected > 55%)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Classification_SerializeRoundTrip_PreservesAccuracy()
     {
         // Use DecisionTreeClassifier which works through the builder

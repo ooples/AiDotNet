@@ -1,5 +1,6 @@
 using AiDotNet.Evaluation.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -14,8 +15,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Paired T-Test =====
 
-    [Fact]
-    public void PairedTTest_IdenticalSamples_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_IdenticalSamples_NotSignificant()
     {
         // When samples are identical, differences are all zero -> not significant
         var test = new PairedTTest<double>();
@@ -27,8 +28,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(1.0, result.PValue, 0.01);
     }
 
-    [Fact]
-    public void PairedTTest_KnownTStatistic_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_KnownTStatistic_HandComputed()
     {
         // sample1 = [10, 20, 30, 40, 50], sample2 = [8, 18, 28, 38, 48]
         // differences = [2, 2, 2, 2, 2], mean_diff = 2, std_diff = 0 (all identical)
@@ -43,8 +44,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(0.0, result.PValue, 0.01);
     }
 
-    [Fact]
-    public void PairedTTest_TStatisticFormula_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_TStatisticFormula_HandComputed()
     {
         // sample1 = [5, 6, 7, 8, 9], sample2 = [3, 4, 5, 6, 7]
         // differences = [2, 2, 2, 2, 2], mean_diff = 2.0, std_diff = 0
@@ -59,8 +60,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.IsSignificant);
     }
 
-    [Fact]
-    public void PairedTTest_VariableDifferences_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_VariableDifferences_HandComputed()
     {
         // sample1 = [10, 20, 30, 40, 50], sample2 = [9, 18, 33, 38, 52]
         // differences = [1, 2, -3, 2, -2]
@@ -79,8 +80,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.False(result.IsSignificant, "Zero mean difference should not be significant");
     }
 
-    [Fact]
-    public void PairedTTest_CohensD_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_CohensD_HandComputed()
     {
         // differences = [2, 4, 6, 8, 10]
         // mean = 6, std = sqrt(((2-6)^2+(4-6)^2+(6-6)^2+(8-6)^2+(10-6)^2)/4) = sqrt((16+4+0+4+16)/4) = sqrt(10)
@@ -95,8 +96,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(expectedCohensD, result.EffectSize, 0.1);
     }
 
-    [Fact]
-    public void PairedTTest_DegreesOfFreedom()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_DegreesOfFreedom()
     {
         // df = n - 1 = 7 - 1 = 6
         var test = new PairedTTest<double>();
@@ -108,8 +109,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(6, result.DegreesOfFreedom);
     }
 
-    [Fact]
-    public void PairedTTest_UnequalLengths_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_UnequalLengths_ThrowsArgumentException()
     {
         var test = new PairedTTest<double>();
         var s1 = new double[] { 1, 2, 3 };
@@ -120,8 +121,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Wilcoxon Signed-Rank Test =====
 
-    [Fact]
-    public void WilcoxonTest_IdenticalSamples_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_IdenticalSamples_NotSignificant()
     {
         var test = new WilcoxonSignedRankTest<double>();
         var sample = new double[] { 1, 2, 3, 4, 5 };
@@ -131,8 +132,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.False(result.IsSignificant, "Identical samples should not be significant");
     }
 
-    [Fact]
-    public void WilcoxonTest_ClearDifference_Significant()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_ClearDifference_Significant()
     {
         // All s1 > s2 by large amounts with more samples for better power
         var test = new WilcoxonSignedRankTest<double>();
@@ -144,8 +145,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.IsSignificant, "Clear positive difference should be significant");
     }
 
-    [Fact]
-    public void WilcoxonTest_RankComputation_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_RankComputation_HandComputed()
     {
         // s1 = [5, 8, 7, 10, 12], s2 = [3, 6, 9, 8, 10]
         // diffs = [2, 2, -2, 2, 2]
@@ -163,8 +164,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.Statistic >= 0, "W should be non-negative");
     }
 
-    [Fact]
-    public void WilcoxonTest_EffectSize_RankBiserial()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_EffectSize_RankBiserial()
     {
         // Effect size = (W+ - W-) / (n*(n+1)/2)
         // For all positive diffs: W+ = n*(n+1)/2, W- = 0
@@ -180,8 +181,8 @@ public class StatisticalTestsDeepMathIntegrationTests
             $"All-positive diffs should have large effect size, got {result.EffectSize}");
     }
 
-    [Fact]
-    public void WilcoxonTest_NormalApproximation_MeanAndStd()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_NormalApproximation_MeanAndStd()
     {
         // For n non-zero differences:
         // mean_W = n*(n+1)/4
@@ -197,8 +198,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.IsSignificant);
     }
 
-    [Fact]
-    public void WilcoxonTest_MinimumSampleSize_5()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_MinimumSampleSize_5()
     {
         var test = new WilcoxonSignedRankTest<double>();
         var s1 = new double[] { 1, 2, 3, 4 }; // Only 4 samples
@@ -208,8 +209,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== McNemar's Test =====
 
-    [Fact]
-    public void McNemarTest_NoDisagreement_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_NoDisagreement_NotSignificant()
     {
         // Both classifiers make same predictions -> b=0, c=0
         var test = new McNemarTest<double>();
@@ -220,8 +221,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.False(result.IsSignificant, "No disagreement should not be significant");
     }
 
-    [Fact]
-    public void McNemarTest_ChiSquaredStatistic_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_ChiSquaredStatistic_HandComputed()
     {
         // A correct + B wrong (b) = 30 times
         // A wrong + B correct (c) = 10 times
@@ -248,8 +249,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(9.025, result.Statistic, 0.01);
     }
 
-    [Fact]
-    public void McNemarTest_OddsRatio_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_OddsRatio_HandComputed()
     {
         // b = 30, c = 10 -> odds ratio = b/c = 30/10 = 3.0
         var test = new McNemarTest<double>();
@@ -266,8 +267,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(3.0, result.EffectSize, 0.01);
     }
 
-    [Fact]
-    public void McNemarTest_SymmetricDisagreement_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_SymmetricDisagreement_NotSignificant()
     {
         // b = c -> no difference between classifiers
         // chi^2 = (|b-c| - 1)^2 / (b+c) = (0-1)^2 / (b+c) = 1/(b+c)
@@ -286,8 +287,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.False(result.IsSignificant, "Symmetric disagreement should not be significant");
     }
 
-    [Fact]
-    public void McNemarTest_ExactBinomialForSmallSamples()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_ExactBinomialForSmallSamples()
     {
         // When b + c < 25, uses exact binomial test
         var test = new McNemarTest<double>();
@@ -309,8 +310,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Friedman Test =====
 
-    [Fact]
-    public void FriedmanTest_IdenticalAlgorithms_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_IdenticalAlgorithms_NotSignificant()
     {
         // All algorithms perform the same on each dataset
         var test = new FriedmanTest<double>();
@@ -326,8 +327,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.False(result.IsSignificant, "Identical algorithms should not be significant");
     }
 
-    [Fact]
-    public void FriedmanTest_ClearlyDifferentAlgorithms_Significant()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_ClearlyDifferentAlgorithms_Significant()
     {
         // Algo 1 always best, Algo 3 always worst
         var test = new FriedmanTest<double>();
@@ -343,8 +344,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.IsSignificant, "Clearly different algorithms should be significant");
     }
 
-    [Fact]
-    public void FriedmanTest_RankComputation_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_RankComputation_HandComputed()
     {
         // Dataset 1: Algo1=0.9, Algo2=0.8, Algo3=0.7 -> ranks: 1, 2, 3
         // Dataset 2: Algo1=0.85, Algo2=0.75, Algo3=0.65 -> ranks: 1, 2, 3
@@ -365,8 +366,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.True(result.IsSignificant);
     }
 
-    [Fact]
-    public void FriedmanTest_ImanDavenportCorrection()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_ImanDavenportCorrection()
     {
         // The Friedman test uses Iman-Davenport F-statistic:
         // F = (n-1)*chi^2 / (n*(k-1) - chi^2)
@@ -386,8 +387,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Equal(2, result.DegreesOfFreedom);
     }
 
-    [Fact]
-    public void FriedmanTest_MinimumRequirements()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_MinimumRequirements()
     {
         var test = new FriedmanTest<double>();
 
@@ -407,8 +408,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Levene's Test =====
 
-    [Fact]
-    public void LeveneTest_EqualVarianceGroups_NotSignificant()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_EqualVarianceGroups_NotSignificant()
     {
         // Two groups with similar variance should pass Levene's test
         var test = new LeveneTest<double>(LeveneTest<double>.CenterType.Median);
@@ -424,8 +425,8 @@ public class StatisticalTestsDeepMathIntegrationTests
             "Groups with equal variance should not be significant");
     }
 
-    [Fact]
-    public void LeveneTest_UnequalVarianceGroups_Significant()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_UnequalVarianceGroups_Significant()
     {
         // Group 1: low variance, Group 2: high variance
         var test = new LeveneTest<double>(LeveneTest<double>.CenterType.Median);
@@ -441,8 +442,8 @@ public class StatisticalTestsDeepMathIntegrationTests
             "Groups with very different variance should be significant");
     }
 
-    [Fact]
-    public void LeveneTest_FStatistic_Positive()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_FStatistic_Positive()
     {
         var test = new LeveneTest<double>(LeveneTest<double>.CenterType.Mean);
         var groups = new double[][]
@@ -457,8 +458,8 @@ public class StatisticalTestsDeepMathIntegrationTests
             $"F-statistic should be non-negative, got {result.Statistic}");
     }
 
-    [Fact]
-    public void LeveneTest_MedianBasedIsBrownForsythe()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_MedianBasedIsBrownForsythe()
     {
         var test = new LeveneTest<double>(LeveneTest<double>.CenterType.Median);
         var groups = new double[][]
@@ -472,8 +473,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Contains("Brown-Forsythe", result.TestName);
     }
 
-    [Fact]
-    public void LeveneTest_MeanBasedIsLevene()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_MeanBasedIsLevene()
     {
         var test = new LeveneTest<double>(LeveneTest<double>.CenterType.Mean);
         var groups = new double[][]
@@ -487,8 +488,8 @@ public class StatisticalTestsDeepMathIntegrationTests
         Assert.Contains("Levene", result.TestName);
     }
 
-    [Fact]
-    public void LeveneTest_DegreesOfFreedom_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task LeveneTest_DegreesOfFreedom_HandComputed()
     {
         // k groups -> df_between = k - 1
         var test = new LeveneTest<double>();
@@ -507,8 +508,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== P-Value Properties =====
 
-    [Fact]
-    public void AllTests_PValue_InZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task AllTests_PValue_InZeroOneRange()
     {
         // P-values should always be in [0, 1]
         var tTest = new PairedTTest<double>();
@@ -525,8 +526,8 @@ public class StatisticalTestsDeepMathIntegrationTests
             $"Wilcoxon p-value should be in [0,1], got {wResult.PValue}");
     }
 
-    [Fact]
-    public void PairedTTest_LargerDifference_SmallerPValue()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_LargerDifference_SmallerPValue()
     {
         // Larger consistent difference -> smaller p-value
         var test = new PairedTTest<double>();
@@ -553,8 +554,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Alpha Level Tests =====
 
-    [Fact]
-    public void PairedTTest_CustomAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_CustomAlpha()
     {
         var test = new PairedTTest<double>();
         var s1 = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -572,8 +573,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== McNemar Exact Binomial Test =====
 
-    [Fact]
-    public void McNemarTest_BinomialProbability_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task McNemarTest_BinomialProbability_HandComputed()
     {
         // For n=10, k=0, p=0.5:
         // P(X=0) = C(10,0) * 0.5^0 * 0.5^10 = 1 * 1 * (1/1024) ≈ 0.000977
@@ -596,8 +597,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Wilcoxon Test - Tie Handling =====
 
-    [Fact]
-    public void WilcoxonTest_WithTies_AverageRanks()
+    [Fact(Timeout = 120000)]
+    public async Task WilcoxonTest_WithTies_AverageRanks()
     {
         // diffs have ties in absolute value
         // s1 - s2 = [1, -1, 2, -2, 3] -> |diffs| = [1, 1, 2, 2, 3]
@@ -615,8 +616,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Friedman Test - Tied Ranks =====
 
-    [Fact]
-    public void FriedmanTest_TiedPerformance_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FriedmanTest_TiedPerformance_HandlesCorrectly()
     {
         // Two algorithms with same score on some datasets
         var test = new FriedmanTest<double>();
@@ -636,8 +637,8 @@ public class StatisticalTestsDeepMathIntegrationTests
 
     // ===== Cross-Test Consistency =====
 
-    [Fact]
-    public void PairedTTest_AndWilcoxon_AgreeOnDirection()
+    [Fact(Timeout = 120000)]
+    public async Task PairedTTest_AndWilcoxon_AgreeOnDirection()
     {
         // Both tests should agree on whether there's a significant difference
         // for clearly different samples with enough data points

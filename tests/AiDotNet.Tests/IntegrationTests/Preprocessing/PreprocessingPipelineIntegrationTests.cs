@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -40,8 +41,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_CreatesEmptyPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_CreatesEmptyPipeline()
     {
         // Act
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -56,8 +57,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Add Step Tests
 
-    [Fact]
-    public void Add_WithoutName_AddsStepWithAutomaticName()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithoutName_AddsStepWithAutomaticName()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -71,8 +72,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal("step_0", pipeline.Steps[0].Name);
     }
 
-    [Fact]
-    public void Add_WithName_AddsStepWithSpecifiedName()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithName_AddsStepWithSpecifiedName()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -86,8 +87,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal("my_scaler", pipeline.Steps[0].Name);
     }
 
-    [Fact]
-    public void Add_DuplicateName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_DuplicateName_ThrowsArgumentException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -99,8 +100,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentException>(() => pipeline.Add("scaler", scaler2));
     }
 
-    [Fact]
-    public void Add_NullTransformer_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_NullTransformer_ThrowsArgumentNullException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -109,8 +110,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentNullException>(() => pipeline.Add("step", null!));
     }
 
-    [Fact]
-    public void Add_EmptyName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_EmptyName_ThrowsArgumentException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -120,8 +121,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentException>(() => pipeline.Add("", scaler));
     }
 
-    [Fact]
-    public void Add_WhitespaceName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WhitespaceName_ThrowsArgumentException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -131,8 +132,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentException>(() => pipeline.Add("   ", scaler));
     }
 
-    [Fact]
-    public void Add_ReturnsThisForChaining()
+    [Fact(Timeout = 120000)]
+    public async Task Add_ReturnsThisForChaining()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -149,8 +150,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region GetStep Tests
 
-    [Fact]
-    public void GetStep_ExistingName_ReturnsTransformer()
+    [Fact(Timeout = 120000)]
+    public async Task GetStep_ExistingName_ReturnsTransformer()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -164,8 +165,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Same(scaler, retrieved);
     }
 
-    [Fact]
-    public void GetStep_NonExistingName_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetStep_NonExistingName_ReturnsNull()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -183,8 +184,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Fit Tests
 
-    [Fact]
-    public void Fit_WithValidData_SetsFittedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_WithValidData_SetsFittedToTrue()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -198,8 +199,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(pipeline.IsFitted);
     }
 
-    [Fact]
-    public void Fit_NullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_NullData_ThrowsArgumentNullException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -209,8 +210,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentNullException>(() => pipeline.Fit(null!));
     }
 
-    [Fact]
-    public void Fit_FitsAllTransformersInSequence()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_FitsAllTransformersInSequence()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -232,8 +233,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Transform Tests
 
-    [Fact]
-    public void Transform_WithoutFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_WithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -244,8 +245,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => pipeline.Transform(data));
     }
 
-    [Fact]
-    public void Transform_NullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_NullData_ThrowsArgumentNullException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -257,8 +258,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<ArgumentNullException>(() => pipeline.Transform(null!));
     }
 
-    [Fact]
-    public void Transform_SingleScaler_TransformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_SingleScaler_TransformsCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -280,8 +281,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(Math.Abs(col1Mean) < 1e-10, $"Column 1 mean should be ~0, got {col1Mean}");
     }
 
-    [Fact]
-    public void Transform_MultipleScalers_AppliesInSequence()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_MultipleScalers_AppliesInSequence()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -308,8 +309,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region FitTransform Tests
 
-    [Fact]
-    public void FitTransform_EquivalentToFitThenTransform()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_EquivalentToFitThenTransform()
     {
         // Arrange
         var pipeline1 = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -330,8 +331,8 @@ public class PreprocessingPipelineIntegrationTests
         AssertMatrixEqual(result1, result2);
     }
 
-    [Fact]
-    public void FitTransform_NullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_NullData_ThrowsArgumentNullException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -345,8 +346,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region InverseTransform Tests
 
-    [Fact]
-    public void InverseTransform_WithSupportingTransformers_ReversesTransformation()
+    [Fact(Timeout = 120000)]
+    public async Task InverseTransform_WithSupportingTransformers_ReversesTransformation()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -362,8 +363,8 @@ public class PreprocessingPipelineIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact]
-    public void InverseTransform_MultipleScalers_ReversesInCorrectOrder()
+    [Fact(Timeout = 120000)]
+    public async Task InverseTransform_MultipleScalers_ReversesInCorrectOrder()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -380,8 +381,8 @@ public class PreprocessingPipelineIntegrationTests
         AssertMatrixEqual(data, inversed, 1e-9);
     }
 
-    [Fact]
-    public void InverseTransform_WithoutFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task InverseTransform_WithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -392,8 +393,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => pipeline.InverseTransform(data));
     }
 
-    [Fact]
-    public void SupportsInverseTransform_AllSupportingTransformers_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsInverseTransform_AllSupportingTransformers_ReturnsTrue()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -408,8 +409,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void Clone_CreatesNewPipelineWithSameStructure()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_CreatesNewPipelineWithSameStructure()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -424,8 +425,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.False(clone.IsFitted); // Clone should not be fitted
     }
 
-    [Fact]
-    public void Clone_DoesNotShareFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_DoesNotShareFittedState()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -445,8 +446,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact]
-    public void GetFeatureNamesOut_PassesThroughInputNames()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_PassesThroughInputNames()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -460,8 +461,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal(inputNames, outputNames);
     }
 
-    [Fact]
-    public void GetFeatureNamesOut_NoInputNames_ReturnsEmptyArray()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_NoInputNames_ReturnsEmptyArray()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -478,8 +479,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void FitTransform_SingleRow_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_SingleRow_WorksCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -495,8 +496,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void FitTransform_SingleColumn_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_SingleColumn_WorksCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -516,8 +517,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(Math.Abs(mean) < 1e-10);
     }
 
-    [Fact]
-    public void FitTransform_ConstantColumn_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_ConstantColumn_HandlesGracefully()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -537,8 +538,8 @@ public class PreprocessingPipelineIntegrationTests
         }
     }
 
-    [Fact]
-    public void FitTransform_EmptyPipeline_PassesThroughData()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_EmptyPipeline_PassesThroughData()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -551,8 +552,8 @@ public class PreprocessingPipelineIntegrationTests
         AssertMatrixEqual(data, result);
     }
 
-    [Fact]
-    public void FitTransform_LargeMatrix_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_LargeMatrix_WorksCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -586,8 +587,8 @@ public class PreprocessingPipelineIntegrationTests
         }
     }
 
-    [Fact]
-    public void Transform_NewData_UseFittedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_NewData_UseFittedParameters()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -609,8 +610,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Data Leakage Tests
 
-    [Fact]
-    public void Transform_UsesOnlyFittedParameters_NoDataLeakage()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_UsesOnlyFittedParameters_NoDataLeakage()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -632,8 +633,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Nested Pipeline Tests - Pipeline with ColumnTransformer
 
-    [Fact]
-    public void Pipeline_WithColumnTransformer_TransformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_WithColumnTransformer_TransformsCorrectly()
     {
         // Arrange - Pipeline containing a ColumnTransformer
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -662,8 +663,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(Math.Abs(result[2, 1] - 1) < Tolerance, "Max value should be 1");
     }
 
-    [Fact]
-    public void Pipeline_WithColumnTransformer_DoesNotSupportInverseTransform()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_WithColumnTransformer_DoesNotSupportInverseTransform()
     {
         // Arrange - ColumnTransformer does not support inverse transform
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -687,8 +688,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Nested Pipeline Tests - Pipeline with FeatureUnion
 
-    [Fact]
-    public void Pipeline_WithFeatureUnion_ConcatenatesFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_WithFeatureUnion_ConcatenatesFeatures()
     {
         // Arrange - Pipeline containing a FeatureUnion
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -709,8 +710,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
-    public void Pipeline_WithFeatureUnion_InverseTransformNotSupported()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_WithFeatureUnion_InverseTransformNotSupported()
     {
         // Arrange - FeatureUnion doesn't support inverse transform
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -731,8 +732,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Complex Nested Pipeline Tests
 
-    [Fact]
-    public void Pipeline_MultipleStepsWithColumnTransformer_TransformsSequentially()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_MultipleStepsWithColumnTransformer_TransformsSequentially()
     {
         // Arrange - Pipeline with multiple steps including ColumnTransformer
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -756,8 +757,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void Pipeline_NestedPipelineInPipeline_TransformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_NestedPipelineInPipeline_TransformsCorrectly()
     {
         // Arrange - A pipeline containing another pipeline
         var innerPipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -791,8 +792,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region PreprocessingInfo Tests
 
-    [Fact]
-    public void PreprocessingInfo_DefaultConstructor_CreatesUnfittedInstance()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_DefaultConstructor_CreatesUnfittedInstance()
     {
         // Act
         var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>();
@@ -804,8 +805,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.False(info.IsTargetFitted);
     }
 
-    [Fact]
-    public void PreprocessingInfo_WithPipeline_StoresPipelineCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_WithPipeline_StoresPipelineCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -824,8 +825,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.False(info.IsTargetFitted);
     }
 
-    [Fact]
-    public void PreprocessingInfo_TransformFeatures_TransformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_TransformFeatures_TransformsCorrectly()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -845,8 +846,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(Math.Abs(result[0, 0]) < Tolerance);
     }
 
-    [Fact]
-    public void PreprocessingInfo_TransformFeaturesWithoutFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_TransformFeaturesWithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -860,8 +861,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => info.TransformFeatures(data));
     }
 
-    [Fact]
-    public void PreprocessingInfo_TransformFeaturesWithNullPipeline_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_TransformFeaturesWithNullPipeline_ThrowsInvalidOperationException()
     {
         // Arrange
         var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>();
@@ -871,8 +872,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => info.TransformFeatures(data));
     }
 
-    [Fact]
-    public void PreprocessingInfo_InverseTransformPredictions_WithNoTargetPipeline_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_InverseTransformPredictions_WithNoTargetPipeline_ReturnsInput()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -898,8 +899,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region Serialization Tests (Clone Functionality)
 
-    [Fact]
-    public void Clone_IsShallowClone_SharesTransformerInstances()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_IsShallowClone_SharesTransformerInstances()
     {
         // Arrange
         var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -915,8 +916,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.False(clone.IsFitted); // Clone is not fitted
     }
 
-    [Fact]
-    public void Clone_ProducesSameResultsWhenFittedOnSameData()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ProducesSameResultsWhenFittedOnSameData()
     {
         // Arrange
         var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -937,8 +938,8 @@ public class PreprocessingPipelineIntegrationTests
         AssertMatrixEqual(originalResult, cloneResult);
     }
 
-    [Fact]
-    public void Clone_WithMultipleTransformerTypes_PreservesStructure()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_WithMultipleTransformerTypes_PreservesStructure()
     {
         // Arrange
         var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -957,8 +958,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Same(original.GetStep("minmax"), clone.GetStep("minmax"));
     }
 
-    [Fact]
-    public void Clone_PreservesSupportsInverseTransformFlag()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_PreservesSupportsInverseTransformFlag()
     {
         // Arrange
         var pipeline1 = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -976,8 +977,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.False(clone2.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void Clone_OriginalModificationDoesNotAffectClone()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_OriginalModificationDoesNotAffectClone()
     {
         // Arrange
         var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -997,8 +998,8 @@ public class PreprocessingPipelineIntegrationTests
 
     #region TransformerBase Tests (via concrete implementations)
 
-    [Fact]
-    public void TransformerBase_Fit_SetsIsFittedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_Fit_SetsIsFittedToTrue()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -1011,8 +1012,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(scaler.IsFitted);
     }
 
-    [Fact]
-    public void TransformerBase_FitTransform_SetsIsFittedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_FitTransform_SetsIsFittedToTrue()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -1025,8 +1026,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.True(scaler.IsFitted);
     }
 
-    [Fact]
-    public void TransformerBase_TransformBeforeFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_TransformBeforeFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -1036,8 +1037,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => scaler.Transform(data));
     }
 
-    [Fact]
-    public void TransformerBase_InverseTransformBeforeFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_InverseTransformBeforeFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -1047,8 +1048,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => scaler.InverseTransform(data));
     }
 
-    [Fact]
-    public void TransformerBase_ColumnIndices_LimitsTransformation()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_ColumnIndices_LimitsTransformation()
     {
         // Arrange - Only transform column 0
         var scaler = new StandardScaler<double>(columnIndices: new[] { 0 });
@@ -1071,8 +1072,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal(300, result[2, 1]);
     }
 
-    [Fact]
-    public void TransformerBase_GetFeatureNamesOut_ReturnsInputNamesWhenProvided()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_GetFeatureNamesOut_ReturnsInputNamesWhenProvided()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -1090,8 +1091,8 @@ public class PreprocessingPipelineIntegrationTests
         Assert.Equal("feature_b", outputNames[1]);
     }
 
-    [Fact]
-    public void TransformerBase_NullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task TransformerBase_NullData_ThrowsArgumentNullException()
     {
         // Arrange
         var scaler = new StandardScaler<double>();

@@ -16,6 +16,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -439,8 +440,8 @@ public class SegmentationModelSizeVariationTests
 
     #region Larger Size Has More Parameters (scaling regression test)
 
-    [Fact]
-    public void Mask2Former_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Mask2Former_LargerSizeHasMoreParameters()
     {
         var small = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var large = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinLarge);
@@ -448,8 +449,8 @@ public class SegmentationModelSizeVariationTests
             $"SwinLarge ({large.ParameterCount}) should have more params than SwinTiny ({small.ParameterCount})");
     }
 
-    [Fact]
-    public void SegNeXt_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task SegNeXt_LargerSizeHasMoreParameters()
     {
         var small = new SegNeXt<double>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
         var large = new SegNeXt<double>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Large);
@@ -457,8 +458,8 @@ public class SegmentationModelSizeVariationTests
             $"Large ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
 
-    [Fact]
-    public void SAM_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task SAM_LargerSizeHasMoreParameters()
     {
         var small = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var large = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTHuge);
@@ -466,8 +467,8 @@ public class SegmentationModelSizeVariationTests
             $"ViTHuge ({large.ParameterCount}) should have more params than ViTBase ({small.ParameterCount})");
     }
 
-    [Fact]
-    public void NnUNet_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task NnUNet_LargerSizeHasMoreParameters()
     {
         var small = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var large = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet3DCascade);
@@ -475,8 +476,8 @@ public class SegmentationModelSizeVariationTests
             $"UNet3DCascade ({large.ParameterCount}) should have more params than UNet2D ({small.ParameterCount})");
     }
 
-    [Fact]
-    public void VisionMamba_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task VisionMamba_LargerSizeHasMoreParameters()
     {
         var small = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
         var large = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Base);
@@ -484,8 +485,8 @@ public class SegmentationModelSizeVariationTests
             $"Base ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
 
-    [Fact]
-    public void PIDNet_LargerSizeHasMoreParameters()
+    [Fact(Timeout = 120000)]
+    public async Task PIDNet_LargerSizeHasMoreParameters()
     {
         var small = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
         var large = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Large);

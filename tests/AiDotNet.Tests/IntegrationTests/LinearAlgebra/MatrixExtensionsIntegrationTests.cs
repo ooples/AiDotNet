@@ -1,6 +1,7 @@
 using AiDotNet.Extensions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinearAlgebra;
 
@@ -13,8 +14,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddConstantColumn Tests
 
-    [Fact]
-    public void AddConstantColumn_AddsColumnAtFront()
+    [Fact(Timeout = 120000)]
+    public async Task AddConstantColumn_AddsColumnAtFront()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -36,8 +37,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region ToVector Tests
 
-    [Fact]
-    public void ToVector_FlattensMatrixRowMajor()
+    [Fact(Timeout = 120000)]
+    public async Task ToVector_FlattensMatrixRowMajor()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -58,8 +59,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddVectorToEachRow Tests
 
-    [Fact]
-    public void AddVectorToEachRow_AddsVectorToAllRows()
+    [Fact(Timeout = 120000)]
+    public async Task AddVectorToEachRow_AddsVectorToAllRows()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -80,8 +81,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region SumColumns Tests
 
-    [Fact]
-    public void SumColumns_ReturnsColumnSums()
+    [Fact(Timeout = 120000)]
+    public async Task SumColumns_ReturnsColumnSums()
     {
         var matrix = new Matrix<double>(3, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -99,8 +100,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumn Tests
 
-    [Fact]
-    public void GetColumn_ExtractsCorrectColumn()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumn_ExtractsCorrectColumn()
     {
         var matrix = new Matrix<double>(3, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -119,8 +120,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region BackwardSubstitution Tests
 
-    [Fact]
-    public void BackwardSubstitution_SolvesUpperTriangularSystem()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardSubstitution_SolvesUpperTriangularSystem()
     {
         // Upper triangular matrix A
         var A = new Matrix<double>(3, 3);
@@ -142,8 +143,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region ForwardSubstitution Tests
 
-    [Fact]
-    public void ForwardSubstitution_SolvesLowerTriangularSystem()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardSubstitution_SolvesLowerTriangularSystem()
     {
         // Lower triangular matrix A
         var A = new Matrix<double>(3, 3);
@@ -164,8 +165,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetBlock Tests
 
-    [Fact]
-    public void GetBlock_ExtractsSubmatrix()
+    [Fact(Timeout = 120000)]
+    public async Task GetBlock_ExtractsSubmatrix()
     {
         var matrix = new Matrix<double>(4, 4);
         for (int i = 0; i < 4; i++)
@@ -186,29 +187,29 @@ public class MatrixExtensionsIntegrationTests
 
     #region Matrix Type Detection Tests
 
-    [Fact]
-    public void IsSquareMatrix_SquareMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSquareMatrix_SquareMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         Assert.True(matrix.IsSquareMatrix());
     }
 
-    [Fact]
-    public void IsSquareMatrix_RectangularMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsSquareMatrix_RectangularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(2, 3);
         Assert.False(matrix.IsSquareMatrix());
     }
 
-    [Fact]
-    public void IsRectangularMatrix_NonSquareMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsRectangularMatrix_NonSquareMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(2, 3);
         Assert.True(matrix.IsRectangularMatrix());
     }
 
-    [Fact]
-    public void IsSymmetricMatrix_SymmetricMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSymmetricMatrix_SymmetricMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -218,8 +219,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsSymmetricMatrix_NonSymmetricMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsSymmetricMatrix_NonSymmetricMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -228,8 +229,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.False(matrix.IsSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsDiagonalMatrix_DiagonalMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsDiagonalMatrix_DiagonalMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[1, 1] = 2; matrix[2, 2] = 3;
@@ -237,16 +238,16 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDiagonalMatrix());
     }
 
-    [Fact]
-    public void IsIdentityMatrix_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIdentityMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[1, 1] = 1; matrix[2, 2] = 1;
         Assert.True(matrix.IsIdentityMatrix());
     }
 
-    [Fact]
-    public void IsUpperTriangularMatrix_UpperTriangular_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsUpperTriangularMatrix_UpperTriangular_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -256,8 +257,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsUpperTriangularMatrix());
     }
 
-    [Fact]
-    public void IsLowerTriangularMatrix_LowerTriangular_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsLowerTriangularMatrix_LowerTriangular_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 0; matrix[0, 2] = 0;
@@ -267,15 +268,15 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsLowerTriangularMatrix());
     }
 
-    [Fact]
-    public void IsZeroMatrix_ZeroMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsZeroMatrix_ZeroMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         Assert.True(matrix.IsZeroMatrix());
     }
 
-    [Fact]
-    public void IsSparseMatrix_MostlyZeros_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSparseMatrix_MostlyZeros_ReturnsTrue()
     {
         var matrix = new Matrix<double>(10, 10);
         matrix[0, 0] = 1;
@@ -284,8 +285,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSparseMatrix());
     }
 
-    [Fact]
-    public void IsDenseMatrix_MostlyNonZeros_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsDenseMatrix_MostlyNonZeros_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         for (int i = 0; i < 3; i++)
@@ -295,8 +296,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDenseMatrix());
     }
 
-    [Fact]
-    public void IsScalarMatrix_ScalarMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsScalarMatrix_ScalarMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 5; matrix[1, 1] = 5; matrix[2, 2] = 5;
@@ -304,8 +305,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsScalarMatrix());
     }
 
-    [Fact]
-    public void IsTridiagonalMatrix_Tridiagonal_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsTridiagonalMatrix_Tridiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(4, 4);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -316,8 +317,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsTridiagonalMatrix());
     }
 
-    [Fact]
-    public void IsUpperBidiagonalMatrix_UpperBidiagonal_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsUpperBidiagonalMatrix_UpperBidiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -327,8 +328,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsUpperBidiagonalMatrix());
     }
 
-    [Fact]
-    public void IsLowerBidiagonalMatrix_LowerBidiagonal_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsLowerBidiagonalMatrix_LowerBidiagonal_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1;
@@ -338,8 +339,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsLowerBidiagonalMatrix());
     }
 
-    [Fact]
-    public void IsSkewSymmetricMatrix_SkewSymmetric_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSkewSymmetricMatrix_SkewSymmetric_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 0; matrix[0, 1] = 2; matrix[0, 2] = -3;
@@ -349,8 +350,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSkewSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsPermutationMatrix_PermutationMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPermutationMatrix_PermutationMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 1] = 1; // row 0 -> column 1
@@ -360,8 +361,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsPermutationMatrix());
     }
 
-    [Fact]
-    public void IsStochasticMatrix_StochasticMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsStochasticMatrix_StochasticMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 0.2; matrix[0, 1] = 0.3; matrix[0, 2] = 0.5;
@@ -371,8 +372,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsStochasticMatrix());
     }
 
-    [Fact]
-    public void IsDoublyStochasticMatrix_DoublyStochastic_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsDoublyStochasticMatrix_DoublyStochastic_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 0.5; matrix[0, 1] = 0.25; matrix[0, 2] = 0.25;
@@ -382,8 +383,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsDoublyStochasticMatrix());
     }
 
-    [Fact]
-    public void IsToeplitzMatrix_ToeplitzMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsToeplitzMatrix_ToeplitzMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -393,8 +394,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsToeplitzMatrix());
     }
 
-    [Fact]
-    public void IsHankelMatrix_HankelMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsHankelMatrix_HankelMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -404,8 +405,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsHankelMatrix());
     }
 
-    [Fact]
-    public void IsCirculantMatrix_CirculantMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsCirculantMatrix_CirculantMatrix_ReturnsTrue()
     {
         // Implementation uses left circular shift convention
         // Row i, col j should equal Row 0, col (j + i) % cols
@@ -421,8 +422,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Matrix Operations Tests
 
-    [Fact]
-    public void Transpose_ReturnsTransposedMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task Transpose_ReturnsTransposedMatrix()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -440,8 +441,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(6, result[2, 1]);
     }
 
-    [Fact]
-    public void Negate_NegatesAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task Negate_NegatesAllElements()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = -2;
@@ -455,8 +456,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(4, result[1, 1]);
     }
 
-    [Fact]
-    public void FrobeniusNorm_ReturnsCorrectNorm()
+    [Fact(Timeout = 120000)]
+    public async Task FrobeniusNorm_ReturnsCorrectNorm()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -468,8 +469,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(Math.Sqrt(30), norm, Tolerance);
     }
 
-    [Fact]
-    public void Determinant_2x2Matrix_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task Determinant_2x2Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -481,8 +482,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(-2, det, Tolerance);
     }
 
-    [Fact]
-    public void Determinant_3x3Matrix_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task Determinant_3x3Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -499,8 +500,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Inverse Tests
 
-    [Fact]
-    public void Inverse_2x2Matrix_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task Inverse_2x2Matrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 4; matrix[0, 1] = 7;
@@ -516,8 +517,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, product[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void InvertDiagonalMatrix_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InvertDiagonalMatrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 2; matrix[1, 1] = 4; matrix[2, 2] = 5;
@@ -529,8 +530,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0.2, inverse[2, 2], Tolerance);
     }
 
-    [Fact]
-    public void InvertUpperTriangularMatrix_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InvertUpperTriangularMatrix_ReturnsCorrectInverse()
     {
         // Upper triangular matrix
         var matrix = new Matrix<double>(3, 3);
@@ -556,8 +557,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region PointwiseMultiply Tests
 
-    [Fact]
-    public void PointwiseMultiply_TwoMatrices_ReturnsHadamardProduct()
+    [Fact(Timeout = 120000)]
+    public async Task PointwiseMultiply_TwoMatrices_ReturnsHadamardProduct()
     {
         var a = new Matrix<double>(2, 2);
         a[0, 0] = 1; a[0, 1] = 2;
@@ -575,8 +576,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(32, result[1, 1]);
     }
 
-    [Fact]
-    public void PointwiseMultiply_MatrixAndVector_ScalesRowsByVectorElements()
+    [Fact(Timeout = 120000)]
+    public async Task PointwiseMultiply_MatrixAndVector_ScalesRowsByVectorElements()
     {
         // Vector length must match rows - scales each row by corresponding vector element
         var matrix = new Matrix<double>(3, 2);
@@ -599,8 +600,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Submatrix Tests
 
-    [Fact]
-    public void Submatrix_ExtractsCorrectRegion()
+    [Fact(Timeout = 120000)]
+    public async Task Submatrix_ExtractsCorrectRegion()
     {
         var matrix = new Matrix<double>(4, 4);
         for (int i = 0; i < 4; i++)
@@ -617,8 +618,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(10, sub[1, 1]);
     }
 
-    [Fact]
-    public void Submatrix_ByIndices_ExtractsRows()
+    [Fact(Timeout = 120000)]
+    public async Task Submatrix_ByIndices_ExtractsRows()
     {
         var matrix = new Matrix<double>(4, 3);
         for (int i = 0; i < 4; i++)
@@ -638,8 +639,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region AddColumn Tests
 
-    [Fact]
-    public void AddColumn_AppendsColumn()
+    [Fact(Timeout = 120000)]
+    public async Task AddColumn_AppendsColumn()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -658,8 +659,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumns Tests
 
-    [Fact]
-    public void GetColumns_ExtractsSelectedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumns_ExtractsSelectedColumns()
     {
         var matrix = new Matrix<double>(3, 4);
         for (int i = 0; i < 3; i++)
@@ -681,8 +682,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRow Tests
 
-    [Fact]
-    public void GetRow_ReturnsCorrectRow()
+    [Fact(Timeout = 120000)]
+    public async Task GetRow_ReturnsCorrectRow()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -701,8 +702,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRowRange Tests
 
-    [Fact]
-    public void GetRowRange_ExtractsRowSubset()
+    [Fact(Timeout = 120000)]
+    public async Task GetRowRange_ExtractsRowSubset()
     {
         var matrix = new Matrix<double>(4, 3);
         for (int i = 0; i < 4; i++)
@@ -721,8 +722,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region SwapRows Tests
 
-    [Fact]
-    public void SwapRows_SwapsRowsInPlace()
+    [Fact(Timeout = 120000)]
+    public async Task SwapRows_SwapsRowsInPlace()
     {
         var matrix = new Matrix<double>(3, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -741,8 +742,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region KroneckerProduct Tests
 
-    [Fact]
-    public void KroneckerProduct_ReturnsCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_ReturnsCorrectResult()
     {
         var a = new Matrix<double>(2, 2);
         a[0, 0] = 1; a[0, 1] = 2;
@@ -767,8 +768,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Flatten Tests
 
-    [Fact]
-    public void Flatten_FlattensToVector()
+    [Fact(Timeout = 120000)]
+    public async Task Flatten_FlattensToVector()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -785,8 +786,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Reshape Tests
 
-    [Fact]
-    public void Reshape_ChangesMatrixShape()
+    [Fact(Timeout = 120000)]
+    public async Task Reshape_ChangesMatrixShape()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
@@ -806,8 +807,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Extract Tests
 
-    [Fact]
-    public void Extract_ExtractsTopLeftCorner()
+    [Fact(Timeout = 120000)]
+    public async Task Extract_ExtractsTopLeftCorner()
     {
         var matrix = new Matrix<double>(4, 4);
         for (int i = 0; i < 4; i++)
@@ -827,8 +828,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region RowWiseArgmax Tests
 
-    [Fact]
-    public void RowWiseArgmax_ReturnsIndicesOfMaxInEachRow()
+    [Fact(Timeout = 120000)]
+    public async Task RowWiseArgmax_ReturnsIndicesOfMaxInEachRow()
     {
         var matrix = new Matrix<double>(3, 4);
         matrix[0, 0] = 1; matrix[0, 1] = 5; matrix[0, 2] = 2; matrix[0, 3] = 3;
@@ -847,8 +848,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region SetSubmatrix Tests
 
-    [Fact]
-    public void SetSubmatrix_SetsValuesInPlace()
+    [Fact(Timeout = 120000)]
+    public async Task SetSubmatrix_SetsValuesInPlace()
     {
         var matrix = new Matrix<double>(4, 4);
         var sub = new Matrix<double>(2, 2);
@@ -867,8 +868,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetSubColumn Tests
 
-    [Fact]
-    public void GetSubColumn_ExtractsColumnPortion()
+    [Fact(Timeout = 120000)]
+    public async Task GetSubColumn_ExtractsColumnPortion()
     {
         var matrix = new Matrix<double>(5, 3);
         for (int i = 0; i < 5; i++)
@@ -885,8 +886,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetRank Tests
 
-    [Fact]
-    public void GetRank_IdentityMatrix_ReturnsFullRank()
+    [Fact(Timeout = 120000)]
+    public async Task GetRank_IdentityMatrix_ReturnsFullRank()
     {
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[1, 1] = 1; matrix[2, 2] = 1;
@@ -896,8 +897,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(3, rank);
     }
 
-    [Fact]
-    public void GetRank_RankDeficientMatrix_ReturnsCorrectRank()
+    [Fact(Timeout = 120000)]
+    public async Task GetRank_RankDeficientMatrix_ReturnsCorrectRank()
     {
         // All rows are multiples of the first row: rank should be 1
         var matrix = new Matrix<double>(3, 3);
@@ -910,8 +911,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, rank);
     }
 
-    [Fact]
-    public void GetRank_ZeroMatrix_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GetRank_ZeroMatrix_ReturnsZero()
     {
         var matrix = new Matrix<double>(3, 3);
 
@@ -924,8 +925,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Complex Matrix Tests
 
-    [Fact]
-    public void ToComplexMatrix_ConvertsRealToComplex()
+    [Fact(Timeout = 120000)]
+    public async Task ToComplexMatrix_ConvertsRealToComplex()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -939,8 +940,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, complex[0, 0].Imaginary);
     }
 
-    [Fact]
-    public void ToRealMatrix_ExtractsRealPart()
+    [Fact(Timeout = 120000)]
+    public async Task ToRealMatrix_ExtractsRealPart()
     {
         var complex = new Matrix<Complex<double>>(2, 2);
         complex[0, 0] = new Complex<double>(1, 2);
@@ -956,8 +957,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(7, real[1, 1]);
     }
 
-    [Fact]
-    public void ConjugateTranspose_ReturnsHermitianTranspose()
+    [Fact(Timeout = 120000)]
+    public async Task ConjugateTranspose_ReturnsHermitianTranspose()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
         matrix[0, 0] = new Complex<double>(1, 2);
@@ -977,8 +978,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsBandMatrix Tests
 
-    [Fact]
-    public void IsBandMatrix_TridiagonalMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsBandMatrix_TridiagonalMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<double>(4, 4);
         matrix[0, 0] = 1; matrix[0, 1] = 2;
@@ -989,8 +990,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsBandMatrix(1, 1));
     }
 
-    [Fact]
-    public void IsBandMatrix_DiagonalMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsBandMatrix_DiagonalMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateDiagonal(new Vector<double>([1, 2, 3]));
 
@@ -1001,8 +1002,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsHermitianMatrix Tests
 
-    [Fact]
-    public void IsHermitianMatrix_HermitianMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsHermitianMatrix_HermitianMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
         matrix[0, 0] = new Complex<double>(1, 0);  // Real diagonal
@@ -1013,8 +1014,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsHermitianMatrix());
     }
 
-    [Fact]
-    public void IsHermitianMatrix_NonHermitianMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsHermitianMatrix_NonHermitianMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
         matrix[0, 0] = new Complex<double>(1, 1);  // Complex diagonal - not Hermitian
@@ -1029,8 +1030,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsSkewHermitianMatrix Tests
 
-    [Fact]
-    public void IsSkewHermitianMatrix_SkewHermitianMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSkewHermitianMatrix_SkewHermitianMatrix_ReturnsTrue()
     {
         var matrix = new Matrix<Complex<double>>(2, 2);
         matrix[0, 0] = new Complex<double>(0, 1);   // Pure imaginary diagonal
@@ -1045,8 +1046,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsSingularMatrix Tests
 
-    [Fact]
-    public void IsSingularMatrix_ZeroDeterminant_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSingularMatrix_ZeroDeterminant_ReturnsTrue()
     {
         // Matrix with linearly dependent rows
         var matrix = new Matrix<double>(new double[,]
@@ -1059,8 +1060,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsSingularMatrix());
     }
 
-    [Fact]
-    public void IsSingularMatrix_IdentityMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsSingularMatrix_IdentityMatrix_ReturnsFalse()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
@@ -1071,16 +1072,16 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsNonSingularMatrix Tests
 
-    [Fact]
-    public void IsNonSingularMatrix_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsNonSingularMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
         Assert.True(matrix.IsNonSingularMatrix());
     }
 
-    [Fact]
-    public void IsNonSingularMatrix_SingularMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsNonSingularMatrix_SingularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1095,16 +1096,16 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsPositiveDefiniteMatrix Tests
 
-    [Fact]
-    public void IsPositiveDefiniteMatrix_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveDefiniteMatrix_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
         Assert.True(matrix.IsPositiveDefiniteMatrix());
     }
 
-    [Fact]
-    public void IsPositiveDefiniteMatrix_SymmetricPD_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveDefiniteMatrix_SymmetricPD_ReturnsTrue()
     {
         // A positive definite matrix: A^T * A for full-rank A
         var matrix = new Matrix<double>(new double[,]
@@ -1120,16 +1121,16 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsPositiveSemiDefiniteMatrix Tests
 
-    [Fact]
-    public void IsPositiveSemiDefiniteMatrix_ZeroMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveSemiDefiniteMatrix_ZeroMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateZeros(3, 3);
 
         Assert.True(matrix.IsPositiveSemiDefiniteMatrix());
     }
 
-    [Fact]
-    public void IsPositiveSemiDefiniteMatrix_PositiveDefinite_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveSemiDefiniteMatrix_PositiveDefinite_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
@@ -1140,8 +1141,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsIdempotentMatrix Tests
 
-    [Fact]
-    public void IsIdempotentMatrix_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIdempotentMatrix_IdentityMatrix_ReturnsTrue()
     {
         // I * I = I
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1149,8 +1150,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsIdempotentMatrix());
     }
 
-    [Fact]
-    public void IsIdempotentMatrix_ZeroMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIdempotentMatrix_ZeroMatrix_ReturnsTrue()
     {
         // 0 * 0 = 0
         var matrix = Matrix<double>.CreateZeros(3, 3);
@@ -1158,8 +1159,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsIdempotentMatrix());
     }
 
-    [Fact]
-    public void IsIdempotentMatrix_ProjectionMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIdempotentMatrix_ProjectionMatrix_ReturnsTrue()
     {
         // A simple 2D projection matrix onto x-axis
         var matrix = new Matrix<double>(new double[,]
@@ -1175,8 +1176,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsInvolutoryMatrix Tests
 
-    [Fact]
-    public void IsInvolutoryMatrix_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvolutoryMatrix_IdentityMatrix_ReturnsTrue()
     {
         // I * I = I
         var matrix = Matrix<double>.CreateIdentity(3);
@@ -1184,8 +1185,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsInvolutoryMatrix());
     }
 
-    [Fact]
-    public void IsInvolutoryMatrix_ReflectionMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvolutoryMatrix_ReflectionMatrix_ReturnsTrue()
     {
         // Reflection matrix: A^2 = I
         var matrix = new Matrix<double>(new double[,]
@@ -1201,8 +1202,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsOrthogonalProjectionMatrix Tests
 
-    [Fact]
-    public void IsOrthogonalProjectionMatrix_SimpleProjection_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsOrthogonalProjectionMatrix_SimpleProjection_ReturnsTrue()
     {
         // Projection onto x-axis (symmetric and idempotent)
         var matrix = new Matrix<double>(new double[,]
@@ -1218,16 +1219,16 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsInvertible Tests
 
-    [Fact]
-    public void IsInvertible_IdentityMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_IdentityMatrix_ReturnsTrue()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
         Assert.True(matrix.IsInvertible());
     }
 
-    [Fact]
-    public void IsInvertible_SingularMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvertible_SingularMatrix_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1242,8 +1243,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsVandermondeMatrix Tests
 
-    [Fact]
-    public void IsVandermondeMatrix_VandermondeMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsVandermondeMatrix_VandermondeMatrix_ReturnsTrue()
     {
         // Vandermonde matrix for nodes [1, 2, 3]
         var matrix = new Matrix<double>(new double[,]
@@ -1260,8 +1261,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsHilbertMatrix Tests
 
-    [Fact]
-    public void IsHilbertMatrix_HilbertMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsHilbertMatrix_HilbertMatrix_ReturnsTrue()
     {
         // H[i,j] = 1 / (i + j + 1) for 0-indexed
         var matrix = new Matrix<double>(new double[,]
@@ -1278,8 +1279,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsCauchyMatrix Tests
 
-    [Fact]
-    public void IsCauchyMatrix_CauchyMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsCauchyMatrix_CauchyMatrix_ReturnsTrue()
     {
         // C[i,j] = 1 / (x[i] - y[j])
         // For x = [1, 2, 3] and y = [4, 5, 6]
@@ -1297,8 +1298,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsCompanionMatrix Tests
 
-    [Fact]
-    public void IsCompanionMatrix_CompanionMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsCompanionMatrix_CompanionMatrix_ReturnsTrue()
     {
         // Companion matrix for polynomial coefficients
         var matrix = new Matrix<double>(new double[,]
@@ -1315,8 +1316,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsAdjacencyMatrix Tests
 
-    [Fact]
-    public void IsAdjacencyMatrix_SymmetricBinaryMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsAdjacencyMatrix_SymmetricBinaryMatrix_ReturnsTrue()
     {
         // Adjacency matrix: symmetric, binary (0 or 1), zero diagonal
         var matrix = new Matrix<double>(new double[,]
@@ -1329,8 +1330,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.True(matrix.IsAdjacencyMatrix());
     }
 
-    [Fact]
-    public void IsAdjacencyMatrix_NonSymmetric_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsAdjacencyMatrix_NonSymmetric_ReturnsFalse()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1346,8 +1347,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsLaplacianMatrix Tests
 
-    [Fact]
-    public void IsLaplacianMatrix_SimpleLaplacian_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsLaplacianMatrix_SimpleLaplacian_ReturnsTrue()
     {
         // Laplacian: L = D - A, where D is degree matrix, A is adjacency
         // For a simple graph with 3 nodes
@@ -1365,8 +1366,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsIncidenceMatrix Tests
 
-    [Fact]
-    public void IsIncidenceMatrix_IncidenceMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIncidenceMatrix_IncidenceMatrix_ReturnsTrue()
     {
         // Incidence matrix: each column has exactly one +1 and one -1
         var matrix = new Matrix<double>(new double[,]
@@ -1383,8 +1384,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region InvertLowerTriangularMatrix Tests
 
-    [Fact]
-    public void InvertLowerTriangularMatrix_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InvertLowerTriangularMatrix_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1407,8 +1408,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Inverse Variants Tests
 
-    [Fact]
-    public void InverseGaussianJordanElimination_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InverseGaussianJordanElimination_ReturnsCorrectInverse()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1424,8 +1425,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(1, product[1, 1], 1e-6);
     }
 
-    [Fact]
-    public void InverseNewton_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InverseNewton_ReturnsCorrectInverse()
     {
         // Use a well-conditioned diagonally dominant matrix for Newton-Schulz
         // Newton-Schulz converges slowly for ill-conditioned matrices
@@ -1446,8 +1447,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, product[1, 0], 1e-4);
     }
 
-    [Fact]
-    public void InverseStrassen_ReturnsCorrectInverse()
+    [Fact(Timeout = 120000)]
+    public async Task InverseStrassen_ReturnsCorrectInverse()
     {
         // Strassen requires power of 2 dimension
         var matrix = new Matrix<double>(new double[,]
@@ -1468,16 +1469,16 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetNullity Tests
 
-    [Fact]
-    public void GetNullity_FullRankMatrix_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GetNullity_FullRankMatrix_ReturnsZero()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
         Assert.Equal(0, matrix.GetNullity());
     }
 
-    [Fact]
-    public void GetNullity_RankDeficientMatrix_ReturnsCorrectNullity()
+    [Fact(Timeout = 120000)]
+    public async Task GetNullity_RankDeficientMatrix_ReturnsCorrectNullity()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1494,8 +1495,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region LogDeterminant Tests
 
-    [Fact]
-    public void LogDeterminant_IdentityMatrix_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task LogDeterminant_IdentityMatrix_ReturnsZero()
     {
         var matrix = Matrix<double>.CreateIdentity(3);
 
@@ -1504,8 +1505,8 @@ public class MatrixExtensionsIntegrationTests
         Assert.Equal(0, logDet, 1e-6); // log(1) = 0
     }
 
-    [Fact]
-    public void LogDeterminant_PositiveDefiniteMatrix_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task LogDeterminant_PositiveDefiniteMatrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1523,8 +1524,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetColumnVectors Tests
 
-    [Fact]
-    public void GetColumnVectors_ReturnsCorrectColumns()
+    [Fact(Timeout = 120000)]
+    public async Task GetColumnVectors_ReturnsCorrectColumns()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1545,8 +1546,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region Max with Selector Tests
 
-    [Fact]
-    public void Max_WithSelector_ReturnsMaxOfTransformedValues()
+    [Fact(Timeout = 120000)]
+    public async Task Max_WithSelector_ReturnsMaxOfTransformedValues()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -1563,8 +1564,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region ToComplexVector Tests
 
-    [Fact]
-    public void ToComplexVector_ConvertsRealToComplex()
+    [Fact(Timeout = 120000)]
+    public async Task ToComplexVector_ConvertsRealToComplex()
     {
         var vector = new Vector<double>([1, 2, 3]);
 
@@ -1579,8 +1580,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region CreateComplexMatrix Tests
 
-    [Fact]
-    public void CreateComplexMatrix_CreatesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task CreateComplexMatrix_CreatesCorrectDimensions()
     {
         var template = new Matrix<Complex<double>>(2, 3);
 
@@ -1594,8 +1595,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region IsBlockMatrix Tests
 
-    [Fact]
-    public void IsBlockMatrix_UniformBlocks_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsBlockMatrix_UniformBlocks_ReturnsTrue()
     {
         // 4x4 matrix with 2x2 blocks
         var matrix = new Matrix<double>(new double[,]
@@ -1613,8 +1614,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region InvertUnitaryMatrix Tests
 
-    [Fact]
-    public void InvertUnitaryMatrix_ReturnsConjugateTranspose()
+    [Fact(Timeout = 120000)]
+    public async Task InvertUnitaryMatrix_ReturnsConjugateTranspose()
     {
         // A simple unitary matrix: diagonal with unit complex numbers
         var matrix = new Matrix<Complex<double>>(2, 2);
@@ -1636,8 +1637,8 @@ public class MatrixExtensionsIntegrationTests
 
     #region GetDeterminant Tests
 
-    [Fact]
-    public void GetDeterminant_SameAsDeterminant()
+    [Fact(Timeout = 120000)]
+    public async Task GetDeterminant_SameAsDeterminant()
     {
         var matrix = new Matrix<double>(new double[,]
         {

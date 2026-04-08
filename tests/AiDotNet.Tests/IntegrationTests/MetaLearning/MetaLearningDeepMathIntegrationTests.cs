@@ -1,4 +1,5 @@
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -17,8 +18,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region ProtoNets: Prototype Computation (Class Mean Embedding)
 
-    [Fact]
-    public void ProtoNets_Prototype_IsMeanOfClassEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_Prototype_IsMeanOfClassEmbeddings()
     {
         // ProtoNets: prototype_k = (1/|S_k|) * sum(f(x_i)) for x_i in class k
         // Class 0 embeddings: [1,2,3], [3,4,5] -> prototype = [2, 3, 4]
@@ -37,8 +38,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(30.0, proto1[2], Tolerance);
     }
 
-    [Fact]
-    public void ProtoNets_Prototype_SingleExample_EqualsItself()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_Prototype_SingleExample_EqualsItself()
     {
         // With one example per class (1-shot), prototype = the single embedding
         var embedding = new double[][] { [5.5, -3.2, 7.1] };
@@ -49,8 +50,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(7.1, proto[2], Tolerance);
     }
 
-    [Fact]
-    public void ProtoNets_EuclideanDistance_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_EuclideanDistance_HandComputed()
     {
         // d(q, p) = sqrt(sum((q_i - p_i)^2))
         // q = [1, 2, 3], p = [4, 6, 3]
@@ -62,8 +63,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(5.0, distance, Tolerance);
     }
 
-    [Fact]
-    public void ProtoNets_SoftmaxOverNegDistances_ClassifiesNearest()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_SoftmaxOverNegDistances_ClassifiesNearest()
     {
         // ProtoNets uses softmax(-d(q, p_k)) for classification
         // query = [2, 3], proto0 = [2, 3] (dist=0), proto1 = [10, 10] (dist=sqrt(64+49)=sqrt(113))
@@ -81,8 +82,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.True(probs[1] < 0.01, $"Far prototype class should have prob < 0.01, got {probs[1]}");
     }
 
-    [Fact]
-    public void ProtoNets_EqualDistances_ProduceUniformProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_EqualDistances_ProduceUniformProbabilities()
     {
         // When equidistant from all prototypes, softmax gives uniform distribution
         var query = new double[] { 0, 0 };
@@ -103,8 +104,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, probs[2], 1e-5);
     }
 
-    [Fact]
-    public void ProtoNets_SquaredEuclidean_MoreDiscriminative()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_SquaredEuclidean_MoreDiscriminative()
     {
         // Squared Euclidean magnifies differences: classes farther away get exponentially lower prob
         // q=[0,0], p0=[1,0](d=1, d^2=1), p1=[3,0](d=3, d^2=9)
@@ -127,8 +128,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region MAML: Inner Loop Gradient Descent
 
-    [Fact]
-    public void MAML_InnerLoop_SingleStep_CorrectUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_InnerLoop_SingleStep_CorrectUpdate()
     {
         // MAML inner loop: θ' = θ - α * ∇L(θ)
         // θ = [1.0, 2.0, 3.0], α = 0.1, ∇L = [0.5, -1.0, 2.0]
@@ -144,8 +145,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(2.8, thetaPrime[2], Tolerance);
     }
 
-    [Fact]
-    public void MAML_InnerLoop_MultipleSteps_Converges()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_InnerLoop_MultipleSteps_Converges()
     {
         // Multiple gradient steps should decrease loss on training data
         // Linear model: y = w*x, loss = (y_pred - y_true)^2
@@ -173,8 +174,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.True(Math.Abs(w - 3.0) < 0.1, $"Weight should approach 3.0, got {w}");
     }
 
-    [Fact]
-    public void MAML_MetaGradient_AveragesAcrossTasks()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_MetaGradient_AveragesAcrossTasks()
     {
         // Meta-gradient = (1/B) * sum(task_gradients)
         // Task 1 gradient: [1.0, 2.0, 3.0]
@@ -195,8 +196,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(1.0, avgGrad[2], Tolerance);
     }
 
-    [Fact]
-    public void MAML_GradientClipping_NormExceedsThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_GradientClipping_NormExceedsThreshold()
     {
         // Gradient clipping: if ||g|| > threshold, g = g * (threshold / ||g||)
         // g = [3.0, 4.0] -> ||g|| = 5.0, threshold = 2.5
@@ -212,8 +213,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(2.0, clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void MAML_GradientClipping_NormBelowThreshold_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_GradientClipping_NormBelowThreshold_NoChange()
     {
         // When ||g|| <= threshold, gradients unchanged
         var gradients = new double[] { 1.0, 1.0 }; // ||g|| = sqrt(2) ≈ 1.414
@@ -225,8 +226,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(gradients[1], clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void MAML_FOMAML_IgnoresSecondOrderTerms()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_FOMAML_IgnoresSecondOrderTerms()
     {
         // FOMAML approximation: meta-gradient ≈ ∇L_query(θ') where θ' = θ - α*∇L_support(θ)
         // Full MAML: meta-gradient = ∇L_query(θ') * (I - α*H_support)
@@ -266,8 +267,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Reptile: Parameter Interpolation
 
-    [Fact]
-    public void Reptile_ParameterInterpolation_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_ParameterInterpolation_Formula()
     {
         // Reptile update: θ_new = θ_old + ε * (θ_adapted - θ_old)
         // θ_old = [1.0, 2.0, 3.0], θ_adapted = [2.0, 4.0, 1.0], ε = 0.5
@@ -284,8 +285,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(2.0, thetaNew[2], Tolerance);
     }
 
-    [Fact]
-    public void Reptile_Epsilon1_FullAdaptation()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_Epsilon1_FullAdaptation()
     {
         // ε = 1.0: θ_new = θ_old + 1.0*(θ_adapted - θ_old) = θ_adapted
         var thetaOld = new double[] { 1.0, 2.0 };
@@ -297,8 +298,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(-3.0, thetaNew[1], Tolerance);
     }
 
-    [Fact]
-    public void Reptile_Epsilon0_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_Epsilon0_NoChange()
     {
         // ε = 0.0: θ_new = θ_old + 0*(θ_adapted - θ_old) = θ_old
         var thetaOld = new double[] { 1.0, 2.0 };
@@ -310,8 +311,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(2.0, thetaNew[1], Tolerance);
     }
 
-    [Fact]
-    public void Reptile_BatchedUpdate_AveragesTaskDirections()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_BatchedUpdate_AveragesTaskDirections()
     {
         // With batch: direction = (1/B) * sum(θ_adapted_i - θ_old)
         // θ_old = [0, 0], adapted_1 = [2, 4], adapted_2 = [4, -2]
@@ -338,8 +339,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.1, thetaNew[1], Tolerance);
     }
 
-    [Fact]
-    public void Reptile_ConvergesWithRepeatedUpdates()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_ConvergesWithRepeatedUpdates()
     {
         // If all tasks have optimal params at [3.0, 3.0], Reptile converges there
         double[] theta = [0.0, 0.0];
@@ -364,8 +365,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region SimpleShot: L2 Normalization
 
-    [Fact]
-    public void SimpleShot_L2Normalization_UnitNorm()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_L2Normalization_UnitNorm()
     {
         // L2 normalization: x_norm = x / ||x||_2
         // x = [3, 4] -> ||x|| = 5 -> x_norm = [0.6, 0.8]
@@ -378,8 +379,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.8, normalized[1], Tolerance);
     }
 
-    [Fact]
-    public void SimpleShot_L2Normalization_PreservesDirection()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_L2Normalization_PreservesDirection()
     {
         // Normalized vector should be a positive scalar multiple of original
         var x = new double[] { 2.0, -3.0, 1.0 };
@@ -392,8 +393,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(ratio, normalized[2] / x[2], Tolerance);
     }
 
-    [Fact]
-    public void SimpleShot_CL2N_CentersThenNormalizes()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_CL2N_CentersThenNormalizes()
     {
         // CL2N: center features by subtracting mean, then L2 normalize
         // Features: [2, 4, 6], [4, 6, 8] -> mean = [3, 5, 7]
@@ -420,8 +421,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(expectedVal, normalized0[2], Tolerance);
     }
 
-    [Fact]
-    public void SimpleShot_CL2N_OppositeClassesBecomeAntiparallel()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_CL2N_OppositeClassesBecomeAntiparallel()
     {
         // After CL2N with two symmetric classes, they become exactly opposite directions
         var features = new double[][] { [1, 0], [3, 0] }; // mean = [2, 0]
@@ -436,8 +437,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(-1.0, dot, Tolerance);
     }
 
-    [Fact]
-    public void SimpleShot_NearestCentroid_ClassifiesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_NearestCentroid_ClassifiesCorrectly()
     {
         // 3 classes with centroids at known positions
         // c0 = [1, 0], c1 = [0, 1], c2 = [-1, 0]
@@ -449,8 +450,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0, predicted);
     }
 
-    [Fact]
-    public void SimpleShot_NearestCentroid_WithNormalization_ChangesDecision()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_NearestCentroid_WithNormalization_ChangesDecision()
     {
         // Without normalization: query [10, 1] closest to centroid [8, 0]
         // With L2 normalization: query becomes [10/sqrt(101), 1/sqrt(101)] ≈ [0.995, 0.0995]
@@ -475,8 +476,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Matching Networks: Cosine Similarity
 
-    [Fact]
-    public void MatchingNets_CosineSimilarity_ParallelVectors()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_CosineSimilarity_ParallelVectors()
     {
         // Parallel vectors: cos(a, 2a) = 1.0
         var a = new double[] { 1.0, 2.0, 3.0 };
@@ -486,8 +487,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(1.0, cosine, Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_CosineSimilarity_OrthogonalVectors()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_CosineSimilarity_OrthogonalVectors()
     {
         // Orthogonal vectors: cos(a, b) = 0
         var a = new double[] { 1.0, 0.0 };
@@ -497,8 +498,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.0, cosine, Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_CosineSimilarity_AntiparallelVectors()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_CosineSimilarity_AntiparallelVectors()
     {
         // Antiparallel vectors: cos(a, -a) = -1.0
         var a = new double[] { 1.0, 2.0, 3.0 };
@@ -508,8 +509,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(-1.0, cosine, Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_CosineSimilarity_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_CosineSimilarity_HandComputed()
     {
         // a = [1, 2, 3], b = [4, -5, 6]
         // dot = 1*4 + 2*(-5) + 3*6 = 4 - 10 + 18 = 12
@@ -524,8 +525,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(expected, cosine, Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_DotProduct_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_DotProduct_HandComputed()
     {
         // a = [1, 2, 3], b = [4, -5, 6]
         // dot = 1*4 + 2*(-5) + 3*6 = 4 - 10 + 18 = 12
@@ -536,8 +537,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(12.0, dot, Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_NegativeEuclidean_MoreSimilarMeansLargerValue()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_NegativeEuclidean_MoreSimilarMeansLargerValue()
     {
         // Negative Euclidean: -||a-b||
         // a=[0,0], b1=[1,0](d=1), b2=[3,0](d=3)
@@ -557,8 +558,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Matching Networks: Softmax Attention Weights
 
-    [Fact]
-    public void MatchingNets_SoftmaxAttention_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_SoftmaxAttention_SumsToOne()
     {
         // softmax always sums to 1
         var similarities = new double[] { 1.5, -0.5, 0.3, 2.1 };
@@ -568,8 +569,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-10);
     }
 
-    [Fact]
-    public void MatchingNets_SoftmaxAttention_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_SoftmaxAttention_AllPositive()
     {
         // softmax outputs are always positive
         var similarities = new double[] { -100, -200, -50 };
@@ -581,8 +582,8 @@ public class MetaLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MatchingNets_SoftmaxAttention_MaxGetsHighestWeight()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_SoftmaxAttention_MaxGetsHighestWeight()
     {
         // Largest input gets largest softmax output
         var similarities = new double[] { 1.0, 3.0, 2.0 };
@@ -592,8 +593,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.True(weights[1] > weights[2], "Max input should have highest weight");
     }
 
-    [Fact]
-    public void MatchingNets_SoftmaxAttention_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_SoftmaxAttention_HandComputed()
     {
         // softmax([1, 2, 3]) = exp([1,2,3])/sum(exp([1,2,3]))
         // exp(1) ≈ 2.71828, exp(2) ≈ 7.38906, exp(3) ≈ 20.08554
@@ -607,8 +608,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.66524, weights[2], 4);
     }
 
-    [Fact]
-    public void MatchingNets_TemperatureScaling_SharpensSoftmax()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_TemperatureScaling_SharpensSoftmax()
     {
         // Low temperature -> sharper distribution (more confident)
         // High temperature -> flatter distribution (more uniform)
@@ -626,8 +627,8 @@ public class MetaLearningDeepMathIntegrationTests
             $"High temp max weight {weightsT10[2]} should be less than normal {weightsT1[2]}");
     }
 
-    [Fact]
-    public void MatchingNets_AttentionWeightedPrediction_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_AttentionWeightedPrediction_HandComputed()
     {
         // Attention-weighted prediction: y_hat = sum(w_i * y_i)
         // Support labels (one-hot): [[1,0], [0,1], [1,0]]
@@ -642,8 +643,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.3, prediction[1], Tolerance);
     }
 
-    [Fact]
-    public void MatchingNets_AttentionPrediction_AllWeightOnOne_ReturnsItsLabel()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNets_AttentionPrediction_AllWeightOnOne_ReturnsItsLabel()
     {
         // If all attention on one example, prediction = that example's label
         var labels = new double[][] { [1, 0], [0, 1], [1, 0] };
@@ -659,8 +660,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Cross-Entropy Loss for Meta-Learning
 
-    [Fact]
-    public void MetaLearning_CrossEntropyLoss_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearning_CrossEntropyLoss_HandComputed()
     {
         // CE = -sum(y_true * log(y_pred)) / N
         // For single example: true class = 0, predicted probs = [0.7, 0.2, 0.1]
@@ -670,16 +671,16 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.35667, ce, 4);
     }
 
-    [Fact]
-    public void MetaLearning_CrossEntropyLoss_PerfectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearning_CrossEntropyLoss_PerfectPrediction()
     {
         // Perfect prediction: prob = 1.0 -> CE = -log(1) = 0
         double ce = -Math.Log(1.0);
         Assert.Equal(0.0, ce, Tolerance);
     }
 
-    [Fact]
-    public void MetaLearning_CrossEntropyLoss_UniformPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearning_CrossEntropyLoss_UniformPrediction()
     {
         // Uniform over K classes: prob = 1/K -> CE = log(K)
         int K = 5;
@@ -687,8 +688,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(Math.Log(K), ce, Tolerance);
     }
 
-    [Fact]
-    public void MetaLearning_CrossEntropyLoss_BatchAverage()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLearning_CrossEntropyLoss_BatchAverage()
     {
         // Batch CE = mean over examples
         // Example 1: true=0, probs=[0.8, 0.2] -> CE1 = -log(0.8)
@@ -707,8 +708,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Few-Shot Episode Construction
 
-    [Fact]
-    public void FewShot_NWayKShot_CorrectSupportSize()
+    [Fact(Timeout = 120000)]
+    public async Task FewShot_NWayKShot_CorrectSupportSize()
     {
         // N-way K-shot: support set has N*K examples
         int N = 5; // 5 classes
@@ -717,8 +718,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(15, supportSize);
     }
 
-    [Fact]
-    public void FewShot_PrototypeCount_EqualsNWay()
+    [Fact(Timeout = 120000)]
+    public async Task FewShot_PrototypeCount_EqualsNWay()
     {
         // Number of prototypes should equal N (number of classes)
         int N = 5;
@@ -738,8 +739,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(N, numClasses);
     }
 
-    [Fact]
-    public void FewShot_OneShotPrototype_EqualsExactExample()
+    [Fact(Timeout = 120000)]
+    public async Task FewShot_OneShotPrototype_EqualsExactExample()
     {
         // In 1-shot learning, prototype = the single support example
         int K = 1;
@@ -758,8 +759,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Gradient Computation for Linear Model
 
-    [Fact]
-    public void LinearModel_MSEGradient_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task LinearModel_MSEGradient_HandComputed()
     {
         // Model: y = W*x + b, where W=[w1,w2], x=[x1,x2], b=bias
         // Loss = (y_pred - y_true)^2
@@ -790,8 +791,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.2, gradB, Tolerance);
     }
 
-    [Fact]
-    public void LinearModel_BatchGradient_AveragedOverExamples()
+    [Fact(Timeout = 120000)]
+    public async Task LinearModel_BatchGradient_AveragedOverExamples()
     {
         // Batch gradient = (1/N) * sum of per-example gradients
         // Example 1: x=[1], y_true=2, W=[0.5], b=0
@@ -822,8 +823,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Distance Metric Properties
 
-    [Fact]
-    public void Distance_Triangle_Inequality()
+    [Fact(Timeout = 120000)]
+    public async Task Distance_Triangle_Inequality()
     {
         // d(a,c) <= d(a,b) + d(b,c) for any a, b, c
         var a = new double[] { 1, 0, 0 };
@@ -838,8 +839,8 @@ public class MetaLearningDeepMathIntegrationTests
             $"Triangle inequality violated: d(a,c)={dAC} > d(a,b)+d(b,c)={dAB + dBC}");
     }
 
-    [Fact]
-    public void Distance_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task Distance_Symmetry()
     {
         // d(a,b) = d(b,a)
         var a = new double[] { 1.5, -3.2, 0.7 };
@@ -851,8 +852,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(dAB, dBA, Tolerance);
     }
 
-    [Fact]
-    public void Distance_Identity()
+    [Fact(Timeout = 120000)]
+    public async Task Distance_Identity()
     {
         // d(a,a) = 0
         var a = new double[] { 1.5, -3.2, 0.7 };
@@ -860,8 +861,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(0.0, d, Tolerance);
     }
 
-    [Fact]
-    public void Distance_NonNegativity()
+    [Fact(Timeout = 120000)]
+    public async Task Distance_NonNegativity()
     {
         // d(a,b) >= 0 for all a,b
         var a = new double[] { -5, 10, -3 };
@@ -874,8 +875,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Cosine Similarity Properties
 
-    [Fact]
-    public void CosineSimilarity_BoundedBetweenNeg1And1()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_BoundedBetweenNeg1And1()
     {
         // cos(a,b) in [-1, 1] for any non-zero a, b
         var vectors = new double[][]
@@ -897,8 +898,8 @@ public class MetaLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CosineSimilarity_ScaleInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_ScaleInvariant()
     {
         // cos(a, k*b) = cos(a, b) for k > 0
         var a = new double[] { 1, 2, 3 };
@@ -911,8 +912,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(cos1, cos2, 1e-10);
     }
 
-    [Fact]
-    public void CosineSimilarity_SelfSimilarity_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_SelfSimilarity_IsOne()
     {
         // cos(a, a) = 1 for any non-zero a
         var a = new double[] { -3.7, 2.1, 0.0, -1.5 };
@@ -924,8 +925,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region One-Hot Encoding for Meta-Learning
 
-    [Fact]
-    public void OneHot_Encoding_CorrectFormat()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_Encoding_CorrectFormat()
     {
         // Class labels [0, 1, 2, 0] with 3 classes ->
         // [[1,0,0], [0,1,0], [0,0,1], [1,0,0]]
@@ -950,8 +951,8 @@ public class MetaLearningDeepMathIntegrationTests
         Assert.Equal(1.0, oneHot[2][2], Tolerance);
     }
 
-    [Fact]
-    public void OneHot_RowSumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task OneHot_RowSumsToOne()
     {
         // Each row of one-hot encoding sums to 1
         var labels = new int[] { 0, 2, 1, 3, 0 };
@@ -969,8 +970,8 @@ public class MetaLearningDeepMathIntegrationTests
 
     #region Meta-Learning Loss Landscape Properties
 
-    [Fact]
-    public void MetaLoss_InnerLoopSteps_DecreaseLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLoss_InnerLoopSteps_DecreaseLoss()
     {
         // More inner loop steps should generally decrease loss on support set
         // Using simple quadratic loss: L(θ) = (θ - θ*)^2 where θ* = 3
@@ -997,8 +998,8 @@ public class MetaLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MetaLoss_LargerLR_FasterInitialDecrease()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLoss_LargerLR_FasterInitialDecrease()
     {
         // With larger learning rate, initial loss decrease is faster
         // But may overshoot if too large

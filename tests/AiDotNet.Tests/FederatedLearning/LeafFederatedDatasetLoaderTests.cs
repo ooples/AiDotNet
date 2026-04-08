@@ -1,6 +1,7 @@
 using System.IO;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -27,8 +28,8 @@ public class LeafFederatedDatasetLoaderTests
   }
 }";
 
-    [Fact]
-    public void LoadSplitFromJson_ValidTinyFixture_ParsesClientsAndFlattensFeatures()
+    [Fact(Timeout = 60000)]
+    public async Task LoadSplitFromJson_ValidTinyFixture_ParsesClientsAndFlattensFeatures()
     {
         var loader = new LeafFederatedDatasetLoader<double>();
         var split = loader.LoadSplitFromJson(TinyLeafJson);
@@ -65,8 +66,8 @@ public class LeafFederatedDatasetLoaderTests
         Assert.Equal(1, clients[1].SampleCount);
     }
 
-    [Fact]
-    public void LoadSplitFromJson_WhenDeclaredNumSamplesMismatch_ThrowsInvalidDataException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadSplitFromJson_WhenDeclaredNumSamplesMismatch_ThrowsInvalidDataException()
     {
         const string badJson = @"
 {
@@ -81,8 +82,8 @@ public class LeafFederatedDatasetLoaderTests
         Assert.Throws<InvalidDataException>(() => loader.LoadSplitFromJson(badJson));
     }
 
-    [Fact]
-    public void LoadSplitFromJson_WhenMaxUsersSpecified_LoadsSubset()
+    [Fact(Timeout = 60000)]
+    public async Task LoadSplitFromJson_WhenMaxUsersSpecified_LoadsSubset()
     {
         var loader = new LeafFederatedDatasetLoader<double>();
         var split = loader.LoadSplitFromJson(
@@ -95,8 +96,8 @@ public class LeafFederatedDatasetLoaderTests
         Assert.False(split.UserData.ContainsKey("u2"));
     }
 
-    [Fact]
-    public void LoadSplitFromFile_WhenFileExists_LoadsSplit()
+    [Fact(Timeout = 60000)]
+    public async Task LoadSplitFromFile_WhenFileExists_LoadsSplit()
     {
         var path = Path.GetTempFileName();
 
@@ -115,8 +116,8 @@ public class LeafFederatedDatasetLoaderTests
         }
     }
 
-    [Fact]
-    public void LoadDatasetFromFiles_WithTrainAndTest_LoadsBothSplits()
+    [Fact(Timeout = 60000)]
+    public async Task LoadDatasetFromFiles_WithTrainAndTest_LoadsBothSplits()
     {
         var trainPath = Path.GetTempFileName();
         var testPath = Path.GetTempFileName();
@@ -141,8 +142,8 @@ public class LeafFederatedDatasetLoaderTests
         }
     }
 
-    [Fact]
-    public void LoadSplitFromJson_WhenMaxUsersIsNonPositive_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadSplitFromJson_WhenMaxUsersIsNonPositive_ThrowsArgumentOutOfRangeException()
     {
         var loader = new LeafFederatedDatasetLoader<double>();
         Assert.Throws<ArgumentOutOfRangeException>(() => loader.LoadSplitFromJson(

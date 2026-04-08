@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class CrossEntropyLossTests
     {
-        [Fact]
-        public void CalculateLoss_WithPerfectPredictions_ReturnsNearZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithPerfectPredictions_ReturnsNearZero()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result < 0.001);
         }
 
-        [Fact]
-        public void CalculateLoss_WithProbabilityDistribution_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithProbabilityDistribution_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result < 1.0);
         }
 
-        [Fact]
-        public void CalculateLoss_WithMultipleClasses_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithMultipleClasses_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result > 0.0);
         }
 
-        [Fact]
-        public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -71,8 +72,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateLoss_WithZeroProbabilities_HandlesNumericalStability()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithZeroProbabilities_HandlesNumericalStability()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(double.IsInfinity(result));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithPerfectPredictions_ReturnsNegativeValues()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithPerfectPredictions_ReturnsNegativeValues()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -105,8 +106,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[0] < 0.0);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -117,8 +118,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithZeroProbabilities_HandlesNumericalStability()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithZeroProbabilities_HandlesNumericalStability()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.False(double.IsInfinity(item)));
         }
 
-        [Fact]
-        public void CalculateLoss_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new CrossEntropyLoss<float>();
@@ -151,8 +152,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(float.IsNaN(result));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new CrossEntropyLoss<float>();
@@ -167,8 +168,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.False(float.IsNaN(item)));
         }
 
-        [Fact]
-        public void CalculateLoss_WithConfidentWrongPrediction_ReturnsHighLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithConfidentWrongPrediction_ReturnsHighLoss()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -183,8 +184,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result > 0.5);
         }
 
-        [Fact]
-        public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(double.IsNaN(result));
         }
 
-        [Fact]
-        public void CalculateDerivative_ReturnsVectorOfCorrectLength()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_ReturnsVectorOfCorrectLength()
         {
             // Arrange
             var loss = new CrossEntropyLoss<double>();

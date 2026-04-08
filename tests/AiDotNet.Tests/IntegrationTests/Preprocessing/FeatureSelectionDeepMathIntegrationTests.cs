@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.FeatureSelection;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -16,8 +17,8 @@ public class FeatureSelectionDeepMathIntegrationTests
     // SSW = sum(sum((x_ij - mean_i)^2))
     // =====================================================================
 
-    [Fact]
-    public void SelectKBest_FClassif_HandComputedFStatistic()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FClassif_HandComputedFStatistic()
     {
         // 2 classes, 2 features, 6 samples
         // Class 0 (rows 0-2): feature0 = [1,2,3], feature1 = [10,10,10]
@@ -60,8 +61,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0, selector.SelectedIndices[0]);
     }
 
-    [Fact]
-    public void SelectKBest_FClassif_SelectsHighestKFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FClassif_SelectsHighestKFeatures()
     {
         // 3 features with varying discriminative power
         var data = new double[,]
@@ -91,8 +92,8 @@ public class FeatureSelectionDeepMathIntegrationTests
             "SelectedIndices should be sorted");
     }
 
-    [Fact]
-    public void SelectKBest_FRegression_HandComputedFStatistic()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FRegression_HandComputedFStatistic()
     {
         // y = 2*x0 + noise, x1 is random
         // Feature 0 should have high F-stat, feature 1 should have lower F-stat
@@ -124,8 +125,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0, selector.SelectedIndices[0]);
     }
 
-    [Fact]
-    public void SelectKBest_FRegression_FormulaVerification()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FRegression_FormulaVerification()
     {
         // Simple case: 5 data points, 1 feature, known regression statistics
         var data = new double[,]
@@ -157,8 +158,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedF, selector.Scores[0], Tolerance);
     }
 
-    [Fact]
-    public void SelectKBest_Chi2_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_Chi2_HandComputed()
     {
         // 2 classes, equal size, 1 feature with non-negative values
         // Class 0: values [1, 2, 3], Class 1: values [4, 5, 6]
@@ -186,8 +187,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedChi2, selector.Scores[0], Tolerance);
     }
 
-    [Fact]
-    public void SelectKBest_MutualInfo_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_MutualInfo_NonNegative()
     {
         // Mutual information should always be non-negative
         var data = new double[,]
@@ -211,8 +212,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelectKBest_TransformReducesDimensionality()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_TransformReducesDimensionality()
     {
         var data = new double[,]
         {
@@ -233,8 +234,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void SelectKBest_TransformPreservesSelectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_TransformPreservesSelectedValues()
     {
         var data = new double[,]
         {
@@ -259,8 +260,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelectKBest_GetSupportMask_CorrectBoolean()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_GetSupportMask_CorrectBoolean()
     {
         var data = new double[,]
         {
@@ -290,8 +291,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelectKBest_KExceedsFeaturesCount_SelectsAll()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_KExceedsFeaturesCount_SelectsAll()
     {
         var data = new double[,]
         {
@@ -310,8 +311,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns); // Should select all
     }
 
-    [Fact]
-    public void SelectKBest_SelectedIndicesAreSorted()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_SelectedIndicesAreSorted()
     {
         var data = new double[,]
         {
@@ -338,8 +339,8 @@ public class FeatureSelectionDeepMathIntegrationTests
     // SelectPercentile Tests
     // =====================================================================
 
-    [Fact]
-    public void SelectPercentile_50Percent_SelectsHalfOfFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task SelectPercentile_50Percent_SelectsHalfOfFeatures()
     {
         var data = new double[,]
         {
@@ -358,8 +359,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void SelectPercentile_25Percent_SelectsAtLeastOne()
+    [Fact(Timeout = 120000)]
+    public async Task SelectPercentile_25Percent_SelectsAtLeastOne()
     {
         var data = new double[,]
         {
@@ -378,8 +379,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(result.Columns >= 1, "Should select at least 1 feature");
     }
 
-    [Fact]
-    public void SelectPercentile_100Percent_SelectsAll()
+    [Fact(Timeout = 120000)]
+    public async Task SelectPercentile_100Percent_SelectsAll()
     {
         var data = new double[,]
         {
@@ -397,8 +398,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void SelectPercentile_ValidationRejectsInvalid()
+    [Fact(Timeout = 120000)]
+    public async Task SelectPercentile_ValidationRejectsInvalid()
     {
         Assert.Throws<ArgumentException>(() =>
             new SelectPercentile<double>(percentile: 0.0));
@@ -410,8 +411,8 @@ public class FeatureSelectionDeepMathIntegrationTests
     // GenericUnivariateSelect Tests
     // =====================================================================
 
-    [Fact]
-    public void GenericSelect_KBestMode_SameAsSelectKBest()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_KBestMode_SameAsSelectKBest()
     {
         var data = new double[,]
         {
@@ -443,8 +444,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void GenericSelect_PercentileMode_SelectsCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_PercentileMode_SelectsCorrectCount()
     {
         var data = new double[,]
         {
@@ -464,8 +465,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
-    public void GenericSelect_FWEMode_BonferroniCorrection()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_FWEMode_BonferroniCorrection()
     {
         // FWE uses Bonferroni: threshold = alpha / p
         var data = new double[,]
@@ -489,8 +490,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact]
-    public void GenericSelect_FDRMode_BenjaminiHochberg()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_FDRMode_BenjaminiHochberg()
     {
         // FDR uses BH procedure: sorted p-values, threshold_i = i * alpha / p
         var data = new double[,]
@@ -513,8 +514,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact]
-    public void GenericSelect_FPRMode_SelectsBelowAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_FPRMode_SelectsBelowAlpha()
     {
         var data = new double[,]
         {
@@ -536,8 +537,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.True(selector.SelectedIndices.Length >= 1);
     }
 
-    [Fact]
-    public void GenericSelect_ValidationRejectsInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_ValidationRejectsInvalidParams()
     {
         Assert.Throws<ArgumentException>(() =>
             new GenericUnivariateSelect<double>(mode: SelectionMode.KBest, param: 0));
@@ -549,8 +550,8 @@ public class FeatureSelectionDeepMathIntegrationTests
             new GenericUnivariateSelect<double>(mode: SelectionMode.FPR, param: 1.5));
     }
 
-    [Fact]
-    public void GenericSelect_FClassifScores_MatchAnovaFormula()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_FClassifScores_MatchAnovaFormula()
     {
         // 3 classes, 1 feature
         // Class 0: [1,2,3], Class 1: [4,5,6], Class 2: [7,8,9]
@@ -581,8 +582,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(expectedF, selector.Scores[0], Tolerance);
     }
 
-    [Fact]
-    public void GenericSelect_FRegressionScores_MatchOLSFormula()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_FRegressionScores_MatchOLSFormula()
     {
         // Perfect linear relationship: y = 3x
         var data = new double[,]
@@ -614,8 +615,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0.0, selector.Scores[0], Tolerance);
     }
 
-    [Fact]
-    public void GenericSelect_GetSupportMask_MatchesSelectedIndices()
+    [Fact(Timeout = 120000)]
+    public async Task GenericSelect_GetSupportMask_MatchesSelectedIndices()
     {
         var data = new double[,]
         {
@@ -646,8 +647,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelectKBest_FClassif_ZeroWithinVariance_ReturnsZeroFScore()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FClassif_ZeroWithinVariance_ReturnsZeroFScore()
     {
         // When all values in each class are identical, SSW = 0, MSW = 0
         // The code checks MSW > 1e-10, so F should be 0
@@ -667,8 +668,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(0.0, selector.Scores[0], Tolerance);
     }
 
-    [Fact]
-    public void SelectKBest_FClassif_ConstantFeature_ZeroScore()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_FClassif_ConstantFeature_ZeroScore()
     {
         // A constant feature has no discriminative power
         var data = new double[,]
@@ -693,8 +694,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Contains(0, selector.SelectedIndices);
     }
 
-    [Fact]
-    public void SelectKBest_CustomScoreFunc_IsUsed()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_CustomScoreFunc_IsUsed()
     {
         var data = new double[,]
         {
@@ -723,8 +724,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         Assert.Equal(1, selector.SelectedIndices[0]);
     }
 
-    [Fact]
-    public void SelectKBest_GetFeatureNamesOut_ReturnsSelectedNames()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_GetFeatureNamesOut_ReturnsSelectedNames()
     {
         var data = new double[,]
         {
@@ -751,8 +752,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelectKBest_RequiresTarget_ThrowsWithoutTarget()
+    [Fact(Timeout = 120000)]
+    public async Task SelectKBest_RequiresTarget_ThrowsWithoutTarget()
     {
         var data = new double[,]
         {

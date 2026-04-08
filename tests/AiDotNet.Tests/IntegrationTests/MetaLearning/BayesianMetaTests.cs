@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -49,8 +50,8 @@ public class BayesianMetaTests
         return false;
     }
 
-    [Fact]
-    public void PACOH_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task PACOH_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new PACOHOptions<double, Matrix<double>, Vector<double>>(model)
@@ -69,8 +70,8 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaPACOH_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaPACOH_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaPACOHOptions<double, Matrix<double>, Vector<double>>(model)
@@ -89,8 +90,8 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void BMAML_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task BMAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new BMAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -109,8 +110,8 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void BayProNet_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task BayProNet_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new BayProNetOptions<double, Matrix<double>, Vector<double>>(model)
@@ -129,8 +130,8 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void FlexPACBayes_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task FlexPACBayes_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new FlexPACBayesOptions<double, Matrix<double>, Vector<double>>(model)
@@ -149,8 +150,8 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void BMAML_MultiStep_StableLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BMAML_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
         var options = new BMAMLOptions<double, Matrix<double>, Vector<double>>(model)

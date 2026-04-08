@@ -1,12 +1,13 @@
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class ConditionalPromptTemplateTests
 {
-    [Fact]
-    public void Constructor_WithTemplate_CreatesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTemplate_CreatesTemplate()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
 
@@ -14,8 +15,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("name", template.InputVariables);
     }
 
-    [Fact]
-    public void Format_WithIfCondition_WhenTrue_IncludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithIfCondition_WhenTrue_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "Hello {{#if name}}{name}{{/if}}");
@@ -29,8 +30,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("John", result);
     }
 
-    [Fact]
-    public void Format_WithIfCondition_WhenFalse_ExcludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithIfCondition_WhenFalse_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "Hello {{#if name}}{name}{{/if}}World");
@@ -43,8 +44,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("World", result);
     }
 
-    [Fact]
-    public void Format_WithIfCondition_WhenEmpty_ExcludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithIfCondition_WhenEmpty_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "Hello {{#if name}}{name}{{/if}}World");
@@ -58,8 +59,8 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("{name}", result);
     }
 
-    [Fact]
-    public void Format_WithIfCondition_WhenWhitespace_ExcludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithIfCondition_WhenWhitespace_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "Hello {{#if name}}{name}{{/if}}World");
@@ -73,8 +74,8 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("{name}", result);
     }
 
-    [Fact]
-    public void Format_WithUnlessCondition_WhenFalse_IncludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithUnlessCondition_WhenFalse_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "{{#unless premium}}Free tier{{/unless}}");
@@ -85,8 +86,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Free tier", result);
     }
 
-    [Fact]
-    public void Format_WithUnlessCondition_WhenTrue_ExcludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithUnlessCondition_WhenTrue_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "{{#unless premium}}Free tier{{/unless}}");
@@ -100,8 +101,8 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("Free tier", result);
     }
 
-    [Fact]
-    public void Format_WithEqualsCondition_WhenMatches_IncludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithEqualsCondition_WhenMatches_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "{{#equals status \"active\"}}User is active{{/equals}}");
@@ -115,8 +116,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("User is active", result);
     }
 
-    [Fact]
-    public void Format_WithEqualsCondition_WhenNotMatches_ExcludesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithEqualsCondition_WhenNotMatches_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
             "{{#equals status \"active\"}}User is active{{/equals}}");
@@ -130,8 +131,8 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("User is active", result);
     }
 
-    [Fact]
-    public void Format_WithEqualsCondition_CaseInsensitive()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithEqualsCondition_CaseInsensitive()
     {
         var template = new ConditionalPromptTemplate(
             "{{#equals status \"ACTIVE\"}}User is active{{/equals}}");
@@ -145,8 +146,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("User is active", result);
     }
 
-    [Fact]
-    public void Format_WithMultipleConditions_ProcessesAll()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithMultipleConditions_ProcessesAll()
     {
         var template = new ConditionalPromptTemplate(
             "{{#if name}}Name: {name}{{/if}} {{#if email}}Email: {email}{{/if}}");
@@ -162,8 +163,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Email: john@example.com", result);
     }
 
-    [Fact]
-    public void Format_WithNestedVariables_ReplacesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithNestedVariables_ReplacesCorrectly()
     {
         var template = new ConditionalPromptTemplate(
             "Text: {text} {{#if context}}Context: {context}{{/if}}");
@@ -179,8 +180,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Context: Greeting", result);
     }
 
-    [Fact]
-    public void Validate_WithRequiredVariable_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithRequiredVariable_ReturnsTrue()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
         var variables = new Dictionary<string, string>
@@ -193,8 +194,8 @@ public class ConditionalPromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void Validate_WithMissingRequiredVariable_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithMissingRequiredVariable_ReturnsFalse()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
         var variables = new Dictionary<string, string>();
@@ -204,8 +205,8 @@ public class ConditionalPromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void Validate_WithConditionalVariable_NotRequired()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithConditionalVariable_NotRequired()
     {
         var template = new ConditionalPromptTemplate(
             "Hello {{#if name}}{name}{{/if}}");
@@ -216,8 +217,8 @@ public class ConditionalPromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void Validate_WithNullVariables_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithNullVariables_ReturnsFalse()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
 
@@ -226,8 +227,8 @@ public class ConditionalPromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void InputVariables_IncludesConditionalVariables()
+    [Fact(Timeout = 60000)]
+    public async Task InputVariables_IncludesConditionalVariables()
     {
         var template = new ConditionalPromptTemplate(
             "{{#if name}}{name}{{/if}} {{#unless premium}}free{{/unless}}");
@@ -236,8 +237,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("premium", template.InputVariables);
     }
 
-    [Fact]
-    public void InputVariables_IncludesEqualsVariables()
+    [Fact(Timeout = 60000)]
+    public async Task InputVariables_IncludesEqualsVariables()
     {
         var template = new ConditionalPromptTemplate(
             "{{#equals status \"active\"}}active{{/equals}}");
@@ -245,8 +246,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("status", template.InputVariables);
     }
 
-    [Fact]
-    public void Format_CleansUpExtraWhitespace()
+    [Fact(Timeout = 60000)]
+    public async Task Format_CleansUpExtraWhitespace()
     {
         var template = new ConditionalPromptTemplate(
             "Hello\n\n{{#if missing}}content{{/if}}\n\nWorld");
@@ -257,8 +258,8 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("\n\n\n", result);
     }
 
-    [Fact]
-    public void Format_MultilineConditional_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Format_MultilineConditional_WorksCorrectly()
     {
         var template = new ConditionalPromptTemplate(
             "Start {{#if details}}\nLine 1\nLine 2\n{{/if}} End");
@@ -273,8 +274,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Line 2", result);
     }
 
-    [Fact]
-    public void Format_WithMixedConditions_ProcessesInOrder()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithMixedConditions_ProcessesInOrder()
     {
         var template = new ConditionalPromptTemplate(
             "{{#equals type \"admin\"}}Admin{{/equals}}{{#if name}}{name}{{/if}}{{#unless guest}}Member{{/unless}}");
@@ -291,8 +292,8 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Member", result);
     }
 
-    [Fact]
-    public void Format_ComplexRealWorldExample()
+    [Fact(Timeout = 60000)]
+    public async Task Format_ComplexRealWorldExample()
     {
         var template = new ConditionalPromptTemplate(@"
             Analyze this text: {text}

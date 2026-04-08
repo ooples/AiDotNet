@@ -1,13 +1,14 @@
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.FewShot;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class RandomExampleSelectorTests
 {
-    [Fact]
-    public void Constructor_WithSeed_CreatesReproducibleSelector()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithSeed_CreatesReproducibleSelector()
     {
         var selector1 = new RandomExampleSelector<double>(seed: 42);
         var selector2 = new RandomExampleSelector<double>(seed: 42);
@@ -29,8 +30,8 @@ public class RandomExampleSelectorTests
         Assert.Equal(examples1[1].Input, examples2[1].Input);
     }
 
-    [Fact]
-    public void SelectExamples_ReturnsRequestedCount()
+    [Fact(Timeout = 60000)]
+    public async Task SelectExamples_ReturnsRequestedCount()
     {
         var selector = new RandomExampleSelector<double>();
 
@@ -43,8 +44,8 @@ public class RandomExampleSelectorTests
         Assert.Equal(2, examples.Count);
     }
 
-    [Fact]
-    public void SelectExamples_WithCountGreaterThanAvailable_ReturnsAllExamples()
+    [Fact(Timeout = 60000)]
+    public async Task SelectExamples_WithCountGreaterThanAvailable_ReturnsAllExamples()
     {
         var selector = new RandomExampleSelector<double>();
 
@@ -56,8 +57,8 @@ public class RandomExampleSelectorTests
         Assert.Equal(2, examples.Count);
     }
 
-    [Fact]
-    public void AddExample_IncreasesExampleCount()
+    [Fact(Timeout = 60000)]
+    public async Task AddExample_IncreasesExampleCount()
     {
         var selector = new RandomExampleSelector<double>();
 
@@ -66,16 +67,16 @@ public class RandomExampleSelectorTests
         Assert.Equal(1, selector.ExampleCount);
     }
 
-    [Fact]
-    public void AddExample_WithNullExample_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task AddExample_WithNullExample_ThrowsArgumentNullException()
     {
         var selector = new RandomExampleSelector<double>();
 
         Assert.Throws<ArgumentNullException>(() => selector.AddExample(null!));
     }
 
-    [Fact]
-    public void RemoveExample_DecreasesExampleCount()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveExample_DecreasesExampleCount()
     {
         var selector = new RandomExampleSelector<double>();
         var example = new FewShotExample { Input = "A", Output = "1" };
@@ -87,8 +88,8 @@ public class RandomExampleSelectorTests
         Assert.Equal(0, selector.ExampleCount);
     }
 
-    [Fact]
-    public void GetAllExamples_ReturnsAllAddedExamples()
+    [Fact(Timeout = 60000)]
+    public async Task GetAllExamples_ReturnsAllAddedExamples()
     {
         var selector = new RandomExampleSelector<double>();
 

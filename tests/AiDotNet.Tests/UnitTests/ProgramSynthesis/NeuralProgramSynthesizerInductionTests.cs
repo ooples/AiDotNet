@@ -7,13 +7,14 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class NeuralProgramSynthesizerInductionTests
 {
-    [Fact]
-    public void SynthesizeProgram_WithExamples_RefinesWhenFeedbackImprovesFitness()
+    [Fact(Timeout = 60000)]
+    public async Task SynthesizeProgram_WithExamples_RefinesWhenFeedbackImprovesFitness()
     {
         var architecture = new CodeSynthesisArchitecture<double>(
             synthesisType: SynthesisType.Neural,

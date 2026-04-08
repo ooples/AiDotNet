@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers;
 
@@ -11,8 +12,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class ExpertTests
 {
-    [Fact]
-    public void Constructor_WithValidLayers_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidLayers_InitializesCorrectly()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -30,8 +31,8 @@ public class ExpertTests
         Assert.True(expert.ParameterCount > 0);
     }
 
-    [Fact]
-    public void Constructor_WithEmptyLayerList_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithEmptyLayerList_ThrowsArgumentException()
     {
         // Arrange
         var layers = new List<ILayer<float>>();
@@ -41,8 +42,8 @@ public class ExpertTests
             new Expert<float>(layers, new[] { 10 }, new[] { 10 }));
     }
 
-    [Fact]
-    public void Constructor_WithNullLayerList_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullLayerList_ThrowsArgumentException()
     {
         // Act & Assert
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
@@ -51,8 +52,8 @@ public class ExpertTests
 #pragma warning restore CS8625
     }
 
-    [Fact]
-    public void Forward_WithValidInput_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_WithValidInput_ReturnsCorrectShape()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -76,8 +77,8 @@ public class ExpertTests
         Assert.Equal(10, output.Shape[1]);
     }
 
-    [Fact]
-    public void Forward_ProcessesDataThroughAllLayers()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_ProcessesDataThroughAllLayers()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -115,8 +116,8 @@ public class ExpertTests
 
 
 
-    [Fact]
-    public void GetParameters_ReturnsAllLayerParameters()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_ReturnsAllLayerParameters()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -135,8 +136,8 @@ public class ExpertTests
         Assert.True(parameters.Length > 0);
     }
 
-    [Fact]
-    public void SetParameters_UpdatesAllLayerParameters()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_UpdatesAllLayerParameters()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -160,8 +161,8 @@ public class ExpertTests
         }
     }
 
-    [Fact]
-    public void SetParameters_WithIncorrectLength_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_WithIncorrectLength_ThrowsArgumentException()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -175,8 +176,8 @@ public class ExpertTests
         Assert.Throws<ArgumentException>(() => expert.SetParameters(wrongSizeParams));
     }
 
-    [Fact]
-    public void ResetState_ClearsLayerStates()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsLayerStates()
     {
         // Arrange
         var layers = new List<ILayer<float>>
@@ -200,8 +201,8 @@ public class ExpertTests
     }
 
 
-    [Fact]
-    public void ParameterCount_ReflectsSumOfAllLayers()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_ReflectsSumOfAllLayers()
     {
         // Arrange
         var layer1 = new DenseLayer<float>(10, 5); // 10*5 + 5 = 55 parameters
@@ -218,8 +219,8 @@ public class ExpertTests
         Assert.Equal(expectedCount, paramCount);
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsTrueWhenAnyLayerIsTrainable()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrueWhenAnyLayerIsTrainable()
     {
         // Arrange
         var layers = new List<ILayer<float>>

@@ -1,12 +1,13 @@
 using AiDotNet.Serving.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public class AttestationEvidenceTests
 {
-    [Fact]
-    public void Defaults_AreEmptyStrings()
+    [Fact(Timeout = 60000)]
+    public async Task Defaults_AreEmptyStrings()
     {
         var evidence = new AttestationEvidence();
 
@@ -16,8 +17,8 @@ public class AttestationEvidenceTests
         Assert.Equal(string.Empty, evidence.AttestationToken);
     }
 
-    [Fact]
-    public void Properties_CanBeSet()
+    [Fact(Timeout = 60000)]
+    public async Task Properties_CanBeSet()
     {
         var evidence = new AttestationEvidence
         {

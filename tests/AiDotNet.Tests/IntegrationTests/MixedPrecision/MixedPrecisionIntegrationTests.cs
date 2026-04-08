@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MixedPrecision;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.MixedPrecision;
 
@@ -18,8 +19,8 @@ public class MixedPrecisionIntegrationTests
 
     #region LossScaler Integration Tests
 
-    [Fact]
-    public void LossScaler_FullWorkflow_ScalesAndUnscalesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_FullWorkflow_ScalesAndUnscalesCorrectly()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 1000.0);
@@ -41,8 +42,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(0.03f, gradients[2], precision: 5); // 30 / 1000 = 0.03
     }
 
-    [Fact]
-    public void LossScaler_TensorGradients_HandlesLargeTensors()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_TensorGradients_HandlesLargeTensors()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -66,8 +67,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LossScaler_DynamicScaling_AdaptsToOverflowPatterns()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_DynamicScaling_AdaptsToOverflowPatterns()
     {
         // Arrange
         var scaler = new LossScaler<float>(
@@ -98,8 +99,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(1000.0, scaleAfterOverflow); // 2000 * 0.5
     }
 
-    [Fact]
-    public void LossScaler_DoubleType_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_DoubleType_WorksCorrectly()
     {
         // Arrange
         var scaler = new LossScaler<double>(initialScale: 65536.0);
@@ -113,8 +114,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(loss, unscaledGradient, precision: 10);
     }
 
-    [Fact]
-    public void LossScaler_EdgeCase_VerySmallScale()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_EdgeCase_VerySmallScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 1.0, minScale: 1.0);
@@ -129,8 +130,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(3.0f, gradients[2], precision: 5);
     }
 
-    [Fact]
-    public void LossScaler_EdgeCase_VeryLargeScale()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_EdgeCase_VeryLargeScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 16777216.0); // 2^24
@@ -145,8 +146,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(scaledLoss > 0);
     }
 
-    [Fact]
-    public void LossScaler_MultipleOverflows_ScaleReachesMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_MultipleOverflows_ScaleReachesMinimum()
     {
         // Arrange
         var scaler = new LossScaler<float>(
@@ -167,8 +168,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(10, scaler.SkippedUpdates);
     }
 
-    [Fact]
-    public void LossScaler_MultipleSuccesses_ScaleReachesMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_MultipleSuccesses_ScaleReachesMaximum()
     {
         // Arrange
         var scaler = new LossScaler<float>(
@@ -189,8 +190,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(500.0, scaler.Scale);
     }
 
-    [Fact]
-    public void LossScaler_DetectOverflow_Tensor_HandlesNegativeInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_DetectOverflow_Tensor_HandlesNegativeInfinity()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -203,8 +204,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(hasOverflow);
     }
 
-    [Fact]
-    public void LossScaler_Statistics_TrackCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_Statistics_TrackCorrectly()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0, growthInterval: 10);
@@ -227,8 +228,8 @@ public class MixedPrecisionIntegrationTests
 
     #region MixedPrecisionConfig Integration Tests
 
-    [Fact]
-    public void MixedPrecisionConfig_DefaultValues_FollowNvidiaRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_DefaultValues_FollowNvidiaRecommendations()
     {
         // Arrange & Act
         var config = new MixedPrecisionConfig();
@@ -246,8 +247,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(config.Fp32GradientAccumulation);
     }
 
-    [Fact]
-    public void MixedPrecisionConfig_CustomConfiguration_SetsAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_CustomConfiguration_SetsAllProperties()
     {
         // Arrange
         var config = new MixedPrecisionConfig
@@ -277,8 +278,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(config.Fp32GradientAccumulation);
     }
 
-    [Fact]
-    public void MixedPrecisionConfig_ToString_ContainsAllSettings()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_ToString_ContainsAllSettings()
     {
         // Arrange
         var config = new MixedPrecisionConfig();
@@ -297,8 +298,8 @@ public class MixedPrecisionIntegrationTests
 
     #region MixedPrecisionContext Integration Tests
 
-    [Fact]
-    public void MixedPrecisionContext_Initialize_SetsUpCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_Initialize_SetsUpCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -313,8 +314,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Contains("layer1", context.ParameterNames);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_InitializeMultiple_TracksAllParameters()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_InitializeMultiple_TracksAllParameters()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -334,8 +335,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Contains("biases", context.ParameterNames);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_CastWeightsToFP16_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_CastWeightsToFP16_ConvertsCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -353,8 +354,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal((Half)3.5f, workingWeights[2]);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_GetMasterWeights_ReturnsCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_GetMasterWeights_ReturnsCopy()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -371,8 +372,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(3.0f, masterWeights[2], precision: 5);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_UpdateMasterWeights_AppliesGradientDescent()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_UpdateMasterWeights_AppliesGradientDescent()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -392,8 +393,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(29.7f, updatedWeights[2], precision: 5); // 30 - 0.1 * 3 = 29.7
     }
 
-    [Fact]
-    public void MixedPrecisionContext_PrepareGradientsForUpdate_HandlesValidGradients()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_PrepareGradientsForUpdate_HandlesValidGradients()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -412,8 +413,8 @@ public class MixedPrecisionIntegrationTests
         // The gradients are unscaled by the default scale (65536)
     }
 
-    [Fact]
-    public void MixedPrecisionContext_PrepareGradientsForUpdate_DetectsOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_PrepareGradientsForUpdate_DetectsOverflow()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -430,8 +431,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(isValid);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_Reset_ClearsAllState()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_Reset_ClearsAllState()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -448,8 +449,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Empty(context.ParameterNames);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_NotInitialized_ThrowsOnCast()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_NotInitialized_ThrowsOnCast()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -458,8 +459,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => context.CastWeightsToFP16());
     }
 
-    [Fact]
-    public void MixedPrecisionContext_AlreadyInitialized_ThrowsOnReinitialize()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_AlreadyInitialized_ThrowsOnReinitialize()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -470,8 +471,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => context.Initialize(parameters));
     }
 
-    [Fact]
-    public void MixedPrecisionContext_GetNonExistentParameter_ThrowsKeyNotFound()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_GetNonExistentParameter_ThrowsKeyNotFound()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -482,8 +483,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Throws<KeyNotFoundException>(() => context.GetMasterWeights("nonexistent"));
     }
 
-    [Fact]
-    public void MixedPrecisionContext_WithCustomConfig_UsesConfigSettings()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_WithCustomConfig_UsesConfigSettings()
     {
         // Arrange
         var config = new MixedPrecisionConfig
@@ -498,8 +499,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(context.LossScaler.DynamicScaling);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_Dispose_ClearsResources()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_Dispose_ClearsResources()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -513,8 +514,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Empty(context.ParameterNames);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_ToString_ContainsStateInfo()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_ToString_ContainsStateInfo()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -534,8 +535,8 @@ public class MixedPrecisionIntegrationTests
 
     #region Full Workflow Integration Tests
 
-    [Fact]
-    public void MixedPrecision_FullTrainingIterationWorkflow_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_FullTrainingIterationWorkflow_CompletesSuccessfully()
     {
         // Arrange
         var config = new MixedPrecisionConfig
@@ -596,8 +597,8 @@ public class MixedPrecisionIntegrationTests
         Assert.NotEqual(0.5f, finalWeights[0]); // Should have been updated
     }
 
-    [Fact]
-    public void MixedPrecision_SimulatedOverflowRecovery_ScaleAdjustsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_SimulatedOverflowRecovery_ScaleAdjustsCorrectly()
     {
         // Arrange
         var config = new MixedPrecisionConfig
@@ -639,8 +640,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(2000.0, scaleHistory[7]); // After 3 more successes, growth again
     }
 
-    [Fact]
-    public void MixedPrecision_FP32ToFP16Precision_LossesSomeAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_FP32ToFP16Precision_LossesSomeAccuracy()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -666,8 +667,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True((float)workingWeights[2] > 0); // Should still be representable
     }
 
-    [Fact]
-    public void MixedPrecision_MultipleParameterGroups_UpdatesIndependently()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_MultipleParameterGroups_UpdatesIndependently()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -693,8 +694,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(5.0f, decoderWeights[2], precision: 5); // Unchanged
     }
 
-    [Fact]
-    public void MixedPrecision_GradientMismatch_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_GradientMismatch_ThrowsArgumentException()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -712,8 +713,8 @@ public class MixedPrecisionIntegrationTests
 
     #region Edge Cases and Numerical Stability
 
-    [Fact]
-    public void LossScaler_ZeroLoss_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_ZeroLoss_HandlesGracefully()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 65536.0);
@@ -726,8 +727,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(0.0f, scaledLoss);
     }
 
-    [Fact]
-    public void LossScaler_NegativeLoss_ScalesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_NegativeLoss_ScalesCorrectly()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -740,8 +741,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(-50.0f, scaledLoss);
     }
 
-    [Fact]
-    public void LossScaler_ZeroGradients_UnscalesToZero()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_ZeroGradients_UnscalesToZero()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 65536.0);
@@ -756,8 +757,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(0.0f, gradients[2]);
     }
 
-    [Fact]
-    public void MixedPrecisionContext_EmptyParameters_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionContext_EmptyParameters_HandlesCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -774,8 +775,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(0, workingWeights.Length);
     }
 
-    [Fact]
-    public void LossScaler_TensorWithAllNaN_DetectsOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_TensorWithAllNaN_DetectsOverflow()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -788,8 +789,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(hasOverflow);
     }
 
-    [Fact]
-    public void LossScaler_EmptyTensor_NoOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_EmptyTensor_NoOverflow()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -802,8 +803,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(hasOverflow);
     }
 
-    [Fact]
-    public void LossScaler_EmptyVector_NoOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task LossScaler_EmptyVector_NoOverflow()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -820,8 +821,8 @@ public class MixedPrecisionIntegrationTests
 
     #region FP8 Type Tests
 
-    [Fact]
-    public void Float8E4M3_Conversion_RoundTripsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E4M3_Conversion_RoundTripsCorrectly()
     {
         // Arrange - Use smaller values where E4M3 has better precision
         var testValues = new[] { 0f, 1f, -1f, 0.5f, 2.5f, 8f, -4f };
@@ -844,8 +845,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void Float8E4M3_Clamps_ValuesOutOfRange()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E4M3_Clamps_ValuesOutOfRange()
     {
         // Arrange
         const float maxE4M3 = 448f;
@@ -858,8 +859,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(tooLargeBack <= maxE4M3);
     }
 
-    [Fact]
-    public void Float8E4M3_HandlesZero()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E4M3_HandlesZero()
     {
         // Act
         var zero = Float8E4M3.FromFloat(0f);
@@ -870,8 +871,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(0f, zero.ToFloat());
     }
 
-    [Fact]
-    public void Float8E4M3_HandlesNaN()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E4M3_HandlesNaN()
     {
         // Act
         var nan = Float8E4M3.FromFloat(float.NaN);
@@ -881,8 +882,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(float.IsNaN(nan.ToFloat()));
     }
 
-    [Fact]
-    public void Float8E5M2_Conversion_RoundTripsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E5M2_Conversion_RoundTripsCorrectly()
     {
         // Arrange
         var testValues = new[] { 0f, 1f, -1f, 0.5f, 10f, 1000f, -500f };
@@ -898,8 +899,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void Float8E5M2_HasLargerRange_ThanE4M3()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E5M2_HasLargerRange_ThanE4M3()
     {
         // Arrange
         const float largeValue = 50000f;
@@ -913,8 +914,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(Math.Abs(e5m2.ToFloat() - largeValue) < 10000); // E5M2 can represent up to 57344
     }
 
-    [Fact]
-    public void Float8E5M2_HandlesInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task Float8E5M2_HandlesInfinity()
     {
         // Act
         var posInf = Float8E5M2.FromFloat(float.PositiveInfinity);
@@ -927,8 +928,8 @@ public class MixedPrecisionIntegrationTests
         Assert.True(float.IsNegativeInfinity(negInf.ToFloat()));
     }
 
-    [Fact]
-    public void Float8Extensions_BulkConversion_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Float8Extensions_BulkConversion_Works()
     {
         // Arrange
         var values = new[] { 1f, 2f, 3f, 4f, 5f };
@@ -946,8 +947,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void Float8_E4M3ToE5M2Conversion_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Float8_E4M3ToE5M2Conversion_Works()
     {
         // Arrange
         var e4m3 = Float8E4M3.FromFloat(10f);
@@ -964,8 +965,8 @@ public class MixedPrecisionIntegrationTests
 
     #region Layer Precision Policy Tests
 
-    [Fact]
-    public void LayerPrecisionPolicy_DefaultPrecision_AppliedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPrecisionPolicy_DefaultPrecision_AppliedCorrectly()
     {
         // Arrange
         var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP16);
@@ -977,8 +978,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(MixedPrecisionType.FP16, precision);
     }
 
-    [Fact]
-    public void LayerPrecisionPolicy_ExactMatch_TakesPrecedence()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPrecisionPolicy_ExactMatch_TakesPrecedence()
     {
         // Arrange
         var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP16)
@@ -991,8 +992,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(MixedPrecisionType.None, precision);
     }
 
-    [Fact]
-    public void LayerPrecisionPolicy_PatternMatch_Works()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPrecisionPolicy_PatternMatch_Works()
     {
         // Arrange
         var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP8_Hybrid)
@@ -1005,8 +1006,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(MixedPrecisionType.FP8_Hybrid, policy.GetPrecision("Linear"));
     }
 
-    [Fact]
-    public void LayerPrecisionPolicy_ForFP8_ExcludesNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPrecisionPolicy_ForFP8_ExcludesNormalization()
     {
         // Arrange
         var policy = LayerPrecisionPolicy.ForFP8();
@@ -1018,8 +1019,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(policy.ShouldSkipMixedPrecision("Linear"));
     }
 
-    [Fact]
-    public void LayerPrecisionPolicy_ForFP8Transformers_ConfiguredCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPrecisionPolicy_ForFP8Transformers_ConfiguredCorrectly()
     {
         // Arrange
         var policy = LayerPrecisionPolicy.ForFP8Transformers();
@@ -1035,8 +1036,8 @@ public class MixedPrecisionIntegrationTests
 
     #region MixedPrecisionConfig Factory Tests
 
-    [Fact]
-    public void MixedPrecisionConfig_ForFP8_HasCorrectSettings()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_ForFP8_HasCorrectSettings()
     {
         // Act
         var config = MixedPrecisionConfig.ForFP8();
@@ -1050,8 +1051,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Contains("LayerNorm", config.FP8ExcludedLayers);
     }
 
-    [Fact]
-    public void MixedPrecisionConfig_ForBF16_HasCorrectSettings()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_ForBF16_HasCorrectSettings()
     {
         // Act
         var config = MixedPrecisionConfig.ForBF16();
@@ -1062,8 +1063,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(1.0, config.InitialLossScale);
     }
 
-    [Fact]
-    public void MixedPrecisionConfig_Conservative_HasSaferSettings()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionConfig_Conservative_HasSaferSettings()
     {
         // Act
         var config = MixedPrecisionConfig.Conservative();
@@ -1080,15 +1081,15 @@ public class MixedPrecisionIntegrationTests
 
     #region MixedPrecisionScope Tests
 
-    [Fact]
-    public void MixedPrecisionScope_Current_IsNullOutsideScope()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_Current_IsNullOutsideScope()
     {
         // Assert - no scope is active
         Assert.Null(MixedPrecisionScope.Current);
     }
 
-    [Fact]
-    public void MixedPrecisionScope_Current_IsSetInsideScope()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_Current_IsSetInsideScope()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1105,8 +1106,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Null(MixedPrecisionScope.Current);
     }
 
-    [Fact]
-    public void MixedPrecisionScope_NestedScopes_RestoresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_NestedScopes_RestoresCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1131,8 +1132,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Null(MixedPrecisionScope.Current);
     }
 
-    [Fact]
-    public void MixedPrecisionScope_RegisterAndCastToFP16_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_RegisterAndCastToFP16_WorksCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1154,8 +1155,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_GetFP32Tensor_RetrievesRegisteredTensor()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_GetFP32Tensor_RetrievesRegisteredTensor()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1176,8 +1177,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_GetFP32Tensor_ReturnsNullForUnregistered()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_GetFP32Tensor_ReturnsNullForUnregistered()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1192,8 +1193,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_ShouldUseFP32_UsesPolicy()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_ShouldUseFP32_UsesPolicy()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1211,8 +1212,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_CastToFP32_Static_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_CastToFP32_Static_ConvertsCorrectly()
     {
         // Arrange
         var fp16Data = new Half[] { (Half)1.0f, (Half)2.5f, (Half)(-3.0f) };
@@ -1228,8 +1229,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(-3.0f, fp32Tensor.GetFlatIndexValue(2), precision: 3);
     }
 
-    [Fact]
-    public void MixedPrecisionScope_CastToFP16_Static_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_CastToFP16_Static_ConvertsCorrectly()
     {
         // Arrange
         var fp32Data = new float[] { 1.0f, 2.5f, -3.0f };
@@ -1245,8 +1246,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal((Half)(-3.0f), fp16Tensor.GetFlatIndexValue(2));
     }
 
-    [Fact]
-    public void MixedPrecisionScope_ClearTensors_RemovesAllTensors()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_ClearTensors_RemovesAllTensors()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1269,8 +1270,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_WithCustomPolicy_UsesPolicyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_WithCustomPolicy_UsesPolicyCorrectly()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1287,8 +1288,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecisionScope_ToString_ContainsStateInfo()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecisionScope_ToString_ContainsStateInfo()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1309,8 +1310,8 @@ public class MixedPrecisionIntegrationTests
 
     #region AC 3.1: AMP Integration Test - Mixed Precision vs Full Precision Comparison
 
-    [Fact]
-    public void MixedPrecision_ComparedToFullPrecision_LossWithinTolerance()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_ComparedToFullPrecision_LossWithinTolerance()
     {
         // This test verifies that mixed-precision training produces results
         // within acceptable tolerance of full-precision training.
@@ -1454,8 +1455,8 @@ public class MixedPrecisionIntegrationTests
         return loss;
     }
 
-    [Fact]
-    public void MixedPrecision_LossScalerWorkflow_ProducesConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_LossScalerWorkflow_ProducesConsistentResults()
     {
         // Additional test to verify the loss scaler doesn't introduce significant drift
 
@@ -1481,8 +1482,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixedPrecision_SmallGradients_PreservedByScaling()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPrecision_SmallGradients_PreservedByScaling()
     {
         // Test that very small gradients that would underflow in FP16 are preserved by scaling
 
@@ -1514,8 +1515,8 @@ public class MixedPrecisionIntegrationTests
 
     #region Layer-Level Mixed Precision Integration Tests
 
-    [Fact]
-    public void LayerBase_IsMixedPrecisionActive_FalseOutsideScope()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_IsMixedPrecisionActive_FalseOutsideScope()
     {
         // Arrange - create a simple test layer
         var layer = new TestLayer();
@@ -1524,8 +1525,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(layer.TestIsMixedPrecisionActive);
     }
 
-    [Fact]
-    public void LayerBase_IsMixedPrecisionActive_TrueInsideScope()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_IsMixedPrecisionActive_TrueInsideScope()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1541,8 +1542,8 @@ public class MixedPrecisionIntegrationTests
         Assert.False(layer.TestIsMixedPrecisionActive);
     }
 
-    [Fact]
-    public void LayerBase_ShouldUseFP32_ReturnsCorrectValueBasedOnPolicy()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_ShouldUseFP32_ReturnsCorrectValueBasedOnPolicy()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1558,8 +1559,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LayerBase_CurrentPrecision_ReturnsCorrectPrecisionType()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_CurrentPrecision_ReturnsCorrectPrecisionType()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1576,8 +1577,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(MixedPrecisionType.None, denseLayer.TestCurrentPrecision);
     }
 
-    [Fact]
-    public void LayerBase_ForwardWithPrecisionCheck_WorksWithoutScope()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_ForwardWithPrecisionCheck_WorksWithoutScope()
     {
         // Arrange
         var layer = new TestLayer();
@@ -1591,8 +1592,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal(4, output.Length);
     }
 
-    [Fact]
-    public void LayerBase_ForwardWithPrecisionCheck_WorksWithScope()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_ForwardWithPrecisionCheck_WorksWithScope()
     {
         // Arrange
         var context = new MixedPrecisionContext();
@@ -1610,8 +1611,8 @@ public class MixedPrecisionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LayerBase_LayerName_DefaultsToTypeName()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_LayerName_DefaultsToTypeName()
     {
         // Arrange
         var layer = new TestLayer();
@@ -1620,8 +1621,8 @@ public class MixedPrecisionIntegrationTests
         Assert.Equal("TestLayer", layer.LayerName);
     }
 
-    [Fact]
-    public void LayerBase_LayerName_CanBeOverridden()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_LayerName_CanBeOverridden()
     {
         // Arrange
         var layer = new TestLayer("MyCustomLayer");

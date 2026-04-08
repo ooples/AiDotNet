@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -81,8 +82,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
@@ -98,8 +99,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 2: Loss is non-negative (for standard losses)
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeNonNegative()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeNonNegative()
     {
         if (!IsNonNegative) return;
 
@@ -115,8 +116,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 3: Identical inputs → zero loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_IdenticalInputs_ShouldBeZero()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_IdenticalInputs_ShouldBeZero()
     {
         if (!ZeroLossForIdentical) return;
 
@@ -132,8 +133,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 4: Larger errors produce larger loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_LargerError_ShouldProduceLargerLoss()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
         // Skip for losses that can go negative (MBE, Wasserstein) — larger error
         // doesn't necessarily mean larger loss value when loss can be negative
@@ -155,8 +156,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 5: Derivative is finite
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
@@ -178,8 +179,8 @@ public abstract class LossFunctionTestBase
     // INVARIANT 6: Derivative is zero for identical inputs
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_IdenticalInputs_ShouldBeZero()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_IdenticalInputs_ShouldBeZero()
     {
         if (!ZeroDerivativeForIdentical) return;
 
@@ -201,8 +202,8 @@ public abstract class LossFunctionTestBase
     // This is the gold standard for gradient correctness.
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_ShouldMatchNumericalGradient()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_ShouldMatchNumericalGradient()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
@@ -239,8 +240,8 @@ public abstract class LossFunctionTestBase
     // If predicted < actual, derivative should be negative (push predicted up).
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_SignShouldMatchErrorDirection()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_SignShouldMatchErrorDirection()
     {
         if (!HasStandardGradientSign) return;
 
@@ -260,8 +261,8 @@ public abstract class LossFunctionTestBase
     // |L(a+δ, a)| ≈ |L(a-δ, a)| for MSE, MAE, Huber
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
     {
         // Only test symmetry for standard regression-style losses.
         // Classification losses (Focal, CE) and signed-label losses (Hinge) are

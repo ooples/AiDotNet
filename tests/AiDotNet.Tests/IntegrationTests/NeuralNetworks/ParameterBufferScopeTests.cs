@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -22,8 +23,8 @@ public class ParameterBufferScopeTests
         return new FeedForwardNeuralNetwork<double>(arch);
     }
 
-    [Fact]
-    public void Train_DoesNotPermanentlyReplaceLayerTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Train_DoesNotPermanentlyReplaceLayerTensors()
     {
         var network = CreateSimpleNetwork();
 
@@ -67,8 +68,8 @@ public class ParameterBufferScopeTests
         }
     }
 
-    [Fact]
-    public void Train_UpdatesParameterValues()
+    [Fact(Timeout = 120000)]
+    public async Task Train_UpdatesParameterValues()
     {
         var network = CreateSimpleNetwork();
 
@@ -126,8 +127,8 @@ public class ParameterBufferScopeTests
         Assert.True(anyChanged, "Training 10 steps with non-trivial loss should update parameter values");
     }
 
-    [Fact]
-    public void Train_MultipleConsecutiveSteps_AlwaysRestoreOriginalReferences()
+    [Fact(Timeout = 120000)]
+    public async Task Train_MultipleConsecutiveSteps_AlwaysRestoreOriginalReferences()
     {
         // Regression: each training step must restore original tensor refs so that
         // references captured before training remain valid across multiple steps.
@@ -167,8 +168,8 @@ public class ParameterBufferScopeTests
         }
     }
 
-    [Fact]
-    public void Train_ThenPredict_ReturnsFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Train_ThenPredict_ReturnsFiniteOutput()
     {
         // After training (which now wraps in try/finally), Predict() must still work correctly.
         var network = CreateSimpleNetwork();
@@ -189,8 +190,8 @@ public class ParameterBufferScopeTests
                 $"Prediction element {i} is not finite after training.");
     }
 
-    [Fact]
-    public void Train_LastLossIsPopulatedAfterStep()
+    [Fact(Timeout = 120000)]
+    public async Task Train_LastLossIsPopulatedAfterStep()
     {
         // TrainWithTape now sets LastLoss inside the try block. Verify it's accessible after Train().
         var network = CreateSimpleNetwork();
@@ -207,8 +208,8 @@ public class ParameterBufferScopeTests
         Assert.True(loss >= 0.0, "Loss must be non-negative.");
     }
 
-    [Fact]
-    public void Train_LossDecreasesOverExtendedTraining()
+    [Fact(Timeout = 120000)]
+    public async Task Train_LossDecreasesOverExtendedTraining()
     {
         // End-to-end regression: the try/finally refactor must not break gradient flow.
         var network = CreateSimpleNetwork();
@@ -232,8 +233,8 @@ public class ParameterBufferScopeTests
             $"Loss should decrease over extended training. Initial: {firstLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void Train_ParameterValuesAreCopiedBackToOriginalTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Train_ParameterValuesAreCopiedBackToOriginalTensors()
     {
         // After RestoreOriginalParameters, the original tensor objects must reflect the updated
         // values that were written into the buffer views during the optimizer step.

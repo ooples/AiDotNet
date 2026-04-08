@@ -2,6 +2,7 @@ using AiDotNet.CausalInference;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalInference;
 
@@ -77,8 +78,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region SLearner - Single Model Treatment Effect
 
-    [Fact]
-    public void SLearner_KnownPositiveEffect_ATEIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_KnownPositiveEffect_ATEIsPositive()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: 3.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -93,8 +94,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"Standard error should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void SLearner_ZeroEffect_ATENearZero()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_ZeroEffect_ATENearZero()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: 0.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -109,8 +110,8 @@ public class CausalInferenceExtendedIntegrationTests
             $"ATE should be close to 0 for no treatment effect, got {ate:F4}");
     }
 
-    [Fact]
-    public void SLearner_NegativeEffect_ATEIsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_NegativeEffect_ATEIsNegative()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: -2.0, seed: 123);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -124,8 +125,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(ate < 0, $"ATE should be negative for negative treatment effect, got {ate:F4}");
     }
 
-    [Fact]
-    public void SLearner_CATE_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_CATE_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -143,8 +144,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region TLearner - Two Separate Models
 
-    [Fact]
-    public void TLearner_PositiveEffect_ATEIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task TLearner_PositiveEffect_ATEIsPositive()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: 3.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -159,8 +160,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"Standard error should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void TLearner_TreatmentEffect_MatchesExpectedSign()
+    [Fact(Timeout = 120000)]
+    public async Task TLearner_TreatmentEffect_MatchesExpectedSign()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: -1.5, seed: 77);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -174,8 +175,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(ate < 0, $"T-Learner ATE should be negative, got {ate:F4}");
     }
 
-    [Fact]
-    public void TLearner_EstimateTreatmentEffect_PerSample()
+    [Fact(Timeout = 120000)]
+    public async Task TLearner_EstimateTreatmentEffect_PerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -201,8 +202,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region XLearner - Cross-Learner Estimation
 
-    [Fact]
-    public void XLearner_PositiveEffect_ATEIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task XLearner_PositiveEffect_ATEIsPositive()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: 2.5);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -217,8 +218,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"Standard error should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void XLearner_CATEPerIndividual_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task XLearner_CATEPerIndividual_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -235,8 +236,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region InverseProbabilityWeighting
 
-    [Fact]
-    public void IPW_KnownEffect_ATEInCorrectDirection()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_KnownEffect_ATEInCorrectDirection()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: 3.0);
 
@@ -249,8 +250,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se > 0, $"IPW SE should be positive, got {se:F4}");
     }
 
-    [Fact]
-    public void IPW_PropensityTrimming_PreventsDivisionByZero()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_PropensityTrimming_PreventsDivisionByZero()
     {
         // Create imbalanced data
         var rng = RandomHelper.CreateSeededRandom(42);
@@ -278,8 +279,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.False(double.IsInfinity(ate), "ATE should not be Infinity with trimming");
     }
 
-    [Fact]
-    public void IPW_NegativeEffect_ATEIsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_NegativeEffect_ATEIsNegative()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: -2.0, seed: 99);
 
@@ -295,8 +296,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region PropensityScoreMatching
 
-    [Fact]
-    public void PSM_KnownEffect_ATEInCorrectDirection()
+    [Fact(Timeout = 120000)]
+    public async Task PSM_KnownEffect_ATEInCorrectDirection()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: 3.0);
 
@@ -309,8 +310,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"PSM SE should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void PSM_CATEPerIndividual_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task PSM_CATEPerIndividual_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
 
@@ -325,8 +326,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region DoublyRobustEstimator
 
-    [Fact]
-    public void DR_KnownEffect_ATEInCorrectDirection()
+    [Fact(Timeout = 120000)]
+    public async Task DR_KnownEffect_ATEInCorrectDirection()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: 3.0);
 
@@ -339,8 +340,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"DR SE should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void DR_NegativeEffect_ATEIsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task DR_NegativeEffect_ATEIsNegative()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: -2.0, seed: 99);
 
@@ -352,8 +353,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(ate < 0, $"DR ATE should be negative, got {ate:F4}");
     }
 
-    [Fact]
-    public void DR_CATEPerIndividual_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task DR_CATEPerIndividual_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
 
@@ -368,8 +369,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region CausalForest
 
-    [Fact]
-    public void CausalForest_KnownEffect_ATEInCorrectDirection()
+    [Fact(Timeout = 120000)]
+    public async Task CausalForest_KnownEffect_ATEInCorrectDirection()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(200, trueTau: 3.0);
 
@@ -382,8 +383,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.True(se >= 0, $"SE should be non-negative, got {se:F4}");
     }
 
-    [Fact]
-    public void CausalForest_IndividualEffects_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task CausalForest_IndividualEffects_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
 
@@ -394,8 +395,8 @@ public class CausalInferenceExtendedIntegrationTests
         Assert.Equal(X.Rows, effects.Length);
     }
 
-    [Fact]
-    public void CausalForest_CATEPerIndividual_HasOnePerSample()
+    [Fact(Timeout = 120000)]
+    public async Task CausalForest_CATEPerIndividual_HasOnePerSample()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(100, trueTau: 2.0);
 
@@ -410,8 +411,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region Cross-Model Comparison
 
-    [Fact]
-    public void AllEstimators_PositiveEffect_AllReturnPositiveATE()
+    [Fact(Timeout = 120000)]
+    public async Task AllEstimators_PositiveEffect_AllReturnPositiveATE()
     {
         var (X, treatment, outcome) = CreateKnownEffectData(300, trueTau: 5.0, seed: 42);
         var treatmentVec = new Vector<double>(treatment.Length);
@@ -447,8 +448,8 @@ public class CausalInferenceExtendedIntegrationTests
 
     #region Parameter Validation
 
-    [Fact]
-    public void IPW_InvalidTrimRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_InvalidTrimRange_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new InverseProbabilityWeighting<double>(trimMin: -0.1));
@@ -458,8 +459,8 @@ public class CausalInferenceExtendedIntegrationTests
             new InverseProbabilityWeighting<double>(trimMin: 0.5, trimMax: 0.3));
     }
 
-    [Fact]
-    public void PSM_InvalidCaliper_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PSM_InvalidCaliper_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new PropensityScoreMatching<double>(caliper: -0.1));

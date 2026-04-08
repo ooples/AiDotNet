@@ -9,6 +9,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 {
@@ -28,32 +29,32 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             _documentStore = TestHelpers.CreateDocumentStore<double>(VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiVectorRetriever<double>(null, 3, "max"));
         }
 
-        [Fact]
-        public void Constructor_WithZeroVectorsPerDocument_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroVectorsPerDocument_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new MultiVectorRetriever<double>(_documentStore, 0, "max"));
         }
 
-        [Fact]
-        public void Constructor_WithNullAggregationMethod_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullAggregationMethod_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiVectorRetriever<double>(_documentStore, 3, null));
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
@@ -62,8 +63,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithDifferentAggregationMethods_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDifferentAggregationMethods_CreatesInstance()
         {
             // Arrange & Act
             var maxRetriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
@@ -76,8 +77,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(weightedRetriever);
         }
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
@@ -86,8 +87,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
         }
 
-        [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
@@ -123,48 +124,48 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             _embeddingModel = TestHelpers.CreateEmbeddingModel<double>(VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new ParentDocumentRetriever<double>(null, _embeddingModel, 256, 2048, true));
         }
 
-        [Fact]
-        public void Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new ParentDocumentRetriever<double>(_documentStore, null, 256, 2048, true));
         }
 
-        [Fact]
-        public void Constructor_WithZeroChunkSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroChunkSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 0, 2048, true));
         }
 
-        [Fact]
-        public void Constructor_WithZeroParentSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroParentSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 0, true));
         }
 
-        [Fact]
-        public void Constructor_WithParentSizeLessThanChunkSize_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithParentSizeLessThanChunkSize_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 2048, 256, true));
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithIncludeNeighboringChunks_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithIncludeNeighboringChunks_CreatesInstance()
         {
             // Arrange & Act
             var retrieverWith = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -185,8 +186,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retrieverWithout);
         }
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -195,8 +196,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -205,8 +206,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
         }
 
-        [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -215,8 +216,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_WithValidQuery_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithValidQuery_WorksCorrectly()
         {
             // Arrange
             AddChunkedDocuments();
@@ -306,40 +307,40 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             _documentStore = TestHelpers.CreateDocumentStore<double>(VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(null, "model.onnx", 512, 32));
         }
 
-        [Fact]
-        public void Constructor_WithNullModelPath_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullModelPath_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(_documentStore, null, 512, 32));
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxDocLength_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxDocLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new ColBERTRetriever<double>(_documentStore, "model.onnx", 0, 32));
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxQueryLength_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxQueryLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 0));
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
@@ -348,8 +349,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
@@ -358,8 +359,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
@@ -368,8 +369,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
         }
 
-        [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
@@ -378,8 +379,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
@@ -408,24 +409,24 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             _embeddingModel = TestHelpers.CreateEmbeddingModel<double>(VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GraphRetriever<double>(null, _embeddingModel));
         }
 
-        [Fact]
-        public void Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GraphRetriever<double>(_documentStore, null));
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
@@ -434,8 +435,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithEntityExtractionEnabled_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEntityExtractionEnabled_CreatesInstance()
         {
             // Arrange & Act
             var retrieverEnabled = new GraphRetriever<double>(_documentStore, _embeddingModel, enableAdvancedEntityExtraction: true);
@@ -446,8 +447,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotNull(retrieverDisabled);
         }
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
@@ -456,8 +457,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
@@ -466,8 +467,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
         }
 
-        [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
@@ -476,8 +477,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
@@ -489,8 +490,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_WithValidQuery_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
             AddSampleDocuments();
@@ -504,8 +505,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_WithEntityQuery_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEntityQuery_WorksCorrectly()
         {
             // Arrange
             AddSampleDocuments();
@@ -520,8 +521,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             // but the retrieval should complete without errors
         }
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
             AddSampleDocuments();
@@ -539,8 +540,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact]
-        public void Retrieve_WithQuotedEntities_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithQuotedEntities_WorksCorrectly()
         {
             // Arrange
             AddSampleDocuments();

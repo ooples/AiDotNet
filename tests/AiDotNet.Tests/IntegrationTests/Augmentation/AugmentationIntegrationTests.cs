@@ -8,6 +8,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Augmentation;
 
@@ -122,8 +123,8 @@ public class AugmentationIntegrationTests
 
     #region AugmentationContext Tests
 
-    [Fact]
-    public void AugmentationContext_ShouldApply_ReturnsCorrectProbability()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_ShouldApply_ReturnsCorrectProbability()
     {
         // Arrange
         var context = CreateTestContext(seed: 42);
@@ -135,8 +136,8 @@ public class AugmentationIntegrationTests
         Assert.False(context.ShouldApply(0.0));
     }
 
-    [Fact]
-    public void AugmentationContext_GetRandomDouble_ReturnsValueInRange()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_GetRandomDouble_ReturnsValueInRange()
     {
         // Arrange
         var context = CreateTestContext();
@@ -150,8 +151,8 @@ public class AugmentationIntegrationTests
         Assert.All(values, v => Assert.InRange(v, min, max));
     }
 
-    [Fact]
-    public void AugmentationContext_GetRandomInt_ReturnsValueInRange()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_GetRandomInt_ReturnsValueInRange()
     {
         // Arrange
         var context = CreateTestContext();
@@ -165,8 +166,8 @@ public class AugmentationIntegrationTests
         Assert.All(values, v => Assert.InRange(v, min, max - 1));
     }
 
-    [Fact]
-    public void AugmentationContext_SampleBeta_ReturnsValueBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_SampleBeta_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
         var context = CreateTestContext();
@@ -178,8 +179,8 @@ public class AugmentationIntegrationTests
         Assert.All(values, v => Assert.InRange(v, 0.0, 1.0));
     }
 
-    [Fact]
-    public void AugmentationContext_SampleGaussian_ReturnsSampledValues()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_SampleGaussian_ReturnsSampledValues()
     {
         // Arrange
         var context = CreateTestContext();
@@ -196,8 +197,8 @@ public class AugmentationIntegrationTests
         Assert.True(Math.Abs(actualStdDev - stdDev) < 0.5, $"Expected stdDev ~{stdDev}, got {actualStdDev}");
     }
 
-    [Fact]
-    public void AugmentationContext_CreateChildContext_PreservesParentState()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_CreateChildContext_PreservesParentState()
     {
         // Arrange
         var parent = CreateTestContext();
@@ -212,8 +213,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(parent.IsTraining, child.IsTraining);
     }
 
-    [Fact]
-    public void AugmentationContext_WithSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_WithSeed_ProducesReproducibleResults()
     {
         // Arrange
         var context1 = CreateTestContext(seed: 12345);
@@ -234,8 +235,8 @@ public class AugmentationIntegrationTests
 
     #region ImageTensor Tests
 
-    [Fact]
-    public void ImageTensor_Constructor_CreatesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_Constructor_CreatesCorrectDimensions()
     {
         // Arrange & Act
         var image = new ImageTensor<double>(32, 64, 3, ChannelOrder.CHW, ColorSpace.RGB);
@@ -248,8 +249,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(ColorSpace.RGB, image.ColorSpace);
     }
 
-    [Fact]
-    public void ImageTensor_GetSetPixel_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_GetSetPixel_WorksCorrectly()
     {
         // Arrange
         var image = new ImageTensor<double>(10, 10, 3, ChannelOrder.CHW, ColorSpace.RGB);
@@ -262,8 +263,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.75, value, Tolerance);
     }
 
-    [Fact]
-    public void ImageTensor_GetPixelChannels_ReturnsAllChannels()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_GetPixelChannels_ReturnsAllChannels()
     {
         // Arrange
         var image = new ImageTensor<double>(10, 10, 3, ChannelOrder.CHW, ColorSpace.RGB);
@@ -281,8 +282,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.3, channels[2], Tolerance);
     }
 
-    [Fact]
-    public void ImageTensor_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_Clone_CreatesDeepCopy()
     {
         // Arrange
         var original = CreateTestImage(10, 10);
@@ -297,8 +298,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.01, clone.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
-    public void ImageTensor_Crop_ExtractsCorrectRegion()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_Crop_ExtractsCorrectRegion()
     {
         // Arrange
         var image = CreateTestImage(20, 20);
@@ -313,8 +314,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.99, cropped.GetPixel(2, 2, 0), Tolerance); // (5-3, 5-3) in cropped coords
     }
 
-    [Fact]
-    public void ImageTensor_Crop_ThrowsOnInvalidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_Crop_ThrowsOnInvalidBounds()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -326,8 +327,8 @@ public class AugmentationIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => image.Crop(0, 8, 5, 5));
     }
 
-    [Fact]
-    public void ImageTensor_ToChannelOrder_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ImageTensor_ToChannelOrder_ConvertsCorrectly()
     {
         // Arrange
         var image = new ImageTensor<double>(4, 5, 3, ChannelOrder.CHW, ColorSpace.RGB);
@@ -348,8 +349,8 @@ public class AugmentationIntegrationTests
 
     #region HorizontalFlip Tests
 
-    [Fact]
-    public void HorizontalFlip_Apply_FlipsImageCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_Apply_FlipsImageCorrectly()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -366,8 +367,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalTopLeft, flipped.GetPixel(0, 9, 0), Tolerance);
     }
 
-    [Fact]
-    public void HorizontalFlip_Apply_PreservesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_Apply_PreservesDimensions()
     {
         // Arrange
         var image = CreateTestImage(15, 20);
@@ -383,8 +384,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(3, flipped.Channels);
     }
 
-    [Fact]
-    public void HorizontalFlip_Apply_DoesNotModifyOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_Apply_DoesNotModifyOriginal()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -399,8 +400,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalValue, image.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
-    public void HorizontalFlip_Apply_RespectsProbability()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_Apply_RespectsProbability()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -415,8 +416,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalValue, result.GetPixel(0, 0, 0), Tolerance);
     }
 
-    [Fact]
-    public void HorizontalFlip_GetParameters_ReturnsExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_GetParameters_ReturnsExpectedValues()
     {
         // Arrange
         var flip = new HorizontalFlip<double>(probability: 0.7);
@@ -434,8 +435,8 @@ public class AugmentationIntegrationTests
 
     #region VerticalFlip Tests
 
-    [Fact]
-    public void VerticalFlip_Apply_FlipsImageCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task VerticalFlip_Apply_FlipsImageCorrectly()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -456,8 +457,8 @@ public class AugmentationIntegrationTests
 
     #region Rotation Tests
 
-    [Fact]
-    public void Rotation_Apply_RotatesImage()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_Apply_RotatesImage()
     {
         // Arrange
         var image = CreateTestImage(20, 20);
@@ -474,8 +475,8 @@ public class AugmentationIntegrationTests
         Assert.NotEqual(image.GetPixel(0, 0, 0), rotated.GetPixel(0, 0, 0), Tolerance);
     }
 
-    [Fact]
-    public void Rotation_Apply_ZeroAngle_PreservesImage()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_Apply_ZeroAngle_PreservesImage()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -490,15 +491,15 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalCenter, rotated.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
-    public void Rotation_Constructor_ThrowsOnInvalidAngleRange()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_Constructor_ThrowsOnInvalidAngleRange()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Rotation<double>(minAngle: 45.0, maxAngle: -45.0));
     }
 
-    [Fact]
-    public void Rotation_GetParameters_ReturnsExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_GetParameters_ReturnsExpectedValues()
     {
         // Arrange
         var rotation = new Rotation<double>(
@@ -521,8 +522,8 @@ public class AugmentationIntegrationTests
 
     #region Brightness Tests
 
-    [Fact]
-    public void Brightness_Apply_IncreasesValues()
+    [Fact(Timeout = 120000)]
+    public async Task Brightness_Apply_IncreasesValues()
     {
         // Arrange
         var image = CreateTestImage(10, 10, initialValue: 0.3);
@@ -538,8 +539,8 @@ public class AugmentationIntegrationTests
         Assert.True(newValue > originalValue || newValue >= 1.0);
     }
 
-    [Fact]
-    public void Brightness_Apply_ClampsToBounds()
+    [Fact(Timeout = 120000)]
+    public async Task Brightness_Apply_ClampsToBounds()
     {
         // Arrange
         var image = CreateTestImage(10, 10, initialValue: 0.9);
@@ -564,8 +565,8 @@ public class AugmentationIntegrationTests
 
     #region GaussianNoise Tests
 
-    [Fact]
-    public void GaussianNoise_Apply_AddsNoiseToImage()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoise_Apply_AddsNoiseToImage()
     {
         // Arrange
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -591,8 +592,8 @@ public class AugmentationIntegrationTests
         Assert.True(differentPixels > 50, $"Expected most pixels to change, but only {differentPixels} changed");
     }
 
-    [Fact]
-    public void GaussianNoise_Apply_ClampsToBounds()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoise_Apply_ClampsToBounds()
     {
         // Arrange
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -620,8 +621,8 @@ public class AugmentationIntegrationTests
 
     #region Cutout Tests
 
-    [Fact]
-    public void Cutout_Apply_CreatesMaskedRegion()
+    [Fact(Timeout = 120000)]
+    public async Task Cutout_Apply_CreatesMaskedRegion()
     {
         // Arrange
         var image = CreateTestImage(20, 20, initialValue: 0.5);
@@ -658,8 +659,8 @@ public class AugmentationIntegrationTests
 
     #region MixUp Tests
 
-    [Fact]
-    public void MixUp_ApplyMixUp_BlendsImages()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_ApplyMixUp_BlendsImages()
     {
         // Arrange
         var image1 = CreateTestImage(10, 10, initialValue: 0.2);
@@ -679,8 +680,8 @@ public class AugmentationIntegrationTests
         Assert.True(mixedValue >= Math.Min(val1, val2) - 0.01 && mixedValue <= Math.Max(val1, val2) + 0.01);
     }
 
-    [Fact]
-    public void MixUp_ApplyMixUp_ThrowsOnDimensionMismatch()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_ApplyMixUp_ThrowsOnDimensionMismatch()
     {
         // Arrange
         var image1 = CreateTestImage(10, 10);
@@ -692,8 +693,8 @@ public class AugmentationIntegrationTests
         Assert.Throws<ArgumentException>(() => mixup.ApplyMixUp(image1, image2, null, null, context));
     }
 
-    [Fact]
-    public void MixUp_LastMixingLambda_IsSet()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_LastMixingLambda_IsSet()
     {
         // Arrange
         var image1 = CreateTestImage(10, 10, initialValue: 0.2);
@@ -713,8 +714,8 @@ public class AugmentationIntegrationTests
 
     #region Tabular Augmentation Tests
 
-    [Fact]
-    public void FeatureNoise_Apply_AddsNoiseToMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_Apply_AddsNoiseToMatrix()
     {
         // Arrange
         var matrix = CreateTestMatrix(10, 5);
@@ -729,8 +730,8 @@ public class AugmentationIntegrationTests
         Assert.NotEqual(originalValue, result[5, 2]);
     }
 
-    [Fact]
-    public void FeatureNoise_Apply_PreservesMatrixDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_Apply_PreservesMatrixDimensions()
     {
         // Arrange
         var matrix = CreateTestMatrix(20, 8);
@@ -745,15 +746,15 @@ public class AugmentationIntegrationTests
         Assert.Equal(8, result.Columns);
     }
 
-    [Fact]
-    public void FeatureNoise_Constructor_ThrowsOnNegativeStdDev()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_Constructor_ThrowsOnNegativeStdDev()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureNoise<double>(noiseStdDev: -0.1));
     }
 
-    [Fact]
-    public void FeatureNoise_FeatureIndices_AppliesOnlyToSpecifiedFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_FeatureIndices_AppliesOnlyToSpecifiedFeatures()
     {
         // Arrange
         var matrix = CreateTestMatrix(10, 5);
@@ -779,8 +780,8 @@ public class AugmentationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureDropout_Apply_ZerosOutFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDropout_Apply_ZerosOutFeatures()
     {
         // Arrange
         var matrix = CreateTestMatrix(10, 10);
@@ -806,8 +807,8 @@ public class AugmentationIntegrationTests
         Assert.True(zeroCount > 0, "FeatureDropout should create some zero values");
     }
 
-    [Fact]
-    public void TabularMixUp_Apply_BlendsTwoRows()
+    [Fact(Timeout = 120000)]
+    public async Task TabularMixUp_Apply_BlendsTwoRows()
     {
         // Arrange
         var matrix1 = new Matrix<double>(1, 5);
@@ -832,8 +833,8 @@ public class AugmentationIntegrationTests
 
     #region Audio Augmentation Tests
 
-    [Fact]
-    public void AudioNoise_Apply_AddsNoiseToWaveform()
+    [Fact(Timeout = 120000)]
+    public async Task AudioNoise_Apply_AddsNoiseToWaveform()
     {
         // Arrange
         var audio = CreateTestAudio(1000);
@@ -848,8 +849,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(audio.Length, result.Length);
     }
 
-    [Fact]
-    public void TimeStretch_Apply_ChangesAudioLength()
+    [Fact(Timeout = 120000)]
+    public async Task TimeStretch_Apply_ChangesAudioLength()
     {
         // Arrange
         var audio = CreateTestAudio(1000);
@@ -864,8 +865,8 @@ public class AugmentationIntegrationTests
         Assert.True(result.Length < audio.Length, "Time stretch with factor 0.5 should shorten audio");
     }
 
-    [Fact]
-    public void VolumeChange_Apply_ScalesAmplitude()
+    [Fact(Timeout = 120000)]
+    public async Task VolumeChange_Apply_ScalesAmplitude()
     {
         // Arrange
         var audio = CreateTestAudio(100);
@@ -887,8 +888,8 @@ public class AugmentationIntegrationTests
         Assert.True(ratio > 1.5 && ratio < 2.5, $"Expected ~2x amplitude, got {ratio}x");
     }
 
-    [Fact]
-    public void TimeShift_Apply_ShiftsAudioSamples()
+    [Fact(Timeout = 120000)]
+    public async Task TimeShift_Apply_ShiftsAudioSamples()
     {
         // Arrange
         var audio = CreateTestAudio(100);
@@ -906,8 +907,8 @@ public class AugmentationIntegrationTests
 
     #region Text Augmentation Tests
 
-    [Fact]
-    public void RandomDeletion_Apply_RemovesWords()
+    [Fact(Timeout = 120000)]
+    public async Task RandomDeletion_Apply_RemovesWords()
     {
         // Arrange
         var text = new[] { "The quick brown fox jumps over the lazy dog" };
@@ -923,8 +924,8 @@ public class AugmentationIntegrationTests
         Assert.True(resultWordCount < originalWordCount || resultWordCount == originalWordCount);
     }
 
-    [Fact]
-    public void RandomSwap_Apply_SwapsWordPositions()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSwap_Apply_SwapsWordPositions()
     {
         // Arrange
         var text = new[] { "one two three four five" };
@@ -941,8 +942,8 @@ public class AugmentationIntegrationTests
         Assert.Subset(originalWords, resultWords);
     }
 
-    [Fact]
-    public void RandomInsertion_Apply_InsertsWords()
+    [Fact(Timeout = 120000)]
+    public async Task RandomInsertion_Apply_InsertsWords()
     {
         // Arrange
         var text = new[] { "hello world" };
@@ -957,8 +958,8 @@ public class AugmentationIntegrationTests
         Assert.Single(result);
     }
 
-    [Fact]
-    public void SynonymReplacement_Apply_ReplacesWithSynonyms()
+    [Fact(Timeout = 120000)]
+    public async Task SynonymReplacement_Apply_ReplacesWithSynonyms()
     {
         // Arrange
         var text = new[] { "The big dog ran quickly" };
@@ -977,8 +978,8 @@ public class AugmentationIntegrationTests
 
     #region Compose Tests
 
-    [Fact]
-    public void Compose_Apply_AppliesAugmentationsInSequence()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_Apply_AppliesAugmentationsInSequence()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -995,8 +996,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, result.Width);
     }
 
-    [Fact]
-    public void Compose_With_AddsAugmentation()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_With_AddsAugmentation()
     {
         // Arrange
         var compose = new Compose<double, ImageTensor<double>>(
@@ -1010,8 +1011,8 @@ public class AugmentationIntegrationTests
         Assert.Single(compose.Augmentations); // Original unchanged
     }
 
-    [Fact]
-    public void Compose_GetParameters_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_GetParameters_ReturnsCorrectInfo()
     {
         // Arrange - use IEnumerable constructor with probability parameter
         var compose = new Compose<double, ImageTensor<double>>(
@@ -1026,8 +1027,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(2, (int)parameters["num_augmentations"]);
     }
 
-    [Fact]
-    public void Compose_RespectsProbability()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_RespectsProbability()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1047,8 +1048,8 @@ public class AugmentationIntegrationTests
 
     #region OneOf Tests
 
-    [Fact]
-    public void OneOf_Apply_SelectsOneAugmentation()
+    [Fact(Timeout = 120000)]
+    public async Task OneOf_Apply_SelectsOneAugmentation()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1064,16 +1065,16 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
-    public void OneOf_Constructor_ThrowsOnEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task OneOf_Constructor_ThrowsOnEmptyList()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new OneOf<double, ImageTensor<double>>(Array.Empty<IAugmentation<double, ImageTensor<double>>>()));
     }
 
-    [Fact]
-    public void OneOf_WithWeights_RespectsWeights()
+    [Fact(Timeout = 120000)]
+    public async Task OneOf_WithWeights_RespectsWeights()
     {
         // Arrange - give all weight to first augmentation
         var oneof = new OneOf<double, ImageTensor<double>>(
@@ -1090,8 +1091,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(2, (int)parameters["num_augmentations"]);
     }
 
-    [Fact]
-    public void OneOf_GetParameters_ReturnsWeights()
+    [Fact(Timeout = 120000)]
+    public async Task OneOf_GetParameters_ReturnsWeights()
     {
         // Arrange
         var oneof = new OneOf<double, ImageTensor<double>>(
@@ -1113,8 +1114,8 @@ public class AugmentationIntegrationTests
 
     #region SomeOf Tests
 
-    [Fact]
-    public void SomeOf_Apply_SelectsNAugmentations()
+    [Fact(Timeout = 120000)]
+    public async Task SomeOf_Apply_SelectsNAugmentations()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1132,8 +1133,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
-    public void SomeOf_RangeN_SelectsBetweenMinAndMax()
+    [Fact(Timeout = 120000)]
+    public async Task SomeOf_RangeN_SelectsBetweenMinAndMax()
     {
         // Arrange
         var someof = new SomeOf<double, ImageTensor<double>>(
@@ -1155,8 +1156,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(3, (int)parameters["max_n"]);
     }
 
-    [Fact]
-    public void SomeOf_Constructor_ThrowsOnInvalidN()
+    [Fact(Timeout = 120000)]
+    public async Task SomeOf_Constructor_ThrowsOnInvalidN()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -1176,8 +1177,8 @@ public class AugmentationIntegrationTests
 
     #region AugmentationPipeline Tests
 
-    [Fact]
-    public void AugmentationPipeline_Add_ChainsProperly()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_Add_ChainsProperly()
     {
         // Arrange
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>("TestPipeline");
@@ -1193,8 +1194,8 @@ public class AugmentationIntegrationTests
         Assert.Equal("TestPipeline", pipeline.Name);
     }
 
-    [Fact]
-    public void AugmentationPipeline_Apply_Sequential()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_Apply_Sequential()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1210,8 +1211,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
-    public void AugmentationPipeline_OneOf_SelectsSingle()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_OneOf_SelectsSingle()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1228,8 +1229,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
-    public void AugmentationPipeline_GetConfiguration_ReturnsDetails()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_GetConfiguration_ReturnsDetails()
     {
         // Arrange
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>("MyPipeline");
@@ -1244,8 +1245,8 @@ public class AugmentationIntegrationTests
         Assert.Equal("Random", config["order"]);
     }
 
-    [Fact]
-    public void AugmentationPipeline_AddNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_AddNull_Throws()
     {
         // Arrange
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
@@ -1258,8 +1259,8 @@ public class AugmentationIntegrationTests
 
     #region AugmentationConfig Tests
 
-    [Fact]
-    public void AugmentationConfig_Defaults_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_Defaults_AreCorrect()
     {
         // Arrange & Act
         var config = new AugmentationConfig();
@@ -1273,8 +1274,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.TTAIncludeOriginal);
     }
 
-    [Fact]
-    public void AugmentationConfig_ForImages_SetsImageSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_ForImages_SetsImageSettings()
     {
         // Arrange & Act
         var config = AugmentationConfig.ForImages();
@@ -1285,8 +1286,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.ImageSettings.EnableRotation);
     }
 
-    [Fact]
-    public void AugmentationConfig_ForTabular_SetsTabularSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_ForTabular_SetsTabularSettings()
     {
         // Arrange & Act
         var config = AugmentationConfig.ForTabular();
@@ -1296,8 +1297,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.TabularSettings.EnableMixUp);
     }
 
-    [Fact]
-    public void AugmentationConfig_ForAudio_SetsAudioSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_ForAudio_SetsAudioSettings()
     {
         // Arrange & Act
         var config = AugmentationConfig.ForAudio();
@@ -1307,8 +1308,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.AudioSettings.EnablePitchShift);
     }
 
-    [Fact]
-    public void AugmentationConfig_ForText_SetsTextSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_ForText_SetsTextSettings()
     {
         // Arrange & Act
         var config = AugmentationConfig.ForText();
@@ -1318,8 +1319,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.TextSettings.EnableSynonymReplacement);
     }
 
-    [Fact]
-    public void AugmentationConfig_ForVideo_SetsVideoSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_ForVideo_SetsVideoSettings()
     {
         // Arrange & Act
         var config = AugmentationConfig.ForVideo();
@@ -1329,8 +1330,8 @@ public class AugmentationIntegrationTests
         Assert.True(config.VideoSettings.EnableTemporalCrop);
     }
 
-    [Fact]
-    public void AugmentationConfig_GetConfiguration_ReturnsAllSettings()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationConfig_GetConfiguration_ReturnsAllSettings()
     {
         // Arrange
         var config = new AugmentationConfig
@@ -1356,8 +1357,8 @@ public class AugmentationIntegrationTests
 
     #region ImageAugmentationSettings Tests
 
-    [Fact]
-    public void ImageAugmentationSettings_Defaults_AreIndustryStandard()
+    [Fact(Timeout = 120000)]
+    public async Task ImageAugmentationSettings_Defaults_AreIndustryStandard()
     {
         // Arrange & Act
         var settings = new ImageAugmentationSettings();
@@ -1377,8 +1378,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.2, settings.MixUpAlpha, Tolerance);
     }
 
-    [Fact]
-    public void ImageAugmentationSettings_GetConfiguration_IncludesAllFields()
+    [Fact(Timeout = 120000)]
+    public async Task ImageAugmentationSettings_GetConfiguration_IncludesAllFields()
     {
         // Arrange
         var settings = new ImageAugmentationSettings { EnableMixUp = true };
@@ -1398,8 +1399,8 @@ public class AugmentationIntegrationTests
 
     #region DataModalityDetector Tests
 
-    [Fact]
-    public void DataModalityDetector_Detect_IdentifiesImageTensor()
+    [Fact(Timeout = 120000)]
+    public async Task DataModalityDetector_Detect_IdentifiesImageTensor()
     {
         // Act
         var modality = DataModalityDetector.Detect<ImageTensor<double>>();
@@ -1408,8 +1409,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(DataModality.Image, modality);
     }
 
-    [Fact]
-    public void DataModalityDetector_Detect_IdentifiesMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task DataModalityDetector_Detect_IdentifiesMatrix()
     {
         // Act
         var modality = DataModalityDetector.Detect<Matrix<double>>();
@@ -1418,8 +1419,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(DataModality.Tabular, modality);
     }
 
-    [Fact]
-    public void DataModalityDetector_Detect_IdentifiesString()
+    [Fact(Timeout = 120000)]
+    public async Task DataModalityDetector_Detect_IdentifiesString()
     {
         // Act
         var modality = DataModalityDetector.Detect<string>();
@@ -1428,8 +1429,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(DataModality.Text, modality);
     }
 
-    [Fact]
-    public void DataModalityDetector_Detect_IdentifiesStringArray()
+    [Fact(Timeout = 120000)]
+    public async Task DataModalityDetector_Detect_IdentifiesStringArray()
     {
         // Act
         var modality = DataModalityDetector.Detect<string[]>();
@@ -1438,8 +1439,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(DataModality.Text, modality);
     }
 
-    [Fact]
-    public void DataModalityDetector_Detect_ReturnsTensorAsUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task DataModalityDetector_Detect_ReturnsTensorAsUnknown()
     {
         // Act
         var modality = DataModalityDetector.Detect<Tensor<double>>();
@@ -1452,8 +1453,8 @@ public class AugmentationIntegrationTests
 
     #region BoundingBox Tests
 
-    [Fact]
-    public void BoundingBox_Create_SetsCoordinates()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_Create_SetsCoordinates()
     {
         // Arrange & Act
         var box = new BoundingBox<double>(10, 20, 100, 150, BoundingBoxFormat.XYXY);
@@ -1465,8 +1466,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(150, box.Y2, Tolerance);
     }
 
-    [Fact]
-    public void BoundingBox_ToXYWH_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_ToXYWH_ConvertsCorrectly()
     {
         // Arrange
         var box = new BoundingBox<double>(10, 20, 60, 80, BoundingBoxFormat.XYXY);
@@ -1481,8 +1482,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(60, h, Tolerance); // 80 - 20
     }
 
-    [Fact]
-    public void BoundingBox_IsValid_ChecksBounds()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_IsValid_ChecksBounds()
     {
         // Arrange
         var validBox = new BoundingBox<double>(10, 20, 100, 150, BoundingBoxFormat.XYXY);
@@ -1493,8 +1494,8 @@ public class AugmentationIntegrationTests
         Assert.False(invalidBox.IsValid());
     }
 
-    [Fact]
-    public void BoundingBox_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BoundingBox_Clone_CreatesDeepCopy()
     {
         // Arrange
         var original = new BoundingBox<double>(10, 20, 100, 150, BoundingBoxFormat.XYXY);
@@ -1516,8 +1517,8 @@ public class AugmentationIntegrationTests
 
     #region Keypoint Tests
 
-    [Fact]
-    public void Keypoint_Create_SetsCoordinates()
+    [Fact(Timeout = 120000)]
+    public async Task Keypoint_Create_SetsCoordinates()
     {
         // Arrange & Act
         var keypoint = new Keypoint<double>(100.5, 200.5);
@@ -1527,8 +1528,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(200.5, keypoint.Y, Tolerance);
     }
 
-    [Fact]
-    public void Keypoint_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Keypoint_Clone_CreatesDeepCopy()
     {
         // Arrange
         var original = new Keypoint<double>(100, 200)
@@ -1552,8 +1553,8 @@ public class AugmentationIntegrationTests
 
     #region AugmentedSample Tests
 
-    [Fact]
-    public void AugmentedSample_Create_HoldsDataAndTargets()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentedSample_Create_HoldsDataAndTargets()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1574,8 +1575,8 @@ public class AugmentationIntegrationTests
         Assert.Single(sample.BoundingBoxes!);
     }
 
-    [Fact]
-    public void AugmentedSample_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentedSample_Clone_CreatesDeepCopy()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1601,8 +1602,8 @@ public class AugmentationIntegrationTests
 
     #region SpatialAugmentation With Targets Tests
 
-    [Fact]
-    public void HorizontalFlip_ApplyWithTargets_TransformsBoundingBox()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_ApplyWithTargets_TransformsBoundingBox()
     {
         // Arrange
         var image = CreateTestImage(100, 100);
@@ -1625,8 +1626,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(90, flippedBox.X2, 1.0);
     }
 
-    [Fact]
-    public void HorizontalFlip_ApplyWithTargets_TransformsKeypoint()
+    [Fact(Timeout = 120000)]
+    public async Task HorizontalFlip_ApplyWithTargets_TransformsKeypoint()
     {
         // Arrange
         var image = CreateTestImage(100, 100);
@@ -1649,8 +1650,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(50, flippedKeypoint.Y, 1.0); // Y unchanged
     }
 
-    [Fact]
-    public void Rotation_ApplyWithTargets_RotatesBoundingBox()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_ApplyWithTargets_RotatesBoundingBox()
     {
         // Arrange
         var image = CreateTestImage(100, 100);
@@ -1680,8 +1681,8 @@ public class AugmentationIntegrationTests
 
     #region Training Mode Tests
 
-    [Fact]
-    public void Augmentation_TrainingOnly_SkipsInInferenceMode()
+    [Fact(Timeout = 120000)]
+    public async Task Augmentation_TrainingOnly_SkipsInInferenceMode()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1696,8 +1697,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalValue, result.GetPixel(0, 0, 0), Tolerance);
     }
 
-    [Fact]
-    public void Augmentation_TrainingOnly_AppliesInTrainingMode()
+    [Fact(Timeout = 120000)]
+    public async Task Augmentation_TrainingOnly_AppliesInTrainingMode()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1716,8 +1717,8 @@ public class AugmentationIntegrationTests
 
     #region IsEnabled Tests
 
-    [Fact]
-    public void Augmentation_IsEnabled_False_SkipsAugmentation()
+    [Fact(Timeout = 120000)]
+    public async Task Augmentation_IsEnabled_False_SkipsAugmentation()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1737,8 +1738,8 @@ public class AugmentationIntegrationTests
 
     #region Video Augmentation Tests
 
-    [Fact]
-    public void TemporalFlip_Apply_ReversesFrameOrder()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalFlip_Apply_ReversesFrameOrder()
     {
         // Arrange - TemporalFlip works on ImageTensor<double>[] (video frames)
         var frames = new ImageTensor<double>[5];
@@ -1761,8 +1762,8 @@ public class AugmentationIntegrationTests
         Assert.True(result[0].GetPixel(0, 0, 0) > result[4].GetPixel(0, 0, 0));
     }
 
-    [Fact]
-    public void FrameDropout_Apply_DropsFrames()
+    [Fact(Timeout = 120000)]
+    public async Task FrameDropout_Apply_DropsFrames()
     {
         // Arrange - FrameDropout works on ImageTensor<double>[]
         var frames = new ImageTensor<double>[10];
@@ -1783,8 +1784,8 @@ public class AugmentationIntegrationTests
         Assert.True(result.Length >= 2); // MinFramesToKeep default is 2
     }
 
-    [Fact]
-    public void SpeedChange_Apply_ChangesVideoSpeed()
+    [Fact(Timeout = 120000)]
+    public async Task SpeedChange_Apply_ChangesVideoSpeed()
     {
         // Arrange - SpeedChange works on ImageTensor<double>[] (video frames)
         var frames = new ImageTensor<double>[10];
@@ -1807,16 +1808,16 @@ public class AugmentationIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void AugmentationBase_Constructor_ThrowsOnInvalidProbability()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationBase_Constructor_ThrowsOnInvalidProbability()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => new HorizontalFlip<double>(probability: -0.1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new HorizontalFlip<double>(probability: 1.5));
     }
 
-    [Fact]
-    public void Compose_EmptyList_ReturnsOriginalData()
+    [Fact(Timeout = 120000)]
+    public async Task Compose_EmptyList_ReturnsOriginalData()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1831,8 +1832,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalValue, result.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
-    public void AugmentationPipeline_EmptyPipeline_ReturnsOriginalData()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationPipeline_EmptyPipeline_ReturnsOriginalData()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1847,8 +1848,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(originalValue, result.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
-    public void Rotation_VerySmallImage_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task Rotation_VerySmallImage_DoesNotCrash()
     {
         // Arrange
         var image = CreateTestImage(2, 2);
@@ -1863,8 +1864,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(2, result.Width);
     }
 
-    [Fact]
-    public void FeatureNoise_EmptyMatrix_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_EmptyMatrix_DoesNotCrash()
     {
         // Arrange
         var matrix = new Matrix<double>(0, 0);
@@ -1879,8 +1880,8 @@ public class AugmentationIntegrationTests
         Assert.Equal(0, result.Columns);
     }
 
-    [Fact]
-    public void RandomDeletion_EmptyText_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task RandomDeletion_EmptyText_DoesNotCrash()
     {
         // Arrange
         var text = new[] { "" };
@@ -1894,8 +1895,8 @@ public class AugmentationIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void RandomDeletion_SingleWord_PreservesMinimumContent()
+    [Fact(Timeout = 120000)]
+    public async Task RandomDeletion_SingleWord_PreservesMinimumContent()
     {
         // Arrange
         var text = new[] { "hello" };
@@ -1913,8 +1914,8 @@ public class AugmentationIntegrationTests
 
     #region Event Tests
 
-    [Fact]
-    public void AugmentationBase_OnAugmentationApplied_RaisesEvent()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationBase_OnAugmentationApplied_RaisesEvent()
     {
         // Arrange
         var image = CreateTestImage(10, 10);
@@ -1930,8 +1931,8 @@ public class AugmentationIntegrationTests
         Assert.True(eventRaised);
     }
 
-    [Fact]
-    public void MixUp_OnLabelMixing_RaisesEvent()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_OnLabelMixing_RaisesEvent()
     {
         // Arrange
         var image1 = CreateTestImage(10, 10, initialValue: 0.2);
@@ -1954,8 +1955,8 @@ public class AugmentationIntegrationTests
 
     #region Recommendation and Validation Tests
 
-    [Fact]
-    public void AugmentationRecommendation_Properties_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationRecommendation_Properties_WorkCorrectly()
     {
         // Arrange & Act
         var recommendation = new AugmentationRecommendation
@@ -1978,8 +1979,8 @@ public class AugmentationIntegrationTests
         Assert.Single(recommendation.IncompatibleWith!);
     }
 
-    [Fact]
-    public void AugmentationValidationResult_Properties_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationValidationResult_Properties_WorkCorrectly()
     {
         // Arrange & Act
         var result = new AugmentationValidationResult
@@ -1997,8 +1998,8 @@ public class AugmentationIntegrationTests
         Assert.Single(result.SuggestedFixes);
     }
 
-    [Fact]
-    public void DatasetCharacteristics_Properties_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DatasetCharacteristics_Properties_WorkCorrectly()
     {
         // Arrange & Act
         var characteristics = new DatasetCharacteristics
@@ -2029,8 +2030,8 @@ public class AugmentationIntegrationTests
 
     #region TestTimeAugmentationResult Tests
 
-    [Fact]
-    public void TestTimeAugmentationResult_Properties_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TestTimeAugmentationResult_Properties_WorkCorrectly()
     {
         // Arrange
         var predictions = new List<double[]>

@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -15,23 +16,23 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region SafeLog
 
-    [Fact]
-    public void SafeLog_PositiveValue_ReturnsExactLog()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLog_PositiveValue_ReturnsExactLog()
     {
         // SafeLog(e) = 1.0 (natural log of e)
         double result = NumericalStabilityHelper.SafeLog(Math.E);
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLog_One_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLog_One_ReturnsZero()
     {
         double result = NumericalStabilityHelper.SafeLog(1.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLog_Zero_ReturnsLogOfEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLog_Zero_ReturnsLogOfEpsilon()
     {
         // SafeLog(0) should clamp to epsilon and return log(epsilon)
         double expected = Math.Log(NumericalStabilityHelper.DefaultEpsilon);
@@ -39,8 +40,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLog_NegativeValue_ReturnsLogOfEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLog_NegativeValue_ReturnsLogOfEpsilon()
     {
         // SafeLog(-5) should clamp to epsilon
         double expected = Math.Log(NumericalStabilityHelper.DefaultEpsilon);
@@ -48,8 +49,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLog_CustomEpsilon_UsesCustomValue()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLog_CustomEpsilon_UsesCustomValue()
     {
         double eps = 1e-3;
         double expected = Math.Log(eps);
@@ -61,16 +62,16 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region SafeDiv
 
-    [Fact]
-    public void SafeDiv_NormalValues_ReturnsExactQuotient()
+    [Fact(Timeout = 120000)]
+    public async Task SafeDiv_NormalValues_ReturnsExactQuotient()
     {
         // 10 / 3 = 3.333...
         double result = NumericalStabilityHelper.SafeDiv(10.0, 3.0);
         Assert.Equal(10.0 / 3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeDiv_ZeroDenominator_ReturnsFiniteValue()
+    [Fact(Timeout = 120000)]
+    public async Task SafeDiv_ZeroDenominator_ReturnsFiniteValue()
     {
         // 5 / 0 → should return 5 / epsilon
         double result = NumericalStabilityHelper.SafeDiv(5.0, 0.0);
@@ -79,16 +80,16 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), "Result should be finite");
     }
 
-    [Fact]
-    public void SafeDiv_NegativeDenominator_PreservesSign()
+    [Fact(Timeout = 120000)]
+    public async Task SafeDiv_NegativeDenominator_PreservesSign()
     {
         // When denominator is very small negative, result should be negative
         double result = NumericalStabilityHelper.SafeDiv(5.0, -1e-20);
         Assert.True(result < 0, "Division by small negative should give negative result");
     }
 
-    [Fact]
-    public void SafeDiv_ZeroDivZero_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task SafeDiv_ZeroDivZero_ReturnsOne()
     {
         // 0 / 0 → 0 / epsilon = 0
         double result = NumericalStabilityHelper.SafeDiv(0.0, 0.0);
@@ -99,23 +100,23 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region SafeSqrt
 
-    [Fact]
-    public void SafeSqrt_PositiveValue_ReturnsExactSqrt()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSqrt_PositiveValue_ReturnsExactSqrt()
     {
         double result = NumericalStabilityHelper.SafeSqrt(4.0);
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeSqrt_Zero_ReturnsSqrtOfEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSqrt_Zero_ReturnsSqrtOfEpsilon()
     {
         double expected = Math.Sqrt(NumericalStabilityHelper.DefaultEpsilon);
         double result = NumericalStabilityHelper.SafeSqrt(0.0);
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeSqrt_NegativeValue_ReturnsSqrtOfEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task SafeSqrt_NegativeValue_ReturnsSqrtOfEpsilon()
     {
         double expected = Math.Sqrt(NumericalStabilityHelper.DefaultEpsilon);
         double result = NumericalStabilityHelper.SafeSqrt(-10.0);
@@ -126,36 +127,36 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region ClampProbability
 
-    [Fact]
-    public void ClampProbability_InRange_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClampProbability_InRange_Unchanged()
     {
         double result = NumericalStabilityHelper.ClampProbability(0.5);
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void ClampProbability_Zero_ClampsToEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task ClampProbability_Zero_ClampsToEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(0.0);
         Assert.Equal(NumericalStabilityHelper.DefaultEpsilon, result, Tolerance);
     }
 
-    [Fact]
-    public void ClampProbability_One_ClampsToOneMinusEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task ClampProbability_One_ClampsToOneMinusEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(1.0);
         Assert.Equal(1.0 - NumericalStabilityHelper.DefaultEpsilon, result, Tolerance);
     }
 
-    [Fact]
-    public void ClampProbability_Negative_ClampsToEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task ClampProbability_Negative_ClampsToEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(-0.1);
         Assert.Equal(NumericalStabilityHelper.DefaultEpsilon, result, Tolerance);
     }
 
-    [Fact]
-    public void ClampProbability_GreaterThanOne_ClampsToOneMinusEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task ClampProbability_GreaterThanOne_ClampsToOneMinusEpsilon()
     {
         double result = NumericalStabilityHelper.ClampProbability(1.5);
         Assert.Equal(1.0 - NumericalStabilityHelper.DefaultEpsilon, result, Tolerance);
@@ -165,16 +166,16 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region SafeLogProbability
 
-    [Fact]
-    public void SafeLogProbability_ValidProbability_ReturnsExactLog()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLogProbability_ValidProbability_ReturnsExactLog()
     {
         // SafeLogProbability(0.5) = log(0.5) = -ln(2)
         double result = NumericalStabilityHelper.SafeLogProbability(0.5);
         Assert.Equal(-Math.Log(2.0), result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLogProbability_Zero_ReturnsLogEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLogProbability_Zero_ReturnsLogEpsilon()
     {
         // 0 → clamped to eps → log(eps)
         double result = NumericalStabilityHelper.SafeLogProbability(0.0);
@@ -182,8 +183,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void SafeLogProbability_One_ReturnsNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task SafeLogProbability_One_ReturnsNearZero()
     {
         // 1 → clamped to 1-eps → log(1-eps) ≈ -eps
         double result = NumericalStabilityHelper.SafeLogProbability(1.0);
@@ -196,8 +197,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region StableSoftmax
 
-    [Fact]
-    public void StableSoftmax_SimpleInput_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_SimpleInput_HandCalculated()
     {
         // softmax([1, 2, 3]) = [e^1, e^2, e^3] / (e^1 + e^2 + e^3)
         var logits = new Vector<double>([1.0, 2.0, 3.0]);
@@ -212,8 +213,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(e3 / sum, result[2], Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_SumsToOne()
     {
         var logits = new Vector<double>([1.0, 2.0, 3.0]);
         var result = NumericalStabilityHelper.StableSoftmax(logits);
@@ -224,8 +225,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(1.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_LargeValues_DoesNotOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_LargeValues_DoesNotOverflow()
     {
         // Without the max-subtraction trick, exp(1000) would overflow
         var logits = new Vector<double>([1000.0, 1001.0, 1002.0]);
@@ -241,8 +242,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(e2 / sum, result[2], Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_EqualInputs_UniformDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_EqualInputs_UniformDistribution()
     {
         var logits = new Vector<double>([5.0, 5.0, 5.0, 5.0]);
         var result = NumericalStabilityHelper.StableSoftmax(logits);
@@ -252,8 +253,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
             Assert.Equal(0.25, result[i], Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_NegativeValues_StillCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_NegativeValues_StillCorrect()
     {
         var logits = new Vector<double>([-1.0, -2.0, -3.0]);
         var result = NumericalStabilityHelper.StableSoftmax(logits);
@@ -267,8 +268,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(em3 / sum, result[2], Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_ShiftInvariance()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_ShiftInvariance()
     {
         // softmax(x + c) = softmax(x) for any constant c
         var logits1 = new Vector<double>([1.0, 2.0, 3.0]);
@@ -283,8 +284,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
             Assert.Equal(result1[i], result2[i], Tolerance);
     }
 
-    [Fact]
-    public void StableSoftmax_MonotonicInInput()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_MonotonicInInput()
     {
         // Larger input → larger softmax output
         var logits = new Vector<double>([1.0, 3.0, 2.0]);
@@ -295,8 +296,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.True(result[2] > result[0], "softmax(2) > softmax(1)");
     }
 
-    [Fact]
-    public void StableSoftmax_NullInput_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task StableSoftmax_NullInput_ReturnsNull()
     {
         var result = NumericalStabilityHelper.StableSoftmax<double>(null);
         Assert.Null(result);
@@ -306,8 +307,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region StableLogSoftmax
 
-    [Fact]
-    public void StableLogSoftmax_ConsistentWithSoftmax()
+    [Fact(Timeout = 120000)]
+    public async Task StableLogSoftmax_ConsistentWithSoftmax()
     {
         // log_softmax(x) should equal log(softmax(x))
         var logits = new Vector<double>([1.0, 2.0, 3.0]);
@@ -320,8 +321,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
             Assert.Equal(Math.Log(softmax[i]), logSoftmax[i], LooseTolerance);
     }
 
-    [Fact]
-    public void StableLogSoftmax_LogSumExpSubtraction()
+    [Fact(Timeout = 120000)]
+    public async Task StableLogSoftmax_LogSumExpSubtraction()
     {
         // log_softmax(x_i) = x_i - log(sum(exp(x_j)))
         var logits = new Vector<double>([2.0, 4.0, 1.0]);
@@ -334,8 +335,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(1.0 - logSumExp, result[2], LooseTolerance);
     }
 
-    [Fact]
-    public void StableLogSoftmax_AllValuesNegative()
+    [Fact(Timeout = 120000)]
+    public async Task StableLogSoftmax_AllValuesNegative()
     {
         // All log-softmax values should be <= 0
         var logits = new Vector<double>([1.0, 2.0, 3.0]);
@@ -346,8 +347,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
             Assert.True(result[i] <= 0, $"Log softmax[{i}]={result[i]} should be <= 0");
     }
 
-    [Fact]
-    public void StableLogSoftmax_ExpSumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task StableLogSoftmax_ExpSumsToOne()
     {
         // exp(log_softmax) should sum to 1
         var logits = new Vector<double>([1.0, 2.0, 3.0]);
@@ -364,16 +365,16 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region IsNaN, IsInfinity, IsFinite
 
-    [Fact]
-    public void IsNaN_DetectsNaN()
+    [Fact(Timeout = 120000)]
+    public async Task IsNaN_DetectsNaN()
     {
         Assert.True(NumericalStabilityHelper.IsNaN(double.NaN));
         Assert.False(NumericalStabilityHelper.IsNaN(1.0));
         Assert.False(NumericalStabilityHelper.IsNaN(double.PositiveInfinity));
     }
 
-    [Fact]
-    public void IsInfinity_DetectsInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task IsInfinity_DetectsInfinity()
     {
         Assert.True(NumericalStabilityHelper.IsInfinity(double.PositiveInfinity));
         Assert.True(NumericalStabilityHelper.IsInfinity(double.NegativeInfinity));
@@ -381,8 +382,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.False(NumericalStabilityHelper.IsInfinity(double.NaN));
     }
 
-    [Fact]
-    public void IsFinite_DetectsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task IsFinite_DetectsFinite()
     {
         Assert.True(NumericalStabilityHelper.IsFinite(1.0));
         Assert.True(NumericalStabilityHelper.IsFinite(0.0));
@@ -395,8 +396,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region Vector NaN/Infinity Detection
 
-    [Fact]
-    public void ContainsNaN_DetectsNaNInVector()
+    [Fact(Timeout = 120000)]
+    public async Task ContainsNaN_DetectsNaNInVector()
     {
         var vec = new Vector<double>([1.0, double.NaN, 3.0]);
         Assert.True(NumericalStabilityHelper.ContainsNaN(vec));
@@ -405,8 +406,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.False(NumericalStabilityHelper.ContainsNaN(clean));
     }
 
-    [Fact]
-    public void ContainsInfinity_DetectsInfinityInVector()
+    [Fact(Timeout = 120000)]
+    public async Task ContainsInfinity_DetectsInfinityInVector()
     {
         var vec = new Vector<double>([1.0, double.PositiveInfinity, 3.0]);
         Assert.True(NumericalStabilityHelper.ContainsInfinity(vec));
@@ -415,15 +416,15 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.False(NumericalStabilityHelper.ContainsInfinity(clean));
     }
 
-    [Fact]
-    public void CountNaN_CorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task CountNaN_CorrectCount()
     {
         var vec = new Vector<double>([double.NaN, 2.0, double.NaN, 4.0, double.NaN]);
         Assert.Equal(3, NumericalStabilityHelper.CountNaN(vec));
     }
 
-    [Fact]
-    public void CountInfinity_CorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task CountInfinity_CorrectCount()
     {
         var vec = new Vector<double>([double.PositiveInfinity, 2.0, double.NegativeInfinity, 4.0]);
         Assert.Equal(2, NumericalStabilityHelper.CountInfinity(vec));
@@ -433,8 +434,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region ReplaceNaN / ReplaceInfinity / ReplaceNonFinite
 
-    [Fact]
-    public void ReplaceNaN_ReplacesWithZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReplaceNaN_ReplacesWithZero()
     {
         var vec = new Vector<double>([1.0, double.NaN, 3.0]);
         var result = NumericalStabilityHelper.ReplaceNaN(vec);
@@ -445,8 +446,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void ReplaceNaN_CustomReplacement()
+    [Fact(Timeout = 120000)]
+    public async Task ReplaceNaN_CustomReplacement()
     {
         var vec = new Vector<double>([1.0, double.NaN, 3.0]);
         var result = NumericalStabilityHelper.ReplaceNaN(vec, -1.0);
@@ -455,8 +456,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(-1.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void ReplaceInfinity_ReplacesWithZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReplaceInfinity_ReplacesWithZero()
     {
         var vec = new Vector<double>([1.0, double.PositiveInfinity, double.NegativeInfinity]);
         var result = NumericalStabilityHelper.ReplaceInfinity(vec);
@@ -467,8 +468,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void ReplaceNonFinite_ReplacesAllBad()
+    [Fact(Timeout = 120000)]
+    public async Task ReplaceNonFinite_ReplacesAllBad()
     {
         var vec = new Vector<double>([1.0, double.NaN, double.PositiveInfinity, 4.0]);
         var result = NumericalStabilityHelper.ReplaceNonFinite(vec);
@@ -484,28 +485,28 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region AssertFinite
 
-    [Fact]
-    public void AssertFinite_NaN_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AssertFinite_NaN_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             NumericalStabilityHelper.AssertFinite(double.NaN));
     }
 
-    [Fact]
-    public void AssertFinite_Infinity_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AssertFinite_Infinity_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             NumericalStabilityHelper.AssertFinite(double.PositiveInfinity));
     }
 
-    [Fact]
-    public void AssertFinite_ValidValue_NoThrow()
+    [Fact(Timeout = 120000)]
+    public async Task AssertFinite_ValidValue_NoThrow()
     {
         NumericalStabilityHelper.AssertFinite(42.0);
     }
 
-    [Fact]
-    public void AssertFinite_VectorWithNaN_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AssertFinite_VectorWithNaN_Throws()
     {
         var vec = new Vector<double>([1.0, double.NaN, 3.0]);
         Assert.Throws<ArgumentException>(() =>
@@ -516,8 +517,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region GradientClipping - ClipByValue
 
-    [Fact]
-    public void ClipByValue_WithinRange_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_WithinRange_Unchanged()
     {
         var grads = new Vector<double>([0.5, -0.3, 0.8]);
         var clipped = GradientClippingHelper.ClipByValue(grads, 1.0);
@@ -528,8 +529,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.8, clipped[2], Tolerance);
     }
 
-    [Fact]
-    public void ClipByValue_ExceedsRange_Clamped()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_ExceedsRange_Clamped()
     {
         var grads = new Vector<double>([5.0, -3.0, 0.5]);
         var clipped = GradientClippingHelper.ClipByValue(grads, 1.0);
@@ -540,8 +541,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.5, clipped[2], Tolerance);
     }
 
-    [Fact]
-    public void ClipByValue_CustomMaxValue()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_CustomMaxValue()
     {
         var grads = new Vector<double>([3.0, -4.0, 0.1]);
         var clipped = GradientClippingHelper.ClipByValue(grads, 2.0);
@@ -552,8 +553,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.1, clipped[2], Tolerance);
     }
 
-    [Fact]
-    public void ClipByValueInPlace_ModifiesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValueInPlace_ModifiesOriginal()
     {
         var grads = new Vector<double>([5.0, -3.0, 0.5]);
         GradientClippingHelper.ClipByValueInPlace(grads, 1.0);
@@ -567,8 +568,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region GradientClipping - ClipByNorm
 
-    [Fact]
-    public void ClipByNorm_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_BelowThreshold_Unchanged()
     {
         // Norm = sqrt(0.3^2 + 0.4^2) = sqrt(0.09 + 0.16) = sqrt(0.25) = 0.5
         var grads = new Vector<double>([0.3, 0.4]);
@@ -579,8 +580,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.4, clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_ExceedsThreshold_ScaledDown()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_ExceedsThreshold_ScaledDown()
     {
         // Norm = sqrt(3^2 + 4^2) = sqrt(9+16) = sqrt(25) = 5
         // Scale = 1.0 / 5.0 = 0.2
@@ -593,8 +594,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.8, clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_PreservesDirection()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_PreservesDirection()
     {
         // After clipping, direction should be preserved
         var grads = new Vector<double>([3.0, 4.0]);
@@ -605,8 +606,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(3.0 / 4.0, clipped[0] / clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_ResultHasMaxNorm()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_ResultHasMaxNorm()
     {
         var grads = new Vector<double>([3.0, 4.0]);
         double maxNorm = 2.0;
@@ -617,8 +618,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(maxNorm, resultNorm, Tolerance);
     }
 
-    [Fact]
-    public void ClipByNormInPlace_ReturnsTrue_WhenClipped()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNormInPlace_ReturnsTrue_WhenClipped()
     {
         var grads = new Vector<double>([3.0, 4.0]); // norm=5
         bool clipped = GradientClippingHelper.ClipByNormInPlace(grads, 1.0);
@@ -628,8 +629,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.8, grads[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByNormInPlace_ReturnsFalse_WhenNotClipped()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNormInPlace_ReturnsFalse_WhenNotClipped()
     {
         var grads = new Vector<double>([0.3, 0.4]); // norm=0.5
         bool clipped = GradientClippingHelper.ClipByNormInPlace(grads, 1.0);
@@ -641,8 +642,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region GradientClipping - ClipByGlobalNorm
 
-    [Fact]
-    public void ClipByGlobalNorm_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByGlobalNorm_HandCalculated()
     {
         // Two vectors: [3, 4] and [5, 12]
         // Global norm = sqrt(9+16+25+144) = sqrt(194) ≈ 13.928
@@ -664,8 +665,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(12.0 * scale, clipped[1][1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByGlobalNorm_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByGlobalNorm_BelowThreshold_Unchanged()
     {
         var g1 = new Vector<double>([0.1, 0.2]);
         var g2 = new Vector<double>([0.3, 0.4]);
@@ -684,8 +685,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region GradientClipping - ComputeNorm
 
-    [Fact]
-    public void ComputeNorm_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeNorm_HandCalculated()
     {
         // L2 norm of [3, 4] = sqrt(9+16) = 5
         var grads = new Vector<double>([3.0, 4.0]);
@@ -693,16 +694,16 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(5.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ComputeNorm_ZeroVector_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeNorm_ZeroVector_IsZero()
     {
         var grads = new Vector<double>([0.0, 0.0, 0.0]);
         double norm = GradientClippingHelper.ComputeNorm(grads);
         Assert.Equal(0.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ComputeGlobalNorm_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeGlobalNorm_HandCalculated()
     {
         // Global norm of [[1,2],[3,4]] = sqrt(1+4+9+16) = sqrt(30)
         var g1 = new Vector<double>([1.0, 2.0]);
@@ -717,8 +718,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region GradientClipping - Adaptive Clipping
 
-    [Fact]
-    public void ClipAdaptive_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_BelowThreshold_Unchanged()
     {
         // Params = [10, 10], param norm = sqrt(200) ≈ 14.14
         // Grads = [0.01, 0.01], grad norm = sqrt(0.0002) ≈ 0.0141
@@ -734,8 +735,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(0.01, result[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipAdaptive_ExceedsThreshold_Scaled()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_ExceedsThreshold_Scaled()
     {
         // Params = [10, 10], param norm = sqrt(200) ≈ 14.142
         // Grads = [5, 5], grad norm = sqrt(50) ≈ 7.071
@@ -756,8 +757,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(5.0 * scale, result[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipAdaptive_MinimumThreshold_Respected()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_MinimumThreshold_Respected()
     {
         // Very small params → threshold = paramNorm * ratio
         // If below 1e-3, clamped to 1e-3
@@ -773,8 +774,8 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         Assert.Equal(1.0 * scale, result[0], Tolerance);
     }
 
-    [Fact]
-    public void ClipAdaptive_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_MismatchedLengths_Throws()
     {
         var grads = new Vector<double>([1.0, 2.0]);
         var params_ = new Vector<double>([1.0, 2.0, 3.0]);
@@ -787,50 +788,50 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region Gradient Explosion/Vanishing Detection
 
-    [Fact]
-    public void AreGradientsExploding_LargeNorm_True()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_LargeNorm_True()
     {
         var grads = new Vector<double>([1e7, 0.0]);
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_NaN_True()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_NaN_True()
     {
         var grads = new Vector<double>([1.0, double.NaN]);
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_Infinity_True()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_Infinity_True()
     {
         var grads = new Vector<double>([1.0, double.PositiveInfinity]);
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_Normal_False()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_Normal_False()
     {
         var grads = new Vector<double>([0.5, -0.3, 0.8]);
         Assert.False(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_TinyNorm_True()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_TinyNorm_True()
     {
         var grads = new Vector<double>([1e-10, 1e-10]);
         Assert.True(GradientClippingHelper.AreGradientsVanishing(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_Normal_False()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_Normal_False()
     {
         var grads = new Vector<double>([0.5, -0.3]);
         Assert.False(GradientClippingHelper.AreGradientsVanishing(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_Null_True()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_Null_True()
     {
         Assert.True(GradientClippingHelper.AreGradientsVanishing<double>(null));
     }
@@ -839,23 +840,23 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
 
     #region Epsilon Constants
 
-    [Fact]
-    public void EpsilonConstants_OrderedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EpsilonConstants_OrderedCorrectly()
     {
         // SmallEpsilon < DefaultEpsilon < LargeEpsilon
         Assert.True(NumericalStabilityHelper.SmallEpsilon < NumericalStabilityHelper.DefaultEpsilon);
         Assert.True(NumericalStabilityHelper.DefaultEpsilon < NumericalStabilityHelper.LargeEpsilon);
     }
 
-    [Fact]
-    public void GetEpsilon_DefaultEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task GetEpsilon_DefaultEpsilon()
     {
         double eps = NumericalStabilityHelper.GetEpsilon<double>();
         Assert.Equal(NumericalStabilityHelper.DefaultEpsilon, eps, Tolerance);
     }
 
-    [Fact]
-    public void GetEpsilon_CustomEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task GetEpsilon_CustomEpsilon()
     {
         double eps = NumericalStabilityHelper.GetEpsilon<double>(1e-3);
         Assert.Equal(1e-3, eps, Tolerance);

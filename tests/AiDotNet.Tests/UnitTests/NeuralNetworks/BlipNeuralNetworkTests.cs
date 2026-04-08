@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -16,8 +17,8 @@ public class BlipNeuralNetworkTests
 {
     #region ONNX Mode Constructor Tests
 
-    [Fact]
-    public void Constructor_Onnx_WithNullVisionEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -30,8 +31,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyVisionEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -44,8 +45,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNullTextEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -58,8 +59,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyTextEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -72,8 +73,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNullDecoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullDecoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -86,8 +87,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text decoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyDecoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyDecoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -100,8 +101,8 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text decoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNonExistentVisionEncoder_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNonExistentVisionEncoder_ThrowsFileNotFoundException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();

@@ -11,6 +11,7 @@ using AiDotNet.Deployment.Runtime;
 using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Deployment;
 
@@ -23,8 +24,8 @@ public class DeploymentIntegrationTests
 {
     #region RuntimeConfiguration Tests
 
-    [Fact]
-    public void RuntimeConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task RuntimeConfiguration_DefaultValues_AreCorrect()
     {
         var config = new RuntimeConfiguration();
 
@@ -49,8 +50,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.EnableGpuAcceleration);
     }
 
-    [Fact]
-    public void RuntimeConfiguration_ForProduction_ReturnsOptimizedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task RuntimeConfiguration_ForProduction_ReturnsOptimizedConfig()
     {
         var config = RuntimeConfiguration.ForProduction();
 
@@ -68,8 +69,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.EnableHealthChecks);
     }
 
-    [Fact]
-    public void RuntimeConfiguration_ForDevelopment_ReturnsDevConfig()
+    [Fact(Timeout = 120000)]
+    public async Task RuntimeConfiguration_ForDevelopment_ReturnsDevConfig()
     {
         var config = RuntimeConfiguration.ForDevelopment();
 
@@ -85,8 +86,8 @@ public class DeploymentIntegrationTests
         Assert.False(config.EnableHealthChecks);
     }
 
-    [Fact]
-    public void RuntimeConfiguration_ForEdge_ReturnsMinimalConfig()
+    [Fact(Timeout = 120000)]
+    public async Task RuntimeConfiguration_ForEdge_ReturnsMinimalConfig()
     {
         var config = RuntimeConfiguration.ForEdge();
 
@@ -106,8 +107,8 @@ public class DeploymentIntegrationTests
 
     #region ModelCache Tests
 
-    [Fact]
-    public void ModelCache_PutAndGet_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_PutAndGet_WorksCorrectly()
     {
         var cache = new ModelCache<double>(enabled: true);
         var input = new double[] { 1.0, 2.0, 3.0 };
@@ -120,8 +121,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(result, cached);
     }
 
-    [Fact]
-    public void ModelCache_Get_ReturnsNullForMissingKey()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_Get_ReturnsNullForMissingKey()
     {
         var cache = new ModelCache<double>(enabled: true);
         var input = new double[] { 1.0, 2.0, 3.0 };
@@ -131,8 +132,8 @@ public class DeploymentIntegrationTests
         Assert.Null(cached);
     }
 
-    [Fact]
-    public void ModelCache_Get_ReturnsNullWhenDisabled()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_Get_ReturnsNullWhenDisabled()
     {
         var cache = new ModelCache<double>(enabled: false);
         var input = new double[] { 1.0, 2.0, 3.0 };
@@ -144,8 +145,8 @@ public class DeploymentIntegrationTests
         Assert.Null(cached);
     }
 
-    [Fact]
-    public void ModelCache_Clear_RemovesAllEntries()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_Clear_RemovesAllEntries()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1.0 }, new double[] { 2.0 });
@@ -157,8 +158,8 @@ public class DeploymentIntegrationTests
         Assert.Null(cache.Get("model:v2", new double[] { 3.0 }));
     }
 
-    [Fact]
-    public void ModelCache_EvictOlderThan_RemovesOldEntries()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_EvictOlderThan_RemovesOldEntries()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1.0 }, new double[] { 2.0 });
@@ -174,8 +175,8 @@ public class DeploymentIntegrationTests
         Assert.True(removed >= 0);
     }
 
-    [Fact]
-    public void ModelCache_EvictLRU_RemovesLeastRecentlyUsed()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_EvictLRU_RemovesLeastRecentlyUsed()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1.0 }, new double[] { 2.0 });
@@ -190,8 +191,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(1, removed);
     }
 
-    [Fact]
-    public void ModelCache_EvictLFU_RemovesLeastFrequentlyUsed()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_EvictLFU_RemovesLeastFrequentlyUsed()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1.0 }, new double[] { 2.0 });
@@ -207,8 +208,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(1, removed);
     }
 
-    [Fact]
-    public void ModelCache_GetStatistics_ReturnsCorrectStats()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_GetStatistics_ReturnsCorrectStats()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1.0 }, new double[] { 2.0 });
@@ -221,8 +222,8 @@ public class DeploymentIntegrationTests
         Assert.True(stats.TotalAccessCount >= 2);
     }
 
-    [Fact]
-    public void ModelCache_DifferentInputs_ProduceDifferentCacheKeys()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_DifferentInputs_ProduceDifferentCacheKeys()
     {
         var cache = new ModelCache<double>(enabled: true);
         var input1 = new double[] { 1.0, 2.0, 3.0 };
@@ -246,8 +247,8 @@ public class DeploymentIntegrationTests
 
     #region TelemetryCollector Tests
 
-    [Fact]
-    public void TelemetryCollector_RecordEvent_StoresEvent()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_RecordEvent_StoresEvent()
     {
         var collector = new TelemetryCollector(enabled: true);
 
@@ -264,8 +265,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(42, events[0].Properties["key2"]);
     }
 
-    [Fact]
-    public void TelemetryCollector_RecordInference_UpdatesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_RecordInference_UpdatesMetrics()
     {
         var collector = new TelemetryCollector(enabled: true);
 
@@ -282,8 +283,8 @@ public class DeploymentIntegrationTests
         Assert.True(stats.CacheHitRate > 0);
     }
 
-    [Fact]
-    public void TelemetryCollector_RecordError_TracksErrors()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_RecordError_TracksErrors()
     {
         var collector = new TelemetryCollector(enabled: true);
 
@@ -297,8 +298,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0.5, stats.ErrorRate, 1);
     }
 
-    [Fact]
-    public void TelemetryCollector_GetStatistics_ReturnsZerosForUnknownModel()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_GetStatistics_ReturnsZerosForUnknownModel()
     {
         var collector = new TelemetryCollector(enabled: true);
 
@@ -309,8 +310,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0.0, stats.AverageLatencyMs);
     }
 
-    [Fact]
-    public void TelemetryCollector_Disabled_DoesNotRecordEvents()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_Disabled_DoesNotRecordEvents()
     {
         var collector = new TelemetryCollector(enabled: false);
 
@@ -324,8 +325,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, stats.TotalInferences);
     }
 
-    [Fact]
-    public void TelemetryCollector_Clear_RemovesAllData()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_Clear_RemovesAllData()
     {
         var collector = new TelemetryCollector(enabled: true);
         collector.RecordEvent("Event1", new Dictionary<string, object>());
@@ -337,8 +338,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, collector.GetStatistics("model1", "v1").TotalInferences);
     }
 
-    [Fact]
-    public void TelemetryCollector_GetEvents_ReturnsOrderedByTimestamp()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryCollector_GetEvents_ReturnsOrderedByTimestamp()
     {
         var collector = new TelemetryCollector(enabled: true);
         collector.RecordEvent("Event1", new Dictionary<string, object>());
@@ -358,8 +359,8 @@ public class DeploymentIntegrationTests
 
     #region EdgeConfiguration Tests
 
-    [Fact]
-    public void EdgeConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeConfiguration_DefaultValues_AreCorrect()
     {
         var config = new EdgeConfiguration();
 
@@ -380,8 +381,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(5.0, config.CacheSizeMB);
     }
 
-    [Fact]
-    public void EdgeConfiguration_ForRaspberryPi_ReturnsOptimizedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeConfiguration_ForRaspberryPi_ReturnsOptimizedConfig()
     {
         var config = EdgeConfiguration.ForRaspberryPi();
 
@@ -397,8 +398,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.OptimizeForPower);
     }
 
-    [Fact]
-    public void EdgeConfiguration_ForJetson_ReturnsGpuOptimizedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeConfiguration_ForJetson_ReturnsGpuOptimizedConfig()
     {
         var config = EdgeConfiguration.ForJetson();
 
@@ -414,8 +415,8 @@ public class DeploymentIntegrationTests
         Assert.False(config.OptimizeForPower);
     }
 
-    [Fact]
-    public void EdgeConfiguration_ForMicrocontroller_ReturnsMinimalConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeConfiguration_ForMicrocontroller_ReturnsMinimalConfig()
     {
         var config = EdgeConfiguration.ForMicrocontroller();
 
@@ -432,8 +433,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.OptimizeForPower);
     }
 
-    [Fact]
-    public void EdgeConfiguration_ForCloudEdge_ReturnsPartitionedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeConfiguration_ForCloudEdge_ReturnsPartitionedConfig()
     {
         var config = EdgeConfiguration.ForCloudEdge();
 
@@ -451,8 +452,8 @@ public class DeploymentIntegrationTests
 
     #region AdaptiveInferenceConfig Tests
 
-    [Fact]
-    public void EdgeOptimizer_CreateAdaptiveConfig_LowBattery_ReturnsFastConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeOptimizer_CreateAdaptiveConfig_LowBattery_ReturnsFastConfig()
     {
         var edgeConfig = new EdgeConfiguration();
         var optimizer = new EdgeOptimizer<double, double[], double[]>(edgeConfig);
@@ -464,8 +465,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(8, config.QuantizationBits);
     }
 
-    [Fact]
-    public void EdgeOptimizer_CreateAdaptiveConfig_HighLoad_ReturnsFastConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeOptimizer_CreateAdaptiveConfig_HighLoad_ReturnsFastConfig()
     {
         var edgeConfig = new EdgeConfiguration();
         var optimizer = new EdgeOptimizer<double, double[], double[]>(edgeConfig);
@@ -476,8 +477,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.UseQuantization);
     }
 
-    [Fact]
-    public void EdgeOptimizer_CreateAdaptiveConfig_HighBatteryLowLoad_ReturnsHighQualityConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeOptimizer_CreateAdaptiveConfig_HighBatteryLowLoad_ReturnsHighQualityConfig()
     {
         var edgeConfig = new EdgeConfiguration();
         var optimizer = new EdgeOptimizer<double, double[], double[]>(edgeConfig);
@@ -489,8 +490,8 @@ public class DeploymentIntegrationTests
         Assert.Empty(config.SkipLayers);
     }
 
-    [Fact]
-    public void EdgeOptimizer_CreateAdaptiveConfig_MediumConditions_ReturnsBalancedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeOptimizer_CreateAdaptiveConfig_MediumConditions_ReturnsBalancedConfig()
     {
         var edgeConfig = new EdgeConfiguration();
         var optimizer = new EdgeOptimizer<double, double[], double[]>(edgeConfig);
@@ -506,8 +507,8 @@ public class DeploymentIntegrationTests
 
     #region Int8Quantizer Tests
 
-    [Fact]
-    public void Int8Quantizer_Properties_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Int8Quantizer_Properties_AreCorrect()
     {
         var quantizer = new Int8Quantizer<double, double[], double[]>();
 
@@ -515,8 +516,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(8, quantizer.BitWidth);
     }
 
-    [Fact]
-    public void Int8Quantizer_GetScaleFactor_ReturnsDefaultForUnknownLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Int8Quantizer_GetScaleFactor_ReturnsDefaultForUnknownLayer()
     {
         var quantizer = new Int8Quantizer<double, double[], double[]>();
 
@@ -525,8 +526,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(1.0, scale);
     }
 
-    [Fact]
-    public void Int8Quantizer_GetZeroPoint_ReturnsDefaultForUnknownLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Int8Quantizer_GetZeroPoint_ReturnsDefaultForUnknownLayer()
     {
         var quantizer = new Int8Quantizer<double, double[], double[]>();
 
@@ -535,8 +536,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, zeroPoint);
     }
 
-    [Fact]
-    public void Int8Quantizer_GetScaleFactor_AfterCalibration_ReturnsGlobalScale()
+    [Fact(Timeout = 120000)]
+    public async Task Int8Quantizer_GetScaleFactor_AfterCalibration_ReturnsGlobalScale()
     {
         var quantizer = new Int8Quantizer<double, double[], double[]>();
 
@@ -551,8 +552,8 @@ public class DeploymentIntegrationTests
 
     #region Float16Quantizer Tests
 
-    [Fact]
-    public void Float16Quantizer_Properties_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Float16Quantizer_Properties_AreCorrect()
     {
         var quantizer = new Float16Quantizer<double, double[], double[]>();
 
@@ -560,8 +561,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(16, quantizer.BitWidth);
     }
 
-    [Fact]
-    public void Float16Quantizer_GetScaleFactor_ReturnsDefaultForUnknownLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Float16Quantizer_GetScaleFactor_ReturnsDefaultForUnknownLayer()
     {
         var quantizer = new Float16Quantizer<double, double[], double[]>();
 
@@ -570,8 +571,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(1.0, scale);
     }
 
-    [Fact]
-    public void Float16Quantizer_GetZeroPoint_ReturnsDefaultForUnknownLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Float16Quantizer_GetZeroPoint_ReturnsDefaultForUnknownLayer()
     {
         var quantizer = new Float16Quantizer<double, double[], double[]>();
 
@@ -584,8 +585,8 @@ public class DeploymentIntegrationTests
 
     #region QuantizationConfiguration Tests
 
-    [Fact]
-    public void QuantizationConfiguration_ForInt8_ReturnsCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task QuantizationConfiguration_ForInt8_ReturnsCorrectConfig()
     {
         var config = QuantizationConfiguration.ForInt8(CalibrationMethod.MinMax);
 
@@ -594,8 +595,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(8, config.EffectiveBitWidth);
     }
 
-    [Fact]
-    public void QuantizationConfiguration_ForFloat16_ReturnsCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task QuantizationConfiguration_ForFloat16_ReturnsCorrectConfig()
     {
         var config = QuantizationConfiguration.ForFloat16();
 
@@ -607,8 +608,8 @@ public class DeploymentIntegrationTests
 
     #region ExportConfiguration Tests
 
-    [Fact]
-    public void ExportConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ExportConfiguration_DefaultValues_AreCorrect()
     {
         var config = new ExportConfiguration();
 
@@ -619,8 +620,8 @@ public class DeploymentIntegrationTests
         Assert.Null(config.InputShape);
     }
 
-    [Fact]
-    public void ExportConfiguration_CustomValues_AreSetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ExportConfiguration_CustomValues_AreSetCorrectly()
     {
         var config = new ExportConfiguration
         {
@@ -642,8 +643,8 @@ public class DeploymentIntegrationTests
 
     #region OnnxModelExporter Tests
 
-    [Fact]
-    public void OnnxModelExporter_Properties_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelExporter_Properties_AreCorrect()
     {
         var exporter = new OnnxModelExporter<double, double[], double[]>();
 
@@ -651,8 +652,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(".onnx", exporter.FileExtension);
     }
 
-    [Fact]
-    public void OnnxModelExporter_GetValidationErrors_NullModel_ReturnsError()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelExporter_GetValidationErrors_NullModel_ReturnsError()
     {
         var exporter = new OnnxModelExporter<double, double[], double[]>();
 
@@ -662,8 +663,8 @@ public class DeploymentIntegrationTests
         Assert.Contains("null", errors[0].ToLower());
     }
 
-    [Fact]
-    public void OnnxModelExporter_Export_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxModelExporter_Export_NullModel_ThrowsArgumentNullException()
     {
         var exporter = new OnnxModelExporter<double, double[], double[]>();
         var config = new ExportConfiguration();
@@ -675,8 +676,8 @@ public class DeploymentIntegrationTests
 
     #region CoreML Configuration Tests
 
-    [Fact]
-    public void CoreMLConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CoreMLConfiguration_DefaultValues_AreCorrect()
     {
         var config = new CoreMLConfiguration();
 
@@ -687,8 +688,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(8, config.QuantizationBits);
     }
 
-    [Fact]
-    public void CoreMLConfiguration_ComputeUnits_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task CoreMLConfiguration_ComputeUnits_CanBeSet()
     {
         var config = new CoreMLConfiguration
         {
@@ -705,8 +706,8 @@ public class DeploymentIntegrationTests
 
     #region TFLite Configuration Tests
 
-    [Fact]
-    public void TFLiteConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TFLiteConfiguration_DefaultValues_AreCorrect()
     {
         var config = new TFLiteConfiguration();
 
@@ -716,8 +717,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(4, config.NumThreads);
     }
 
-    [Fact]
-    public void TFLiteConfiguration_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TFLiteConfiguration_CanSetAllProperties()
     {
         var config = new TFLiteConfiguration
         {
@@ -731,8 +732,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(4, config.NumThreads);
     }
 
-    [Fact]
-    public void TFLiteTargetSpec_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TFLiteTargetSpec_HasCorrectProperties()
     {
         var spec = new TFLiteTargetSpec
         {
@@ -750,8 +751,8 @@ public class DeploymentIntegrationTests
 
     #region NNAPI Configuration Tests
 
-    [Fact]
-    public void NNAPIConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task NNAPIConfiguration_DefaultValues_AreCorrect()
     {
         var config = new NNAPIConfiguration();
 
@@ -759,8 +760,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.AllowFp16);
     }
 
-    [Fact]
-    public void NNAPIConfiguration_CanSetExecutionPreference()
+    [Fact(Timeout = 120000)]
+    public async Task NNAPIConfiguration_CanSetExecutionPreference()
     {
         var config = new NNAPIConfiguration
         {
@@ -773,8 +774,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(NNAPIExecutionPreference.FastSingleAnswer, config.ExecutionPreference);
     }
 
-    [Fact]
-    public void NNAPIDeviceInfo_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task NNAPIDeviceInfo_HasCorrectProperties()
     {
         var deviceInfo = new NNAPIDeviceInfo
         {
@@ -796,8 +797,8 @@ public class DeploymentIntegrationTests
 
     #region TensorRT Configuration Tests
 
-    [Fact]
-    public void TensorRTConfiguration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRTConfiguration_DefaultValues_AreCorrect()
     {
         var config = new TensorRTConfiguration();
 
@@ -808,8 +809,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(-1, config.DLACore);
     }
 
-    [Fact]
-    public void TensorRTConfiguration_CanSetPrecision()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRTConfiguration_CanSetPrecision()
     {
         var config = new TensorRTConfiguration
         {
@@ -822,8 +823,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(TensorRTPrecision.INT8, config.Precision);
     }
 
-    [Fact]
-    public void TensorRTConfiguration_CanEnableDLA()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRTConfiguration_CanEnableDLA()
     {
         var config = new TensorRTConfiguration
         {
@@ -835,8 +836,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, config.DLACore);
     }
 
-    [Fact]
-    public void OptimizationProfile_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizationProfile_DefaultValues_AreCorrect()
     {
         var profile = new OptimizationProfile();
 
@@ -846,8 +847,8 @@ public class DeploymentIntegrationTests
         Assert.Null(profile.MaxShape);
     }
 
-    [Fact]
-    public void OptimizationProfileConfig_CanSetMinOptMax()
+    [Fact(Timeout = 120000)]
+    public async Task OptimizationProfileConfig_CanSetMinOptMax()
     {
         var config = new OptimizationProfileConfig
         {
@@ -865,8 +866,8 @@ public class DeploymentIntegrationTests
 
     #region Configuration Classes Tests
 
-    [Fact]
-    public void ABTestingConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ABTestingConfig_DefaultValues_AreCorrect()
     {
         var config = new ABTestingConfig();
 
@@ -875,8 +876,8 @@ public class DeploymentIntegrationTests
         Assert.Empty(config.Tests);
     }
 
-    [Fact]
-    public void CacheConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CacheConfig_DefaultValues_AreCorrect()
     {
         var config = new CacheConfig();
 
@@ -886,8 +887,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(TimeSpan.FromHours(1), config.DefaultTTL);
     }
 
-    [Fact]
-    public void CompressionConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionConfig_DefaultValues_AreCorrect()
     {
         var config = new CompressionConfig();
 
@@ -899,8 +900,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(2.0, config.MaxAccuracyLossPercent);
     }
 
-    [Fact]
-    public void ProfilingConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilingConfig_DefaultValues_AreCorrect()
     {
         var config = new ProfilingConfig();
 
@@ -909,8 +910,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.MeasureMemory);
     }
 
-    [Fact]
-    public void TelemetryConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TelemetryConfig_DefaultValues_AreCorrect()
     {
         var config = new TelemetryConfig();
 
@@ -920,8 +921,8 @@ public class DeploymentIntegrationTests
         Assert.True(config.CollectErrors);
     }
 
-    [Fact]
-    public void VersioningConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task VersioningConfig_DefaultValues_AreCorrect()
     {
         var config = new VersioningConfig();
 
@@ -934,8 +935,8 @@ public class DeploymentIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void Integration_CacheAndTelemetry_WorkTogether()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CacheAndTelemetry_WorkTogether()
     {
         var cache = new ModelCache<double>(enabled: true);
         var telemetry = new TelemetryCollector(enabled: true);
@@ -962,8 +963,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0.5, stats.CacheHitRate, 1);
     }
 
-    [Fact]
-    public void Integration_EdgeConfigToQuantizer_MatchesBitWidth()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_EdgeConfigToQuantizer_MatchesBitWidth()
     {
         var rpiConfig = EdgeConfiguration.ForRaspberryPi();
         var jetsonConfig = EdgeConfiguration.ForJetson();
@@ -980,8 +981,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(16, fp16Quantizer.BitWidth);
     }
 
-    [Fact]
-    public void Integration_MultipleConfigurationsForDifferentDevices()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_MultipleConfigurationsForDifferentDevices()
     {
         var rpiConfig = EdgeConfiguration.ForRaspberryPi();
         var jetsonConfig = EdgeConfiguration.ForJetson();
@@ -1001,8 +1002,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(1.0, mcuConfig.MaxModelSizeMB);
     }
 
-    [Fact]
-    public void Integration_TelemetryWithMultipleModels()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_TelemetryWithMultipleModels()
     {
         var telemetry = new TelemetryCollector(enabled: true);
 
@@ -1030,8 +1031,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(2, modelAAll.TotalInferences);
     }
 
-    [Fact]
-    public void Integration_CacheStatistics_AccurateOverTime()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CacheStatistics_AccurateOverTime()
     {
         var cache = new ModelCache<double>(enabled: true);
 
@@ -1058,8 +1059,8 @@ public class DeploymentIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void EdgeCase_EmptyCacheStatistics()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_EmptyCacheStatistics()
     {
         var cache = new ModelCache<double>(enabled: true);
         var stats = cache.GetStatistics();
@@ -1071,8 +1072,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(TimeSpan.Zero, stats.NewestEntryAge);
     }
 
-    [Fact]
-    public void EdgeCase_TelemetryMinMaxLatency()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_TelemetryMinMaxLatency()
     {
         var telemetry = new TelemetryCollector(enabled: true);
 
@@ -1087,8 +1088,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(100, stats.MaxLatencyMs);
     }
 
-    [Fact]
-    public void EdgeCase_EvictFromEmptyCache()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_EvictFromEmptyCache()
     {
         var cache = new ModelCache<double>(enabled: true);
 
@@ -1101,8 +1102,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, removedAge);
     }
 
-    [Fact]
-    public void EdgeCase_EvictWithExactCount()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_EvictWithExactCount()
     {
         var cache = new ModelCache<double>(enabled: true);
         cache.Put("model:v1", new double[] { 1 }, new double[] { 1 });
@@ -1114,8 +1115,8 @@ public class DeploymentIntegrationTests
         Assert.Equal(0, removed);
     }
 
-    [Fact]
-    public void EdgeCase_NullInput_CacheHash()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_NullInput_CacheHash()
     {
         var cache = new ModelCache<double>(enabled: true);
 
@@ -1126,8 +1127,8 @@ public class DeploymentIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void EdgeCase_AdaptiveConfig_BoundaryConditions()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_AdaptiveConfig_BoundaryConditions()
     {
         var edgeConfig = new EdgeConfiguration();
         var optimizer = new EdgeOptimizer<double, double[], double[]>(edgeConfig);
@@ -1145,8 +1146,8 @@ public class DeploymentIntegrationTests
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void ThreadSafety_ConcurrentCacheAccess()
+    [Fact(Timeout = 120000)]
+    public async Task ThreadSafety_ConcurrentCacheAccess()
     {
         var cache = new ModelCache<double>(enabled: true);
         var tasks = new List<Task>();
@@ -1167,8 +1168,8 @@ public class DeploymentIntegrationTests
         Assert.True(stats.TotalEntries <= 100);
     }
 
-    [Fact]
-    public void ThreadSafety_ConcurrentTelemetryRecording()
+    [Fact(Timeout = 120000)]
+    public async Task ThreadSafety_ConcurrentTelemetryRecording()
     {
         var telemetry = new TelemetryCollector(enabled: true);
         var tasks = new List<Task>();

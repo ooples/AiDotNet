@@ -2,13 +2,14 @@ using System;
 using System.IO;
 using AiDotNet.Onnx;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Onnx
 {
     public class OnnxModelTests
     {
-        [Fact]
-        public void OnnxModelOptions_DefaultValues()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelOptions_DefaultValues()
         {
             // Arrange & Act
             var options = new OnnxModelOptions();
@@ -19,8 +20,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.True(options.EnableMemoryPattern);
         }
 
-        [Fact]
-        public void OnnxModelOptions_SetExecutionProvider()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelOptions_SetExecutionProvider()
         {
             // Arrange & Act
             var options = new OnnxModelOptions
@@ -32,8 +33,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.Equal(OnnxExecutionProvider.Cuda, options.ExecutionProvider);
         }
 
-        [Fact]
-        public void OnnxExecutionProvider_HasExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxExecutionProvider_HasExpectedValues()
         {
             // Assert - verify the enum values exist
             Assert.True(Enum.IsDefined(typeof(OnnxExecutionProvider), OnnxExecutionProvider.Cpu));
@@ -44,8 +45,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.True(Enum.IsDefined(typeof(OnnxExecutionProvider), OnnxExecutionProvider.Auto));
         }
 
-        [Fact]
-        public void OnnxModelDownloader_DefaultCacheDirectory_IsSet()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_DefaultCacheDirectory_IsSet()
         {
             // Arrange & Act
             var downloader = new OnnxModelDownloader();
@@ -54,8 +55,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.NotNull(downloader);
         }
 
-        [Fact]
-        public void OnnxModelDownloader_CustomCacheDirectory()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_CustomCacheDirectory()
         {
             // Arrange
             var tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-test-cache-" + Guid.NewGuid());
@@ -79,8 +80,8 @@ namespace AiDotNet.Tests.Onnx
             }
         }
 
-        [Fact]
-        public void OnnxModelDownloader_GetCachedPath_ReturnsNullForNonExistent()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_GetCachedPath_ReturnsNullForNonExistent()
         {
             // Arrange
             var downloader = new OnnxModelDownloader();
@@ -92,8 +93,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.Null(path);
         }
 
-        [Fact]
-        public void OnnxModelDownloader_GetCacheSize_ReturnsZeroForEmptyCache()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_GetCacheSize_ReturnsZeroForEmptyCache()
         {
             // Arrange
             var tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-empty-cache-" + Guid.NewGuid());
@@ -116,8 +117,8 @@ namespace AiDotNet.Tests.Onnx
             }
         }
 
-        [Fact]
-        public void OnnxModelDownloader_ListCachedModels_ReturnsEmptyForNewCache()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_ListCachedModels_ReturnsEmptyForNewCache()
         {
             // Arrange
             var tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-new-cache-" + Guid.NewGuid());
@@ -141,8 +142,8 @@ namespace AiDotNet.Tests.Onnx
             }
         }
 
-        [Fact]
-        public void OnnxModelDownloader_ClearCache_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_ClearCache_DoesNotThrow()
         {
             // Arrange
             var tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-clear-cache-" + Guid.NewGuid());
@@ -162,8 +163,8 @@ namespace AiDotNet.Tests.Onnx
             }
         }
 
-        [Fact]
-        public void OnnxModelRepositories_Whisper_HasCorrectValues()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelRepositories_Whisper_HasCorrectValues()
         {
             // Assert
             Assert.Equal("openai/whisper-tiny", OnnxModelRepositories.Whisper.Tiny);
@@ -173,23 +174,23 @@ namespace AiDotNet.Tests.Onnx
             Assert.Equal("openai/whisper-large-v3", OnnxModelRepositories.Whisper.Large);
         }
 
-        [Fact]
-        public void OnnxModelRepositories_AudioGen_HasCorrectValues()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelRepositories_AudioGen_HasCorrectValues()
         {
             // Assert
             Assert.Equal("facebook/audiogen-medium", OnnxModelRepositories.AudioGen.Small);
             Assert.Equal("facebook/musicgen-small", OnnxModelRepositories.AudioGen.MusicGenSmall);
         }
 
-        [Fact]
-        public void OnnxModelDownloader_HuggingFaceBaseUrl_IsCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelDownloader_HuggingFaceBaseUrl_IsCorrect()
         {
             // Assert
             Assert.Equal("https://huggingface.co", OnnxModelDownloader.HuggingFaceBaseUrl);
         }
 
-        [Fact]
-        public void OnnxModelOptions_ForCpu_SetsCorrectProvider()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelOptions_ForCpu_SetsCorrectProvider()
         {
             // Act
             var options = OnnxModelOptions.ForCpu();
@@ -198,8 +199,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.Equal(OnnxExecutionProvider.Cpu, options.ExecutionProvider);
         }
 
-        [Fact]
-        public void OnnxModelOptions_ForCuda_SetsCorrectProvider()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelOptions_ForCuda_SetsCorrectProvider()
         {
             // Act
             var options = OnnxModelOptions.ForCuda();
@@ -208,8 +209,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.Equal(OnnxExecutionProvider.Cuda, options.ExecutionProvider);
         }
 
-        [Fact]
-        public void OnnxModelOptions_ForDirectML_SetsCorrectProvider()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxModelOptions_ForDirectML_SetsCorrectProvider()
         {
             // Act
             var options = OnnxModelOptions.ForDirectML();
@@ -218,8 +219,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.Equal(OnnxExecutionProvider.DirectML, options.ExecutionProvider);
         }
 
-        [Fact]
-        public void GraphOptimizationLevel_HasExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task GraphOptimizationLevel_HasExpectedValues()
         {
             // Assert
             Assert.True(Enum.IsDefined(typeof(GraphOptimizationLevel), GraphOptimizationLevel.None));
@@ -228,8 +229,8 @@ namespace AiDotNet.Tests.Onnx
             Assert.True(Enum.IsDefined(typeof(GraphOptimizationLevel), GraphOptimizationLevel.All));
         }
 
-        [Fact]
-        public void OnnxLogLevel_HasExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task OnnxLogLevel_HasExpectedValues()
         {
             // Assert
             Assert.True(Enum.IsDefined(typeof(OnnxLogLevel), OnnxLogLevel.Verbose));

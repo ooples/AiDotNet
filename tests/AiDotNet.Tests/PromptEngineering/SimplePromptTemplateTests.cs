@@ -1,12 +1,13 @@
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class SimplePromptTemplateTests
 {
-    [Fact]
-    public void Constructor_WithValidTemplate_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidTemplate_Succeeds()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
 
@@ -17,21 +18,21 @@ public class SimplePromptTemplateTests
         Assert.Contains("language", template.InputVariables);
     }
 
-    [Fact]
-    public void Constructor_WithNullTemplate_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
     }
 
-    [Fact]
-    public void Constructor_WithEmptyTemplate_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithEmptyTemplate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate(""));
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate("   "));
     }
 
-    [Fact]
-    public void Format_WithAllVariables_ReturnsFormattedString()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithAllVariables_ReturnsFormattedString()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
         var variables = new Dictionary<string, string>
@@ -45,8 +46,8 @@ public class SimplePromptTemplateTests
         Assert.Equal("Translate Hello world to Spanish", result);
     }
 
-    [Fact]
-    public void Format_WithMissingVariable_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithMissingVariable_ThrowsArgumentException()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
         var variables = new Dictionary<string, string>
@@ -58,16 +59,16 @@ public class SimplePromptTemplateTests
         Assert.Throws<ArgumentException>(() => template.Format(variables));
     }
 
-    [Fact]
-    public void Format_WithNullVariables_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithNullVariables_ThrowsArgumentNullException()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
 
         Assert.Throws<ArgumentNullException>(() => template.Format(null!));
     }
 
-    [Fact]
-    public void Validate_WithAllVariables_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithAllVariables_ReturnsTrue()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
         var variables = new Dictionary<string, string>
@@ -81,8 +82,8 @@ public class SimplePromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void Validate_WithMissingVariable_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithMissingVariable_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
         var variables = new Dictionary<string, string>
@@ -95,8 +96,8 @@ public class SimplePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void Validate_WithNullVariables_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task Validate_WithNullVariables_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
 
@@ -105,8 +106,8 @@ public class SimplePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void FromTemplate_CreatesValidInstance()
+    [Fact(Timeout = 60000)]
+    public async Task FromTemplate_CreatesValidInstance()
     {
         var template = SimplePromptTemplate.FromTemplate("Summarize {document}");
 
@@ -116,8 +117,8 @@ public class SimplePromptTemplateTests
         Assert.Contains("document", template.InputVariables);
     }
 
-    [Fact]
-    public void Format_WithMultipleOccurrencesOfSameVariable_ReplacesAll()
+    [Fact(Timeout = 60000)]
+    public async Task Format_WithMultipleOccurrencesOfSameVariable_ReplacesAll()
     {
         var template = new SimplePromptTemplate("Compare {item} with {item} carefully");
         var variables = new Dictionary<string, string>

@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.FeatureGeneration;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -17,8 +18,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
     // Distance-weighted: inverse-distance weighted average
     // =====================================================================
 
-    [Fact]
-    public void KNNImputer_Uniform_SimpleMean_OneNeighbor()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_Uniform_SimpleMean_OneNeighbor()
     {
         // 3 training rows, 2 features. Query has NaN in col 1.
         // Row 0: [1, 10], Row 1: [2, 20], Row 2: [3, 30]
@@ -48,8 +49,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(10.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void KNNImputer_Uniform_AverageOfKNeighbors()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_Uniform_AverageOfKNeighbors()
     {
         // 4 training rows, query [2, NaN], k=2
         // Row 0: [1, 10], Row 1: [2, 20], Row 2: [3, 30], Row 3: [10, 100]
@@ -87,8 +88,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             $"Expected imputed value to be 15 or 25 (depending on tie-breaking), got {imputed}");
     }
 
-    [Fact]
-    public void KNNImputer_NonMissingValuesPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_NonMissingValuesPreserved()
     {
         var trainData = new double[,]
         {
@@ -113,8 +114,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(50.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void KNNImputer_DistanceWeighted_CloserNeighborsDominateAverage()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_DistanceWeighted_CloserNeighborsDominateAverage()
     {
         // With distance weighting, closer neighbors have more influence
         // Row 0: [0, 100] (very close to query), Row 1: [100, 0] (very far)
@@ -142,8 +143,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             $"Distance-weighted imputation should favor close neighbor (100), got {result[0, 1]}");
     }
 
-    [Fact]
-    public void KNNImputer_MultipleNaNsInSameRow()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_MultipleNaNsInSameRow()
     {
         var trainData = new double[,]
         {
@@ -171,15 +172,15 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(100.0, result[0, 2], Tolerance);
     }
 
-    [Fact]
-    public void KNNImputer_MinNeighborsValidation()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_MinNeighborsValidation()
     {
         Assert.Throws<ArgumentException>(() =>
             new KNNImputer<double>(nNeighbors: 0));
     }
 
-    [Fact]
-    public void KNNImputer_AllRowsHaveNaN_FallsBackToColumnMean()
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_AllRowsHaveNaN_FallsBackToColumnMean()
     {
         // If no valid neighbors can be found for a column, falls back to column mean
         var trainData = new double[,]
@@ -214,8 +215,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
     // Partition of Unity: sum of basis functions = 1 at any point
     // =====================================================================
 
-    [Fact]
-    public void Spline_OutputDimension_CorrectFormula()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_OutputDimension_CorrectFormula()
     {
         // nKnots=5, degree=3, includeIntercept=true
         // nBasis per feature = 5 + 3 + 1 = 9
@@ -234,8 +235,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(9, result.Columns); // 5 + 3 + 1
     }
 
-    [Fact]
-    public void Spline_WithoutIntercept_OneLessColumn()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_WithoutIntercept_OneLessColumn()
     {
         var data = new double[,]
         {
@@ -255,8 +256,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(resultWith.Columns - 1, resultWithout.Columns);
     }
 
-    [Fact]
-    public void Spline_PartitionOfUnity_BasisFunctionsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_PartitionOfUnity_BasisFunctionsSumToOne()
     {
         // B-spline basis functions form a partition of unity:
         // At any point x, the sum of all basis functions equals 1
@@ -282,8 +283,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Spline_BasisFunctionsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_BasisFunctionsNonNegative()
     {
         // B-spline basis functions are non-negative
         var data = new double[,]
@@ -307,8 +308,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Spline_Degree1_PiecewiseLinear()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_Degree1_PiecewiseLinear()
     {
         // Degree 1 = linear B-splines (piecewise linear, hat functions)
         var data = new double[,]
@@ -338,8 +339,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Spline_UniformKnots_EvenlySpaced()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_UniformKnots_EvenlySpaced()
     {
         var data = new double[,]
         {
@@ -368,8 +369,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(10.0, knots[6], Tolerance); // boundary
     }
 
-    [Fact]
-    public void Spline_ConstantExtrapolation_ClipsValues()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_ConstantExtrapolation_ClipsValues()
     {
         // With constant extrapolation, values outside range get boundary basis values
         var trainData = new double[,]
@@ -408,8 +409,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(1.0, aboveSum, LooseTolerance);
     }
 
-    [Fact]
-    public void Spline_MultiColumn_IndependentBasis()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_MultiColumn_IndependentBasis()
     {
         var data = new double[,]
         {
@@ -428,8 +429,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(8, result.Columns);
     }
 
-    [Fact]
-    public void Spline_ValidationRejectsInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_ValidationRejectsInvalidParams()
     {
         Assert.Throws<ArgumentException>(() =>
             new SplineTransformer<double>(nKnots: 1)); // min 2
@@ -439,8 +440,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             new SplineTransformer<double>(degree: 6)); // max 5
     }
 
-    [Fact]
-    public void Spline_GetFeatureNamesOut_CorrectNames()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_GetFeatureNamesOut_CorrectNames()
     {
         var data = new double[,]
         {
@@ -462,8 +463,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Contains("spline", names[0]);
     }
 
-    [Fact]
-    public void Spline_Degree0_StepFunctions()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_Degree0_StepFunctions()
     {
         // Degree 0 = constant/step functions
         var data = new double[,]
@@ -492,8 +493,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Spline_AllBasisFinite()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_AllBasisFinite()
     {
         // Test that no NaN or Infinity values are produced
         var data = new double[,]
@@ -517,8 +518,8 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Spline_BoundaryValues_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Spline_BoundaryValues_HandledCorrectly()
     {
         // Test that the exact min and max values are handled
         var data = new double[,]

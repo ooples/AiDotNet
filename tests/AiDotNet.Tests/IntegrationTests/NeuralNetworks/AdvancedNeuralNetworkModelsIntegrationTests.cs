@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -87,8 +88,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Transformer Tests
 
-    [Fact]
-    public void Transformer_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Transformer_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new TransformerArchitecture<float>(
@@ -114,8 +115,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void Transformer_Forward_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Transformer_Forward_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new TransformerArchitecture<float>(
@@ -150,8 +151,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
-    [Fact]
-    public void Transformer_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task Transformer_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new TransformerArchitecture<float>(
@@ -175,8 +176,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact]
-    public void Transformer_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Transformer_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new TransformerArchitecture<float>(
@@ -205,8 +206,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region LSTMNeuralNetwork Tests
 
-    [Fact]
-    public void LSTMNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -228,8 +229,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void LSTMNeuralNetwork_Forward_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -325,8 +326,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, $"Output should have non-zero values\n\nDebug trace:\n{debugOutput}");
     }
 
-    [Fact]
-    public void LSTMNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -346,8 +347,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact]
-    public void LSTMNeuralNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LSTMNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -372,8 +373,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region GRUNeuralNetwork Tests
 
-    [Fact]
-    public void GRUNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GRUNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -395,8 +396,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void GRUNeuralNetwork_Forward_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GRUNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -426,8 +427,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
-    [Fact]
-    public void GRUNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GRUNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -447,8 +448,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact]
-    public void GRUNeuralNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task GRUNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -473,8 +474,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region ResidualNeuralNetwork Tests
 
-    [Fact]
-    public void ResidualNeuralNetwork_Predict_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -495,8 +496,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[^1]); // Last dimension is output classes
     }
 
-    [Fact]
-    public void ResidualNeuralNetwork_Forward_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -525,8 +526,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
-    [Fact]
-    public void ResidualNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -545,8 +546,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact]
-    public void ResidualNeuralNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task ResidualNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -570,8 +571,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SiameseNetwork Tests
 
-    [Fact]
-    public void SiameseNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SiameseNetwork_Predict_ProducesOutput()
     {
         // Arrange - SiameseNeuralNetwork uses Transformer-based encoder by default
         var inputShape = new[] { 1, 32 }; // One sequence of 32 tokens
@@ -596,8 +597,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(new[] { 1, 32, 768 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void SiameseNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task SiameseNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var inputShape = new[] { 1, 32 };
@@ -623,8 +624,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region RadialBasisFunctionNetwork Tests
 
-    [Fact]
-    public void RadialBasisFunctionNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -645,8 +646,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void RadialBasisFunctionNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -670,8 +671,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region EchoStateNetwork Tests
 
-    [Fact]
-    public void EchoStateNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EchoStateNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -693,8 +694,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void EchoStateNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task EchoStateNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -719,8 +720,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HopfieldNetwork Tests
 
-    [Fact]
-    public void HopfieldNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HopfieldNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -741,8 +742,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void HopfieldNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task HopfieldNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -766,8 +767,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SelfOrganizingMap Tests
 
-    [Fact]
-    public void SelfOrganizingMap_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfOrganizingMap_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -788,8 +789,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void SelfOrganizingMap_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task SelfOrganizingMap_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -813,8 +814,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region ExtremeLearningMachine Tests
 
-    [Fact]
-    public void ExtremeLearningMachine_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ExtremeLearningMachine_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -835,8 +836,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void ExtremeLearningMachine_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task ExtremeLearningMachine_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -860,8 +861,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void SequenceNetworks_DifferentComplexities_ProduceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceNetworks_DifferentComplexities_ProduceOutput()
     {
         // Test LSTM and GRU with different complexity settings
         var complexities = new[]
@@ -902,8 +903,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         }
     }
 
-    [Fact]
-    public void DenseNetworks_DifferentTaskTypes_ProduceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNetworks_DifferentTaskTypes_ProduceOutput()
     {
         // Test ResidualNeuralNetwork with different task types
         var taskTypes = new[]
@@ -934,8 +935,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Autoencoder Tests
 
-    [Fact]
-    public void Autoencoder_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -956,8 +957,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(64, output.Length);
     }
 
-    [Fact]
-    public void Autoencoder_Predict_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_Predict_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -977,8 +978,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(HasNonZeroValues(output), "Output should have non-zero values");
     }
 
-    [Fact]
-    public void Autoencoder_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -997,8 +998,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void Autoencoder_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1018,8 +1019,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(metadata.AdditionalInfo);
     }
 
-    [Fact]
-    public void Autoencoder_EncodedSize_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_EncodedSize_IsPositive()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1043,8 +1044,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region VariationalAutoencoder Tests
 
-    [Fact]
-    public void VariationalAutoencoder_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalAutoencoder_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1065,8 +1066,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(64, output.Length);
     }
 
-    [Fact]
-    public void VariationalAutoencoder_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalAutoencoder_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1085,8 +1086,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void VariationalAutoencoder_LatentSize_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalAutoencoder_LatentSize_IsCorrect()
     {
         // Arrange
         int expectedLatentSize = 32;
@@ -1110,8 +1111,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Deep Belief Network Tests
 
-    [Fact]
-    public void DeepBeliefNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepBeliefNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1134,8 +1135,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void DeepBeliefNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DeepBeliefNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1161,8 +1162,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Restricted Boltzmann Machine Tests
 
-    [Fact]
-    public void RestrictedBoltzmannMachine_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RestrictedBoltzmannMachine_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1187,8 +1188,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void RestrictedBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task RestrictedBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1216,8 +1217,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region CapsuleNetwork Tests
 
-    [Fact]
-    public void CapsuleNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1239,8 +1240,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void CapsuleNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1265,8 +1266,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region DeepQNetwork Tests
 
-    [Fact]
-    public void DeepQNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepQNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1286,8 +1287,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void DeepQNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DeepQNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1310,8 +1311,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region LiquidStateMachine Tests
 
-    [Fact]
-    public void LiquidStateMachine_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LiquidStateMachine_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1335,8 +1336,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void LiquidStateMachine_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task LiquidStateMachine_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1363,8 +1364,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SpikingNeuralNetwork Tests
 
-    [Fact]
-    public void SpikingNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SpikingNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1388,8 +1389,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void SpikingNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SpikingNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1416,8 +1417,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SparseNeuralNetwork Tests
 
-    [Fact]
-    public void SparseNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1437,8 +1438,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void SparseNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SparseNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1461,8 +1462,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MemoryNetwork Tests
 
-    [Fact]
-    public void MemoryNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1487,8 +1488,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void MemoryNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1514,8 +1515,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MixtureOfExperts Tests
 
-    [Fact]
-    public void MixtureOfExpertsNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1543,8 +1544,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void MixtureOfExpertsNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1575,8 +1576,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region GAN Model Tests
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1608,8 +1609,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GAN output should have elements");
     }
 
-    [Fact]
-    public void GenerativeAdversarialNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1640,8 +1641,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(discriminatorParams > 0, $"Discriminator parameter count should be > 0, got {discriminatorParams}");
     }
 
-    [Fact]
-    public void DCGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_Predict_ProducesOutput()
     {
         // Arrange - small image size for testing
         var dcgan = new DCGAN<float>(
@@ -1664,8 +1665,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DCGAN output should have elements");
     }
 
-    [Fact]
-    public void DCGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DCGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var dcgan = new DCGAN<float>(
@@ -1685,8 +1686,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(discriminatorParams > 0, $"DCGAN discriminator parameter count should be > 0, got {discriminatorParams}");
     }
 
-    [Fact]
-    public void WGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_Predict_ProducesOutput()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1718,8 +1719,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "WGAN output should have elements");
     }
 
-    [Fact]
-    public void WGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task WGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1750,8 +1751,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(criticParams > 0, $"WGAN critic parameter count should be > 0, got {criticParams}");
     }
 
-    [Fact]
-    public void ConditionalGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_Predict_ProducesOutput()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1784,8 +1785,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Conditional GAN output should have elements");
     }
 
-    [Fact]
-    public void ConditionalGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -1817,8 +1818,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(discriminatorParams > 0, $"Conditional GAN discriminator parameter count should be > 0, got {discriminatorParams}");
     }
 
-    [Fact]
-    public void CycleGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CycleGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var generatorAtoB = new NeuralNetworkArchitecture<float>(
@@ -1869,8 +1870,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Graph Neural Network Tests
 
-    [Fact]
-    public void GraphNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1892,8 +1893,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GNN output should have elements");
     }
 
-    [Fact]
-    public void GraphNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GraphNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1913,8 +1914,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"GNN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void GraphAttentionNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1935,8 +1936,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GAT output should have elements");
     }
 
-    [Fact]
-    public void GraphAttentionNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1959,8 +1960,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Vision Network Tests
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -1983,8 +1984,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "CNN output should have elements");
     }
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2005,8 +2006,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"CNN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2027,8 +2028,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "FFNN output should have elements");
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2047,8 +2048,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"FFNN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void RecurrentNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         // For RNN with 2D input [seqLen, features], set inputHeight (seqLen) and inputWidth (features)
@@ -2071,8 +2072,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "RNN output should have elements");
     }
 
-    [Fact]
-    public void RecurrentNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         // For RNN with 2D input [seqLen, features], set inputHeight (seqLen) and inputWidth (features)
@@ -2097,8 +2098,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Specialized Network Tests
 
-    [Fact]
-    public void AttentionNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2119,8 +2120,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AttentionNetwork output should have elements");
     }
 
-    [Fact]
-    public void AttentionNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2139,8 +2140,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"AttentionNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void NeuralTuringMachine_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralTuringMachine_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2170,8 +2171,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "NTM output should have elements");
     }
 
-    [Fact]
-    public void NeuralTuringMachine_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralTuringMachine_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2202,8 +2203,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Additional GAN Variant Tests
 
-    [Fact]
-    public void ACGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ACGAN_Predict_ProducesOutput()
     {
         // Arrange - GANs use ThreeDimensional input for image generation
         // For ThreeDimensional, inputSize must equal inputHeight * inputWidth * inputDepth
@@ -2244,8 +2245,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "ACGAN output should have elements");
     }
 
-    [Fact]
-    public void ACGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ACGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - GANs use ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2282,8 +2283,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ACGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void BigGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BigGAN_Predict_ProducesOutput()
     {
         // Arrange - BigGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2329,8 +2330,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "BigGAN output should have elements");
     }
 
-    [Fact]
-    public void BigGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task BigGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - BigGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2370,8 +2371,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"BigGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void InfoGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_Predict_ProducesOutput()
     {
         // Arrange - InfoGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2421,8 +2422,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "InfoGAN output should have elements");
     }
 
-    [Fact]
-    public void InfoGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task InfoGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - InfoGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2469,8 +2470,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"InfoGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void Pix2Pix_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Pix_Predict_ProducesOutput()
     {
         // Arrange - Pix2Pix uses ThreeDimensional input for image-to-image translation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2508,8 +2509,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Pix2Pix output should have elements");
     }
 
-    [Fact]
-    public void Pix2Pix_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task Pix2Pix_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - Pix2Pix uses ThreeDimensional input for image-to-image translation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2544,8 +2545,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Pix2Pix parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void ProgressiveGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ProgressiveGAN_Predict_ProducesOutput()
     {
         // Arrange - ProgressiveGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2586,8 +2587,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "ProgressiveGAN output should have elements");
     }
 
-    [Fact]
-    public void ProgressiveGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ProgressiveGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - ProgressiveGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2625,8 +2626,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ProgressiveGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void SAGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SAGAN_Predict_ProducesOutput()
     {
         // Arrange - SAGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2669,8 +2670,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "SAGAN output should have elements");
     }
 
-    [Fact]
-    public void SAGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SAGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - SAGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2708,8 +2709,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"SAGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void StyleGAN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_Predict_ProducesOutput()
     {
         // Arrange - StyleGAN uses ThreeDimensional input for image generation
         var mappingNetworkArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2760,8 +2761,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "StyleGAN output should have elements");
     }
 
-    [Fact]
-    public void StyleGAN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task StyleGAN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - StyleGAN uses ThreeDimensional input for image generation
         var mappingNetworkArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2809,8 +2810,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"StyleGAN parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void WGANGP_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_Predict_ProducesOutput()
     {
         // Arrange - WGANGP uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2848,8 +2849,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "WGANGP output should have elements");
     }
 
-    [Fact]
-    public void WGANGP_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task WGANGP_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange - WGANGP uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
@@ -2888,8 +2889,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Additional Graph Neural Network Tests
 
-    [Fact]
-    public void GraphSAGENetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGENetwork_Predict_ProducesOutput()
     {
         // Arrange - GraphSAGENetwork uses OneDimensional input
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2919,8 +2920,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphSAGENetwork output should have elements");
     }
 
-    [Fact]
-    public void GraphSAGENetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGENetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2942,8 +2943,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"GraphSAGENetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void GraphIsomorphismNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismNetwork_Predict_ProducesOutput()
     {
         // Arrange - GraphIsomorphismNetwork uses OneDimensional input
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -2973,8 +2974,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphIsomorphismNetwork output should have elements");
     }
 
-    [Fact]
-    public void GraphIsomorphismNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3000,8 +3001,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Vision Architecture Tests
 
-    [Fact]
-    public void VGGNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_Predict_ProducesOutput()
     {
         // Arrange - VGG requires ThreeDimensional input and VGGConfiguration
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3027,8 +3028,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VGGNetwork output should have elements");
     }
 
-    [Fact]
-    public void VGGNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VGGNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3051,8 +3052,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"VGGNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void ResNetNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Predict_ProducesOutput()
     {
         // Arrange - ResNet requires ThreeDimensional input and ResNetConfiguration
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3078,8 +3079,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "ResNetNetwork output should have elements");
     }
 
-    [Fact]
-    public void ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3102,8 +3103,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ResNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void DenseNetNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNetNetwork_Predict_ProducesOutput()
     {
         // Arrange - DenseNet requires ThreeDimensional input and DenseNetConfiguration
         var config = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3129,8 +3130,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DenseNetNetwork output should have elements");
     }
 
-    [Fact]
-    public void DenseNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3153,8 +3154,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DenseNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void EfficientNetNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EfficientNetNetwork_Predict_ProducesOutput()
     {
         // Arrange - EfficientNet requires ThreeDimensional input and EfficientNetConfiguration
         var config = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses: 10);
@@ -3180,8 +3181,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "EfficientNetNetwork output should have elements");
     }
 
-    [Fact]
-    public void EfficientNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task EfficientNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses: 10);
@@ -3204,8 +3205,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"EfficientNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void MobileNetV2Network_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2Network_Predict_ProducesOutput()
     {
         // Arrange - MobileNetV2 requires ThreeDimensional input and MobileNetV2Configuration
         var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3231,8 +3232,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MobileNetV2Network output should have elements");
     }
 
-    [Fact]
-    public void MobileNetV2Network_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2Network_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3255,8 +3256,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"MobileNetV2Network parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void MobileNetV3Network_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Network_Predict_ProducesOutput()
     {
         // Arrange - MobileNetV3 requires ThreeDimensional input and MobileNetV3Configuration
         var config = new MobileNetV3Configuration(MobileNetV3Variant.Small, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3282,8 +3283,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MobileNetV3Network output should have elements");
     }
 
-    [Fact]
-    public void MobileNetV3Network_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Network_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new MobileNetV3Configuration(MobileNetV3Variant.Small, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -3306,8 +3307,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"MobileNetV3Network parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void VisionTransformer_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VisionTransformer_Predict_ProducesOutput()
     {
         // Arrange - VisionTransformer takes imageHeight, imageWidth, channels, patchSize, numClasses
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3342,8 +3343,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VisionTransformer output should have elements");
     }
 
-    [Fact]
-    public void VisionTransformer_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VisionTransformer_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3379,8 +3380,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Advanced Memory and Specialized Network Tests
 
-    [Fact]
-    public void DifferentiableNeuralComputer_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentiableNeuralComputer_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3409,8 +3410,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DifferentiableNeuralComputer output should have elements");
     }
 
-    [Fact]
-    public void DifferentiableNeuralComputer_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentiableNeuralComputer_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3436,8 +3437,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DifferentiableNeuralComputer parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void DeepBoltzmannMachine_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepBoltzmannMachine_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3463,8 +3464,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DeepBoltzmannMachine output should have elements");
     }
 
-    [Fact]
-    public void DeepBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task DeepBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3487,8 +3488,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DeepBoltzmannMachine parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3512,8 +3513,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HyperbolicNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void HyperbolicNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3534,8 +3535,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"HyperbolicNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3558,8 +3559,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "OctonionNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void OctonionNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task OctonionNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3579,8 +3580,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"OctonionNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void QuantumNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3604,8 +3605,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "QuantumNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void QuantumNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task QuantumNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3630,8 +3631,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HTMNetwork Tests
 
-    [Fact]
-    public void HTMNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HTMNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3656,8 +3657,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HTMNetwork output should have elements");
     }
 
-    [Fact]
-    public void HTMNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task HTMNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3680,8 +3681,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HopeNetwork Tests
 
-    [Fact]
-    public void HopeNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HopeNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3708,8 +3709,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HopeNetwork output should have elements");
     }
 
-    [Fact]
-    public void HopeNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task HopeNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3732,8 +3733,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region NEAT Tests
 
-    [Fact]
-    public void NEAT_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NEAT_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3759,8 +3760,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "NEAT output should have elements");
     }
 
-    [Fact]
-    public void NEAT_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task NEAT_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3783,8 +3784,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SuperNet Tests
 
-    [Fact]
-    public void SuperNet_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SuperNet_Predict_ProducesOutput()
     {
         // Arrange
         var searchSpace = new MobileNetSearchSpace<float>();
@@ -3800,8 +3801,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "SuperNet output should have elements");
     }
 
-    [Fact]
-    public void SuperNet_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SuperNet_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var searchSpace = new MobileNetSearchSpace<float>();
@@ -3818,8 +3819,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region OccupancyNeuralNetwork Tests
 
-    [Fact]
-    public void OccupancyNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OccupancyNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3843,8 +3844,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "OccupancyNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void OccupancyNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task OccupancyNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3867,8 +3868,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region GraphGenerationModel Tests
 
-    [Fact]
-    public void GraphGenerationModel_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphGenerationModel_Predict_ProducesOutput()
     {
         // Arrange
         var graphGen = new GraphGenerationModel<float>(
@@ -3889,8 +3890,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphGenerationModel output should have elements");
     }
 
-    [Fact]
-    public void GraphGenerationModel_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task GraphGenerationModel_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var graphGen = new GraphGenerationModel<float>(
@@ -3909,8 +3910,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region UNet3D Tests
 
-    [Fact]
-    public void UNet3D_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UNet3D_Predict_ProducesOutput()
     {
         // Arrange - 3D networks need inputHeight, inputWidth, inputDepth
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3939,8 +3940,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "UNet3D output should have elements");
     }
 
-    [Fact]
-    public void UNet3D_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task UNet3D_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3965,8 +3966,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region VoxelCNN Tests
 
-    [Fact]
-    public void VoxelCNN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VoxelCNN_Predict_ProducesOutput()
     {
         // Arrange - 3D networks need inputHeight, inputWidth, inputDepth
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -3994,8 +3995,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VoxelCNN output should have elements");
     }
 
-    [Fact]
-    public void VoxelCNN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VoxelCNN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4020,8 +4021,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MeshCNN Tests
 
-    [Fact]
-    public void MeshCNN_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MeshCNN_Predict_ProducesOutput()
     {
         // Arrange - Use simplified constructor
         int numEdges = 100;
@@ -4051,8 +4052,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MeshCNN output should have elements");
     }
 
-    [Fact]
-    public void MeshCNN_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MeshCNN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
@@ -4068,8 +4069,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SpiralNet Tests
 
-    [Fact]
-    public void SpiralNet_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SpiralNet_Predict_ProducesOutput()
     {
         // Arrange - Use default constructor
         int numVertices = 100;
@@ -4099,8 +4100,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "SpiralNet output should have elements");
     }
 
-    [Fact]
-    public void SpiralNet_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task SpiralNet_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var spiralNet = new SpiralNet<float>();
@@ -4116,8 +4117,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region AudioVisualCorrespondenceNetwork Tests
 
-    [Fact]
-    public void AudioVisualCorrespondenceNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AudioVisualCorrespondenceNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4143,8 +4144,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AudioVisualCorrespondenceNetwork output should have elements");
     }
 
-    [Fact]
-    public void AudioVisualCorrespondenceNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task AudioVisualCorrespondenceNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4167,8 +4168,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region AudioVisualEventLocalizationNetwork Tests
 
-    [Fact]
-    public void AudioVisualEventLocalizationNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AudioVisualEventLocalizationNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4194,8 +4195,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AudioVisualEventLocalizationNetwork output should have elements");
     }
 
-    [Fact]
-    public void AudioVisualEventLocalizationNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task AudioVisualEventLocalizationNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4218,8 +4219,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Multimodal Vision-Language Model Tests
 
-    [Fact]
-    public void BlipNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BlipNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor (no ONNX files required)
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4254,8 +4255,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "BlipNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void BlipNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task BlipNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4282,8 +4283,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"BlipNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void Blip2NeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Blip2NeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor (no ONNX files required)
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4320,8 +4321,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Blip2NeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void Blip2NeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task Blip2NeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4348,8 +4349,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Blip2NeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void FlamingoNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FlamingoNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4386,8 +4387,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "FlamingoNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void FlamingoNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task FlamingoNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4414,8 +4415,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"FlamingoNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void LLaVANeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LLaVANeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4449,8 +4450,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "LLaVANeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void LLaVANeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task LLaVANeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4477,8 +4478,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"LLaVANeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void ImageBindNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ImageBindNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4515,8 +4516,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "ImageBindNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void ImageBindNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ImageBindNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4542,8 +4543,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ImageBindNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void VideoCLIPNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VideoCLIPNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4581,8 +4582,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VideoCLIPNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void VideoCLIPNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task VideoCLIPNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4612,8 +4613,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"VideoCLIPNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void UnifiedMultimodalNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UnifiedMultimodalNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4641,8 +4642,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "UnifiedMultimodalNetwork output should have elements");
     }
 
-    [Fact]
-    public void UnifiedMultimodalNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task UnifiedMultimodalNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4665,8 +4666,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"UnifiedMultimodalNetwork parameter count should be > 0, got {parameterCount}");
     }
 
-    [Fact]
-    public void Gpt4VisionNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Gpt4VisionNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor with mock tokenizer
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -4706,8 +4707,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Gpt4VisionNeuralNetwork output should have elements");
     }
 
-    [Fact]
-    public void Gpt4VisionNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task Gpt4VisionNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(

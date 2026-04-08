@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -25,8 +26,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -35,8 +36,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var options = new GaussianProcessFitDetectorOptions
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithPerfectPredictions_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithPerfectPredictions_ReturnsValidResult()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -71,8 +72,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithPoorPredictions_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithPoorPredictions_ReturnsValidResult()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithReasonablePredictions_ReturnsConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithReasonablePredictions_ReturnsConfidenceLevel()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -104,8 +105,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_GeneratesRecommendationsBasedOnFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -120,8 +121,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact]
-        public void DetectFit_WithVariousDataSizes_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithVariousDataSizes_HandlesCorrectly()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_WithHighDimensionalFeatures_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithHighDimensionalFeatures_HandlesCorrectly()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -153,8 +154,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
             var options = new GaussianProcessFitDetectorOptions
@@ -175,8 +176,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact]
-        public void DetectFit_WithSlightlyOffPredictions_ReturnsModerateConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithSlightlyOffPredictions_ReturnsModerateConfidence()
         {
             // Arrange
             var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();

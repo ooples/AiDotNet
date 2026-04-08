@@ -9,8 +9,8 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 public class RLDataLoaderIntegrationTests
 {
-    [Fact]
-    public void EnvironmentDataLoader_RunEpisode_CollectsExperiences()
+    [Fact(Timeout = 120000)]
+    public async Task EnvironmentDataLoader_RunEpisode_CollectsExperiences()
     {
         var environment = new DeterministicBanditEnvironment<double>(
             actionSpaceSize: 2,
@@ -34,8 +34,8 @@ public class RLDataLoaderIntegrationTests
         Assert.InRange(result.TotalReward, 0.0, 2.0);
     }
 
-    [Fact]
-    public void EnvironmentDataLoader_RunEpisodes_ReturnsRequestedCount()
+    [Fact(Timeout = 120000)]
+    public async Task EnvironmentDataLoader_RunEpisodes_ReturnsRequestedCount()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
         var loader = new EnvironmentDataLoader<double>(
@@ -54,8 +54,8 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(3, loader.TotalSteps);
     }
 
-    [Fact]
-    public void EnvironmentDataLoader_GetNextBatch_ReturnsExperience()
+    [Fact(Timeout = 120000)]
+    public async Task EnvironmentDataLoader_GetNextBatch_ReturnsExperience()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
         var loader = new EnvironmentDataLoader<double>(
@@ -77,8 +77,8 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(1, batch.NextState.Length);
     }
 
-    [Fact]
-    public void EnvironmentDataLoader_TryGetNextBatch_FalseWhenEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task EnvironmentDataLoader_TryGetNextBatch_FalseWhenEmpty()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
         var loader = new EnvironmentDataLoader<double>(
@@ -97,7 +97,7 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(0, batch.NextState.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EnvironmentDataLoader_LoadAndUnload_TogglesLoadedState()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
@@ -119,7 +119,7 @@ public class RLDataLoaderIntegrationTests
         Assert.False(loader.IsLoaded);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EnvironmentDataLoader_GetBatchesAsync_ReturnsSamples()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 2);

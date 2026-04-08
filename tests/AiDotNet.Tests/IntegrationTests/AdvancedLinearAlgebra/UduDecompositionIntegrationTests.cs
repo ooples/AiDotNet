@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -192,8 +193,8 @@ public class UduDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void UduDecomposition_IdentityMatrix_HasAllOnesInD()
+    [Fact(Timeout = 120000)]
+    public async Task UduDecomposition_IdentityMatrix_HasAllOnesInD()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -209,8 +210,8 @@ public class UduDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void UduDecomposition_DiagonalMatrix_PreservesDiagonalInD()
+    [Fact(Timeout = 120000)]
+    public async Task UduDecomposition_DiagonalMatrix_PreservesDiagonalInD()
     {
         // Arrange - Diagonal matrix with positive values
         var D_input = new Matrix<double>(4, 4);
@@ -225,8 +226,8 @@ public class UduDecompositionIntegrationTests
         Assert.True(maxDiff < Tolerance, $"Diagonal matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void UduDecomposition_SpdMatrix_HasPositiveD()
+    [Fact(Timeout = 120000)]
+    public async Task UduDecomposition_SpdMatrix_HasPositiveD()
     {
         // Arrange - Positive definite matrix
         var A = CreateSpdMatrix(4, seed: 789);
@@ -279,8 +280,8 @@ public class UduDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void UduDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task UduDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4);
@@ -294,8 +295,8 @@ public class UduDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void UduDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task UduDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         var A = CreateSpdMatrix(10, seed: 999);

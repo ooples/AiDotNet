@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Data;
 
@@ -74,8 +75,8 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region BalancedEpisodicDataLoader Tests
 
-    [Fact]
-    public void BalancedLoader_Constructor_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task BalancedLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
@@ -87,8 +88,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void BalancedLoader_GetNextTask_VerifyTaskDimensions()
+    [Fact(Timeout = 60000)]
+    public async Task BalancedLoader_GetNextTask_VerifyTaskDimensions()
     {
         // Arrange
         int nWay = 5;
@@ -109,8 +110,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(numFeatures, task.QuerySetX.Shape[1]);
     }
 
-    [Fact]
-    public void BalancedLoader_MultipleTasks_AchievesBalancedDistribution()
+    [Fact(Timeout = 60000)]
+    public async Task BalancedLoader_MultipleTasks_AchievesBalancedDistribution()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 6, examplesPerClass: 30, numFeatures: 5);
@@ -142,8 +143,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(true);  // If we get here without exceptions, balancing is working
     }
 
-    [Fact]
-    public void BalancedLoader_WithSeed_ProducesReproducibleTasks()
+    [Fact(Timeout = 60000)]
+    public async Task BalancedLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
         int seed = 42;
@@ -164,8 +165,8 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
-    public void BalancedLoader_WithDefaultParameters_UsesIndustryStandards()
+    [Fact(Timeout = 60000)]
+    public async Task BalancedLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
@@ -183,8 +184,8 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region StratifiedEpisodicDataLoader Tests
 
-    [Fact]
-    public void StratifiedLoader_Constructor_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
         var (X, Y) = CreateImbalancedDataset(numFeatures: 10);
@@ -196,8 +197,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
-    public void StratifiedLoader_GetNextTask_VerifyTaskDimensions()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedLoader_GetNextTask_VerifyTaskDimensions()
     {
         // Arrange
         int nWay = 2;
@@ -218,8 +219,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(numFeatures, task.QuerySetX.Shape[1]);
     }
 
-    [Fact]
-    public void StratifiedLoader_MultipleTasks_FavorsFrequentClasses()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedLoader_MultipleTasks_FavorsFrequentClasses()
     {
         // Arrange
         // Create highly imbalanced dataset
@@ -247,8 +248,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(true);
     }
 
-    [Fact]
-    public void StratifiedLoader_WithSeed_ProducesReproducibleTasks()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
         int seed = 42;
@@ -269,8 +270,8 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
-    public void StratifiedLoader_WithDefaultParameters_UsesIndustryStandards()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
@@ -288,8 +289,8 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region CurriculumEpisodicDataLoader Tests
 
-    [Fact]
-    public void CurriculumLoader_Constructor_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
@@ -309,8 +310,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(0.0, loader.Progress);
     }
 
-    [Fact]
-    public void CurriculumLoader_InitialProgress_GeneratesEasyTasks()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_InitialProgress_GeneratesEasyTasks()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
@@ -335,8 +336,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(20, task.QuerySetX.Shape[0]);
     }
 
-    [Fact]
-    public void CurriculumLoader_FinalProgress_GeneratesHardTasks()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_FinalProgress_GeneratesHardTasks()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
@@ -361,8 +362,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(50, task.QuerySetX.Shape[0]);
     }
 
-    [Fact]
-    public void CurriculumLoader_MiddleProgress_GeneratesMediumTasks()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_MiddleProgress_GeneratesMediumTasks()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
@@ -386,8 +387,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(10, task.SupportSetX.Shape[1]);
     }
 
-    [Fact]
-    public void CurriculumLoader_ProgressProgression_IncreasesDifficulty()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_ProgressProgression_IncreasesDifficulty()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
@@ -423,8 +424,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(easySupport > hardSupport, "Initial (easy) support set should be larger than final (hard) support set");
     }
 
-    [Fact]
-    public void CurriculumLoader_SetProgress_ThrowsOnInvalidProgress()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_SetProgress_ThrowsOnInvalidProgress()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
@@ -443,8 +444,8 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => loader.SetProgress(1.1));
     }
 
-    [Fact]
-    public void CurriculumLoader_Constructor_ValidatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_Constructor_ValidatesParameters()
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
@@ -468,8 +469,8 @@ public class AdvancedEpisodicDataLoaderTests
             initialKShot: 5));  // Invalid: less than target
     }
 
-    [Fact]
-    public void CurriculumLoader_WithSeed_ProducesReproducibleTasks()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
         int seed = 42;
@@ -498,8 +499,8 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
-    public void CurriculumLoader_WithDefaultParameters_UsesIndustryStandards()
+    [Fact(Timeout = 60000)]
+    public async Task CurriculumLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Need enough data for initial difficulty: 2-way 10-shot + 15 queries
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);

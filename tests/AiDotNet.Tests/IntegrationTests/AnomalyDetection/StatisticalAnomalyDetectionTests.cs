@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Statistical;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -72,15 +73,15 @@ public class StatisticalAnomalyDetectionTests
 
     #region ZScoreDetector Tests
 
-    [Fact]
-    public void ZScore_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_Construction_NotFittedByDefault()
     {
         var detector = new ZScoreDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void ZScore_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_OutlierGetsHighestScore()
     {
         var detector = new ZScoreDetector<double>();
         var data = CreateTestData();
@@ -90,8 +91,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ZScore_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ZScoreDetector<double>();
         var data = CreateTestData();
@@ -104,8 +105,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region ModifiedZScoreDetector Tests
 
-    [Fact]
-    public void ModifiedZScore_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_OutlierGetsHighestScore()
     {
         var detector = new ModifiedZScoreDetector<double>();
         var data = CreateTestData();
@@ -115,8 +116,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ModifiedZScore_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ModifiedZScoreDetector<double>();
         var data = CreateTestData();
@@ -129,8 +130,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region IQRDetector Tests
 
-    [Fact]
-    public void IQR_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_OutlierGetsHighestScore()
     {
         var detector = new IQRDetector<double>();
         var data = CreateTestData();
@@ -140,8 +141,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void IQR_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new IQRDetector<double>();
         var data = CreateTestData();
@@ -154,8 +155,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region MADDetector Tests
 
-    [Fact]
-    public void MAD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_OutlierGetsHighestScore()
     {
         var detector = new MADDetector<double>();
         var data = CreateTestData();
@@ -165,8 +166,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void MAD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MADDetector<double>();
         var data = CreateTestData();
@@ -179,8 +180,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region HampelDetector Tests
 
-    [Fact]
-    public void Hampel_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Hampel_OutlierGetsHighestScore()
     {
         var detector = new HampelDetector<double>();
         var data = CreateTestData();
@@ -190,8 +191,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Hampel_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Hampel_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new HampelDetector<double>();
         var data = CreateTestData();
@@ -204,8 +205,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region GrubbsTestDetector Tests
 
-    [Fact]
-    public void Grubbs_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_OutlierGetsHighestScore()
     {
         var detector = new GrubbsTestDetector<double>();
         var data = CreateTestData();
@@ -215,8 +216,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Grubbs_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GrubbsTestDetector<double>();
         var data = CreateTestData();
@@ -229,8 +230,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region ESDDetector Tests
 
-    [Fact]
-    public void ESD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ESD_OutlierGetsHighestScore()
     {
         var detector = new ESDDetector<double>();
         var data = CreateTestData();
@@ -240,8 +241,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ESD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ESD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ESDDetector<double>();
         var data = CreateTestData();
@@ -254,8 +255,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region GESDDetector Tests
 
-    [Fact]
-    public void GESD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task GESD_OutlierGetsHighestScore()
     {
         var detector = new GESDDetector<double>();
         var data = CreateTestData();
@@ -265,8 +266,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void GESD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task GESD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GESDDetector<double>();
         var data = CreateTestData();
@@ -279,8 +280,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region ChiSquareDetector Tests
 
-    [Fact]
-    public void ChiSquare_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ChiSquare_OutlierGetsHighestScore()
     {
         var detector = new ChiSquareDetector<double>();
         var data = CreateTestData();
@@ -290,8 +291,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ChiSquare_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ChiSquare_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ChiSquareDetector<double>();
         var data = CreateTestData();
@@ -304,8 +305,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region DixonQTestDetector Tests
 
-    [Fact]
-    public void DixonQ_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task DixonQ_OutlierGetsHighestScore()
     {
         var detector = new DixonQTestDetector<double>();
         var data = CreateTestData();
@@ -315,8 +316,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void DixonQ_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task DixonQ_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DixonQTestDetector<double>();
         var data = CreateTestData();
@@ -329,8 +330,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region PercentileDetector Tests
 
-    [Fact]
-    public void Percentile_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_OutlierGetsHighestScore()
     {
         var detector = new PercentileDetector<double>();
         var data = CreateTestData();
@@ -340,8 +341,8 @@ public class StatisticalAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Percentile_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new PercentileDetector<double>();
         var data = CreateTestData();
@@ -354,8 +355,8 @@ public class StatisticalAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllStatisticalDetectors_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task AllStatisticalDetectors_NotFittedByDefault()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {
@@ -378,8 +379,8 @@ public class StatisticalAnomalyDetectionTests
         }
     }
 
-    [Fact]
-    public void AllStatisticalDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllStatisticalDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {
@@ -403,8 +404,8 @@ public class StatisticalAnomalyDetectionTests
         }
     }
 
-    [Fact]
-    public void AllStatisticalDetectors_ScoreAnomaliesBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllStatisticalDetectors_ScoreAnomaliesBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

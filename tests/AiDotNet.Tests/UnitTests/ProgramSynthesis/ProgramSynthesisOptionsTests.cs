@@ -1,13 +1,14 @@
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisOptionsTests
 {
-    [Fact]
-    public void Defaults_AreIndustryStandardAndStable()
+    [Fact(Timeout = 60000)]
+    public async Task Defaults_AreIndustryStandardAndStable()
     {
         var options = new ProgramSynthesisOptions();
 

@@ -3,6 +3,7 @@ using AiDotNet.FineTuning;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FineTuning;
 
@@ -115,16 +116,16 @@ public class FineTuningDeepMathIntegrationTests
     // Sigmoid Tests
     // ============================
 
-    [Fact]
-    public void Sigmoid_AtZero_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_AtZero_ReturnsHalf()
     {
         // sigmoid(0) = 1 / (1 + exp(0)) = 1/2
         var result = TestFineTuning.TestSigmoid(0.0);
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void Sigmoid_LargePositive_ApproachesOne()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_LargePositive_ApproachesOne()
     {
         // sigmoid(100) ≈ 1.0
         var result = TestFineTuning.TestSigmoid(100.0);
@@ -132,8 +133,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(result <= 1.0);
     }
 
-    [Fact]
-    public void Sigmoid_LargeNegative_ApproachesZero()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_LargeNegative_ApproachesZero()
     {
         // sigmoid(-100) ≈ 0.0
         var result = TestFineTuning.TestSigmoid(-100.0);
@@ -141,8 +142,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void Sigmoid_SymmetryProperty_SigmaX_Plus_SigmaNegX_Equals_One()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_SymmetryProperty_SigmaX_Plus_SigmaNegX_Equals_One()
     {
         // σ(x) + σ(-x) = 1 for all x
         var values = new[] { -5.0, -2.0, -0.5, 0.0, 0.5, 2.0, 5.0, 10.0, -10.0 };
@@ -154,8 +155,8 @@ public class FineTuningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sigmoid_KnownValues_MatchHandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_KnownValues_MatchHandComputed()
     {
         // σ(1) = 1/(1+e^-1) = 1/(1+0.367879...) = 0.731058...
         var sig1 = TestFineTuning.TestSigmoid(1.0);
@@ -170,8 +171,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(1.0 / (1.0 + Math.Exp(-2.0)), sig2, Tolerance);
     }
 
-    [Fact]
-    public void Sigmoid_IsMonotonicallyIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_IsMonotonicallyIncreasing()
     {
         double prev = 0.0;
         for (double x = -10.0; x <= 10.0; x += 0.5)
@@ -185,8 +186,8 @@ public class FineTuningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sigmoid_OutputBoundedBetween0And1()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_OutputBoundedBetween0And1()
     {
         var testValues = new[] { -1000.0, -100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0, 1000.0 };
         foreach (var x in testValues)
@@ -201,32 +202,32 @@ public class FineTuningDeepMathIntegrationTests
     // LogSigmoid Tests
     // ============================
 
-    [Fact]
-    public void LogSigmoid_AtZero_ReturnsNegLn2()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_AtZero_ReturnsNegLn2()
     {
         // log(sigmoid(0)) = log(0.5) = -ln(2)
         var result = TestFineTuning.TestLogSigmoid(0.0);
         Assert.Equal(-Math.Log(2.0), result, Tolerance);
     }
 
-    [Fact]
-    public void LogSigmoid_LargePositive_ApproachesZero()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_LargePositive_ApproachesZero()
     {
         // log(sigmoid(100)) ≈ log(1) = 0
         var result = TestFineTuning.TestLogSigmoid(100.0);
         Assert.True(Math.Abs(result) < 1e-10);
     }
 
-    [Fact]
-    public void LogSigmoid_LargeNegative_ApproachesNegativeInput()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_LargeNegative_ApproachesNegativeInput()
     {
         // log(sigmoid(-100)) ≈ -100 (since sigmoid(-x) ≈ exp(x) for large neg x)
         var result = TestFineTuning.TestLogSigmoid(-100.0);
         Assert.Equal(-100.0, result, 1e-5);
     }
 
-    [Fact]
-    public void LogSigmoid_EqualsLogOfSigmoid()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_EqualsLogOfSigmoid()
     {
         // Verify log(σ(x)) = logσ(x) for moderate values
         var values = new[] { -5.0, -2.0, -1.0, 0.0, 1.0, 2.0, 5.0 };
@@ -239,8 +240,8 @@ public class FineTuningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogSigmoid_IsAlwaysNonPositive()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_IsAlwaysNonPositive()
     {
         // Since sigmoid is in (0,1], log(sigmoid) is in (-inf, 0]
         var values = new[] { -100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0 };
@@ -251,8 +252,8 @@ public class FineTuningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogSigmoid_NumericalStability_NoNaNOrInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task LogSigmoid_NumericalStability_NoNaNOrInfinity()
     {
         // Test extreme values don't produce NaN or Infinity
         var extremeValues = new[] { -1000.0, -500.0, -100.0, 0.0, 100.0, 500.0, 1000.0 };
@@ -268,8 +269,8 @@ public class FineTuningDeepMathIntegrationTests
     // KL Divergence Tests
     // ============================
 
-    [Fact]
-    public void KLDivergence_IdenticalDistributions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task KLDivergence_IdenticalDistributions_ReturnsZero()
     {
         var ft = new TestFineTuning();
         var p = new[] { 0.25, 0.25, 0.25, 0.25 };
@@ -277,8 +278,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void KLDivergence_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task KLDivergence_IsNonNegative()
     {
         // Gibbs' inequality: KL(P||Q) >= 0
         var ft = new TestFineTuning();
@@ -288,8 +289,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(result >= -Tolerance, $"KL divergence = {result} should be non-negative");
     }
 
-    [Fact]
-    public void KLDivergence_IsNotSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task KLDivergence_IsNotSymmetric()
     {
         // KL(P||Q) != KL(Q||P) in general
         var ft = new TestFineTuning();
@@ -300,8 +301,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.NotEqual(kl_pq, kl_qp);
     }
 
-    [Fact]
-    public void KLDivergence_KnownValue_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task KLDivergence_KnownValue_HandComputed()
     {
         // P = [0.5, 0.5], Q = [0.25, 0.75]
         // KL(P||Q) = 0.5*ln(0.5/0.25) + 0.5*ln(0.5/0.75)
@@ -316,8 +317,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void KLDivergence_DifferentLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task KLDivergence_DifferentLengths_Throws()
     {
         var ft = new TestFineTuning();
         var p = new[] { 0.5, 0.5 };
@@ -329,8 +330,8 @@ public class FineTuningDeepMathIntegrationTests
     // Scalar Log Probability Tests
     // ============================
 
-    [Fact]
-    public void ScalarLogProb_PerfectMatch_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ScalarLogProb_PerfectMatch_ReturnsZero()
     {
         // When pred == target, squared error = 0, so log prob = 0
         var ft = new ScalarTestFineTuning();
@@ -338,8 +339,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ScalarLogProb_IsNonPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ScalarLogProb_IsNonPositive()
     {
         // Log probability from Gaussian kernel: -error^2 / (2*sigma^2) <= 0
         var ft = new ScalarTestFineTuning();
@@ -351,8 +352,8 @@ public class FineTuningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ScalarLogProb_HandComputed_Unit1()
+    [Fact(Timeout = 120000)]
+    public async Task ScalarLogProb_HandComputed_Unit1()
     {
         // pred=0, target=1: squared_error = 1, sigma=1
         // log_prob = -1 / (2*1*1) = -0.5
@@ -361,8 +362,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(-0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void ScalarLogProb_CloserPrediction_HigherLogProb()
+    [Fact(Timeout = 120000)]
+    public async Task ScalarLogProb_CloserPrediction_HigherLogProb()
     {
         var ft = new ScalarTestFineTuning();
         var target = 5.0;
@@ -378,16 +379,16 @@ public class FineTuningDeepMathIntegrationTests
     // String Log Probability Tests
     // ============================
 
-    [Fact]
-    public void StringLogProb_IdenticalStrings_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_IdenticalStrings_ReturnsZero()
     {
         var ft = new StringTestFineTuning();
         var result = ft.TestComputeLogProb("hello", "hello");
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void StringLogProb_CompletelyDifferent_IsVeryNegative()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_CompletelyDifferent_IsVeryNegative()
     {
         var ft = new StringTestFineTuning();
         var result = ft.TestComputeLogProb("aaaa", "zzzz");
@@ -395,8 +396,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(result < -10.0);
     }
 
-    [Fact]
-    public void StringLogProb_PartialMatch_IntermediateValue()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_PartialMatch_IntermediateValue()
     {
         var ft = new StringTestFineTuning();
         // "hello" vs "helly" -> 4/5 match = 0.8
@@ -406,8 +407,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-10);
     }
 
-    [Fact]
-    public void StringLogProb_DifferentLengths_PenalizesLength()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_DifferentLengths_PenalizesLength()
     {
         var ft = new StringTestFineTuning();
         // "abc" vs "abcdef" -> matches = min(3,6)=3, maxLen=6, matchRatio = 3/6 = 0.5
@@ -420,8 +421,8 @@ public class FineTuningDeepMathIntegrationTests
     // Array Log Probability Tests (Probability Distribution)
     // ============================
 
-    [Fact]
-    public void ArrayLogProb_ProbabilityDistribution_CrossEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_ProbabilityDistribution_CrossEntropy()
     {
         // When prediction looks like a probability distribution (sums to ~1, all non-negative),
         // uses cross-entropy: -sum(target * log(pred))
@@ -435,8 +436,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(expected, result, 1e-10);
     }
 
-    [Fact]
-    public void ArrayLogProb_PerfectProbDist_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_PerfectProbDist_ReturnsZero()
     {
         // If prediction exactly matches target one-hot, cross entropy = -log(1) = 0
         var ft = new TestFineTuning();
@@ -448,8 +449,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-8);
     }
 
-    [Fact]
-    public void ArrayLogProb_Embedding_UsesCosine()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_Embedding_UsesCosine()
     {
         // When prediction doesn't look like a prob dist (doesn't sum to ~1 or has negatives),
         // uses cosine similarity
@@ -462,8 +463,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-8);
     }
 
-    [Fact]
-    public void ArrayLogProb_OrthogonalEmbeddings_HasNegativeLogProb()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_OrthogonalEmbeddings_HasNegativeLogProb()
     {
         // Use vectors that don't look like probability distributions (negative values or sum != 1)
         // to trigger cosine similarity path
@@ -476,8 +477,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(Math.Log(0.5), result, 1e-8);
     }
 
-    [Fact]
-    public void ArrayLogProb_OppositeEmbeddings_VeryNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_OppositeEmbeddings_VeryNegative()
     {
         // Use vectors that are opposite and not prob distributions
         var ft = new TestFineTuning();
@@ -493,8 +494,8 @@ public class FineTuningDeepMathIntegrationTests
     // DPO Loss Formula Tests
     // ============================
 
-    [Fact]
-    public void DPOLoss_Formula_WhenChosenPreferred_LossIsSmall()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_Formula_WhenChosenPreferred_LossIsSmall()
     {
         // DPO loss: -log(σ(β * (chosen_log_ratio - rejected_log_ratio)))
         // When chosen is strongly preferred: chosen_log_ratio > rejected_log_ratio
@@ -509,8 +510,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(loss < 0.01, $"DPO loss should be near 0 when chosen is preferred, got {loss}");
     }
 
-    [Fact]
-    public void DPOLoss_Formula_WhenRejectedPreferred_LossIsLarge()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_Formula_WhenRejectedPreferred_LossIsLarge()
     {
         // When rejected is preferred: rejected_log_ratio > chosen_log_ratio
         // margin is large negative, σ(margin) ≈ 0, -log(ε) is large
@@ -523,8 +524,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(loss > 0.5, $"DPO loss should be large when rejected is preferred, got {loss}");
     }
 
-    [Fact]
-    public void DPOLoss_Formula_EqualPreference_LossIsLn2()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_Formula_EqualPreference_LossIsLn2()
     {
         // When margin = 0, σ(0) = 0.5, -log(0.5) = ln(2) ≈ 0.693
         double margin = 0.0;
@@ -532,8 +533,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(Math.Log(2.0), loss, Tolerance);
     }
 
-    [Fact]
-    public void DPOLoss_BetaScaling_HigherBeta_SteepergGradient()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_BetaScaling_HigherBeta_SteepergGradient()
     {
         // Higher beta makes the model more sensitive to preference differences
         double chosenLogRatio = 1.0;
@@ -551,8 +552,8 @@ public class FineTuningDeepMathIntegrationTests
     // SimPO Loss Formula Tests
     // ============================
 
-    [Fact]
-    public void SimPOLoss_WithGamma_ShiftsDecisionBoundary()
+    [Fact(Timeout = 120000)]
+    public async Task SimPOLoss_WithGamma_ShiftsDecisionBoundary()
     {
         // SimPO loss: -log(σ(β * (chosen_avg - rejected_avg) - γ))
         // gamma > 0 shifts the boundary, requiring a larger margin to achieve same loss
@@ -566,8 +567,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(lossWithGamma > lossNoGamma, "Gamma should increase loss (require larger margin)");
     }
 
-    [Fact]
-    public void SimPOLoss_LengthNormalization_AverageVsSum()
+    [Fact(Timeout = 120000)]
+    public async Task SimPOLoss_LengthNormalization_AverageVsSum()
     {
         // SimPO normalizes by response length. Shorter responses should not be unfairly penalized.
         // Average log prob: logprob_total / length
@@ -587,8 +588,8 @@ public class FineTuningDeepMathIntegrationTests
     // KTO Loss Formula Tests
     // ============================
 
-    [Fact]
-    public void KTOLoss_Desirable_SigmoidOfBetaTimesMargin()
+    [Fact(Timeout = 120000)]
+    public async Task KTOLoss_Desirable_SigmoidOfBetaTimesMargin()
     {
         // KTO desirable loss: -w_d * σ(β * (log_ratio - KL))
         double desirableWeight = 1.0;
@@ -605,8 +606,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact]
-    public void KTOLoss_Undesirable_OneMinusSigmoid()
+    [Fact(Timeout = 120000)]
+    public async Task KTOLoss_Undesirable_OneMinusSigmoid()
     {
         // KTO undesirable loss: -w_u * (1 - σ(β * (log_ratio - KL)))
         double undesirableWeight = 1.0;
@@ -625,8 +626,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(expected, loss, Tolerance);
     }
 
-    [Fact]
-    public void KTOLoss_LossAversion_UndesirableWeightHigher()
+    [Fact(Timeout = 120000)]
+    public async Task KTOLoss_LossAversion_UndesirableWeightHigher()
     {
         // In prospect theory, losses are weighted more than gains
         // Typical: undesirable_weight > desirable_weight (e.g., 1.5 vs 1.0)
@@ -649,8 +650,8 @@ public class FineTuningDeepMathIntegrationTests
     // DPO Label Smoothing Tests
     // ============================
 
-    [Fact]
-    public void DPOLoss_LabelSmoothing_InterpolatesBetweenDirections()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_LabelSmoothing_InterpolatesBetweenDirections()
     {
         // Label smoothed DPO: (1-ε)*loss + ε*reversed_loss
         double beta = 0.1;
@@ -668,8 +669,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.True(smoothedLoss <= maxLoss + Tolerance);
     }
 
-    [Fact]
-    public void DPOLoss_ZeroSmoothing_EqualsDirectLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DPOLoss_ZeroSmoothing_EqualsDirectLoss()
     {
         double beta = 0.1;
         double margin = 1.0;
@@ -686,8 +687,8 @@ public class FineTuningDeepMathIntegrationTests
     // Cosine Similarity (used in embedding log prob) Tests
     // ============================
 
-    [Fact]
-    public void CosineSimilarity_ParallelVectors_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_ParallelVectors_ReturnsOne()
     {
         // cos(a, 2a) = (a . 2a) / (|a| * |2a|) = 2|a|^2 / (|a| * 2|a|) = 1
         var a = new[] { 1.0, 2.0, 3.0 };
@@ -704,8 +705,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(1.0, cosine, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_AntiParallel_ReturnsNegOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_AntiParallel_ReturnsNegOne()
     {
         var a = new[] { 1.0, 0.0 };
         var b = new[] { -1.0, 0.0 };
@@ -721,8 +722,8 @@ public class FineTuningDeepMathIntegrationTests
     // Method Configuration Tests
     // ============================
 
-    [Fact]
-    public void DPO_RequiresReferenceModel_NotRewardModel()
+    [Fact(Timeout = 120000)]
+    public async Task DPO_RequiresReferenceModel_NotRewardModel()
     {
         var dpo = new DirectPreferenceOptimization<double, double[], double[]>(new FineTuningOptions<double>());
         Assert.True(dpo.RequiresReferenceModel);
@@ -730,8 +731,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal("DPO", dpo.MethodName);
     }
 
-    [Fact]
-    public void SimPO_DoesNotRequireReferenceOrReward()
+    [Fact(Timeout = 120000)]
+    public async Task SimPO_DoesNotRequireReferenceOrReward()
     {
         var simpo = new SimplePreferenceOptimization<double, double[], double[]>(new FineTuningOptions<double>());
         Assert.False(simpo.RequiresReferenceModel);
@@ -739,8 +740,8 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal("SimPO", simpo.MethodName);
     }
 
-    [Fact]
-    public void KTO_RequiresReferenceModel_NotRewardModel()
+    [Fact(Timeout = 120000)]
+    public async Task KTO_RequiresReferenceModel_NotRewardModel()
     {
         var kto = new KahnemanTverskyOptimization<double, double[], double[]>(new FineTuningOptions<double>());
         Assert.True(kto.RequiresReferenceModel);
@@ -752,8 +753,8 @@ public class FineTuningDeepMathIntegrationTests
     // Null/Edge Case Log Probability Tests
     // ============================
 
-    [Fact]
-    public void ArrayLogProb_SingleElement_TreatedAsScalar()
+    [Fact(Timeout = 120000)]
+    public async Task ArrayLogProb_SingleElement_TreatedAsScalar()
     {
         // Single-element arrays should be treated as scalars (cosine always 1 for same-sign)
         var ft = new TestFineTuning();
@@ -765,16 +766,16 @@ public class FineTuningDeepMathIntegrationTests
         Assert.Equal(-2.0, result, 1e-8);
     }
 
-    [Fact]
-    public void StringLogProb_EmptyVsNonEmpty_ReturnsNegInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_EmptyVsNonEmpty_ReturnsNegInfinity()
     {
         var ft = new StringTestFineTuning();
         var result = ft.TestComputeLogProb("", "hello");
         Assert.Equal(double.NegativeInfinity, result);
     }
 
-    [Fact]
-    public void StringLogProb_BothEmpty_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task StringLogProb_BothEmpty_ReturnsZero()
     {
         var ft = new StringTestFineTuning();
         var result = ft.TestComputeLogProb("", "");

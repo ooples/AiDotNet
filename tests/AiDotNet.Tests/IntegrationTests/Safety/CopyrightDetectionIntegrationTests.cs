@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Text;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -14,8 +15,8 @@ public class CopyrightDetectionIntegrationTests
 {
     #region NgramCopyrightDetector Tests
 
-    [Fact]
-    public void Ngram_OriginalContent_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Ngram_OriginalContent_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
         var findings = detector.EvaluateText(
@@ -24,8 +25,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void Ngram_WithCopyrightedTexts_DetectsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task Ngram_WithCopyrightedTexts_DetectsMatch()
     {
         var copyrighted = new[] { "It was the best of times it was the worst of times it was the age of wisdom" };
         var sources = new[] { "A Tale of Two Cities" };
@@ -36,8 +37,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Ngram_EmptyText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Ngram_EmptyText_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
         var findings = detector.EvaluateText("");
@@ -45,8 +46,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void Ngram_ShortText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Ngram_ShortText_NoFindings()
     {
         var detector = new NgramCopyrightDetector<double>();
         var findings = detector.EvaluateText("Hello world");
@@ -58,8 +59,8 @@ public class CopyrightDetectionIntegrationTests
 
     #region EmbeddingCopyrightDetector Tests
 
-    [Fact]
-    public void Embedding_OriginalContent_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Embedding_OriginalContent_NoFindings()
     {
         var detector = new EmbeddingCopyrightDetector<double>();
         var findings = detector.EvaluateText(
@@ -68,8 +69,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void Embedding_WithCopyrightedTexts_ProcessesCleanly()
+    [Fact(Timeout = 120000)]
+    public async Task Embedding_WithCopyrightedTexts_ProcessesCleanly()
     {
         var copyrighted = new[] { "To be or not to be that is the question whether tis nobler in the mind" };
         var sources = new[] { "Hamlet" };
@@ -80,8 +81,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Embedding_EmptyText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Embedding_EmptyText_NoFindings()
     {
         var detector = new EmbeddingCopyrightDetector<double>();
         var findings = detector.EvaluateText("");
@@ -93,8 +94,8 @@ public class CopyrightDetectionIntegrationTests
 
     #region PerplexityMemorizationDetector Tests
 
-    [Fact]
-    public void Perplexity_RepetitiveText_DetectsMemorization()
+    [Fact(Timeout = 120000)]
+    public async Task Perplexity_RepetitiveText_DetectsMemorization()
     {
         var detector = new PerplexityMemorizationDetector<double>();
         string repeatedText = string.Join(" ",
@@ -104,8 +105,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Perplexity_UniqueContent_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Perplexity_UniqueContent_ProcessesWithoutError()
     {
         var detector = new PerplexityMemorizationDetector<double>();
         var findings = detector.EvaluateText(
@@ -116,8 +117,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Perplexity_HighlyRepetitive_DetectsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task Perplexity_HighlyRepetitive_DetectsIssue()
     {
         var detector = new PerplexityMemorizationDetector<double>();
         string text = string.Join(" ", Enumerable.Repeat("hello world hello world", 50));
@@ -126,8 +127,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Perplexity_CustomThresholds_Work()
+    [Fact(Timeout = 120000)]
+    public async Task Perplexity_CustomThresholds_Work()
     {
         var detector = new PerplexityMemorizationDetector<double>(
             lowPerplexityThreshold: 1.0, highRepetitionThreshold: 0.1);
@@ -137,8 +138,8 @@ public class CopyrightDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void Perplexity_EmptyText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Perplexity_EmptyText_NoFindings()
     {
         var detector = new PerplexityMemorizationDetector<double>();
         var findings = detector.EvaluateText("");
@@ -150,8 +151,8 @@ public class CopyrightDetectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllDetectors_OriginalContent_ProcessWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_OriginalContent_ProcessWithoutError()
     {
         var text = "This is completely original content about the future of space exploration " +
                    "and the potential for human colonization of Mars by the end of the century.";

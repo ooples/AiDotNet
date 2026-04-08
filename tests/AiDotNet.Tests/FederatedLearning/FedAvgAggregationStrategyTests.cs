@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using System;
@@ -10,8 +11,8 @@ using Xunit;
 /// </summary>
 public class FedAvgAggregationStrategyTests
 {
-    [Fact]
-    public void Aggregate_WithEqualWeights_ReturnsAverageModel()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithEqualWeights_ReturnsAverageModel()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -49,8 +50,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(4.0, aggregatedModel["layer1"][2], precision: 5);
     }
 
-    [Fact]
-    public void Aggregate_WithDifferentWeights_ReturnsWeightedAverage()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithDifferentWeights_ReturnsWeightedAverage()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -84,8 +85,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(3.5, aggregatedModel["layer1"][1], precision: 5);
     }
 
-    [Fact]
-    public void Aggregate_WithMultipleLayers_AggregatesAllLayers()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithMultipleLayers_AggregatesAllLayers()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -121,8 +122,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal(3.0, aggregatedModel["layer2"][0], precision: 5);
     }
 
-    [Fact]
-    public void Aggregate_WithEmptyClientModels_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithEmptyClientModels_ThrowsArgumentException()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -133,8 +134,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(emptyModels, clientWeights));
     }
 
-    [Fact]
-    public void Aggregate_WithNullClientModels_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithNullClientModels_ThrowsArgumentException()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -145,8 +146,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(nullModels!, clientWeights));
     }
 
-    [Fact]
-    public void GetStrategyName_ReturnsCorrectName()
+    [Fact(Timeout = 60000)]
+    public async Task GetStrategyName_ReturnsCorrectName()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -158,8 +159,8 @@ public class FedAvgAggregationStrategyTests
         Assert.Equal("FedAvg", name);
     }
 
-    [Fact]
-    public void Aggregate_WithThreeClients_ComputesCorrectWeightedAverage()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_WithThreeClients_ComputesCorrectWeightedAverage()
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();

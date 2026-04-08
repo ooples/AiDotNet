@@ -4,13 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
     public class TextProcessingHelperTests
     {
-        [Fact]
-        public void SplitIntoSentences_WithNull_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithNull_ReturnsEmptyList()
         {
             // Act
             var result = TextProcessingHelper.SplitIntoSentences(null);
@@ -20,8 +21,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithEmptyString_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithEmptyString_ReturnsEmptyList()
         {
             // Act
             var result = TextProcessingHelper.SplitIntoSentences(string.Empty);
@@ -31,8 +32,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithWhitespace_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithWhitespace_ReturnsEmptyList()
         {
             // Act
             var result = TextProcessingHelper.SplitIntoSentences("   \t\n  ");
@@ -42,8 +43,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithSingleSentence_ReturnsSingleItem()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithSingleSentence_ReturnsSingleItem()
         {
             // Arrange
             var text = "This is a sentence.";
@@ -56,8 +57,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("This is a sentence.", result[0]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithMultipleSentences_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithMultipleSentences_SplitsCorrectly()
         {
             // Arrange
             var text = "First sentence. Second sentence. Third sentence.";
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Third sentence.", result[2]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithExclamationMark_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithExclamationMark_SplitsCorrectly()
         {
             // Arrange
             var text = "Hello there! How are you?";
@@ -87,8 +88,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("How are you?", result[1]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithQuestionMark_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithQuestionMark_SplitsCorrectly()
         {
             // Arrange
             var text = "What is this? It is a test. Really?";
@@ -103,8 +104,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Really?", result[2]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithNewlines_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithNewlines_SplitsCorrectly()
         {
             // Arrange
             var text = "First line.\nSecond line.\nThird line.";
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Third line.", result[2]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithMixedPunctuation_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithMixedPunctuation_SplitsCorrectly()
         {
             // Arrange
             var text = "Statement one. Question two? Exclamation three!";
@@ -135,8 +136,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Exclamation three!", result[2]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithNoTrailingPunctuation_IncludesLastSentence()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithNoTrailingPunctuation_IncludesLastSentence()
         {
             // Arrange
             var text = "First sentence. Second sentence";
@@ -150,8 +151,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Second sentence", result[1]);
         }
 
-        [Fact]
-        public void Tokenize_WithNull_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithNull_ReturnsEmptyList()
         {
             // Act
             var result = TextProcessingHelper.Tokenize(null);
@@ -161,8 +162,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
-        public void Tokenize_WithEmptyString_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithEmptyString_ReturnsEmptyList()
         {
             // Act
             var result = TextProcessingHelper.Tokenize(string.Empty);
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
-        public void Tokenize_WithSingleWord_ReturnsSingleToken()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithSingleWord_ReturnsSingleToken()
         {
             // Arrange
             var text = "hello";
@@ -186,8 +187,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("hello", result[0]);
         }
 
-        [Fact]
-        public void Tokenize_WithMultipleWords_ReturnsAllTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithMultipleWords_ReturnsAllTokens()
         {
             // Arrange
             var text = "hello world test";
@@ -202,8 +203,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
-        public void Tokenize_WithPunctuation_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithPunctuation_SplitsCorrectly()
         {
             // Arrange
             var text = "Hello, world!";
@@ -217,8 +218,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
-        public void Tokenize_WithUpperCase_ConvertsToLowerCase()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithUpperCase_ConvertsToLowerCase()
         {
             // Arrange
             var text = "HELLO WORLD";
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
-        public void Tokenize_WithMixedCase_ConvertsToLowerCase()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithMixedCase_ConvertsToLowerCase()
         {
             // Arrange
             var text = "HeLLo WoRLd";
@@ -247,8 +248,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
-        public void Tokenize_WithTabs_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithTabs_SplitsCorrectly()
         {
             // Arrange
             var text = "hello\tworld\ttest";
@@ -263,8 +264,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
-        public void Tokenize_WithNewlines_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithNewlines_SplitsCorrectly()
         {
             // Arrange
             var text = "hello\nworld\ntest";
@@ -279,8 +280,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
-        public void Tokenize_WithMultipleSpaces_IgnoresEmptyTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithMultipleSpaces_IgnoresEmptyTokens()
         {
             // Arrange
             var text = "hello    world    test";
@@ -295,8 +296,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
-        public void Tokenize_WithSentence_RemovesPunctuation()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithSentence_RemovesPunctuation()
         {
             // Arrange
             var text = "This is a test. It works!";
@@ -314,8 +315,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("works", result[5]);
         }
 
-        [Fact]
-        public void Tokenize_WithQuestionMarks_RemovesThem()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithQuestionMarks_RemovesThem()
         {
             // Arrange
             var text = "What? Why?";
@@ -329,8 +330,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("why", result[1]);
         }
 
-        [Fact]
-        public void Tokenize_WithCommas_RemovesThem()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithCommas_RemovesThem()
         {
             // Arrange
             var text = "one, two, three";
@@ -345,8 +346,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("three", result[2]);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithLongText_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithLongText_HandlesCorrectly()
         {
             // Arrange
             var text = "This is the first sentence. This is the second sentence! " +
@@ -363,8 +364,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("fourth sentence", result[3]);
         }
 
-        [Fact]
-        public void Tokenize_WithNumbers_IncludesThem()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithNumbers_IncludesThem()
         {
             // Arrange
             var text = "test 123 hello 456";
@@ -380,8 +381,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("456", result);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithConsecutivePunctuation_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithConsecutivePunctuation_HandlesCorrectly()
         {
             // Arrange
             var text = "What?! Really! Yes.";
@@ -394,8 +395,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, sentence => Assert.False(string.IsNullOrWhiteSpace(sentence)));
         }
 
-        [Fact]
-        public void Tokenize_WithHyphenatedWords_PreservesHyphenatedWords()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithHyphenatedWords_PreservesHyphenatedWords()
         {
             // Arrange
             var text = "state-of-the-art technology";
@@ -409,8 +410,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("technology", result);
         }
 
-        [Fact]
-        public void SplitIntoSentences_WithExtraSpaces_TrimsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SplitIntoSentences_WithExtraSpaces_TrimsCorrectly()
         {
             // Arrange
             var text = "First.   Second.    Third.";
@@ -424,8 +425,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, sentence => Assert.False(sentence.EndsWith("  ")));
         }
 
-        [Fact]
-        public void Tokenize_WithCarriageReturn_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_WithCarriageReturn_SplitsCorrectly()
         {
             // Arrange
             var text = "hello\rworld\rtest";

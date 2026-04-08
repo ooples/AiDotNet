@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -65,8 +66,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 1: Loss is non-negative (KL divergence, MSE, CE are all >= 0)
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IsNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsNonNegative()
     {
         ValidateDimensions();
         if (!IsNonNegative) return;
@@ -80,8 +81,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 2: Loss is finite
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IsFinite()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsFinite()
     {
         var strategy = CreateStrategy();
         double loss = strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput());
@@ -93,8 +94,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 3: Identical inputs → zero/minimal loss
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IdenticalInputs_ProducesMinimalLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IdenticalInputs_ProducesMinimalLoss()
     {
         if (!ZeroLossForIdentical) return;
         var strategy = CreateStrategy();
@@ -108,8 +109,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 4: Larger divergence → larger loss (monotonicity)
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_LargerDivergence_ProducesLargerLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_LargerDivergence_ProducesLargerLoss()
     {
         var strategy = CreateStrategy();
         var teacher = CreateTeacherOutput();
@@ -137,8 +138,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 5: Gradient has correct shape [batch, classes]
     // =========================================================================
 
-    [Fact]
-    public void ComputeGradient_HasCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_HasCorrectShape()
     {
         var strategy = CreateStrategy();
         var gradient = strategy.ComputeGradient(CreateStudentOutput(), CreateTeacherOutput());
@@ -150,8 +151,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 6: Gradient is finite
     // =========================================================================
 
-    [Fact]
-    public void ComputeGradient_IsFinite()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_IsFinite()
     {
         var strategy = CreateStrategy();
         var gradient = strategy.ComputeGradient(CreateStudentOutput(), CreateTeacherOutput());
@@ -169,8 +170,8 @@ public abstract class DistillationStrategyTestBase
     // Analytical gradient should match finite-difference approximation.
     // =========================================================================
 
-    [Fact]
-    public void ComputeGradient_MatchesNumericalGradient()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_MatchesNumericalGradient()
     {
         var strategy = CreateStrategy();
 
@@ -224,8 +225,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 8: Gradient for identical inputs is near-zero
     // =========================================================================
 
-    [Fact]
-    public void ComputeGradient_IdenticalInputs_IsNearZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_IdenticalInputs_IsNearZero()
     {
         if (!ZeroLossForIdentical) return;
         var strategy = CreateStrategy();
@@ -246,8 +247,8 @@ public abstract class DistillationStrategyTestBase
     // Moving student in the negative gradient direction should reduce loss.
     // =========================================================================
 
-    [Fact]
-    public void ComputeGradient_DescentDirectionReducesLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_DescentDirectionReducesLoss()
     {
         var strategy = CreateStrategy();
         var student = CreateStudentOutput();
@@ -281,8 +282,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 10: Temperature is positive
     // =========================================================================
 
-    [Fact]
-    public void Temperature_IsPositive()
+    [Fact(Timeout = 60000)]
+    public async Task Temperature_IsPositive()
     {
         var strategy = CreateStrategy();
         Assert.True(strategy.Temperature > 0,
@@ -293,8 +294,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 11: Alpha is in valid range [0, 1]
     // =========================================================================
 
-    [Fact]
-    public void Alpha_IsInValidRange()
+    [Fact(Timeout = 60000)]
+    public async Task Alpha_IsInValidRange()
     {
         var strategy = CreateStrategy();
         Assert.True(strategy.Alpha >= 0 && strategy.Alpha <= 1,
@@ -305,8 +306,8 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 12: Higher temperature → softer distribution → smaller gradient magnitude
     // =========================================================================
 
-    [Fact]
-    public void HigherTemperature_ProducesSmallerGradients()
+    [Fact(Timeout = 60000)]
+    public async Task HigherTemperature_ProducesSmallerGradients()
     {
         var strategy1 = CreateStrategy();
         var strategy2 = CreateStrategy();

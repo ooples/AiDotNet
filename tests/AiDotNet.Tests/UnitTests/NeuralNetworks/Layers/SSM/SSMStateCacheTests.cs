@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class SSMStateCacheTests
 {
-    [Fact]
-    public void Constructor_DefaultParameters_CreatesCache()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DefaultParameters_CreatesCache()
     {
         var cache = new SSMStateCache<float>();
 
@@ -18,23 +19,23 @@ public class SSMStateCacheTests
         Assert.False(cache.CompressionEnabled);
     }
 
-    [Fact]
-    public void Constructor_WithCompression_EnablesCompression()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCompression_EnablesCompression()
     {
         var cache = new SSMStateCache<float>(enableCompression: true, compressionBitWidth: 8);
 
         Assert.True(cache.CompressionEnabled);
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnInvalidBitWidth()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsOnInvalidBitWidth()
     {
         Assert.Throws<ArgumentException>(() => new SSMStateCache<float>(true, 0));
         Assert.Throws<ArgumentException>(() => new SSMStateCache<float>(true, 33));
     }
 
-    [Fact]
-    public void CacheSSMState_StoresAndRetrieves()
+    [Fact(Timeout = 120000)]
+    public async Task CacheSSMState_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<float>();
         var state = CreateRandomTensor(new[] { 1, 16, 4 });
@@ -54,8 +55,8 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
-    public void CacheSSMState_OverwritesPreviousState()
+    [Fact(Timeout = 120000)]
+    public async Task CacheSSMState_OverwritesPreviousState()
     {
         var cache = new SSMStateCache<float>();
         var state1 = new Tensor<float>(new[] { 1, 4, 2 });
@@ -71,15 +72,15 @@ public class SSMStateCacheTests
         Assert.Equal(2.0f, retrieved[0]);
     }
 
-    [Fact]
-    public void CacheSSMState_ThrowsOnNull()
+    [Fact(Timeout = 120000)]
+    public async Task CacheSSMState_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
         Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, null!));
     }
 
-    [Fact]
-    public void GetSSMState_ReturnsNullForUncachedLayer()
+    [Fact(Timeout = 120000)]
+    public async Task GetSSMState_ReturnsNullForUncachedLayer()
     {
         var cache = new SSMStateCache<float>();
 
@@ -87,8 +88,8 @@ public class SSMStateCacheTests
         Assert.False(cache.HasSSMState(0));
     }
 
-    [Fact]
-    public void GetSSMState_ReturnsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GetSSMState_ReturnsIndependentCopy()
     {
         var cache = new SSMStateCache<float>();
         var state = new Tensor<float>(new[] { 1, 4, 2 });
@@ -102,8 +103,8 @@ public class SSMStateCacheTests
         Assert.Equal(1.0f, retrieved2![0]);
     }
 
-    [Fact]
-    public void CacheConvBuffer_StoresAndRetrieves()
+    [Fact(Timeout = 120000)]
+    public async Task CacheConvBuffer_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<float>();
         var buffer = CreateRandomTensor(new[] { 1, 16, 3 });
@@ -119,22 +120,22 @@ public class SSMStateCacheTests
             Assert.Equal(buffer[i], retrieved[i]);
     }
 
-    [Fact]
-    public void CacheConvBuffer_ThrowsOnNull()
+    [Fact(Timeout = 120000)]
+    public async Task CacheConvBuffer_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
         Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, null!));
     }
 
-    [Fact]
-    public void GetConvBuffer_ReturnsNullForUncachedLayer()
+    [Fact(Timeout = 120000)]
+    public async Task GetConvBuffer_ReturnsNullForUncachedLayer()
     {
         var cache = new SSMStateCache<float>();
         Assert.Null(cache.GetConvBuffer(0));
     }
 
-    [Fact]
-    public void Reset_ClearsAllStates()
+    [Fact(Timeout = 120000)]
+    public async Task Reset_ClearsAllStates()
     {
         var cache = new SSMStateCache<float>();
         cache.CacheSSMState(0, CreateRandomTensor(new[] { 1, 8, 4 }));
@@ -149,8 +150,8 @@ public class SSMStateCacheTests
         Assert.Null(cache.GetConvBuffer(0));
     }
 
-    [Fact]
-    public void Clone_ProducesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ProducesIndependentCopy()
     {
         var cache = new SSMStateCache<float>();
         var state = new Tensor<float>(new[] { 1, 4, 2 });
@@ -175,8 +176,8 @@ public class SSMStateCacheTests
         Assert.True(cache.HasSSMState(0));
     }
 
-    [Fact]
-    public void Clone_DeepCopiesStates()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_DeepCopiesStates()
     {
         var cache = new SSMStateCache<float>();
         var state = new Tensor<float>(new[] { 1, 4, 2 });
@@ -195,8 +196,8 @@ public class SSMStateCacheTests
         Assert.Equal(3.0f, originalState![0]);
     }
 
-    [Fact]
-    public void MultipleLayerStates_StoreAndRetrieveIndependently()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleLayerStates_StoreAndRetrieveIndependently()
     {
         var cache = new SSMStateCache<float>();
 
@@ -217,8 +218,8 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
-    public void StateCompression_PreservesApproximateValues()
+    [Fact(Timeout = 120000)]
+    public async Task StateCompression_PreservesApproximateValues()
     {
         var cache = new SSMStateCache<float>(enableCompression: true, compressionBitWidth: 8);
         var state = CreateRandomTensor(new[] { 1, 8, 4 });
@@ -237,8 +238,8 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
-    public void GetMemoryUsageBytes_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task GetMemoryUsageBytes_ReturnsNonNegative()
     {
         var cache = new SSMStateCache<float>();
         Assert.Equal(0L, cache.GetMemoryUsageBytes());
@@ -247,8 +248,8 @@ public class SSMStateCacheTests
         Assert.True(cache.GetMemoryUsageBytes() > 0);
     }
 
-    [Fact]
-    public void DoubleType_StoresAndRetrieves()
+    [Fact(Timeout = 120000)]
+    public async Task DoubleType_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<double>();
         var state = new Tensor<double>(new[] { 1, 4, 2 });

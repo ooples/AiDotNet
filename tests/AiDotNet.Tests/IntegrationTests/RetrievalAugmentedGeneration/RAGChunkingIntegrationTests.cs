@@ -1,5 +1,6 @@
 using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
 
@@ -13,8 +14,8 @@ public class RAGChunkingIntegrationTests
 {
     #region FixedSizeChunkingStrategy
 
-    [Fact]
-    public void FixedSize_DefaultParams_ChunksText()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_DefaultParams_ChunksText()
     {
         var strategy = new FixedSizeChunkingStrategy(100, 10);
         var text = new string('a', 250);
@@ -23,8 +24,8 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 2, "Should produce multiple chunks for text longer than chunk size");
     }
 
-    [Fact]
-    public void FixedSize_ShortText_SingleChunk()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_ShortText_SingleChunk()
     {
         var strategy = new FixedSizeChunkingStrategy(500, 50);
         var text = "Short text here.";
@@ -34,8 +35,8 @@ public class RAGChunkingIntegrationTests
         Assert.Equal("Short text here.", chunks[0]);
     }
 
-    [Fact]
-    public void FixedSize_ChunkSizeRespected()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_ChunkSizeRespected()
     {
         var strategy = new FixedSizeChunkingStrategy(20, 5);
         var text = "The quick brown fox jumps over the lazy dog and other animals.";
@@ -47,8 +48,8 @@ public class RAGChunkingIntegrationTests
         }
     }
 
-    [Fact]
-    public void FixedSize_WithPositions_TracksPositions()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_WithPositions_TracksPositions()
     {
         var strategy = new FixedSizeChunkingStrategy(10, 2);
         var text = "abcdefghijklmnopqrstuvwxyz";
@@ -59,8 +60,8 @@ public class RAGChunkingIntegrationTests
         Assert.Equal(0, chunksWithPos[0].StartPosition);
     }
 
-    [Fact]
-    public void FixedSize_OverlapCreatesOverlappingContent()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_OverlapCreatesOverlappingContent()
     {
         var strategy = new FixedSizeChunkingStrategy(10, 3);
         var text = "0123456789ABCDEFGHIJ";
@@ -75,40 +76,40 @@ public class RAGChunkingIntegrationTests
         }
     }
 
-    [Fact]
-    public void FixedSize_NullText_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_NullText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy();
         Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
     }
 
-    [Fact]
-    public void FixedSize_EmptyText_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_EmptyText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy();
         Assert.Throws<ArgumentException>(() => strategy.Chunk("").ToList());
     }
 
-    [Fact]
-    public void FixedSize_ZeroChunkSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_ZeroChunkSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(0, 0));
     }
 
-    [Fact]
-    public void FixedSize_NegativeOverlap_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_NegativeOverlap_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(100, -1));
     }
 
-    [Fact]
-    public void FixedSize_OverlapGteChunkSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_OverlapGteChunkSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(100, 100));
     }
 
-    [Fact]
-    public void FixedSize_Properties_MatchConstructorParams()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSize_Properties_MatchConstructorParams()
     {
         var strategy = new FixedSizeChunkingStrategy(200, 30);
         Assert.Equal(200, strategy.ChunkSize);
@@ -119,8 +120,8 @@ public class RAGChunkingIntegrationTests
 
     #region SentenceChunkingStrategy
 
-    [Fact]
-    public void Sentence_SplitsOnSentenceBoundaries()
+    [Fact(Timeout = 120000)]
+    public async Task Sentence_SplitsOnSentenceBoundaries()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 50, maxChunkSize: 100, overlapSentences: 0);
         var text = "First sentence here. Second sentence here. Third sentence here. Fourth sentence here.";
@@ -129,8 +130,8 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 1, "Should produce at least one chunk");
     }
 
-    [Fact]
-    public void Sentence_ShortText_SingleChunk()
+    [Fact(Timeout = 120000)]
+    public async Task Sentence_ShortText_SingleChunk()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 500, maxChunkSize: 1000);
         var text = "Just one short sentence.";
@@ -139,22 +140,22 @@ public class RAGChunkingIntegrationTests
         Assert.Single(chunks);
     }
 
-    [Fact]
-    public void Sentence_MaxChunkSizeLessThanTarget_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Sentence_MaxChunkSizeLessThanTarget_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new SentenceChunkingStrategy(targetChunkSize: 1000, maxChunkSize: 500));
     }
 
-    [Fact]
-    public void Sentence_NegativeOverlapSentences_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Sentence_NegativeOverlapSentences_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new SentenceChunkingStrategy(overlapSentences: -1));
     }
 
-    [Fact]
-    public void Sentence_WithPositions_TracksPositions()
+    [Fact(Timeout = 120000)]
+    public async Task Sentence_WithPositions_TracksPositions()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 30, maxChunkSize: 60);
         var text = "First here. Second here. Third here.";
@@ -172,8 +173,8 @@ public class RAGChunkingIntegrationTests
 
     #region SlidingWindowChunkingStrategy
 
-    [Fact]
-    public void SlidingWindow_CreatesOverlappingChunks()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_CreatesOverlappingChunks()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 20, stride: 10);
         var text = "The quick brown fox jumps over the lazy dog sleeping in the sun.";
@@ -182,8 +183,8 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 2, "Should create multiple overlapping windows");
     }
 
-    [Fact]
-    public void SlidingWindow_ShortText_SingleChunk()
+    [Fact(Timeout = 120000)]
+    public async Task SlidingWindow_ShortText_SingleChunk()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 100, stride: 50);
         var text = "Short.";
@@ -196,8 +197,8 @@ public class RAGChunkingIntegrationTests
 
     #region RecursiveCharacterChunkingStrategy
 
-    [Fact]
-    public void Recursive_SplitsLongText()
+    [Fact(Timeout = 120000)]
+    public async Task Recursive_SplitsLongText()
     {
         var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 50, chunkOverlap: 10);
         var text = "First paragraph about topic one.\n\nSecond paragraph about topic two.\n\nThird paragraph about topic three.";
@@ -206,8 +207,8 @@ public class RAGChunkingIntegrationTests
         Assert.True(chunks.Count >= 1, "Should produce at least one chunk");
     }
 
-    [Fact]
-    public void Recursive_ShortText_SingleChunk()
+    [Fact(Timeout = 120000)]
+    public async Task Recursive_ShortText_SingleChunk()
     {
         var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 500);
         var text = "Just a short text.";
@@ -220,8 +221,8 @@ public class RAGChunkingIntegrationTests
 
     #region Cross-Strategy - Consistency
 
-    [Fact]
-    public void AllStrategies_CoverEntireText_NoContentLoss()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_CoverEntireText_NoContentLoss()
     {
         var text = "The quick brown fox jumps over the lazy dog.";
         var strategy = new FixedSizeChunkingStrategy(15, 3);
@@ -231,8 +232,8 @@ public class RAGChunkingIntegrationTests
         Assert.All(chunks, chunk => Assert.False(string.IsNullOrWhiteSpace(chunk)));
     }
 
-    [Fact]
-    public void AllStrategies_WithPositions_PositionsInRange()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_WithPositions_PositionsInRange()
     {
         var text = "This is a test text for chunking with position tracking.";
         var strategy = new FixedSizeChunkingStrategy(20, 5);

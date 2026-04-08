@@ -6,12 +6,13 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class AiModelBuilderFederatedLearningIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithFederatedLearning_AddsFederatedLearningMetadata()
     {
         var x = new Matrix<double>(20, 2);

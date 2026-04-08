@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -16,8 +17,8 @@ public class Blip2NeuralNetworkTests
 {
     #region ONNX Mode Constructor Tests
 
-    [Fact]
-    public void Constructor_Onnx_WithNullVisionEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -35,8 +36,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyVisionEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -54,8 +55,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNullQFormerPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullQFormerPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -73,8 +74,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Q-Former path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyQFormerPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyQFormerPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -92,8 +93,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Q-Former path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNullLlmPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNullLlmPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -111,8 +112,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Language model path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithEmptyLlmPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithEmptyLlmPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -130,8 +131,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("Language model path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Onnx_WithNonExistentVisionEncoder_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Onnx_WithNonExistentVisionEncoder_ThrowsFileNotFoundException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -152,8 +153,8 @@ public class Blip2NeuralNetworkTests
 
     #region Native Mode Constructor Tests
 
-    [Fact]
-    public void Constructor_Native_WithNonDivisiblePatchSize_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Native_WithNonDivisiblePatchSize_ThrowsArgumentException()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -168,8 +169,8 @@ public class Blip2NeuralNetworkTests
         Assert.Contains("divisible", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_Native_WithValidParameters_SetsProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Native_WithValidParameters_SetsProperties()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -185,8 +186,8 @@ public class Blip2NeuralNetworkTests
         Assert.Equal(LanguageModelBackbone.OPT, network.LanguageModelBackbone);
     }
 
-    [Fact]
-    public void Constructor_Native_WithDefaultParameters_CreatesNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Native_WithDefaultParameters_CreatesNetwork()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -199,8 +200,8 @@ public class Blip2NeuralNetworkTests
         Assert.Equal(32, network.NumQueryTokens); // Default value
     }
 
-    [Fact]
-    public void Constructor_Native_WithCustomImageSize_CreatesNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Native_WithCustomImageSize_CreatesNetwork()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -215,8 +216,8 @@ public class Blip2NeuralNetworkTests
         Assert.NotNull(network);
     }
 
-    [Fact]
-    public void Constructor_Native_WithCustomQueryTokens_CreatesNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_Native_WithCustomQueryTokens_CreatesNetwork()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -234,8 +235,8 @@ public class Blip2NeuralNetworkTests
 
     #region Interface Implementation Tests
 
-    [Fact]
-    public void Network_ImplementsIBlip2Model()
+    [Fact(Timeout = 120000)]
+    public async Task Network_ImplementsIBlip2Model()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -247,8 +248,8 @@ public class Blip2NeuralNetworkTests
         Assert.IsAssignableFrom<Interfaces.IBlip2Model<float>>(network);
     }
 
-    [Fact]
-    public void Network_ImplementsIMultimodalEmbedding()
+    [Fact(Timeout = 120000)]
+    public async Task Network_ImplementsIMultimodalEmbedding()
     {
         // Arrange
         var architecture = CreateBasicArchitecture();
@@ -264,8 +265,8 @@ public class Blip2NeuralNetworkTests
 
     #region ModelMetadata Tests
 
-    [Fact]
-    public void GetModelMetadata_ReturnsCorrectModelType()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ReturnsCorrectModelType()
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
@@ -278,8 +279,8 @@ public class Blip2NeuralNetworkTests
 
     }
 
-    [Fact]
-    public void GetModelMetadata_ContainsRequiredInfo()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ContainsRequiredInfo()
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
@@ -307,8 +308,8 @@ public class Blip2NeuralNetworkTests
         Assert.Equal("FlanT5", metadata.AdditionalInfo["LanguageModelBackbone"]);
     }
 
-    [Fact]
-    public void GetModelMetadata_ContainsQFormerConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ContainsQFormerConfiguration()
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();

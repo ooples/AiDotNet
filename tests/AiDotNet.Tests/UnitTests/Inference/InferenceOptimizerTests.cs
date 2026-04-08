@@ -5,14 +5,15 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
 [Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceOptimizerTests
 {
-    [Fact]
-    public void InferenceOptimizer_WhenDiagnosticsEnabled_RecordsDecisions()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_WhenDiagnosticsEnabled_RecordsDecisions()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
         try
@@ -42,8 +43,8 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
-    public void InferenceOptimizer_RewritesMultiHeadAttention_ToFlashAttention_WhenEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_RewritesMultiHeadAttention_ToFlashAttention_WhenEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.Regression);
         Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
@@ -64,8 +65,8 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
     }
 
-    [Fact]
-    public void InferenceOptimizer_RewritesMultiHeadAttention_ToCachedAttention_ForTextGeneration_WhenKVCacheEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_RewritesMultiHeadAttention_ToCachedAttention_ForTextGeneration_WhenKVCacheEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
         Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
@@ -95,8 +96,8 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
-    public void InferenceOptimizer_RewritesSelfAttention_ToCachedAttention_WhenKVCacheEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_RewritesSelfAttention_ToCachedAttention_WhenKVCacheEnabled()
     {
         var model = CreateTinySelfAttentionModel(taskType: NeuralNetworkTaskType.TextGeneration);
         Assert.Contains(model.Layers, l => l is SelfAttentionLayer<float>);
@@ -120,8 +121,8 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(model.Layers, l => l is SelfAttentionLayer<float>);
     }
 
-    [Fact]
-    public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenSmallNeuralUnavailable()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenSmallNeuralUnavailable()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
 
@@ -144,8 +145,8 @@ public class InferenceOptimizerTests
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 
-    [Fact]
-    public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenCustomNotProvided()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenCustomNotProvided()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
 
@@ -167,8 +168,8 @@ public class InferenceOptimizerTests
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 
-    [Fact]
-    public void InferenceOptimizer_WeightOnlyQuantization_RewritesDenseLayer_OnClonedModel_AndPreservesOutputs()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_WeightOnlyQuantization_RewritesDenseLayer_OnClonedModel_AndPreservesOutputs()
     {
         var model = CreateTinyDenseModel();
 
@@ -203,8 +204,8 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
-    public void InferenceOptimizer_Skips_AttentionLayer_WhenKVCacheEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_Skips_AttentionLayer_WhenKVCacheEnabled()
     {
         var model = CreateTinyAttentionLayerModel();
 
@@ -223,8 +224,8 @@ public class InferenceOptimizerTests
         Assert.Contains(optimized.Layers, l => l is AttentionLayer<float>);
     }
 
-    [Fact]
-    public void InferenceOptimizer_Skips_GraphAttentionLayer_WhenKVCacheEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_Skips_GraphAttentionLayer_WhenKVCacheEnabled()
     {
         var model = CreateTinyGraphAttentionModel();
 

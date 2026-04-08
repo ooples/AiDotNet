@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DecompositionMethods;
 
@@ -152,8 +153,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region CholeskyDecomposition Tests
 
-    [Fact]
-    public void Cholesky_LTimesLT_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_LTimesLT_ReconstructsA()
     {
         var matrix = CreateSPDMatrix();
         var chol = new CholeskyDecomposition<double>(matrix);
@@ -163,16 +164,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Cholesky_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_L_IsLowerTriangular()
     {
         var matrix = CreateSPDMatrix();
         var chol = new CholeskyDecomposition<double>(matrix);
         AssertIsLowerTriangular(chol.L, Tolerance);
     }
 
-    [Fact]
-    public void Cholesky_L_DiagonalPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_L_DiagonalPositive()
     {
         // For SPD matrix, Cholesky L has positive diagonal
         var matrix = CreateSPDMatrix();
@@ -184,8 +185,8 @@ public class MatrixDecompositionIntegrationTests
                 $"L[{i},{i}] = {l[i, i]} should be positive for SPD matrix");
     }
 
-    [Fact]
-    public void Cholesky_KnownResult_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_KnownResult_2x2()
     {
         // A = [[4, 2], [2, 5]] -> L = [[2, 0], [1, 2]]
         // L*L^T = [[4, 2], [2, 5]] = A
@@ -203,8 +204,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region QrDecomposition Tests
 
-    [Fact]
-    public void QR_QTimesR_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task QR_QTimesR_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var qr = new QrDecomposition<double>(matrix);
@@ -212,16 +213,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void QR_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task QR_Q_IsOrthogonal()
     {
         var matrix = CreateGeneralMatrix();
         var qr = new QrDecomposition<double>(matrix);
         AssertIsOrthogonal(qr.Q, Tolerance);
     }
 
-    [Fact]
-    public void QR_R_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task QR_R_IsUpperTriangular()
     {
         var matrix = CreateGeneralMatrix();
         var qr = new QrDecomposition<double>(matrix);
@@ -232,8 +233,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region SvdDecomposition Tests
 
-    [Fact]
-    public void SVD_USVt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_USVt_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var svd = new SvdDecomposition<double>(matrix);
@@ -244,8 +245,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void SVD_SingularValues_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_SingularValues_NonNegative()
     {
         var matrix = CreateGeneralMatrix();
         var svd = new SvdDecomposition<double>(matrix);
@@ -255,8 +256,8 @@ public class MatrixDecompositionIntegrationTests
                 $"Singular value S[{i}] = {svd.S[i]} should be non-negative");
     }
 
-    [Fact]
-    public void SVD_SingularValues_Descending()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_SingularValues_Descending()
     {
         var matrix = CreateGeneralMatrix();
         var svd = new SvdDecomposition<double>(matrix);
@@ -266,16 +267,16 @@ public class MatrixDecompositionIntegrationTests
                 $"S[{i}]={svd.S[i]} should be >= S[{i + 1}]={svd.S[i + 1]} (descending order)");
     }
 
-    [Fact]
-    public void SVD_U_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_U_IsOrthogonal()
     {
         var matrix = CreateGeneralMatrix();
         var svd = new SvdDecomposition<double>(matrix);
         AssertIsOrthogonal(svd.U, Tolerance);
     }
 
-    [Fact]
-    public void SVD_Vt_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_Vt_IsOrthogonal()
     {
         var matrix = CreateGeneralMatrix();
         var svd = new SvdDecomposition<double>(matrix);
@@ -289,8 +290,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region LuDecomposition Tests
 
-    [Fact]
-    public void LU_LTimesU_ReconstructsPermutedA()
+    [Fact(Timeout = 120000)]
+    public async Task LU_LTimesU_ReconstructsPermutedA()
     {
         var matrix = CreateGeneralMatrix();
         var lu = new LuDecomposition<double>(matrix);
@@ -308,24 +309,24 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(permutedA, product, Tolerance);
     }
 
-    [Fact]
-    public void LU_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LU_L_IsLowerTriangular()
     {
         var matrix = CreateGeneralMatrix();
         var lu = new LuDecomposition<double>(matrix);
         AssertIsLowerTriangular(lu.L, Tolerance);
     }
 
-    [Fact]
-    public void LU_U_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LU_U_IsUpperTriangular()
     {
         var matrix = CreateGeneralMatrix();
         var lu = new LuDecomposition<double>(matrix);
         AssertIsUpperTriangular(lu.U, Tolerance);
     }
 
-    [Fact]
-    public void LU_L_HasUnitDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task LU_L_HasUnitDiagonal()
     {
         var matrix = CreateGeneralMatrix();
         var lu = new LuDecomposition<double>(matrix);
@@ -339,8 +340,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region EigenDecomposition Tests
 
-    [Fact]
-    public void Eigen_AVEqualsVLambda()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_AVEqualsVLambda()
     {
         // For symmetric matrix, A*V = V*diag(eigenvalues)
         var matrix = CreateSymmetricMatrix();
@@ -354,8 +355,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(av, vLambda, LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_EigenvaluesSum_EqualsTrace()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_EigenvaluesSum_EqualsTrace()
     {
         // Sum of eigenvalues = trace of matrix
         var matrix = CreateSymmetricMatrix();
@@ -372,8 +373,8 @@ public class MatrixDecompositionIntegrationTests
         Assert.Equal(trace, eigenSum, LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_EigenvaluesProduct_EqualsDeterminant()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_EigenvaluesProduct_EqualsDeterminant()
     {
         // Product of eigenvalues = determinant
         var matrix = Create2x2Matrix();
@@ -388,8 +389,8 @@ public class MatrixDecompositionIntegrationTests
         Assert.Equal(det, eigenProduct, LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_2x2_KnownEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_2x2_KnownEigenvalues()
     {
         // A = [[2, 1], [1, 3]]
         // Eigenvalues: (5 +/- sqrt(5)) / 2 ≈ 3.618 and 1.382
@@ -407,8 +408,8 @@ public class MatrixDecompositionIntegrationTests
         Assert.Equal(expected2, vals[1], LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_Eigenvalues_AreReal_ForSymmetricMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_Eigenvalues_AreReal_ForSymmetricMatrix()
     {
         var matrix = CreateSPDMatrix();
         var eigen = new EigenDecomposition<double>(matrix);
@@ -428,8 +429,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region LdlDecomposition Tests
 
-    [Fact]
-    public void LDL_LDLt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_LDLt_ReconstructsA()
     {
         var matrix = CreateSPDMatrix();
         var ldl = new LdlDecomposition<double>(matrix);
@@ -440,16 +441,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void LDL_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_L_IsLowerTriangular()
     {
         var matrix = CreateSPDMatrix();
         var ldl = new LdlDecomposition<double>(matrix);
         AssertIsLowerTriangular(ldl.L, Tolerance);
     }
 
-    [Fact]
-    public void LDL_L_HasUnitDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_L_HasUnitDiagonal()
     {
         var matrix = CreateSPDMatrix();
         var ldl = new LdlDecomposition<double>(matrix);
@@ -459,8 +460,8 @@ public class MatrixDecompositionIntegrationTests
             Assert.Equal(1.0, l[i, i], Tolerance);
     }
 
-    [Fact]
-    public void LDL_D_Positive_ForSPD()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_D_Positive_ForSPD()
     {
         // For SPD matrix, all D values should be positive
         var matrix = CreateSPDMatrix();
@@ -475,8 +476,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region BidiagonalDecomposition Tests
 
-    [Fact]
-    public void Bidiagonal_UBVt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Bidiagonal_UBVt_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var bidiag = new BidiagonalDecomposition<double>(matrix);
@@ -485,8 +486,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Bidiagonal_B_IsBidiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Bidiagonal_B_IsBidiagonal()
     {
         var matrix = CreateGeneralMatrix();
         var bidiag = new BidiagonalDecomposition<double>(matrix);
@@ -500,8 +501,8 @@ public class MatrixDecompositionIntegrationTests
                         $"B[{i},{j}] = {b[i, j]} should be zero (bidiagonal)");
     }
 
-    [Fact]
-    public void Bidiagonal_B_HasCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Bidiagonal_B_HasCorrectDimensions()
     {
         var matrix = CreateGeneralMatrix();
         var bidiag = new BidiagonalDecomposition<double>(matrix);
@@ -515,8 +516,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region HessenbergDecomposition Tests
 
-    [Fact]
-    public void Hessenberg_QHQt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_QHQt_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var hess = new HessenbergDecomposition<double>(matrix);
@@ -528,8 +529,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Hessenberg_H_IsUpperHessenberg()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_H_IsUpperHessenberg()
     {
         var matrix = CreateGeneralMatrix();
         var hess = new HessenbergDecomposition<double>(matrix);
@@ -542,8 +543,8 @@ public class MatrixDecompositionIntegrationTests
                     $"H[{i},{j}] = {h[i, j]} should be zero (upper Hessenberg)");
     }
 
-    [Fact]
-    public void Hessenberg_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_Q_IsOrthogonal()
     {
         var matrix = CreateGeneralMatrix();
         var hess = new HessenbergDecomposition<double>(matrix);
@@ -554,8 +555,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region SchurDecomposition Tests
 
-    [Fact]
-    public void Schur_QTQt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_QTQt_ReconstructsA()
     {
         var matrix = CreateSymmetricMatrix();
         var schur = new SchurDecomposition<double>(matrix);
@@ -567,8 +568,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Schur_DiagonalOfT_ContainsEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_DiagonalOfT_ContainsEigenvalues()
     {
         // For symmetric matrix, Schur form is diagonal with eigenvalues
         var matrix = CreateSymmetricMatrix();
@@ -587,8 +588,8 @@ public class MatrixDecompositionIntegrationTests
         Assert.Equal(trace, diagSum, Tolerance);
     }
 
-    [Fact]
-    public void Schur_SchurMatrix_HasCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_SchurMatrix_HasCorrectDimensions()
     {
         var matrix = CreateGeneralMatrix();
         var schur = new SchurDecomposition<double>(matrix);
@@ -602,8 +603,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region TridiagonalDecomposition Tests
 
-    [Fact]
-    public void Tridiagonal_QTQt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_QTQt_ReconstructsA()
     {
         var matrix = CreateSPDMatrix();
         var trid = new TridiagonalDecomposition<double>(matrix);
@@ -615,8 +616,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Tridiagonal_T_IsTridiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_T_IsTridiagonal()
     {
         var matrix = CreateSPDMatrix();
         var trid = new TridiagonalDecomposition<double>(matrix);
@@ -629,16 +630,16 @@ public class MatrixDecompositionIntegrationTests
                         $"T[{i},{j}] = {t[i, j]} should be zero (tridiagonal)");
     }
 
-    [Fact]
-    public void Tridiagonal_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_Q_IsOrthogonal()
     {
         var matrix = CreateSPDMatrix();
         var trid = new TridiagonalDecomposition<double>(matrix);
         AssertIsOrthogonal(trid.QMatrix, Tolerance);
     }
 
-    [Fact]
-    public void Tridiagonal_TMatrix_HasCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_TMatrix_HasCorrectDimensions()
     {
         var matrix = CreateSPDMatrix();
         var trid = new TridiagonalDecomposition<double>(matrix);
@@ -652,8 +653,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region PolarDecomposition Tests
 
-    [Fact]
-    public void Polar_UP_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_UP_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var polar = new PolarDecomposition<double>(matrix);
@@ -661,8 +662,8 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void Polar_P_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_P_IsSymmetric()
     {
         var matrix = CreateGeneralMatrix();
         var polar = new PolarDecomposition<double>(matrix);
@@ -673,8 +674,8 @@ public class MatrixDecompositionIntegrationTests
                 Assert.Equal(p[i, j], p[j, i], Tolerance);
     }
 
-    [Fact]
-    public void Polar_P_IsPositiveSemiDefinite()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_P_IsPositiveSemiDefinite()
     {
         // Eigenvalues of P should be non-negative
         var matrix = CreateGeneralMatrix();
@@ -691,8 +692,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region GramSchmidtDecomposition Tests
 
-    [Fact]
-    public void GramSchmidt_QR_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_QR_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var gs = new GramSchmidtDecomposition<double>(matrix);
@@ -700,16 +701,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void GramSchmidt_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_Q_IsOrthogonal()
     {
         var matrix = CreateGeneralMatrix();
         var gs = new GramSchmidtDecomposition<double>(matrix);
         AssertIsOrthogonal(gs.Q, Tolerance);
     }
 
-    [Fact]
-    public void GramSchmidt_R_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_R_IsUpperTriangular()
     {
         var matrix = CreateGeneralMatrix();
         var gs = new GramSchmidtDecomposition<double>(matrix);
@@ -720,8 +721,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region LqDecomposition Tests
 
-    [Fact]
-    public void LQ_LQ_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task LQ_LQ_ReconstructsA()
     {
         var matrix = CreateGeneralMatrix();
         var lq = new LqDecomposition<double>(matrix);
@@ -729,16 +730,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void LQ_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LQ_L_IsLowerTriangular()
     {
         var matrix = CreateGeneralMatrix();
         var lq = new LqDecomposition<double>(matrix);
         AssertIsLowerTriangular(lq.L, Tolerance);
     }
 
-    [Fact]
-    public void LQ_Q_RowsOrthonormal()
+    [Fact(Timeout = 120000)]
+    public async Task LQ_Q_RowsOrthonormal()
     {
         var matrix = CreateGeneralMatrix();
         var lq = new LqDecomposition<double>(matrix);
@@ -752,8 +753,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region UduDecomposition Tests
 
-    [Fact]
-    public void UDU_UDUt_ReconstructsA()
+    [Fact(Timeout = 120000)]
+    public async Task UDU_UDUt_ReconstructsA()
     {
         var matrix = CreateSPDMatrix();
         var udu = new UduDecomposition<double>(matrix);
@@ -764,16 +765,16 @@ public class MatrixDecompositionIntegrationTests
         AssertMatricesEqual(matrix, reconstructed, Tolerance);
     }
 
-    [Fact]
-    public void UDU_U_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task UDU_U_IsUpperTriangular()
     {
         var matrix = CreateSPDMatrix();
         var udu = new UduDecomposition<double>(matrix);
         AssertIsUpperTriangular(udu.U, Tolerance);
     }
 
-    [Fact]
-    public void UDU_U_HasUnitDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task UDU_U_HasUnitDiagonal()
     {
         var matrix = CreateSPDMatrix();
         var udu = new UduDecomposition<double>(matrix);
@@ -787,8 +788,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region NmfDecomposition Tests
 
-    [Fact]
-    public void NMF_WH_ApproximatesA()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_WH_ApproximatesA()
     {
         var matrix = CreateNonNegativeMatrix();
         var nmf = new NmfDecomposition<double>(matrix, components: 2);
@@ -811,8 +812,8 @@ public class MatrixDecompositionIntegrationTests
             $"NMF relative reconstruction error {relativeError:F4} should be < 0.5");
     }
 
-    [Fact]
-    public void NMF_W_And_H_AreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_W_And_H_AreNonNegative()
     {
         var matrix = CreateNonNegativeMatrix();
         var nmf = new NmfDecomposition<double>(matrix, components: 2);
@@ -828,8 +829,8 @@ public class MatrixDecompositionIntegrationTests
                     $"H[{i},{j}] = {nmf.H[i, j]} should be non-negative");
     }
 
-    [Fact]
-    public void NMF_Dimensions_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_Dimensions_AreCorrect()
     {
         var matrix = CreateNonNegativeMatrix(); // 3x3
         int components = 2;
@@ -870,8 +871,8 @@ public class MatrixDecompositionIntegrationTests
         return data;
     }
 
-    [Fact]
-    public void ICA_ProducesComponents_WithCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ICA_ProducesComponents_WithCorrectDimensions()
     {
         var matrix = CreateIcaTestData();
         var ica = new IcaDecomposition<double>(matrix);
@@ -882,8 +883,8 @@ public class MatrixDecompositionIntegrationTests
         Assert.Equal(3, ica.Mean.Length);
     }
 
-    [Fact]
-    public void ICA_MixingReconstruction_ApproximatesCenteredData()
+    [Fact(Timeout = 120000)]
+    public async Task ICA_MixingReconstruction_ApproximatesCenteredData()
     {
         var matrix = CreateIcaTestData();
         var ica = new IcaDecomposition<double>(matrix);
@@ -922,8 +923,8 @@ public class MatrixDecompositionIntegrationTests
     #region CramerDecomposition Tests
 
 
-    [Fact]
-    public void Cramer_Invert_TimesA_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Cramer_Invert_TimesA_IsIdentity()
     {
         var matrix = CreateGeneralMatrix();
         var cramer = new CramerDecomposition<double>(matrix);
@@ -944,8 +945,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region TakagiDecomposition Tests
 
-    [Fact]
-    public void Takagi_SigmaMatrix_IsDiagonalWithRealNonNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Takagi_SigmaMatrix_IsDiagonalWithRealNonNegativeValues()
     {
         var matrix = CreateSPDMatrix();
         var takagi = new TakagiDecomposition<double>(matrix);
@@ -967,8 +968,8 @@ public class MatrixDecompositionIntegrationTests
             }
     }
 
-    [Fact]
-    public void Takagi_SigmaMatrix_DiagonalNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Takagi_SigmaMatrix_DiagonalNonNegative()
     {
         var matrix = CreateSPDMatrix();
         var takagi = new TakagiDecomposition<double>(matrix);
@@ -984,8 +985,8 @@ public class MatrixDecompositionIntegrationTests
 
     #region ComplexMatrixDecomposition Tests
 
-    [Fact]
-    public void Complex_WrapsBaseDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task Complex_WrapsBaseDecomposition()
     {
         var matrix = CreateGeneralMatrix();
         var baseDecomp = new QrDecomposition<double>(matrix);

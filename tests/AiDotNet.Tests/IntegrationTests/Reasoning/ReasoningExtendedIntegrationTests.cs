@@ -7,6 +7,7 @@ using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Search;
 using AiDotNet.Reasoning.Verification;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Reasoning;
 
@@ -20,8 +21,8 @@ public class ReasoningExtendedIntegrationTests
 {
     #region DiversitySampler - Jaccard Diversity Calculation
 
-    [Fact]
-    public void DiversitySampler_IdenticalThoughts_ZeroDiversity()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_IdenticalThoughts_ZeroDiversity()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Use solar panels for electricity generation" };
@@ -33,8 +34,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.0, diversity, 3);
     }
 
-    [Fact]
-    public void DiversitySampler_CompletelyDifferentThoughts_HighDiversity()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_CompletelyDifferentThoughts_HighDiversity()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Solar panels generate renewable electricity efficiently" };
@@ -46,8 +47,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(diversity > 0.8, $"Expected diversity > 0.8 for unrelated thoughts, got {diversity}");
     }
 
-    [Fact]
-    public void DiversitySampler_HandCalculated_JaccardDiversity()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_HandCalculated_JaccardDiversity()
     {
         // Hand-calculate:
         // t1 words (after stop-word removal, len>2): {"solar", "panels", "generate", "power"}
@@ -67,8 +68,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.InRange(diversity, 0.55, 0.75);
     }
 
-    [Fact]
-    public void DiversitySampler_DomainBoost_IncreaseDiversity()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_DomainBoost_IncreaseDiversity()
     {
         var sampler = new DiversitySampler<double>();
         // Same domain (energy)
@@ -86,8 +87,8 @@ public class ReasoningExtendedIntegrationTests
             $"Cross-domain diversity ({crossDomainDiversity}) should >= same-domain ({sameDomainDiversity})");
     }
 
-    [Fact]
-    public void DiversitySampler_NullThought_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_NullThought_ReturnsZero()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Some thought" };
@@ -97,8 +98,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.0, diversity);
     }
 
-    [Fact]
-    public void DiversitySampler_EmptyThoughts_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_EmptyThoughts_ReturnsZero()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "" };
@@ -109,8 +110,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.0, diversity);
     }
 
-    [Fact]
-    public void DiversitySampler_OneEmptyOneNonEmpty_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_OneEmptyOneNonEmpty_ReturnsOne()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "" };
@@ -122,8 +123,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(1.0, diversity);
     }
 
-    [Fact]
-    public void DiversitySampler_SampleDiverse_SelectsMaximallyDifferentThoughts()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_SampleDiverse_SelectsMaximallyDifferentThoughts()
     {
         var sampler = new DiversitySampler<double>();
         var candidates = new List<ThoughtNode<double>>
@@ -144,8 +145,8 @@ public class ReasoningExtendedIntegrationTests
         // Next selections should maximize diversity - expect different domains
     }
 
-    [Fact]
-    public void DiversitySampler_SampleDiverse_RequestMoreThanAvailable_ReturnsAll()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_SampleDiverse_RequestMoreThanAvailable_ReturnsAll()
     {
         var sampler = new DiversitySampler<double>();
         var candidates = new List<ThoughtNode<double>>
@@ -160,8 +161,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(2, selected.Count);
     }
 
-    [Fact]
-    public void DiversitySampler_SampleDiverse_EmptyCandidates_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_SampleDiverse_EmptyCandidates_Throws()
     {
         var sampler = new DiversitySampler<double>();
         var config = new ReasoningConfig();
@@ -170,8 +171,8 @@ public class ReasoningExtendedIntegrationTests
             sampler.SampleDiverse(new List<ThoughtNode<double>>(), 3, config));
     }
 
-    [Fact]
-    public void DiversitySampler_SampleDiverse_ZeroSamples_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_SampleDiverse_ZeroSamples_Throws()
     {
         var sampler = new DiversitySampler<double>();
         var candidates = new List<ThoughtNode<double>>
@@ -184,8 +185,8 @@ public class ReasoningExtendedIntegrationTests
             sampler.SampleDiverse(candidates, 0, config));
     }
 
-    [Fact]
-    public void DiversitySampler_Diversity_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_Diversity_IsSymmetric()
     {
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Solar panels generate electricity" };
@@ -197,8 +198,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(d12, d21, 10);
     }
 
-    [Fact]
-    public void DiversitySampler_StopWordsFiltered_DontAffectDiversity()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_StopWordsFiltered_DontAffectDiversity()
     {
         var sampler = new DiversitySampler<double>();
         // These texts differ only in stop words
@@ -216,8 +217,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region ContradictionDetector - HasObviousContradiction Heuristics
 
-    [Fact]
-    public void ContradictionDetector_DifferentAnswerValues_DetectsContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_DifferentAnswerValues_DetectsContradiction()
     {
         // Uses the HasObviousContradiction heuristic: "answer is N" vs "answer is M"
         // Test the heuristic via the full pipeline with a mock chat model
@@ -229,8 +230,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(detected, "Should detect contradiction between different answer values");
     }
 
-    [Fact]
-    public void ContradictionDetector_SameAnswerValues_NoContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_SameAnswerValues_NoContradiction()
     {
         var text1 = "The answer is 36";
         var text2 = "The answer is 36";
@@ -239,8 +240,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(detected, "Should not detect contradiction when answers match");
     }
 
-    [Fact]
-    public void ContradictionDetector_IsNotPattern_DetectsContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_IsNotPattern_DetectsContradiction()
     {
         // "X is not Y" vs "X is Y" pattern
         var text1 = "x is not positive";
@@ -250,8 +251,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(detected, "Should detect 'is not Y' vs 'is Y' contradiction");
     }
 
-    [Fact]
-    public void ContradictionDetector_DifferentEqualsValues_DetectsContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_DifferentEqualsValues_DetectsContradiction()
     {
         // "X equals N" vs "X equals M" pattern
         var text1 = "x equals 10";
@@ -261,8 +262,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(detected, "Should detect different 'equals' values as contradiction");
     }
 
-    [Fact]
-    public void ContradictionDetector_DifferentIsValues_DetectsContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_DifferentIsValues_DetectsContradiction()
     {
         // "X is Y" vs "X is Z" pattern
         var text1 = "result is positive";
@@ -272,8 +273,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(detected, "Should detect 'X is Y' vs 'X is Z' contradiction");
     }
 
-    [Fact]
-    public void ContradictionDetector_UnrelatedStatements_NoContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_UnrelatedStatements_NoContradiction()
     {
         var text1 = "Calculate the area of the circle";
         var text2 = "Multiply by pi";
@@ -282,8 +283,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(detected, "Unrelated statements should not be contradictions");
     }
 
-    [Fact]
-    public void ContradictionDetector_EmptyStrings_NoContradiction()
+    [Fact(Timeout = 120000)]
+    public async Task ContradictionDetector_EmptyStrings_NoContradiction()
     {
         bool detected = HasObviousContradictionViaReflection("", "some text");
         Assert.False(detected, "Empty string should not cause contradiction");
@@ -316,15 +317,15 @@ public class ReasoningExtendedIntegrationTests
 
     #region CalculatorVerifier - Expression Evaluation
 
-    [Fact]
-    public void CalculatorVerifier_ToolName_IsCalculator()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_ToolName_IsCalculator()
     {
         var verifier = new CalculatorVerifier<double>();
         Assert.Equal("Calculator", verifier.ToolName);
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_ArithmeticExpression_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_ArithmeticExpression_ReturnsTrue()
     {
         var verifier = new CalculatorVerifier<double>();
         var step = new ReasoningStep<double> { Content = "Calculate 15 + 25 = 40" };
@@ -332,8 +333,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(verifier.CanVerify(step));
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_PercentageExpression_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_PercentageExpression_ReturnsTrue()
     {
         var verifier = new CalculatorVerifier<double>();
         var step = new ReasoningStep<double> { Content = "15% of the total" };
@@ -341,8 +342,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(verifier.CanVerify(step));
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_MultiplicationSign_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_MultiplicationSign_ReturnsTrue()
     {
         var verifier = new CalculatorVerifier<double>();
         var step = new ReasoningStep<double> { Content = "0.15 × 240" };
@@ -350,8 +351,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(verifier.CanVerify(step));
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_PlainText_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_PlainText_ReturnsFalse()
     {
         var verifier = new CalculatorVerifier<double>();
         var step = new ReasoningStep<double> { Content = "Consider the problem from a different angle" };
@@ -359,15 +360,15 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(verifier.CanVerify(step));
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_NullStep_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_NullStep_ReturnsFalse()
     {
         var verifier = new CalculatorVerifier<double>();
         Assert.False(verifier.CanVerify(null!));
     }
 
-    [Fact]
-    public void CalculatorVerifier_CanVerify_EmptyContent_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatorVerifier_CanVerify_EmptyContent_ReturnsFalse()
     {
         var verifier = new CalculatorVerifier<double>();
         var step = new ReasoningStep<double> { Content = "" };
@@ -375,7 +376,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(verifier.CanVerify(step));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_CorrectArithmetic_Passes()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -391,7 +392,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Calculator", result.ToolUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_IncorrectArithmetic_Fails()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -406,7 +407,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(result.Passed, "Expected verification to fail for incorrect calculation");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_Addition_HandVerified()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -421,7 +422,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(result.Passed, $"100+200+50=350 should pass. Explanation: {result.Explanation}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_Division_HandVerified()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -436,7 +437,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(result.Passed, $"100/4=25 should pass. Explanation: {result.Explanation}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_NoCalculation_PassesWithLowConfidence()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -452,7 +453,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.5, result.Confidence, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_NullStep_ThrowsArgumentNull()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -465,8 +466,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region AdaptiveComputeScaler - Difficulty Estimation
 
-    [Fact]
-    public void AdaptiveComputeScaler_EmptyProblem_DefaultMediumDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_EmptyProblem_DefaultMediumDifficulty()
     {
         var scaler = new AdaptiveComputeScaler();
         double difficulty = scaler.EstimateDifficulty("");
@@ -474,8 +475,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.5, difficulty);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_SimpleProblem_LowDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_SimpleProblem_LowDifficulty()
     {
         var scaler = new AdaptiveComputeScaler();
         double difficulty = scaler.EstimateDifficulty("What is 2 + 2?");
@@ -484,8 +485,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(difficulty < 0.4, $"Simple problem should have low difficulty, got {difficulty}");
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_ComplexProblem_HighDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_ComplexProblem_HighDifficulty()
     {
         var scaler = new AdaptiveComputeScaler();
         string problem = "Prove that the algorithm for dynamic programming optimization achieves " +
@@ -501,8 +502,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(difficulty > 0.5, $"Complex problem should have high difficulty, got {difficulty}");
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_MathProblem_IncreasesDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_MathProblem_IncreasesDifficulty()
     {
         var scaler = new AdaptiveComputeScaler();
         double simpleDiff = scaler.EstimateDifficulty("What is two plus two?");
@@ -513,8 +514,8 @@ public class ReasoningExtendedIntegrationTests
             $"Math problem ({mathDiff}) should be harder than text ({simpleDiff})");
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_DifficultyClamped_0To1()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_DifficultyClamped_0To1()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -531,8 +532,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region AdaptiveComputeScaler - Config Scaling
 
-    [Fact]
-    public void AdaptiveComputeScaler_EasyProblem_ReducedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_EasyProblem_ReducedConfig()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10, ExplorationDepth = 3 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -547,8 +548,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.False(config.EnableSelfRefinement, "Easy problem should not enable self-refinement");
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_HardProblem_IncreasedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_HardProblem_IncreasedConfig()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10, ExplorationDepth = 3 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -563,8 +564,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(config.EnableContradictionDetection, "Hard problem should enable contradiction detection");
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_ScalingFactor_BoundaryAt03()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_ScalingFactor_BoundaryAt03()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -576,8 +577,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(10, config.MaxSteps);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_ScalingFactor_BoundaryAt07()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_ScalingFactor_BoundaryAt07()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -589,8 +590,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(20, config.MaxSteps);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_Difficulty0_MinimalScaling()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_Difficulty0_MinimalScaling()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -602,8 +603,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(5, config.MaxSteps);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_Difficulty1_MaximalScaling()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_Difficulty1_MaximalScaling()
     {
         var baseline = new ReasoningConfig { MaxSteps = 10 };
         var scaler = new AdaptiveComputeScaler(baseline, maxScalingFactor: 5.0);
@@ -615,8 +616,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(50, config.MaxSteps);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_VerificationThresholds_CorrectBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_VerificationThresholds_CorrectBehavior()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -643,8 +644,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(config08.EnableDiversitySampling);
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_Temperature_DecreasesForEasy()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_Temperature_DecreasesForEasy()
     {
         var baseline = new ReasoningConfig { Temperature = 0.7 };
         var scaler = new AdaptiveComputeScaler(baseline);
@@ -663,8 +664,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region AdaptiveComputeScaler - Strategy Recommendation
 
-    [Fact]
-    public void AdaptiveComputeScaler_RecommendedStrategy_EasyIsCoT()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_RecommendedStrategy_EasyIsCoT()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -672,8 +673,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Chain-of-Thought", scaler.GetRecommendedStrategy(0.2));
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_RecommendedStrategy_MediumIsCoT()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_RecommendedStrategy_MediumIsCoT()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -681,8 +682,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Chain-of-Thought", scaler.GetRecommendedStrategy(0.5));
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_RecommendedStrategy_HardIsSelfConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_RecommendedStrategy_HardIsSelfConsistency()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -690,8 +691,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Self-Consistency", scaler.GetRecommendedStrategy(0.7));
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_RecommendedStrategy_VeryHardIsToT()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_RecommendedStrategy_VeryHardIsToT()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -699,8 +700,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Tree-of-Thoughts", scaler.GetRecommendedStrategy(1.0));
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_RecommendedStrategy_ClampedInput()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_RecommendedStrategy_ClampedInput()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -711,8 +712,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Tree-of-Thoughts", scaler.GetRecommendedStrategy(1.5));
     }
 
-    [Fact]
-    public void AdaptiveComputeScaler_MaxScalingFactor_ClampsToMinimum2()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_MaxScalingFactor_ClampsToMinimum2()
     {
         // If we pass 1.0 as max scaling, it should clamp to 2.0
         var scaler = new AdaptiveComputeScaler(maxScalingFactor: 1.0);
@@ -728,7 +729,7 @@ public class ReasoningExtendedIntegrationTests
 
     #region Search Algorithms - BestFirstSearch
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BestFirstSearch_FindsTerminalNode()
     {
         var search = new BestFirstSearch<double>();
@@ -750,7 +751,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(path.Count >= 2, $"Path should have >= 2 nodes, got {path.Count}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BestFirstSearch_NullRoot_Throws()
     {
         var search = new BestFirstSearch<double>();
@@ -760,7 +761,7 @@ public class ReasoningExtendedIntegrationTests
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BestFirstSearch_RespectsCancellation()
     {
         var search = new BestFirstSearch<double>();
@@ -774,7 +775,7 @@ public class ReasoningExtendedIntegrationTests
                 new ReasoningConfig { ExplorationDepth = 10 }, cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BestFirstSearch_RespectsDepthLimit()
     {
         var search = new BestFirstSearch<double>();
@@ -802,7 +803,7 @@ public class ReasoningExtendedIntegrationTests
 
     #region Search Algorithms - BreadthFirstSearch
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BreadthFirstSearch_ExploresByLevel()
     {
         var search = new BreadthFirstSearch<double>();
@@ -823,7 +824,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Root", path[0].Thought);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BreadthFirstSearch_NullRoot_Throws()
     {
         var search = new BreadthFirstSearch<double>();
@@ -837,7 +838,7 @@ public class ReasoningExtendedIntegrationTests
 
     #region Search Algorithms - DepthFirstSearch
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DepthFirstSearch_ExploresDepthFirst()
     {
         var search = new DepthFirstSearch<double>();
@@ -867,7 +868,7 @@ public class ReasoningExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DepthFirstSearch_NullRoot_Throws()
     {
         var search = new DepthFirstSearch<double>();
@@ -881,8 +882,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region Search Algorithms - MonteCarloTreeSearch
 
-    [Fact]
-    public void MCTS_DefaultConstruction_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_DefaultConstruction_ValidParameters()
     {
         var mcts = new MonteCarloTreeSearch<double>();
 
@@ -890,35 +891,35 @@ public class ReasoningExtendedIntegrationTests
         Assert.Contains("exploration", mcts.Description.ToLower());
     }
 
-    [Fact]
-    public void MCTS_NegativeExplorationConstant_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_NegativeExplorationConstant_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new MonteCarloTreeSearch<double>(explorationConstant: -1.0));
     }
 
-    [Fact]
-    public void MCTS_NaNExplorationConstant_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_NaNExplorationConstant_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new MonteCarloTreeSearch<double>(explorationConstant: double.NaN));
     }
 
-    [Fact]
-    public void MCTS_InfinityExplorationConstant_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_InfinityExplorationConstant_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new MonteCarloTreeSearch<double>(explorationConstant: double.PositiveInfinity));
     }
 
-    [Fact]
-    public void MCTS_ZeroSimulations_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_ZeroSimulations_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new MonteCarloTreeSearch<double>(numSimulations: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MCTS_SearchAsync_ProducesPath()
     {
         var mcts = new MonteCarloTreeSearch<double>(numSimulations: 10);
@@ -938,7 +939,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal("Root problem", path[0].Thought);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MCTS_Backpropagation_VisitCountsIncrease()
     {
         var mcts = new MonteCarloTreeSearch<double>(numSimulations: 5);
@@ -960,7 +961,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(visits >= 5, $"Root should have at least 5 visits (from 5 simulations), got {visits}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MCTS_NullRoot_Throws()
     {
         var mcts = new MonteCarloTreeSearch<double>();
@@ -970,7 +971,7 @@ public class ReasoningExtendedIntegrationTests
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MCTS_RespectsCancellation()
     {
         var mcts = new MonteCarloTreeSearch<double>(numSimulations: 1000);
@@ -984,8 +985,8 @@ public class ReasoningExtendedIntegrationTests
                 new ReasoningConfig { ExplorationDepth = 10 }, cts.Token));
     }
 
-    [Fact]
-    public void MCTS_ZeroExplorationConstant_AllowsPureExploitation()
+    [Fact(Timeout = 120000)]
+    public async Task MCTS_ZeroExplorationConstant_AllowsPureExploitation()
     {
         // Zero exploration constant means pure exploitation (no exploration bonus)
         var mcts = new MonteCarloTreeSearch<double>(explorationConstant: 0.0);
@@ -996,8 +997,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region Cross-Component Integration
 
-    [Fact]
-    public void AdaptiveComputeScaler_WithSearchAlgorithm_ConfigAffectsSearch()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveComputeScaler_WithSearchAlgorithm_ConfigAffectsSearch()
     {
         var scaler = new AdaptiveComputeScaler();
 
@@ -1010,8 +1011,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(hardConfig.BranchingFactor >= easyConfig.BranchingFactor);
     }
 
-    [Fact]
-    public void DiversitySampler_WithReasoningChainSteps_ProducesDiversePaths()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampler_WithReasoningChainSteps_ProducesDiversePaths()
     {
         var sampler = new DiversitySampler<double>();
 
@@ -1033,7 +1034,7 @@ public class ReasoningExtendedIntegrationTests
         // (which would all be algebraic approaches)
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CalculatorVerifier_WithReasoningChain_VerifiesAllSteps()
     {
         var verifier = new CalculatorVerifier<double>();
@@ -1059,8 +1060,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.True(result2.Passed, $"Step 2 should pass: {result2.Explanation}");
     }
 
-    [Fact]
-    public void ReasoningChain_ScoreConsistency_AverageMatchesManualCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_ScoreConsistency_AverageMatchesManualCalculation()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", Score = 0.8 });
@@ -1076,7 +1077,7 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.7, min, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AllSearchAlgorithms_SameInput_AllProducePaths()
     {
         var algorithms = new ISearchAlgorithm<double>[]
@@ -1113,8 +1114,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region ThoughtNode - Additional Property Tests
 
-    [Fact]
-    public void ThoughtNode_PathScores_HandCalculated_3LevelTree()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_PathScores_HandCalculated_3LevelTree()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0, EvaluationScore = 0.9 };
         var child = new ThoughtNode<double> { Thought = "Child", Parent = root, Depth = 1, EvaluationScore = 0.85 };
@@ -1128,8 +1129,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.95, pathScores[2]);
     }
 
-    [Fact]
-    public void ThoughtNode_CheckIsTerminalByHeuristic_AllKeywords()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_CheckIsTerminalByHeuristic_AllKeywords()
     {
         var keywords = new[] { "final answer", "conclusion", "therefore", "the answer is" };
 
@@ -1141,8 +1142,8 @@ public class ReasoningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void ThoughtNode_CheckIsTerminalByHeuristic_CaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_CheckIsTerminalByHeuristic_CaseInsensitive()
     {
         var node = new ThoughtNode<double> { Thought = "THEREFORE, the result is 42" };
         Assert.True(node.CheckIsTerminalByHeuristic());
@@ -1152,8 +1153,8 @@ public class ReasoningExtendedIntegrationTests
 
     #region Contradiction Model Properties
 
-    [Fact]
-    public void Contradiction_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Contradiction_DefaultValues()
     {
         var contradiction = new Contradiction();
 
@@ -1163,8 +1164,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(0.0, contradiction.Severity);
     }
 
-    [Fact]
-    public void Contradiction_ToString_IncludesAllFields()
+    [Fact(Timeout = 120000)]
+    public async Task Contradiction_ToString_IncludesAllFields()
     {
         var contradiction = new Contradiction
         {
@@ -1182,8 +1183,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Contains("0.85", str);
     }
 
-    [Fact]
-    public void VerificationResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationResult_DefaultValues()
     {
         var result = new VerificationResult<double>();
 
@@ -1194,8 +1195,8 @@ public class ReasoningExtendedIntegrationTests
         Assert.Equal(string.Empty, result.ToolUsed);
     }
 
-    [Fact]
-    public void VerificationResult_ToString_ShowsPassFail()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationResult_ToString_ShowsPassFail()
     {
         var passed = new VerificationResult<double> { Passed = true, Explanation = "All correct", ToolUsed = "Calculator" };
         var failed = new VerificationResult<double> { Passed = false, Explanation = "Wrong answer", ToolUsed = "Calculator" };

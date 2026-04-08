@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var retriever = new TrackingMockRetriever(CreateTestDocuments());
@@ -123,8 +124,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new FLARERetriever<double>(null!, retriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new FLARERetriever<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_WithValidArguments_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator();
@@ -185,8 +186,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GenerateWithActiveRetrieval Tests
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator();
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 flare.GenerateWithActiveRetrieval(null!));
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator();
@@ -211,8 +212,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 flare.GenerateWithActiveRetrieval("   "));
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithConfidentResponse_StopsAfterOneIteration()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithConfidentResponse_StopsAfterOneIteration()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator("Quantum computing is a type of computation that uses quantum mechanical phenomena.");
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(retriever.RetrievalCallCount >= 1);
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithUncertainResponse_TriggersAdditionalRetrieval()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithUncertainResponse_TriggersAdditionalRetrieval()
         {
             // Arrange - Generator produces uncertainty phrases that should trigger re-retrieval
             var responses = new[]
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(retriever.RetrievalCallCount >= 1);
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_RespectsMaxIterations()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_RespectsMaxIterations()
         {
             // Arrange - Generator always produces uncertain responses
             var uncertainResponse = "I don't know about this topic. Need more information about everything.";
@@ -271,8 +272,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 $"Expected at most 10 retrieval calls but got {retriever.RetrievalCallCount}");
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_ReturnsNonEmptyResult()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_ReturnsNonEmptyResult()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator("Quantum computing harnesses quantum phenomena.");
@@ -316,8 +317,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(generator.GeneratePrompts.Count >= 1);
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithHighRelevanceDocuments_CalculatesHigherConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithHighRelevanceDocuments_CalculatesHigherConfidence()
         {
             // Arrange - Documents with high relevance scores
             var highRelevanceDocs = new List<Document<double>>
@@ -355,8 +356,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Missing Information Extraction Tests
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithMissingInfoPattern_ExtractsMissingTopic()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithMissingInfoPattern_ExtractsMissingTopic()
         {
             // Arrange - Response contains pattern that should extract missing info
             var responses = new[]
@@ -406,8 +407,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithEmptyDocuments_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithEmptyDocuments_HandlesGracefully()
         {
             // Arrange
             var generator = new ConfigurableMockGenerator("Answer based on limited context.");
@@ -421,8 +422,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithDocumentsWithoutRelevanceScores_UsesDefaultConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithDocumentsWithoutRelevanceScores_UsesDefaultConfidence()
         {
             // Arrange - Documents without relevance scores
             var docsWithoutScores = new List<Document<double>>
@@ -452,8 +453,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should use 0.5 default for relevance calculation
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithThresholdZero_AlwaysRetrievesMore()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithThresholdZero_AlwaysRetrievesMore()
         {
             // Arrange - Threshold 0 means any confidence passes
             var generator = new ConfigurableMockGenerator("Short");
@@ -468,8 +469,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // With threshold 0, even low confidence should pass
         }
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_WithThresholdOne_RequiresHighConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_WithThresholdOne_RequiresHighConfidence()
         {
             // Arrange - Threshold 1.0 requires perfect confidence
             var generator = new ConfigurableMockGenerator("Short answer");
@@ -488,8 +489,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Document Deduplication Tests
 
-        [Fact]
-        public void GenerateWithActiveRetrieval_DoesNotDuplicateDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateWithActiveRetrieval_DoesNotDuplicateDocuments()
         {
             // Arrange - Retriever always returns the same documents
             var docs = CreateTestDocuments();

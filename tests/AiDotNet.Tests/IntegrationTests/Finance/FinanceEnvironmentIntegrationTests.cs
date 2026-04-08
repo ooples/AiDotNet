@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.IntegrationTests.Finance;
 
 public class FinanceEnvironmentIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task FinancialDataLoader_Float_LoadsAndSplits()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<float>(30);
@@ -29,7 +29,7 @@ public class FinanceEnvironmentIntegrationTests
         Assert.NotNull(splits.Test);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task FinancialDataLoader_Double_LoadsAndSplits()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(30);
@@ -48,7 +48,7 @@ public class FinanceEnvironmentIntegrationTests
         Assert.NotNull(splits.Test);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task FinancialDataLoader_Float_NormalizesAndPredictsReturns()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<float>(40);
@@ -71,8 +71,8 @@ public class FinanceEnvironmentIntegrationTests
         Assert.NotNull(batch.Labels);
     }
 
-    [Fact]
-    public void MarketDataProvider_CanSliceAndTensorize()
+    [Fact(Timeout = 120000)]
+    public async Task MarketDataProvider_CanSliceAndTensorize()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(10);
         var provider = new MarketDataProvider<double>();
@@ -100,8 +100,8 @@ public class FinanceEnvironmentIntegrationTests
         Assert.Equal(0, provider.Count);
     }
 
-    [Fact]
-    public void FinancialPreprocessor_CreatesFeaturesAndNormalizes()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialPreprocessor_CreatesFeaturesAndNormalizes()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<double>(25);
         var preprocessor = new FinancialPreprocessor<double>();
@@ -134,20 +134,20 @@ public class FinanceEnvironmentIntegrationTests
         Assert.True(supervisedTargets.Shape[0] > 0);
     }
 
-    [Fact]
-    public void TradingEnvironments_Float_Smoke()
+    [Fact(Timeout = 120000)]
+    public async Task TradingEnvironments_Float_Smoke()
     {
         RunEnvironmentSmokeTest<float>();
     }
 
-    [Fact]
-    public void TradingEnvironments_Double_Smoke()
+    [Fact(Timeout = 120000)]
+    public async Task TradingEnvironments_Double_Smoke()
     {
         RunEnvironmentSmokeTest<double>();
     }
 
-    [Fact]
-    public void TradingEnvironment_Seed_ReproducibleRandomStart()
+    [Fact(Timeout = 120000)]
+    public async Task TradingEnvironment_Seed_ReproducibleRandomStart()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var data = FinanceTestHelpers.CreatePriceTensor<double>(steps: 50, assets: 1);
@@ -172,7 +172,7 @@ public class FinanceEnvironmentIntegrationTests
         env.Close();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task FinancialDataLoaderFactory_CreatesLoaderFromProvider()
     {
         var series = FinanceTestHelpers.CreateMarketSeries<float>(30);
@@ -185,8 +185,8 @@ public class FinanceEnvironmentIntegrationTests
         Assert.True(loader.TotalCount > 0);
     }
 
-    [Fact]
-    public void TradingEnvironmentFactory_CreatesPortfolioEnvironment()
+    [Fact(Timeout = 120000)]
+    public async Task TradingEnvironmentFactory_CreatesPortfolioEnvironment()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var start = DateTime.UtcNow;

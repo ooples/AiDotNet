@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,8 +17,8 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // The model should produce finite output from image-only input.
     // =====================================================
 
-    [Fact]
-    public void ImageOnly_ShouldProduceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ImageOnly_ShouldProduceOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -38,8 +39,8 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // A model mapping everything to the same embedding is collapsed.
     // =====================================================
 
-    [Fact]
-    public void DifferentImages_DifferentEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentImages_DifferentEmbeddings()
     {
         var network = CreateNetwork();
 
@@ -69,8 +70,8 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // indicate numerical instability or unbounded growth.
     // =====================================================
 
-    [Fact]
-    public void OutputNorm_ShouldBeBounded()
+    [Fact(Timeout = 120000)]
+    public async Task OutputNorm_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -93,8 +94,8 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     // All-black image is a valid edge case.
     // =====================================================
 
-    [Fact]
-    public void ZeroImage_ShouldNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroImage_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var blackImage = CreateConstantTensor(InputShape, 0.0);

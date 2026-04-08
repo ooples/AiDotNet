@@ -2,13 +2,14 @@ using System.Reflection;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class CodeModelArchitectureSerializationTests
 {
-    [Fact]
-    public void WriteAndReadAndValidate_MatchingArchitecture_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task WriteAndReadAndValidate_MatchingArchitecture_DoesNotThrow()
     {
         var architecture = CreateArchitecture(maxSequenceLength: 16, vocabularySize: 32, useDataFlow: true, numEncoderLayers: 1, numDecoderLayers: 2);
 
@@ -22,8 +23,8 @@ public sealed class CodeModelArchitectureSerializationTests
             includeEncoderDecoderLayerCounts: true);
     }
 
-    [Fact]
-    public void ReadAndValidate_MismatchedArchitecture_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task ReadAndValidate_MismatchedArchitecture_Throws()
     {
         var written = CreateArchitecture(maxSequenceLength: 16, vocabularySize: 32, useDataFlow: true, numEncoderLayers: 1, numDecoderLayers: 2);
         var expected = CreateArchitecture(maxSequenceLength: 16, vocabularySize: 33, useDataFlow: true, numEncoderLayers: 1, numDecoderLayers: 2);

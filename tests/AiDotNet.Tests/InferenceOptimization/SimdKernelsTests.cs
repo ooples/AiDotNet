@@ -1,13 +1,14 @@
 using System;
 using AiDotNet.Tensors.Engines.Simd;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class SimdKernelsTests
 {
-    [Fact]
-    public void VectorAdd_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task VectorAdd_MatchesScalar()
     {
         var a = CreateInput(32, 1);
         var b = CreateInput(32, 17);
@@ -24,8 +25,8 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact]
-    public void VectorMultiply_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task VectorMultiply_MatchesScalar()
     {
         var a = CreateInput(32, 3);
         var b = CreateInput(32, 9);
@@ -42,8 +43,8 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact]
-    public void DotProduct_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task DotProduct_MatchesScalar()
     {
         var a = CreateInput(37, 5);
         var b = CreateInput(37, 11);
@@ -58,8 +59,8 @@ public class SimdKernelsTests
         Assert.Equal(expected, actual, 5);
     }
 
-    [Fact]
-    public void ScalarMultiplyAdd_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task ScalarMultiplyAdd_MatchesScalar()
     {
         var a = CreateInput(31, 7);
         var b = CreateInput(31, 13);
@@ -77,8 +78,8 @@ public class SimdKernelsTests
         AssertEqual(expected, result);
     }
 
-    [Fact]
-    public void ReLU_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task ReLU_MatchesScalar()
     {
         var input = CreateSignedInput(33);
         var output = new float[input.Length];
@@ -94,8 +95,8 @@ public class SimdKernelsTests
         AssertEqual(expected, output);
     }
 
-    [Fact]
-    public void Sum_MatchesScalar()
+    [Fact(Timeout = 60000)]
+    public async Task Sum_MatchesScalar()
     {
         var input = CreateInput(100, 23);
         float expected = 0f;

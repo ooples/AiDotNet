@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Conditioning;
 
@@ -11,8 +12,8 @@ public class ConditioningModuleTests
 {
     #region CLIP Text Conditioner Tests
 
-    [Fact]
-    public void CLIPConditioner_DefaultVariant_Creates768DimEmbedding()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_DefaultVariant_Creates768DimEmbedding()
     {
         var clip = new CLIPTextConditioner<double>();
 
@@ -33,8 +34,8 @@ public class ConditioningModuleTests
         Assert.Equal(expectedDim, clip.EmbeddingDimension);
     }
 
-    [Fact]
-    public void CLIPConditioner_Tokenize_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_Tokenize_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>();
 
@@ -45,8 +46,8 @@ public class ConditioningModuleTests
         Assert.Equal(77, tokens.Shape[1]); // max sequence length
     }
 
-    [Fact]
-    public void CLIPConditioner_TokenizeBatch_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_TokenizeBatch_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>();
 
@@ -57,8 +58,8 @@ public class ConditioningModuleTests
         Assert.Equal(77, tokens.Shape[1]);
     }
 
-    [Fact]
-    public void CLIPConditioner_EncodeText_ReturnsFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_EncodeText_ReturnsFiniteValues()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
         var tokens = clip.Tokenize("a beautiful sunset");
@@ -78,8 +79,8 @@ public class ConditioningModuleTests
         }
     }
 
-    [Fact]
-    public void CLIPConditioner_GetPooledEmbedding_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_GetPooledEmbedding_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
         var tokens = clip.Tokenize("a cat");
@@ -91,8 +92,8 @@ public class ConditioningModuleTests
         Assert.Equal(768, pooled.Shape[1]);
     }
 
-    [Fact]
-    public void CLIPConditioner_GetUnconditionalEmbedding_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_GetUnconditionalEmbedding_ReturnsCorrectShape()
     {
         var clip = new CLIPTextConditioner<double>(seed: 42);
         var uncond = clip.GetUnconditionalEmbedding(batchSize: 2);
@@ -105,8 +106,8 @@ public class ConditioningModuleTests
 
     #region T5 Text Conditioner Tests
 
-    [Fact]
-    public void T5Conditioner_DefaultVariant_Creates4096DimEmbedding()
+    [Fact(Timeout = 120000)]
+    public async Task T5Conditioner_DefaultVariant_Creates4096DimEmbedding()
     {
         var t5 = new T5TextConditioner<double>();
 
@@ -127,8 +128,8 @@ public class ConditioningModuleTests
         Assert.Equal(expectedDim, t5.EmbeddingDimension);
     }
 
-    [Fact]
-    public void T5Conditioner_Tokenize_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task T5Conditioner_Tokenize_ReturnsCorrectShape()
     {
         var t5 = new T5TextConditioner<double>();
 
@@ -139,8 +140,8 @@ public class ConditioningModuleTests
         Assert.Equal(256, tokens.Shape[1]);
     }
 
-    [Fact]
-    public void T5Conditioner_EncodeText_ReturnsFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task T5Conditioner_EncodeText_ReturnsFiniteValues()
     {
         var t5 = new T5TextConditioner<double>(seed: 42);
         var tokens = t5.Tokenize("a detailed landscape");
@@ -156,8 +157,8 @@ public class ConditioningModuleTests
 
     #region Dual Text Conditioner Tests
 
-    [Fact]
-    public void DualConditioner_DefaultConfig_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task DualConditioner_DefaultConfig_HasCorrectProperties()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
 
@@ -169,8 +170,8 @@ public class ConditioningModuleTests
         Assert.Equal(ConditioningType.MultiModal, dual.ConditioningType);
     }
 
-    [Fact]
-    public void DualConditioner_EncodeDual_ReturnsBothEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task DualConditioner_EncodeDual_ReturnsBothEmbeddings()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
 
@@ -187,8 +188,8 @@ public class ConditioningModuleTests
         Assert.Equal(768, pooledEmb.Shape[1]);
     }
 
-    [Fact]
-    public void DualConditioner_GetUnconditionalDual_ReturnsBothEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task DualConditioner_GetUnconditionalDual_ReturnsBothEmbeddings()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
 
@@ -198,8 +199,8 @@ public class ConditioningModuleTests
         Assert.NotNull(pooledEmb);
     }
 
-    [Fact]
-    public void DualConditioner_Tokenize_DefaultsToT5()
+    [Fact(Timeout = 120000)]
+    public async Task DualConditioner_Tokenize_DefaultsToT5()
     {
         var dual = new DualTextConditioner<double>(seed: 42);
 
@@ -212,8 +213,8 @@ public class ConditioningModuleTests
 
     #region Triple Text Conditioner Tests
 
-    [Fact]
-    public void TripleConditioner_DefaultConfig_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_DefaultConfig_HasCorrectProperties()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
 
@@ -227,8 +228,8 @@ public class ConditioningModuleTests
         Assert.Equal(ConditioningType.MultiModal, triple.ConditioningType);
     }
 
-    [Fact]
-    public void TripleConditioner_EncodeTriple_ReturnsBothEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_EncodeTriple_ReturnsBothEmbeddings()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
 
@@ -245,8 +246,8 @@ public class ConditioningModuleTests
         Assert.Equal(2048, combinedPooled.Shape[1]); // 768 + 1280
     }
 
-    [Fact]
-    public void TripleConditioner_GetCombinedPooledEmbedding_Returns2048Dim()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_GetCombinedPooledEmbedding_Returns2048Dim()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
 
@@ -257,8 +258,8 @@ public class ConditioningModuleTests
         Assert.Equal(2048, pooled.Shape[1]);
     }
 
-    [Fact]
-    public void TripleConditioner_GetUnconditionalTriple_ReturnsBothEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_GetUnconditionalTriple_ReturnsBothEmbeddings()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
 
@@ -269,8 +270,8 @@ public class ConditioningModuleTests
         Assert.Equal(2048, combinedPooled.Shape[1]);
     }
 
-    [Fact]
-    public void TripleConditioner_EncodeTriple_ValuesAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_EncodeTriple_ValuesAreFinite()
     {
         var triple = new TripleTextConditioner<double>(seed: 42);
 
@@ -290,8 +291,8 @@ public class ConditioningModuleTests
         }
     }
 
-    [Fact]
-    public void TripleConditioner_CustomVariants_Creates()
+    [Fact(Timeout = 120000)]
+    public async Task TripleConditioner_CustomVariants_Creates()
     {
         var triple = new TripleTextConditioner<double>(
             clipLVariant: "ViT-L/14",
@@ -309,8 +310,8 @@ public class ConditioningModuleTests
 
     #region IConditioningModule Interface Compliance Tests
 
-    [Fact]
-    public void AllConditioners_ImplementIConditioningModule()
+    [Fact(Timeout = 120000)]
+    public async Task AllConditioners_ImplementIConditioningModule()
     {
         var conditioners = new IConditioningModule<double>[]
         {

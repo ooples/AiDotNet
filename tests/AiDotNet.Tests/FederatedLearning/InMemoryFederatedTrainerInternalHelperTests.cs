@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -11,16 +12,16 @@ public class InMemoryFederatedTrainerInternalHelperTests
 {
     private static readonly Type TrainerType = typeof(InMemoryFederatedTrainer<double, Matrix<double>, Vector<double>>);
 
-    [Fact]
-    public void Clamp01_ClampsValues()
+    [Fact(Timeout = 60000)]
+    public async Task Clamp01_ClampsValues()
     {
         Assert.Equal(0.0, InvokePrivateStatic<double>("Clamp01", -1.0), precision: 12);
         Assert.Equal(0.5, InvokePrivateStatic<double>("Clamp01", 0.5), precision: 12);
         Assert.Equal(1.0, InvokePrivateStatic<double>("Clamp01", 2.0), precision: 12);
     }
 
-    [Fact]
-    public void ComputeStalenessWeight_SupportsAllModes()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeStalenessWeight_SupportsAllModes()
     {
         Assert.Equal(1.0, InvokePrivateStatic<double>("ComputeStalenessWeight", 0, null), precision: 12);
         Assert.Equal(0.25, InvokePrivateStatic<double>("ComputeStalenessWeight", 3, null), precision: 12);
@@ -40,8 +41,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
             new AsyncFederatedLearningOptions { StalenessWeighting = (FederatedStalenessWeighting)999 }));
     }
 
-    [Fact]
-    public void MixParameters_HandlesAlphaBoundsAndLengthMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task MixParameters_HandlesAlphaBoundsAndLengthMismatch()
     {
         var trainer = CreateTrainer();
         var current = new Vector<double>(new[] { 1.0, 2.0 });
@@ -60,8 +61,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(4.0, mixed[1], precision: 12);
     }
 
-    [Fact]
-    public void CreateDefaultServerOptimizer_ResolvesKnownOptimizersAndThrowsForUnknown()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDefaultServerOptimizer_ResolvesKnownOptimizersAndThrowsForUnknown()
     {
         Assert.Null(InvokePrivateStatic<object>("CreateDefaultServerOptimizer", (object?)null));
         Assert.Null(InvokePrivateStatic<object>("CreateDefaultServerOptimizer", new FederatedServerOptimizerOptions { Optimizer = FederatedServerOptimizer.None }));
@@ -107,8 +108,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
             new FederatedServerOptimizerOptions { Optimizer = (FederatedServerOptimizer)999 }));
     }
 
-    [Fact]
-    public void CreateDefaultHeterogeneityCorrection_ResolvesKnownCorrectionsAndThrowsForUnknown()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDefaultHeterogeneityCorrection_ResolvesKnownCorrectionsAndThrowsForUnknown()
     {
         Assert.Null(InvokePrivateStatic<object>("CreateDefaultHeterogeneityCorrection", (object?)null));
         Assert.Null(InvokePrivateStatic<object>("CreateDefaultHeterogeneityCorrection", new FederatedHeterogeneityCorrectionOptions { Algorithm = FederatedHeterogeneityCorrection.None }));
@@ -138,8 +139,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
             new FederatedHeterogeneityCorrectionOptions { Algorithm = (FederatedHeterogeneityCorrection)999 }));
     }
 
-    [Fact]
-    public void CreateDefaultPrivacyAccountant_ResolvesKnownAccountantsAndThrowsForUnknown()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDefaultPrivacyAccountant_ResolvesKnownAccountantsAndThrowsForUnknown()
     {
         var basic = InvokePrivateStatic<IPrivacyAccountant>("CreateDefaultPrivacyAccountant", FederatedPrivacyAccountant.Basic, 1.0);
         Assert.Equal("Basic", basic.GetAccountantName());
@@ -150,8 +151,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         AssertInnerException<InvalidOperationException>(() => InvokePrivateStatic<object>("CreateDefaultPrivacyAccountant", (FederatedPrivacyAccountant)999, 1.0));
     }
 
-    [Fact]
-    public void CreateBuiltInSelectionStrategy_ResolvesAllKnownStrategiesAndThrowsForUnknown()
+    [Fact(Timeout = 60000)]
+    public async Task CreateBuiltInSelectionStrategy_ResolvesAllKnownStrategiesAndThrowsForUnknown()
     {
         var selectionOptions = new ClientSelectionOptions
         {
@@ -171,8 +172,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         AssertInnerException<InvalidOperationException>(() => InvokePrivateStatic<object>("CreateBuiltInSelectionStrategy", (FederatedClientSelectionStrategy)999, selectionOptions));
     }
 
-    [Fact]
-    public void EstimateRoundCommunicationMB_HandlesBoundsAndClampsRatio()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateRoundCommunicationMB_HandlesBoundsAndClampsRatio()
     {
         Assert.Equal(0.0, InvokePrivateStatic<double>("EstimateRoundCommunicationMB", 0, 10, 1.0), precision: 12);
         Assert.Equal(0.0, InvokePrivateStatic<double>("EstimateRoundCommunicationMB", 2, 0, 1.0), precision: 12);
@@ -187,8 +188,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(InvokePrivateStatic<double>("EstimateRoundCommunicationMB", 2, 10, 1.0), aboveOne, precision: 12);
     }
 
-    [Fact]
-    public void ResolveCompressionOptions_SupportsLegacyUseCompression()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveCompressionOptions_SupportsLegacyUseCompression()
     {
         Assert.Null(InvokePrivateStatic<object>("ResolveCompressionOptions", (object?)null));
 
@@ -208,8 +209,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.True(resolvedLegacy.UseErrorFeedback);
     }
 
-    [Fact]
-    public void ResolvePersonalizationOptions_SupportsLegacyEnablePersonalization()
+    [Fact(Timeout = 60000)]
+    public async Task ResolvePersonalizationOptions_SupportsLegacyEnablePersonalization()
     {
         Assert.Null(InvokePrivateStatic<object>("ResolvePersonalizationOptions", (object?)null));
 
@@ -229,8 +230,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(0.4, resolvedLegacy.PersonalizedParameterFraction, precision: 12);
     }
 
-    [Fact]
-    public void ResolvePersonalizedIndices_ComputesTailIndices()
+    [Fact(Timeout = 60000)]
+    public async Task ResolvePersonalizedIndices_ComputesTailIndices()
     {
         Assert.Empty(InvokePrivateStatic<int[]>("ResolvePersonalizedIndices", 0.25, 0));
         Assert.Empty(InvokePrivateStatic<int[]>("ResolvePersonalizedIndices", double.NaN, 10));
@@ -243,15 +244,15 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(new[] { 5, 6, 7, 8, 9 }, half);
     }
 
-    [Fact]
-    public void GetClusterId_NormalizesNegativeClientIds()
+    [Fact(Timeout = 60000)]
+    public async Task GetClusterId_NormalizesNegativeClientIds()
     {
         Assert.Equal(0, InvokePrivateStatic<int>("GetClusterId", 5, 0));
         Assert.Equal(2, InvokePrivateStatic<int>("GetClusterId", -1, 3));
     }
 
-    [Fact]
-    public void MaskIndices_MasksOnlyValidIndicesAndThrowsOnLengthMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task MaskIndices_MasksOnlyValidIndicesAndThrowsOnLengthMismatch()
     {
         var parameters = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var baseline = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -264,8 +265,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         AssertInnerException<ArgumentException>(() => InvokePrivateStatic<object>("MaskIndices", new Vector<double>(2), baseline, new[] { 0 }));
     }
 
-    [Fact]
-    public void ResolveEncryptedIndices_BuildsAllOrRanges()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveEncryptedIndices_BuildsAllOrRanges()
     {
         AssertInnerException<ArgumentNullException>(() => InvokePrivateStatic<object>("ResolveEncryptedIndices", null!, 5, HomomorphicEncryptionMode.Hybrid));
 
@@ -289,8 +290,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(new[] { 0, 1, 2, 3 }, hybrid);
     }
 
-    [Fact]
-    public void ComputeQuantizationRatio_ClampsBits()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeQuantizationRatio_ClampsBits()
     {
         Assert.Equal(0.0, InvokePrivateStatic<double>("ComputeQuantizationRatio", -1), precision: 12);
         Assert.Equal(0.0, InvokePrivateStatic<double>("ComputeQuantizationRatio", 0), precision: 12);
@@ -298,15 +299,15 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(1.0, InvokePrivateStatic<double>("ComputeQuantizationRatio", 1000), precision: 12);
     }
 
-    [Fact]
-    public void EstimateBytesPerNumericType_FallsBackForUnsupportedTypes()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateBytesPerNumericType_FallsBackForUnsupportedTypes()
     {
         Assert.Equal(8, InvokePrivateStatic<int>("EstimateBytesPerNumericType", typeof(double)));
         Assert.Equal(8, InvokePrivateStatic<int>("EstimateBytesPerNumericType", typeof(string)));
     }
 
-    [Fact]
-    public void PersonalizationHelpers_HandleAllStrategies()
+    [Fact(Timeout = 60000)]
+    public async Task PersonalizationHelpers_HandleAllStrategies()
     {
         var trainer = CreateTrainer();
         var globalModel = new MockFullModel(_ => new Vector<double>(6), parameterCount: 6);

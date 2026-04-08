@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
 
@@ -19,8 +20,8 @@ public class RAGVectorSearchIntegrationTests
 
     #region CosineSimilarityMetric - Golden References
 
-    [Fact]
-    public void CosineSimilarity_IdenticalVectors_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_IdenticalVectors_IsOne()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v = new Vector<double>(new double[] { 1, 2, 3 });
@@ -30,8 +31,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_OrthogonalVectors_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_OrthogonalVectors_IsZero()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v1 = new Vector<double>(new double[] { 1, 0, 0 });
@@ -42,8 +43,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_OppositeVectors_IsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_OppositeVectors_IsNegativeOne()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -54,8 +55,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_45Degrees_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_45Degrees_GoldenReference()
     {
         // cos(45°) = 1/√2 ≈ 0.7071
         var metric = new CosineSimilarityMetric<double>();
@@ -68,8 +69,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_ScaleInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_ScaleInvariant()
     {
         // Cosine similarity should be independent of vector magnitude
         var metric = new CosineSimilarityMetric<double>();
@@ -84,15 +85,15 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(1.0, sim13, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_HigherIsBetter_IsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_HigherIsBetter_IsTrue()
     {
         var metric = new CosineSimilarityMetric<double>();
         Assert.True(metric.HigherIsBetter);
     }
 
-    [Fact]
-    public void CosineSimilarity_3DVectors_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_3DVectors_GoldenReference()
     {
         // v1 = [1, 2, 3], v2 = [4, 5, 6]
         // dot = 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
@@ -113,8 +114,8 @@ public class RAGVectorSearchIntegrationTests
 
     #region EuclideanDistanceMetric - Golden References
 
-    [Fact]
-    public void EuclideanDistance_IdenticalVectors_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_IdenticalVectors_IsZero()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var v = new Vector<double>(new double[] { 1, 2, 3 });
@@ -124,8 +125,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_UnitVectors_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_UnitVectors_GoldenReference()
     {
         // |[1,0,0] - [0,1,0]| = sqrt(1+1+0) = sqrt(2) ≈ 1.4142
         var metric = new EuclideanDistanceMetric<double>();
@@ -137,8 +138,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(Math.Sqrt(2.0), result, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_3D_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_3D_GoldenReference()
     {
         // |[1,2,3] - [4,5,6]| = sqrt(9+9+9) = sqrt(27) = 3*sqrt(3)
         var metric = new EuclideanDistanceMetric<double>();
@@ -151,15 +152,15 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_HigherIsBetter_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_HigherIsBetter_IsFalse()
     {
         var metric = new EuclideanDistanceMetric<double>();
         Assert.False(metric.HigherIsBetter);
     }
 
-    [Fact]
-    public void EuclideanDistance_TriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_TriangleInequality()
     {
         // d(A,C) <= d(A,B) + d(B,C)
         var metric = new EuclideanDistanceMetric<double>();
@@ -177,8 +178,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.True(dAC <= dAB + dBC + Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_Symmetry()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_Symmetry()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -194,8 +195,8 @@ public class RAGVectorSearchIntegrationTests
 
     #region HNSW Index - Graph Properties and Recall
 
-    [Fact]
-    public void HNSW_AddSingle_CountIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_AddSingle_CountIsOne()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -204,8 +205,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(1, index.Count);
     }
 
-    [Fact]
-    public void HNSW_AddMultiple_CountCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_AddMultiple_CountCorrect()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -217,8 +218,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(10, index.Count);
     }
 
-    [Fact]
-    public void HNSW_Search_IdenticalVector_ReturnsSelf()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Search_IdenticalVector_ReturnsSelf()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -232,8 +233,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal("target", results[0].Id);
     }
 
-    [Fact]
-    public void HNSW_Search_OrthogonalVectors_CorrectRanking()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Search_OrthogonalVectors_CorrectRanking()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -250,8 +251,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.True(topScore > 0.9, $"Top score {topScore} should be close to 1.0");
     }
 
-    [Fact]
-    public void HNSW_Search_EmptyIndex_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Search_EmptyIndex_ReturnsEmpty()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -260,8 +261,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void HNSW_Search_KLargerThanCount_ReturnsAll()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Search_KLargerThanCount_ReturnsAll()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -273,8 +274,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(2, results.Count);
     }
 
-    [Fact]
-    public void HNSW_Remove_DecreasesCount()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Remove_DecreasesCount()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -286,8 +287,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(1, index.Count);
     }
 
-    [Fact]
-    public void HNSW_Remove_ExcludesFromSearch()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Remove_ExcludesFromSearch()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -302,8 +303,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal("keep", results[0].Id);
     }
 
-    [Fact]
-    public void HNSW_Clear_ResetsIndex()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Clear_ResetsIndex()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -319,8 +320,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void HNSW_AddBatch_EquivalentToIndividualAdds()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_AddBatch_EquivalentToIndividualAdds()
     {
         var index1 = new HNSWIndex<double>(new CosineSimilarityMetric<double>(), seed: 42);
         var index2 = new HNSWIndex<double>(new CosineSimilarityMetric<double>(), seed: 42);
@@ -351,8 +352,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.Equal(results1[0].Id, results2[0].Id);
     }
 
-    [Fact]
-    public void HNSW_Recall_50Vectors_HighRecall()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_Recall_50Vectors_HighRecall()
     {
         // HNSW should achieve high recall for approximate nearest neighbors
         var index = new HNSWIndex<double>(
@@ -403,8 +404,8 @@ public class RAGVectorSearchIntegrationTests
             $"HNSW recall@5 is {correct}/10 - expected >= 8 for 50 vectors");
     }
 
-    [Fact]
-    public void HNSW_InvalidK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_InvalidK_Throws()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -412,8 +413,8 @@ public class RAGVectorSearchIntegrationTests
             index.Search(new Vector<double>(new double[] { 1, 0 }), k: 0));
     }
 
-    [Fact]
-    public void HNSW_InvalidConstructorParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_InvalidConstructorParams_Throws()
     {
         var metric = new CosineSimilarityMetric<double>();
 
@@ -425,8 +426,8 @@ public class RAGVectorSearchIntegrationTests
             new HNSWIndex<double>(metric, efSearch: 0));
     }
 
-    [Fact]
-    public void HNSW_UpdateExisting_OverwritesVector()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_UpdateExisting_OverwritesVector()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 
@@ -441,8 +442,8 @@ public class RAGVectorSearchIntegrationTests
         Assert.True(score > 0.9, $"After overwrite, score {score} should be high");
     }
 
-    [Fact]
-    public void HNSW_SearchResults_SortedByScore()
+    [Fact(Timeout = 120000)]
+    public async Task HNSW_SearchResults_SortedByScore()
     {
         var index = new HNSWIndex<double>(new CosineSimilarityMetric<double>());
 

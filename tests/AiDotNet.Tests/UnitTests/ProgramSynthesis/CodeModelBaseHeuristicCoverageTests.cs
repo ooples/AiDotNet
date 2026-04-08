@@ -4,13 +4,14 @@ using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class CodeModelBaseHeuristicCoverageTests
 {
-    [Fact]
-    public void PerformTask_HeuristicRequests_ReturnStructuredOutputs()
+    [Fact(Timeout = 60000)]
+    public async Task PerformTask_HeuristicRequests_ReturnStructuredOutputs()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
 

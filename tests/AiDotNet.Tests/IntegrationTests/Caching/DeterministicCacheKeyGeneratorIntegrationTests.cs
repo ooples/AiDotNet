@@ -1,6 +1,7 @@
 using AiDotNet.Caching;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Caching;
 
@@ -12,8 +13,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 {
     #region Determinism Tests
 
-    [Fact]
-    public void GenerateKey_SameInputs_ProducesSameKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_SameInputs_ProducesSameKey()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -27,8 +28,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_MultipleCalls_AlwaysSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_MultipleCalls_AlwaysSameResult()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.5, 2.5, 3.5, 4.5, 5.5 });
@@ -45,8 +46,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Single(keys);
     }
 
-    [Fact]
-    public void GenerateKey_ReturnsValidSha256HexString()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_ReturnsValidSha256HexString()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.0, 2.0 });
@@ -66,8 +67,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Uniqueness Tests
 
-    [Fact]
-    public void GenerateKey_DifferentParameters_ProducesDifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentParameters_ProducesDifferentKeys()
     {
         // Arrange
         var parameters1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -82,8 +83,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentDescriptors_ProducesDifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentDescriptors_ProducesDifferentKeys()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -98,8 +99,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentParameterCounts_ProducesDifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentParameterCounts_ProducesDifferentKeys()
     {
         // Arrange
         var parameters1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -114,8 +115,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_LargeDataset_KeysAreUnique()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_LargeDataset_KeysAreUnique()
     {
         // Arrange - Generate 1000 different parameter sets
         var keys = new HashSet<string>();
@@ -136,8 +137,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Null Validation Tests
 
-    [Fact]
-    public void GenerateKey_NullParameters_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NullParameters_ThrowsArgumentNullException()
     {
         // Arrange
         const string inputDescriptor = "train:Matrix(100,10)xVector(100)";
@@ -147,8 +148,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
             DeterministicCacheKeyGenerator.GenerateKey<double>(null!, inputDescriptor));
     }
 
-    [Fact]
-    public void GenerateKey_NullDescriptor_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NullDescriptor_ThrowsArgumentNullException()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -162,8 +163,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region CreateInputDataDescriptor Tests
 
-    [Fact]
-    public void CreateInputDataDescriptor_TrainOnly_ReturnsCorrectFormat()
+    [Fact(Timeout = 120000)]
+    public async Task CreateInputDataDescriptor_TrainOnly_ReturnsCorrectFormat()
     {
         // Arrange
         var xTrain = new Matrix<double>(100, 10);
@@ -179,8 +180,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("Vector(100)", descriptor);
     }
 
-    [Fact]
-    public void CreateInputDataDescriptor_WithValidation_IncludesValidationInfo()
+    [Fact(Timeout = 120000)]
+    public async Task CreateInputDataDescriptor_WithValidation_IncludesValidationInfo()
     {
         // Arrange
         var xTrain = new Matrix<double>(100, 10);
@@ -198,8 +199,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("Matrix(20,10)", descriptor);
     }
 
-    [Fact]
-    public void CreateInputDataDescriptor_WithAllDatasets_IncludesAllInfo()
+    [Fact(Timeout = 120000)]
+    public async Task CreateInputDataDescriptor_WithAllDatasets_IncludesAllInfo()
     {
         // Arrange
         var xTrain = new Matrix<double>(100, 10);
@@ -219,8 +220,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("test:", descriptor);
     }
 
-    [Fact]
-    public void CreateInputDataDescriptor_SameInputs_ProducesSameDescriptor()
+    [Fact(Timeout = 120000)]
+    public async Task CreateInputDataDescriptor_SameInputs_ProducesSameDescriptor()
     {
         // Arrange
         var xTrain1 = new Matrix<double>(100, 10);
@@ -238,8 +239,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(descriptor1, descriptor2);
     }
 
-    [Fact]
-    public void CreateInputDataDescriptor_DifferentShapes_ProducesDifferentDescriptors()
+    [Fact(Timeout = 120000)]
+    public async Task CreateInputDataDescriptor_DifferentShapes_ProducesDifferentDescriptors()
     {
         // Arrange
         var xTrain1 = new Matrix<double>(100, 10);
@@ -261,8 +262,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void GenerateKey_EmptyParameters_StillGeneratesValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_EmptyParameters_StillGeneratesValidKey()
     {
         // Arrange
         var parameters = new Vector<double>(0);
@@ -276,8 +277,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length); // Still valid SHA-256
     }
 
-    [Fact]
-    public void GenerateKey_VeryLargeParameters_GeneratesValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_VeryLargeParameters_GeneratesValidKey()
     {
         // Arrange - Create a large parameter vector
         var largeParams = new double[10000];
@@ -296,8 +297,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
-    public void GenerateKey_ExtremeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_ExtremeValues_HandlesCorrectly()
     {
         // Arrange - Test with extreme values
         var parameters = new Vector<double>(new[] {
@@ -318,8 +319,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
-    public void GenerateKey_NaNAndInfinity_ProducesConsistentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NaNAndInfinity_ProducesConsistentKeys()
     {
         // Arrange
         var parameters1 = new Vector<double>(new[] { double.NaN, double.PositiveInfinity });
@@ -334,8 +335,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_WhitespaceInDescriptor_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_WhitespaceInDescriptor_HandlesCorrectly()
     {
         // Arrange
         var parameters = new Vector<double>(new[] { 1.0, 2.0 });
@@ -354,8 +355,8 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Culture Invariance Tests
 
-    [Fact]
-    public void GenerateKey_FloatingPointValues_CultureInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_FloatingPointValues_CultureInvariant()
     {
         // Arrange - Values that might format differently in different cultures
         var parameters = new Vector<double>(new[] {

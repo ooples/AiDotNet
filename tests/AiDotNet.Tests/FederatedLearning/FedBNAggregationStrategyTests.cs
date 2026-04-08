@@ -1,12 +1,13 @@
 using AiDotNet.FederatedLearning.Aggregators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedBNAggregationStrategyTests
 {
-    [Fact]
-    public void Aggregate_KeepsBatchNormLayersLocal()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_KeepsBatchNormLayersLocal()
     {
         var aggregator = new FedBNAggregationStrategy<double>();
 

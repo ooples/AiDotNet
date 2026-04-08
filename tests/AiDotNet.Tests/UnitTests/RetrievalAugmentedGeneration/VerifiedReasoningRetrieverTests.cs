@@ -6,6 +6,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var mockRetriever = CreateMockRetriever();
@@ -70,8 +71,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new VerifiedReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new VerifiedReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_WithValidArguments_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(verifiedRetriever);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidThreshold_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidThreshold_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -120,8 +121,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     verificationThreshold: -0.1));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeRefinementAttempts_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeRefinementAttempts_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -135,8 +136,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     maxRefinementAttempts: -1));
         }
 
-        [Fact]
-        public void RetrieveWithVerification_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -148,8 +149,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification(null!, 10));
         }
 
-        [Fact]
-        public void RetrieveWithVerification_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -161,8 +162,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification("   ", 10));
         }
 
-        [Fact]
-        public void RetrieveWithVerification_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 verifiedRetriever.RetrieveWithVerification("test query", -1));
         }
 
-        [Fact]
-        public void RetrieveWithVerification_WithValidQuery_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_WithValidQuery_ReturnsResult()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -199,8 +200,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(docList.Count <= 10);
         }
 
-        [Fact]
-        public void RetrieveWithVerification_ReturnsVerifiedSteps()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_ReturnsVerifiedSteps()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -225,8 +226,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void RetrieveWithVerification_CalculatesAverageVerificationScore()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_CalculatesAverageVerificationScore()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -243,8 +244,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(result.AverageVerificationScore <= 1);
         }
 
-        [Fact]
-        public void RetrieveWithVerification_TracksRefinementAttempts()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_TracksRefinementAttempts()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -269,8 +270,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void RetrieveWithVerification_WithMetadataFilters_ReturnsResults()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithVerification_WithMetadataFilters_ReturnsResults()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -289,8 +290,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.Documents);
         }
 
-        [Fact]
-        public void VerifiedReasoningStep_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task VerifiedReasoningStep_HasAllRequiredProperties()
         {
             // Arrange
             var step = new VerifiedReasoningStep<double>
@@ -314,8 +315,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Original test statement", step.OriginalStatement);
         }
 
-        [Fact]
-        public void VerifiedReasoningResult_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task VerifiedReasoningResult_HasAllRequiredProperties()
         {
             // Arrange
             var result = new VerifiedReasoningResult<double>

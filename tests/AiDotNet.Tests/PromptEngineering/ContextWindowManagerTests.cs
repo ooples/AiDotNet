@@ -1,12 +1,13 @@
 using AiDotNet.PromptEngineering;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class ContextWindowManagerTests
 {
-    [Fact]
-    public void Constructor_WithMaxTokens_SetsMaxTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMaxTokens_SetsMaxTokens()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -14,24 +15,24 @@ public class ContextWindowManagerTests
         Assert.Equal(4096, manager.MaxTokens);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultEstimator_CreatesManager()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultEstimator_CreatesManager()
     {
         var manager = new ContextWindowManager(8192);
 
         Assert.NotNull(manager);
     }
 
-    [Fact]
-    public void Constructor_WithCustomEstimator_UsesEstimator()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomEstimator_UsesEstimator()
     {
         var manager = new ContextWindowManager(4096, text => text.Length / 4);
 
         Assert.NotNull(manager);
     }
 
-    [Fact]
-    public void EstimateTokens_ReturnsEstimate()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateTokens_ReturnsEstimate()
     {
         var manager = new ContextWindowManager(4096);
         var text = "Hello world, this is a test.";
@@ -41,8 +42,8 @@ public class ContextWindowManagerTests
         Assert.True(estimate > 0);
     }
 
-    [Fact]
-    public void EstimateTokens_EmptyString_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateTokens_EmptyString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -51,8 +52,8 @@ public class ContextWindowManagerTests
         Assert.Equal(0, estimate);
     }
 
-    [Fact]
-    public void EstimateTokens_NullString_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateTokens_NullString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -61,8 +62,8 @@ public class ContextWindowManagerTests
         Assert.Equal(0, estimate);
     }
 
-    [Fact]
-    public void EstimateTokens_WithCustomEstimator_UsesCustom()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateTokens_WithCustomEstimator_UsesCustom()
     {
         var manager = new ContextWindowManager(4096, text => text.Length);
         var text = "Hello";
@@ -72,8 +73,8 @@ public class ContextWindowManagerTests
         Assert.Equal(5, estimate);
     }
 
-    [Fact]
-    public void FitsInWindow_WhenFits_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task FitsInWindow_WhenFits_ReturnsTrue()
     {
         var manager = new ContextWindowManager(1000);
         var text = "Short text";
@@ -83,8 +84,8 @@ public class ContextWindowManagerTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void FitsInWindow_WhenTooLarge_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task FitsInWindow_WhenTooLarge_ReturnsFalse()
     {
         var manager = new ContextWindowManager(10);
         var text = new string('x', 1000);
@@ -94,8 +95,8 @@ public class ContextWindowManagerTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void FitsInWindow_WithReserved_AccountsForReserved()
+    [Fact(Timeout = 60000)]
+    public async Task FitsInWindow_WithReserved_AccountsForReserved()
     {
         var manager = new ContextWindowManager(100);
         // "Some longer text that will use more tokens" is 42 chars ≈ 11 tokens
@@ -107,8 +108,8 @@ public class ContextWindowManagerTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void RemainingTokens_ReturnsAvailableSpace()
+    [Fact(Timeout = 60000)]
+    public async Task RemainingTokens_ReturnsAvailableSpace()
     {
         var manager = new ContextWindowManager(1000);
         var text = "Short text";
@@ -119,8 +120,8 @@ public class ContextWindowManagerTests
         Assert.True(remaining < 1000);
     }
 
-    [Fact]
-    public void RemainingTokens_WithReserved_SubtractsReserved()
+    [Fact(Timeout = 60000)]
+    public async Task RemainingTokens_WithReserved_SubtractsReserved()
     {
         var manager = new ContextWindowManager(1000);
         var text = "";
@@ -131,8 +132,8 @@ public class ContextWindowManagerTests
         Assert.True(withoutReserved > withReserved);
     }
 
-    [Fact]
-    public void TruncateToFit_WhenFits_ReturnsOriginal()
+    [Fact(Timeout = 60000)]
+    public async Task TruncateToFit_WhenFits_ReturnsOriginal()
     {
         var manager = new ContextWindowManager(10000);
         var text = "Short text that fits";
@@ -142,8 +143,8 @@ public class ContextWindowManagerTests
         Assert.Equal(text, result);
     }
 
-    [Fact]
-    public void TruncateToFit_WhenTooLong_Truncates()
+    [Fact(Timeout = 60000)]
+    public async Task TruncateToFit_WhenTooLong_Truncates()
     {
         var manager = new ContextWindowManager(50);
         var text = new string('x', 1000);
@@ -153,8 +154,8 @@ public class ContextWindowManagerTests
         Assert.True(result.Length < text.Length);
     }
 
-    [Fact]
-    public void TruncateToFit_WithReserved_AccountsForReserved()
+    [Fact(Timeout = 60000)]
+    public async Task TruncateToFit_WithReserved_AccountsForReserved()
     {
         var manager = new ContextWindowManager(100);
         var text = "Some text here";
@@ -165,8 +166,8 @@ public class ContextWindowManagerTests
         Assert.True(withReserved.Length <= withoutReserved.Length);
     }
 
-    [Fact]
-    public void TruncateToFit_EmptyString_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task TruncateToFit_EmptyString_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(100);
 
@@ -175,8 +176,8 @@ public class ContextWindowManagerTests
         Assert.Equal("", result);
     }
 
-    [Fact]
-    public void TruncateToFit_PreservesSuffix_ByDefault()
+    [Fact(Timeout = 60000)]
+    public async Task TruncateToFit_PreservesSuffix_ByDefault()
     {
         var manager = new ContextWindowManager(20, text => text.Length);
         var text = "Start...Middle...End";
@@ -187,8 +188,8 @@ public class ContextWindowManagerTests
         Assert.True(result.Length <= 20);
     }
 
-    [Fact]
-    public void SplitIntoChunks_SmallText_ReturnsSingleChunk()
+    [Fact(Timeout = 60000)]
+    public async Task SplitIntoChunks_SmallText_ReturnsSingleChunk()
     {
         var manager = new ContextWindowManager(1000);
         var text = "Small text";
@@ -199,8 +200,8 @@ public class ContextWindowManagerTests
         Assert.Equal(text, chunks[0]);
     }
 
-    [Fact]
-    public void SplitIntoChunks_LargeText_ReturnsMultipleChunks()
+    [Fact(Timeout = 60000)]
+    public async Task SplitIntoChunks_LargeText_ReturnsMultipleChunks()
     {
         var manager = new ContextWindowManager(50, text => text.Length);
         var text = new string('x', 200);
@@ -210,8 +211,8 @@ public class ContextWindowManagerTests
         Assert.True(chunks.Count > 1);
     }
 
-    [Fact]
-    public void SplitIntoChunks_EmptyText_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task SplitIntoChunks_EmptyText_ReturnsEmptyList()
     {
         var manager = new ContextWindowManager(100);
 
@@ -220,8 +221,8 @@ public class ContextWindowManagerTests
         Assert.Empty(chunks);
     }
 
-    [Fact]
-    public void SplitIntoChunks_EachChunkFits()
+    [Fact(Timeout = 60000)]
+    public async Task SplitIntoChunks_EachChunkFits()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
         var text = new string('x', 500);
@@ -234,8 +235,8 @@ public class ContextWindowManagerTests
         }
     }
 
-    [Fact]
-    public void SplitIntoChunks_WithOverlap_CreatesOverlappingChunks()
+    [Fact(Timeout = 60000)]
+    public async Task SplitIntoChunks_WithOverlap_CreatesOverlappingChunks()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
         var text = new string('x', 300);
@@ -247,24 +248,24 @@ public class ContextWindowManagerTests
         Assert.True(chunksWithOverlap.Count >= chunksNoOverlap.Count);
     }
 
-    [Fact]
-    public void MaxTokens_ReturnsConfiguredValue()
+    [Fact(Timeout = 60000)]
+    public async Task MaxTokens_ReturnsConfiguredValue()
     {
         var manager = new ContextWindowManager(16384);
 
         Assert.Equal(16384, manager.MaxTokens);
     }
 
-    [Fact]
-    public void Constructor_WithZeroMaxTokens_AllowsCreation()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroMaxTokens_AllowsCreation()
     {
         var manager = new ContextWindowManager(0);
 
         Assert.Equal(0, manager.MaxTokens);
     }
 
-    [Fact]
-    public void EstimateTokens_LongText_ReturnsReasonableEstimate()
+    [Fact(Timeout = 60000)]
+    public async Task EstimateTokens_LongText_ReturnsReasonableEstimate()
     {
         var manager = new ContextWindowManager(100000);
         var text = new string('a', 10000);
@@ -276,8 +277,8 @@ public class ContextWindowManagerTests
         Assert.True(estimate <= text.Length);
     }
 
-    [Fact]
-    public void FitsInWindow_ExactlyAtLimit_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task FitsInWindow_ExactlyAtLimit_ReturnsTrue()
     {
         var manager = new ContextWindowManager(10, text => text.Length);
         var text = "1234567890"; // Exactly 10 characters
@@ -287,8 +288,8 @@ public class ContextWindowManagerTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void FitsInWindow_OneOverLimit_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task FitsInWindow_OneOverLimit_ReturnsFalse()
     {
         var manager = new ContextWindowManager(10, text => text.Length);
         var text = "12345678901"; // 11 characters

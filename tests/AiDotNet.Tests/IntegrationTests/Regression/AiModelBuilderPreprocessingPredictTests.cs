@@ -5,6 +5,7 @@ using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -15,8 +16,8 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderPreprocessingPredictTests
 {
-    [Fact]
-    public void BuildWithPreprocessing_PreprocessingInfoIsFitted()
+    [Fact(Timeout = 120000)]
+    public async Task BuildWithPreprocessing_PreprocessingInfoIsFitted()
     {
         // Arrange: Create data with very different feature scales.
         // Feature 1: 0-1 range, Feature 2: 0-10000 range
@@ -73,8 +74,8 @@ public class AiModelBuilderPreprocessingPredictTests
         }
     }
 
-    [Fact]
-    public void BuildWithPreprocessing_PredictAppliesInverseTransform()
+    [Fact(Timeout = 120000)]
+    public async Task BuildWithPreprocessing_PredictAppliesInverseTransform()
     {
         // Arrange: Train on known linear data y = 2*x + 3 with preprocessing.
         // Predictions should be in the ORIGINAL scale, not the standardized scale.
@@ -116,8 +117,8 @@ public class AiModelBuilderPreprocessingPredictTests
         Assert.InRange(predictions[0], 15.0, 35.0);
     }
 
-    [Fact]
-    public void BuildWithCustomPipeline_PredictProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BuildWithCustomPipeline_PredictProducesFiniteOutput()
     {
         // Arrange: Use pipeline with SimpleImputer + StandardScaler.
         // Training data has some NaN values that the imputer must handle.
@@ -178,8 +179,8 @@ public class AiModelBuilderPreprocessingPredictTests
         }
     }
 
-    [Fact]
-    public void BuildWithoutPreprocessing_PredictSkipsTransform()
+    [Fact(Timeout = 120000)]
+    public async Task BuildWithoutPreprocessing_PredictSkipsTransform()
     {
         // Arrange: Train WITHOUT ConfigurePreprocessing
         var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 88);

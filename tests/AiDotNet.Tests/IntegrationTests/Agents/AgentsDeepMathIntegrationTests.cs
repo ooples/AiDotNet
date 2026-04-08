@@ -1,6 +1,7 @@
 using AiDotNet.Agents;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Agents;
 
@@ -31,14 +32,14 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(expected, HyperparameterDefinition.NormalizeName(input));
     }
 
-    [Fact]
-    public void NormalizeName_EmptyString_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizeName_EmptyString_ReturnsEmpty()
     {
         Assert.Equal("", HyperparameterDefinition.NormalizeName(""));
     }
 
-    [Fact]
-    public void NormalizeName_AlreadyNormalized_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizeName_AlreadyNormalized_Unchanged()
     {
         var name = "learningrate";
         Assert.Equal(name, HyperparameterDefinition.NormalizeName(name));
@@ -48,8 +49,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterDefinition: Alias Matching
     // ============================
 
-    [Fact]
-    public void MatchesAlias_AfterBuild_MatchesPropertyName()
+    [Fact(Timeout = 120000)]
+    public async Task MatchesAlias_AfterBuild_MatchesPropertyName()
     {
         var def = new HyperparameterDefinition
         {
@@ -62,8 +63,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.True(def.MatchesAlias("maxdepth"));
     }
 
-    [Fact]
-    public void MatchesAlias_AfterBuild_MatchesAliases()
+    [Fact(Timeout = 120000)]
+    public async Task MatchesAlias_AfterBuild_MatchesAliases()
     {
         var def = new HyperparameterDefinition
         {
@@ -77,8 +78,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.True(def.MatchesAlias("depth"));
     }
 
-    [Fact]
-    public void MatchesAlias_CaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task MatchesAlias_CaseInsensitive()
     {
         var def = new HyperparameterDefinition
         {
@@ -92,8 +93,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.True(def.MatchesAlias("maxdepth"));
     }
 
-    [Fact]
-    public void MatchesAlias_UnknownAlias_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MatchesAlias_UnknownAlias_ReturnsFalse()
     {
         var def = new HyperparameterDefinition
         {
@@ -109,8 +110,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterRegistry: Default Registrations
     // ============================
 
-    [Fact]
-    public void Registry_TreeModels_HaveMaxDepth()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_TreeModels_HaveMaxDepth()
     {
         var registry = new HyperparameterRegistry();
 
@@ -127,8 +128,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_TreeModels_MaxDepth_Range1To100()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_TreeModels_MaxDepth_Range1To100()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth");
@@ -138,8 +139,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(100.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_EnsembleModels_HaveNumberOfTrees()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_EnsembleModels_HaveNumberOfTrees()
     {
         var registry = new HyperparameterRegistry();
 
@@ -156,8 +157,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_NumberOfTrees_Range1To10000()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_NumberOfTrees_Range1To10000()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.RandomForestRegression<>), "n_estimators");
@@ -167,8 +168,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(10000.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_NEstimators_AllAliasesWork()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_NEstimators_AllAliasesWork()
     {
         var registry = new HyperparameterRegistry();
         var aliases = new[] { "n_estimators", "num_trees", "ntrees", "number_of_trees", "n_trees" };
@@ -180,8 +181,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_GradientBoosting_HasLearningRate()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_GradientBoosting_HasLearningRate()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "learning_rate");
@@ -192,8 +193,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(1.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_GradientBoosting_LearningRateAliases()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_GradientBoosting_LearningRateAliases()
     {
         var registry = new HyperparameterRegistry();
         var aliases = new[] { "learning_rate", "lr", "eta", "shrinkage" };
@@ -204,8 +205,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_GradientBoosting_SubsampleRatio()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_GradientBoosting_SubsampleRatio()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "subsample");
@@ -216,8 +217,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(1.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_NeuralNetworks_HaveLearningRateEpochsBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_NeuralNetworks_HaveLearningRateEpochsBatchSize()
     {
         var registry = new HyperparameterRegistry();
 
@@ -231,8 +232,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_NeuralNetwork_LearningRate_Range()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_NeuralNetwork_LearningRate_Range()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.NeuralNetworkRegression<>), "lr");
@@ -242,8 +243,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(1.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_NeuralNetwork_Epochs_Range()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_NeuralNetwork_Epochs_Range()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.NeuralNetworkRegression<>), "num_epochs");
@@ -253,8 +254,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(100000.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_PolynomialRegression_Degree()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_PolynomialRegression_Degree()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.PolynomialRegression<>), "degree");
@@ -265,8 +266,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(20.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_RegularizedModels_Alpha()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_RegularizedModels_Alpha()
     {
         var registry = new HyperparameterRegistry();
 
@@ -282,8 +283,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_Alpha_AllAliases()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_Alpha_AllAliases()
     {
         var registry = new HyperparameterRegistry();
         var aliases = new[] { "alpha", "regularization", "lambda", "reg_strength", "penalty" };
@@ -294,8 +295,8 @@ public class AgentsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Registry_KNN_K()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_KNN_K()
     {
         var registry = new HyperparameterRegistry();
         var def = registry.GetDefinition(typeof(AiDotNet.Regression.KNearestNeighborsRegression<>), "n_neighbors");
@@ -306,8 +307,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(1000.0, def.MaxValue);
     }
 
-    [Fact]
-    public void Registry_SVR_C_And_Epsilon()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_SVR_C_And_Epsilon()
     {
         var registry = new HyperparameterRegistry();
 
@@ -324,8 +325,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(10.0, epsDef.MaxValue);
     }
 
-    [Fact]
-    public void Registry_TimeSeries_LagOrder_And_SeasonalPeriod()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_TimeSeries_LagOrder_And_SeasonalPeriod()
     {
         var registry = new HyperparameterRegistry();
 
@@ -342,8 +343,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(365.0, seasonDef.MaxValue);
     }
 
-    [Fact]
-    public void Registry_SharedParameters_Seed()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_SharedParameters_Seed()
     {
         var registry = new HyperparameterRegistry();
 
@@ -355,8 +356,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal("Seed", propName);
     }
 
-    [Fact]
-    public void Registry_SharedParameters_UseIntercept()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_SharedParameters_UseIntercept()
     {
         var registry = new HyperparameterRegistry();
 
@@ -364,8 +365,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal("UseIntercept", propName);
     }
 
-    [Fact]
-    public void Registry_UnknownParam_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task Registry_UnknownParam_ReturnsNull()
     {
         var registry = new HyperparameterRegistry();
 
@@ -377,8 +378,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterRegistry: Validation
     // ============================
 
-    [Fact]
-    public void Validate_WithinRange_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithinRange_Valid()
     {
         var registry = new HyperparameterRegistry();
 
@@ -387,8 +388,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.False(result.HasWarning);
     }
 
-    [Fact]
-    public void Validate_BelowMinimum_Warning()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_BelowMinimum_Warning()
     {
         var registry = new HyperparameterRegistry();
 
@@ -399,8 +400,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Contains("below the typical minimum", result.Warning);
     }
 
-    [Fact]
-    public void Validate_AboveMaximum_Warning()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_AboveMaximum_Warning()
     {
         var registry = new HyperparameterRegistry();
 
@@ -411,8 +412,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Contains("above the typical maximum", result.Warning);
     }
 
-    [Fact]
-    public void Validate_UnknownParam_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_UnknownParam_Valid()
     {
         var registry = new HyperparameterRegistry();
 
@@ -422,8 +423,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.False(result.HasWarning);
     }
 
-    [Fact]
-    public void Validate_NonNumericValue_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NonNumericValue_Valid()
     {
         var registry = new HyperparameterRegistry();
 
@@ -432,8 +433,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
-    public void Validate_AtExactMinimum_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_AtExactMinimum_Valid()
     {
         var registry = new HyperparameterRegistry();
 
@@ -443,8 +444,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.False(result.HasWarning);
     }
 
-    [Fact]
-    public void Validate_AtExactMaximum_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_AtExactMaximum_Valid()
     {
         var registry = new HyperparameterRegistry();
 
@@ -458,8 +459,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterValidationResult: Factory Methods
     // ============================
 
-    [Fact]
-    public void ValidationResult_Valid_NoWarning()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationResult_Valid_NoWarning()
     {
         var result = HyperparameterValidationResult.Valid();
 
@@ -468,8 +469,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Null(result.Warning);
     }
 
-    [Fact]
-    public void ValidationResult_WithWarning_StillValid()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationResult_WithWarning_StillValid()
     {
         var result = HyperparameterValidationResult.WithWarning("test warning");
 
@@ -478,8 +479,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal("test warning", result.Warning);
     }
 
-    [Fact]
-    public void ValidationResult_Invalid_NotValid()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationResult_Invalid_NotValid()
     {
         var result = HyperparameterValidationResult.Invalid("test reason");
 
@@ -492,8 +493,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterResponseParser: JSON Parsing
     // ============================
 
-    [Fact]
-    public void Parse_JsonBlock_ExtractsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Parse_JsonBlock_ExtractsParameters()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -510,8 +511,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(5, result["max_depth"]);
     }
 
-    [Fact]
-    public void TryParseJson_JsonBlockWithCodeFence_ParsesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseJson_JsonBlockWithCodeFence_ParsesCorrectly()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -526,8 +527,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(50, result["epochs"]);
     }
 
-    [Fact]
-    public void TryParseJson_RawJsonObject_ParsesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseJson_RawJsonObject_ParsesCorrectly()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -540,8 +541,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(3, result["degree"]);
     }
 
-    [Fact]
-    public void TryParseJson_NoJson_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseJson_NoJson_ReturnsEmpty()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -550,8 +551,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Empty(result);
     }
 
-    [Fact]
-    public void TryParseJson_BooleanValues_Parsed()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseJson_BooleanValues_Parsed()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -569,8 +570,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterResponseParser: Markdown Bold Parsing
     // ============================
 
-    [Fact]
-    public void TryParseMarkdownBold_BoldPatterns_Extracted()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseMarkdownBold_BoldPatterns_Extracted()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -587,8 +588,8 @@ public class AgentsDeepMathIntegrationTests
         Assert.Equal(8, result["max_depth"]);
     }
 
-    [Fact]
-    public void TryParseMarkdownBold_NoMarkdown_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseMarkdownBold_NoMarkdown_ReturnsEmpty()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -601,8 +602,8 @@ public class AgentsDeepMathIntegrationTests
     // HyperparameterResponseParser: Colon-Separated Parsing
     // ============================
 
-    [Fact]
-    public void TryParseColonSeparated_ColonFormat_Extracted()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseColonSeparated_ColonFormat_Extracted()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -618,8 +619,8 @@ max_depth: 10";
         Assert.Equal(10, result["max_depth"]);
     }
 
-    [Fact]
-    public void TryParseColonSeparated_EqualsFormat_Extracted()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseColonSeparated_EqualsFormat_Extracted()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -633,8 +634,8 @@ degree = 3";
         Assert.Equal(3, result["degree"]);
     }
 
-    [Fact]
-    public void TryParseColonSeparated_SkipsNonParameterNames()
+    [Fact(Timeout = 120000)]
+    public async Task TryParseColonSeparated_SkipsNonParameterNames()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -656,8 +657,8 @@ learning_rate: 0.01";
     // HyperparameterResponseParser: Type Inference
     // ============================
 
-    [Fact]
-    public void InferTypedValue_Integer_ReturnsInt()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_Integer_ReturnsInt()
     {
         var result = HyperparameterResponseParser.InferTypedValue("42");
 
@@ -665,8 +666,8 @@ learning_rate: 0.01";
         Assert.Equal(42, result);
     }
 
-    [Fact]
-    public void InferTypedValue_Double_ReturnsDouble()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_Double_ReturnsDouble()
     {
         var result = HyperparameterResponseParser.InferTypedValue("0.001");
 
@@ -674,15 +675,15 @@ learning_rate: 0.01";
         Assert.Equal(0.001, result);
     }
 
-    [Fact]
-    public void InferTypedValue_Boolean_ReturnsBool()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_Boolean_ReturnsBool()
     {
         Assert.Equal(true, HyperparameterResponseParser.InferTypedValue("true"));
         Assert.Equal(false, HyperparameterResponseParser.InferTypedValue("false"));
     }
 
-    [Fact]
-    public void InferTypedValue_String_ReturnsString()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_String_ReturnsString()
     {
         var result = HyperparameterResponseParser.InferTypedValue("relu");
 
@@ -690,15 +691,15 @@ learning_rate: 0.01";
         Assert.Equal("relu", result);
     }
 
-    [Fact]
-    public void InferTypedValue_QuotedString_StripsQuotes()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_QuotedString_StripsQuotes()
     {
         var result = HyperparameterResponseParser.InferTypedValue("\"sigmoid\"");
         Assert.Equal("sigmoid", result);
     }
 
-    [Fact]
-    public void InferTypedValue_NullOrEmpty_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task InferTypedValue_NullOrEmpty_ReturnsNull()
     {
         Assert.Null(HyperparameterResponseParser.InferTypedValue(""));
         Assert.Null(HyperparameterResponseParser.InferTypedValue("  "));
@@ -708,8 +709,8 @@ learning_rate: 0.01";
     // HyperparameterResponseParser: Parse Strategy Priority
     // ============================
 
-    [Fact]
-    public void Parse_EmptyInput_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Parse_EmptyInput_ReturnsEmpty()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -717,8 +718,8 @@ learning_rate: 0.01";
         Assert.Empty(parser.Parse("   "));
     }
 
-    [Fact]
-    public void Parse_JsonTakesPriority_OverMarkdown()
+    [Fact(Timeout = 120000)]
+    public async Task Parse_JsonTakesPriority_OverMarkdown()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -733,8 +734,8 @@ learning_rate: 0.01";
         Assert.Equal(0.001, result["learning_rate"]);
     }
 
-    [Fact]
-    public void Parse_MarkdownTakesPriority_OverColon()
+    [Fact(Timeout = 120000)]
+    public async Task Parse_MarkdownTakesPriority_OverColon()
     {
         var parser = new HyperparameterResponseParser();
 
@@ -752,8 +753,8 @@ Some text learning_rate: 0.1";
     // HyperparameterRegistry: Custom Registration
     // ============================
 
-    [Fact]
-    public void Register_CustomParameter_Resolvable()
+    [Fact(Timeout = 120000)]
+    public async Task Register_CustomParameter_Resolvable()
     {
         var registry = new HyperparameterRegistry();
 
@@ -770,8 +771,8 @@ Some text learning_rate: 0.1";
         Assert.Equal("CustomParam", registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "my_param"));
     }
 
-    [Fact]
-    public void Register_ModelSpecific_TakesPriorityOverShared()
+    [Fact(Timeout = 120000)]
+    public async Task Register_ModelSpecific_TakesPriorityOverShared()
     {
         var registry = new HyperparameterRegistry();
 
@@ -785,8 +786,8 @@ Some text learning_rate: 0.1";
     // Cross-Component Integration: Registry + Parser + Validation
     // ============================
 
-    [Fact]
-    public void EndToEnd_ParseThenLookupThenValidate()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_ParseThenLookupThenValidate()
     {
         var parser = new HyperparameterResponseParser();
         var registry = new HyperparameterRegistry();
@@ -813,8 +814,8 @@ Some text learning_rate: 0.1";
         }
     }
 
-    [Fact]
-    public void EndToEnd_ParseThenValidate_OutOfRange()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_ParseThenValidate_OutOfRange()
     {
         var parser = new HyperparameterResponseParser();
         var registry = new HyperparameterRegistry();

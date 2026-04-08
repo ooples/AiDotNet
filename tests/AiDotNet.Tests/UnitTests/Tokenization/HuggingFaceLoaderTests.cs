@@ -5,6 +5,7 @@ using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Models;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -36,8 +37,8 @@ public class HuggingFaceLoaderTests : IDisposable
         }
     }
 
-    [Fact]
-    public void LoadFromDirectory_WithValidBpeFiles_LoadsTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromDirectory_WithValidBpeFiles_LoadsTokenizer()
     {
         // Arrange
         CreateBpeTokenizerFiles();
@@ -50,8 +51,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void LoadFromDirectory_WithVocabJson_LoadsVocabulary()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromDirectory_WithVocabJson_LoadsVocabulary()
     {
         // Arrange
         CreateWordPieceTokenizerFiles();
@@ -64,8 +65,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(tokenizer.Vocabulary.ContainsToken("hello"));
     }
 
-    [Fact]
-    public void LoadFromDirectory_MissingDirectory_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromDirectory_MissingDirectory_ThrowsException()
     {
         // Arrange
         var nonExistentPath = Path.Combine(_tempDir, "nonexistent");
@@ -75,8 +76,8 @@ public class HuggingFaceLoaderTests : IDisposable
             HuggingFaceTokenizerLoader.LoadFromDirectory(nonExistentPath));
     }
 
-    [Fact]
-    public void LoadFromDirectory_MissingConfigFile_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromDirectory_MissingConfigFile_ThrowsException()
     {
         // Arrange - empty directory with no tokenizer files
 
@@ -85,8 +86,8 @@ public class HuggingFaceLoaderTests : IDisposable
             HuggingFaceTokenizerLoader.LoadFromDirectory(_tempDir));
     }
 
-    [Fact]
-    public void SaveToDirectory_CreatesVocabFile()
+    [Fact(Timeout = 60000)]
+    public async Task SaveToDirectory_CreatesVocabFile()
     {
         // Arrange
         var corpus = new List<string> { "Hello world", "Test text" };
@@ -101,8 +102,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(File.Exists(Path.Combine(outputDir, "tokenizer_config.json")));
     }
 
-    [Fact]
-    public void SaveToDirectory_ConfigContainsSpecialTokens()
+    [Fact(Timeout = 60000)]
+    public async Task SaveToDirectory_ConfigContainsSpecialTokens()
     {
         // Arrange - Use BERT special tokens to test BERT-style token saving
         var corpus = new List<string> { "Hello world" };
@@ -123,8 +124,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.Equal("[PAD]", config.PadToken);
     }
 
-    [Fact]
-    public void LoadAndSave_Roundtrip_PreservesVocabulary()
+    [Fact(Timeout = 60000)]
+    public async Task LoadAndSave_Roundtrip_PreservesVocabulary()
     {
         // Arrange
         CreateBpeTokenizerFiles();
@@ -139,8 +140,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.Equal(loaded.VocabularySize, reloaded.VocabularySize);
     }
 
-    [Fact]
-    public void LoadFromTokenizerJson_WithBpeModel_LoadsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromTokenizerJson_WithBpeModel_LoadsCorrectly()
     {
         // Arrange
         CreateTokenizerJsonFile("bpe");
@@ -153,8 +154,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
-    public void LoadFromTokenizerJson_WithWordPieceModel_LoadsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromTokenizerJson_WithWordPieceModel_LoadsCorrectly()
     {
         // Arrange
         CreateTokenizerJsonFile("wordpiece");
@@ -167,8 +168,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
-    public void LoadFromTokenizerJson_WithUnigramModel_LoadsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromTokenizerJson_WithUnigramModel_LoadsCorrectly()
     {
         // Arrange
         CreateTokenizerJsonFile("unigram");
@@ -181,8 +182,8 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
-    public void LoadFromTokenizerJson_ExtractsSpecialTokens()
+    [Fact(Timeout = 60000)]
+    public async Task LoadFromTokenizerJson_ExtractsSpecialTokens()
     {
         // Arrange
         CreateTokenizerJsonFile("bpe");

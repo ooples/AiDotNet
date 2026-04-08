@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -17,8 +18,8 @@ public class MiscHelpersIntegrationTests
 
     #region EnumHelper
 
-    [Fact]
-    public void EnumHelper_GetEnumValues_ReturnsAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task EnumHelper_GetEnumValues_ReturnsAllValues()
     {
         var values = EnumHelper.GetEnumValues<ActivationFunction>();
         Assert.NotEmpty(values);
@@ -27,16 +28,16 @@ public class MiscHelpersIntegrationTests
         Assert.Contains(ActivationFunction.Tanh, values);
     }
 
-    [Fact]
-    public void EnumHelper_GetEnumValues_WithIgnore_ExcludesValue()
+    [Fact(Timeout = 120000)]
+    public async Task EnumHelper_GetEnumValues_WithIgnore_ExcludesValue()
     {
         var values = EnumHelper.GetEnumValues<ActivationFunction>("ReLU");
         Assert.DoesNotContain(ActivationFunction.ReLU, values);
         Assert.Contains(ActivationFunction.Sigmoid, values);
     }
 
-    [Fact]
-    public void EnumHelper_GetEnumValues_NullIgnore_ReturnsAll()
+    [Fact(Timeout = 120000)]
+    public async Task EnumHelper_GetEnumValues_NullIgnore_ReturnsAll()
     {
         var values = EnumHelper.GetEnumValues<ActivationFunction>(null);
         Assert.NotEmpty(values);
@@ -46,15 +47,15 @@ public class MiscHelpersIntegrationTests
 
     #region VectorHelper
 
-    [Fact]
-    public void VectorHelper_CreateVector_CorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task VectorHelper_CreateVector_CorrectSize()
     {
         var v = VectorHelper.CreateVector<double>(5);
         Assert.Equal(5, v.Length);
     }
 
-    [Fact]
-    public void VectorHelper_CreateVector_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VectorHelper_CreateVector_DefaultValues()
     {
         var v = VectorHelper.CreateVector<double>(3);
         Assert.Equal(0.0, v[0], Tolerance);
@@ -62,8 +63,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(0.0, v[2], Tolerance);
     }
 
-    [Fact]
-    public void VectorHelper_CreateVector_ZeroSize()
+    [Fact(Timeout = 120000)]
+    public async Task VectorHelper_CreateVector_ZeroSize()
     {
         var v = VectorHelper.CreateVector<double>(0);
         Assert.Equal(0, v.Length);
@@ -73,64 +74,64 @@ public class MiscHelpersIntegrationTests
 
     #region RegexHelper
 
-    [Fact]
-    public void RegexHelper_DefaultTimeout_IsOneSecond()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_DefaultTimeout_IsOneSecond()
     {
         Assert.Equal(TimeSpan.FromSeconds(1), RegexHelper.DefaultTimeout);
     }
 
-    [Fact]
-    public void RegexHelper_FastTimeout_Is100ms()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_FastTimeout_Is100ms()
     {
         Assert.Equal(TimeSpan.FromMilliseconds(100), RegexHelper.FastTimeout);
     }
 
-    [Fact]
-    public void RegexHelper_Create_ReturnsRegex()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Create_ReturnsRegex()
     {
         var regex = RegexHelper.Create(@"\d+");
         Assert.NotNull(regex);
         Assert.True(regex.IsMatch("abc123"));
     }
 
-    [Fact]
-    public void RegexHelper_IsMatch_FindsPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_IsMatch_FindsPattern()
     {
         Assert.True(RegexHelper.IsMatch("hello123", @"\d+"));
         Assert.False(RegexHelper.IsMatch("hello", @"\d+"));
     }
 
-    [Fact]
-    public void RegexHelper_Match_ReturnsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Match_ReturnsMatch()
     {
         var match = RegexHelper.Match("test123end", @"\d+");
         Assert.True(match.Success);
         Assert.Equal("123", match.Value);
     }
 
-    [Fact]
-    public void RegexHelper_Matches_ReturnsAllMatches()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Matches_ReturnsAllMatches()
     {
         var matches = RegexHelper.Matches("a1b2c3", @"\d");
         Assert.Equal(3, matches.Count);
     }
 
-    [Fact]
-    public void RegexHelper_Replace_ReplacesPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Replace_ReplacesPattern()
     {
         var result = RegexHelper.Replace("hello 123 world 456", @"\d+", "NUM");
         Assert.Equal("hello NUM world NUM", result);
     }
 
-    [Fact]
-    public void RegexHelper_Replace_WithEvaluator()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Replace_WithEvaluator()
     {
         var result = RegexHelper.Replace("a1b2", @"\d", m => (int.Parse(m.Value) * 10).ToString());
         Assert.Equal("a10b20", result);
     }
 
-    [Fact]
-    public void RegexHelper_Split_SplitsOnPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Split_SplitsOnPattern()
     {
         var parts = RegexHelper.Split("one,two,three", ",");
         Assert.Equal(3, parts.Length);
@@ -138,16 +139,16 @@ public class MiscHelpersIntegrationTests
         Assert.Equal("three", parts[2]);
     }
 
-    [Fact]
-    public void RegexHelper_Escape_EscapesSpecialChars()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Escape_EscapesSpecialChars()
     {
         var escaped = RegexHelper.Escape("(hello)");
         Assert.Contains(@"\(", escaped);
         Assert.Contains(@"\)", escaped);
     }
 
-    [Fact]
-    public void RegexHelper_Create_WithOptions()
+    [Fact(Timeout = 120000)]
+    public async Task RegexHelper_Create_WithOptions()
     {
         var regex = RegexHelper.Create("hello", RegexOptions.IgnoreCase);
         Assert.True(regex.IsMatch("HELLO"));
@@ -157,8 +158,8 @@ public class MiscHelpersIntegrationTests
 
     #region TensorCopyHelper
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_1D()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_1D()
     {
         var source = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 10, 20, 30 }));
         var dest = new Tensor<double>(new[] { 3 });
@@ -167,8 +168,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(20.0, dest[2], Tolerance);
     }
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_2D()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_2D()
     {
         var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var dest = new Tensor<double>(new[] { 2, 3 });
@@ -180,8 +181,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(3.0, dest[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_DifferentRanks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_DifferentRanks_Throws()
     {
         var source = new Tensor<double>(new[] { 3 });
         var dest = new Tensor<double>(new[] { 3, 2 });
@@ -190,8 +191,8 @@ public class MiscHelpersIntegrationTests
             TensorCopyHelper.CopySample(source, dest, 0, 0));
     }
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_SourceOutOfRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_SourceOutOfRange_Throws()
     {
         var source = new Tensor<double>(new[] { 2, 3 });
         var dest = new Tensor<double>(new[] { 2, 3 });
@@ -200,8 +201,8 @@ public class MiscHelpersIntegrationTests
             TensorCopyHelper.CopySample(source, dest, 5, 0));
     }
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_DestOutOfRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_DestOutOfRange_Throws()
     {
         var source = new Tensor<double>(new[] { 2, 3 });
         var dest = new Tensor<double>(new[] { 2, 3 });
@@ -210,8 +211,8 @@ public class MiscHelpersIntegrationTests
             TensorCopyHelper.CopySample(source, dest, 0, 5));
     }
 
-    [Fact]
-    public void TensorCopyHelper_CopySample_MismatchedShapes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CopySample_MismatchedShapes_Throws()
     {
         var source = new Tensor<double>(new[] { 2, 3 });
         var dest = new Tensor<double>(new[] { 2, 4 }); // different second dim
@@ -224,8 +225,8 @@ public class MiscHelpersIntegrationTests
 
     #region DataAggregationHelper
 
-    [Fact]
-    public void DataAggregationHelper_AggregateVectors()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_AggregateVectors()
     {
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
         var v2 = new Vector<double>(new double[] { 4, 5, 6 });
@@ -237,8 +238,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(4.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void DataAggregationHelper_AggregateMatrices()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_AggregateMatrices()
     {
         var m1 = new Matrix<double>(2, 3);
         m1[0, 0] = 1.0;
@@ -251,8 +252,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void DataAggregationHelper_AggregateTensors()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_AggregateTensors()
     {
         var t1 = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var t2 = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 7, 8, 9 }));
@@ -262,8 +263,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(new[] { 3, 3 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void DataAggregationHelper_SingleItem_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_SingleItem_ReturnsSame()
     {
         var v = new Vector<double>(new double[] { 1, 2, 3 });
         var list = new List<Vector<double>> { v };
@@ -272,16 +273,16 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(3, result.Length);
     }
 
-    [Fact]
-    public void DataAggregationHelper_EmptyList_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_EmptyList_Throws()
     {
         var list = new List<Vector<double>>();
         Assert.Throws<InvalidOperationException>(() =>
             DataAggregationHelper.Aggregate<double, Vector<double>>(list, "test"));
     }
 
-    [Fact]
-    public void DataAggregationHelper_MismatchedMatrixColumns_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DataAggregationHelper_MismatchedMatrixColumns_Throws()
     {
         var m1 = new Matrix<double>(2, 3);
         var m2 = new Matrix<double>(2, 4); // different columns
@@ -295,8 +296,8 @@ public class MiscHelpersIntegrationTests
 
     #region TimeSeriesHelper
 
-    [Fact]
-    public void TimeSeriesHelper_DifferenceSeries_Order1()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_DifferenceSeries_Order1()
     {
         var y = new Vector<double>(new double[] { 10.0, 13.0, 15.0, 19.0 });
         var result = TimeSeriesHelper<double>.DifferenceSeries(y, 1);
@@ -306,8 +307,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(4.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void TimeSeriesHelper_DifferenceSeries_Order2()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_DifferenceSeries_Order2()
     {
         var y = new Vector<double>(new double[] { 10.0, 13.0, 15.0, 19.0 });
         var result = TimeSeriesHelper<double>.DifferenceSeries(y, 2);
@@ -318,8 +319,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(2.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void TimeSeriesHelper_DifferenceSeries_Order0_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_DifferenceSeries_Order0_Unchanged()
     {
         var y = new Vector<double>(new double[] { 10.0, 20.0, 30.0 });
         var result = TimeSeriesHelper<double>.DifferenceSeries(y, 0);
@@ -327,8 +328,8 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(10.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void TimeSeriesHelper_CalculateAutoCorrelation_Lag0Like()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_CalculateAutoCorrelation_Lag0Like()
     {
         // With known data, autocorrelation at lag 0 normalized by itself should be 1
         var y = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -336,24 +337,24 @@ public class MiscHelpersIntegrationTests
         Assert.Equal(1.0, acf[0], Tolerance); // lag 0 always 1
     }
 
-    [Fact]
-    public void TimeSeriesHelper_CalculateMultipleAutoCorrelation_Length()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_CalculateMultipleAutoCorrelation_Length()
     {
         var y = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
         var acf = TimeSeriesHelper<double>.CalculateMultipleAutoCorrelation(y, 3);
         Assert.Equal(4, acf.Length); // maxLag + 1
     }
 
-    [Fact]
-    public void TimeSeriesHelper_EstimateMACoefficients_ReturnsCorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_EstimateMACoefficients_ReturnsCorrectLength()
     {
         var residuals = new Vector<double>(new double[] { 0.1, -0.2, 0.3, -0.1, 0.05, -0.15 });
         var maCoeffs = TimeSeriesHelper<double>.EstimateMACoefficients(residuals, 2);
         Assert.Equal(2, maCoeffs.Length);
     }
 
-    [Fact]
-    public void TimeSeriesHelper_CalculateARResiduals_CorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesHelper_CalculateARResiduals_CorrectLength()
     {
         var y = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         var arCoeffs = new Vector<double>(new double[] { 0.5, 0.3 }); // AR(2)
@@ -365,8 +366,8 @@ public class MiscHelpersIntegrationTests
 
     #region WeightFunctionHelper
 
-    [Fact]
-    public void WeightFunctionHelper_Huber_SmallResiduals_WeightOne()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Huber_SmallResiduals_WeightOne()
     {
         var residuals = new Vector<double>(new double[] { 0.1, -0.1, 0.05 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Huber, 1.345);
@@ -377,8 +378,8 @@ public class MiscHelpersIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeightFunctionHelper_Huber_LargeResiduals_ReducedWeight()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Huber_LargeResiduals_ReducedWeight()
     {
         var residuals = new Vector<double>(new double[] { 5.0, -10.0 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Huber, 1.345);
@@ -388,8 +389,8 @@ public class MiscHelpersIntegrationTests
         Assert.True(weights[0] > 0.0);
     }
 
-    [Fact]
-    public void WeightFunctionHelper_Bisquare_SmallResiduals_NonZero()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Bisquare_SmallResiduals_NonZero()
     {
         var residuals = new Vector<double>(new double[] { 0.5, -0.3 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Bisquare, 4.685);
@@ -397,32 +398,32 @@ public class MiscHelpersIntegrationTests
         Assert.True(weights[1] > 0.0);
     }
 
-    [Fact]
-    public void WeightFunctionHelper_Bisquare_LargeResiduals_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Bisquare_LargeResiduals_Zero()
     {
         var residuals = new Vector<double>(new double[] { 100.0 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Bisquare, 4.685);
         Assert.Equal(0.0, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void WeightFunctionHelper_Andrews_SmallResiduals_NonZero()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Andrews_SmallResiduals_NonZero()
     {
         var residuals = new Vector<double>(new double[] { 0.1 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Andrews, 1.339);
         Assert.True(weights[0] > 0.0);
     }
 
-    [Fact]
-    public void WeightFunctionHelper_Andrews_LargeResiduals_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_Andrews_LargeResiduals_Zero()
     {
         var residuals = new Vector<double>(new double[] { 100.0 });
         var weights = WeightFunctionHelper<double>.CalculateWeights(residuals, WeightFunction.Andrews, 1.339);
         Assert.Equal(0.0, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void WeightFunctionHelper_InvalidFunction_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WeightFunctionHelper_InvalidFunction_Throws()
     {
         var residuals = new Vector<double>(new double[] { 1.0 });
         Assert.Throws<ArgumentException>(() =>

@@ -3,13 +3,14 @@ using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Tokenization
 {
     public class BpeTokenizerTests
     {
-        [Fact]
-        public void Train_CreatesTokenizerWithMerges()
+        [Fact(Timeout = 60000)]
+        public async Task Train_CreatesTokenizerWithMerges()
         {
             // Arrange
             var corpus = new List<string>
@@ -27,8 +28,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(tokenizer.VocabularySize > 0);
         }
 
-        [Fact]
-        public void Tokenize_SplitsTextIntoTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_SplitsTextIntoTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -52,8 +53,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("hello", tokens);
         }
 
-        [Fact]
-        public void Encode_ReturnsTokenizationResult()
+        [Fact(Timeout = 60000)]
+        public async Task Encode_ReturnsTokenizationResult()
         {
             // Arrange
             var vocab = new Vocabulary("<|endoftext|>");
@@ -77,8 +78,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(result.TokenIds.Count, result.Tokens.Count);
         }
 
-        [Fact]
-        public void Decode_ReconstructsText()
+        [Fact(Timeout = 60000)]
+        public async Task Decode_ReconstructsText()
         {
             // Arrange
             var vocab = new Vocabulary("<|endoftext|>");
@@ -97,8 +98,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(text, decoded);
         }
 
-        [Fact]
-        public void Encode_WithPadding_AddsPaddingTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Encode_WithPadding_AddsPaddingTokens()
         {
             // Arrange
             var vocab = new Vocabulary("<|endoftext|>");
@@ -123,8 +124,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains(0, result.AttentionMask); // Has padding
         }
 
-        [Fact]
-        public void Encode_WithTruncation_TruncatesSequence()
+        [Fact(Timeout = 60000)]
+        public async Task Encode_WithTruncation_TruncatesSequence()
         {
             // Arrange
             var vocab = new Vocabulary("<|endoftext|>");

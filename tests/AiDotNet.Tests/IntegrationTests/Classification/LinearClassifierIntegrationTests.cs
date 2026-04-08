@@ -1,6 +1,7 @@
 using AiDotNet.Classification.Linear;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -15,8 +16,8 @@ public class LinearClassifierIntegrationTests
 
     #region Perceptron Tests
 
-    [Fact]
-    public void Perceptron_LinearSeparable_ConvergesToPerfectClassification()
+    [Fact(Timeout = 120000)]
+    public async Task Perceptron_LinearSeparable_ConvergesToPerfectClassification()
     {
         // Arrange: Linearly separable data
         var x = new Matrix<double>(20, 2);
@@ -60,8 +61,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct == 20, $"Perceptron should converge to perfect classification on linearly separable data. Got {correct}/20");
     }
 
-    [Fact]
-    public void Perceptron_UpdatesOnlyOnMistakes()
+    [Fact(Timeout = 120000)]
+    public async Task Perceptron_UpdatesOnlyOnMistakes()
     {
         // Arrange: Simple data where perceptron should learn quickly
         var x = new Matrix<double>(4, 2);
@@ -95,8 +96,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 3, $"Perceptron should classify most samples correctly. Got {correct}/4");
     }
 
-    [Fact]
-    public void Perceptron_ThrowsOnMulticlass()
+    [Fact(Timeout = 120000)]
+    public async Task Perceptron_ThrowsOnMulticlass()
     {
         // Arrange: 3-class data
         var x = new Matrix<double>(6, 2);
@@ -115,8 +116,8 @@ public class LinearClassifierIntegrationTests
         Assert.Throws<NotSupportedException>(() => perceptron.Train(x, y));
     }
 
-    [Fact]
-    public void Perceptron_WithL2Regularization_SmallerWeights()
+    [Fact(Timeout = 120000)]
+    public async Task Perceptron_WithL2Regularization_SmallerWeights()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -179,8 +180,8 @@ public class LinearClassifierIntegrationTests
 
     #region Ridge Classifier Tests
 
-    [Fact]
-    public void RidgeClassifier_ClosedFormSolution_AccurateResults()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_ClosedFormSolution_AccurateResults()
     {
         // Arrange: Well-separated data
         var x = new Matrix<double>(20, 2);
@@ -213,8 +214,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 18, $"Ridge should achieve high accuracy. Got {correct}/20");
     }
 
-    [Fact]
-    public void RidgeClassifier_HigherAlpha_MoreRegularization()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_HigherAlpha_MoreRegularization()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -251,8 +252,8 @@ public class LinearClassifierIntegrationTests
             $"Higher alpha should produce smaller weights. Low alpha norm: {Math.Sqrt(normLow)}, High alpha norm: {Math.Sqrt(normHigh)}");
     }
 
-    [Fact]
-    public void RidgeClassifier_WithoutIntercept_CenteredData()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_WithoutIntercept_CenteredData()
     {
         // Arrange: Data centered around origin
         var x = new Matrix<double>(8, 2);
@@ -292,8 +293,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correctWithout >= 6, $"Ridge without intercept should work on centered data. Got {correctWithout}/8");
     }
 
-    [Fact]
-    public void RidgeClassifier_ThrowsOnMulticlass()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_ThrowsOnMulticlass()
     {
         // Arrange: 3-class data
         var x = new Matrix<double>(6, 2);
@@ -316,8 +317,8 @@ public class LinearClassifierIntegrationTests
 
     #region SGD Classifier Tests
 
-    [Fact]
-    public void SGDClassifier_HingeLoss_SimilarToSVM()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_HingeLoss_SimilarToSVM()
     {
         // Arrange: Linearly separable data
         var x = new Matrix<double>(20, 2);
@@ -354,8 +355,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 18, $"SGD with hinge loss should achieve high accuracy. Got {correct}/20");
     }
 
-    [Fact]
-    public void SGDClassifier_LogLoss_LogisticRegression()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_LogLoss_LogisticRegression()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -392,8 +393,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 16, $"SGD with log loss should achieve good accuracy. Got {correct}/20");
     }
 
-    [Fact]
-    public void SGDClassifier_SquaredHingeLoss_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_SquaredHingeLoss_Works()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -428,8 +429,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"SGD with squared hinge loss should work. Got {correct}/10");
     }
 
-    [Fact]
-    public void SGDClassifier_L1Regularization_SparseWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_L1Regularization_SparseWeights()
     {
         // Arrange: Data with many irrelevant features
         var x = new Matrix<double>(20, 10);
@@ -480,8 +481,8 @@ public class LinearClassifierIntegrationTests
             $"L1 regularization should produce sparse weights. Expected at least 3 near-zero weights, got {nearZeroCount}/{weights.Length}");
     }
 
-    [Fact]
-    public void SGDClassifier_ConvergenceCheck_StopsEarly()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_ConvergenceCheck_StopsEarly()
     {
         // Arrange: Easy data that should converge quickly
         var x = new Matrix<double>(10, 2);
@@ -521,8 +522,8 @@ public class LinearClassifierIntegrationTests
 
     #region Passive-Aggressive Classifier Tests
 
-    [Fact]
-    public void PassiveAggressive_PA_MinimalUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_PA_MinimalUpdate()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -556,8 +557,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
-    public void PassiveAggressive_PA_I_LimitedStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_PA_I_LimitedStepSize()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -592,8 +593,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA-I should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
-    public void PassiveAggressive_PA_II_SoftMargin()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_PA_II_SoftMargin()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -628,8 +629,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA-II should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
-    public void PassiveAggressive_DifferentC_AffectsAggressiveness()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_DifferentC_AffectsAggressiveness()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -671,8 +672,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(weightsHigh.Length > 0);
     }
 
-    [Fact]
-    public void PassiveAggressive_GetModelMetadata_ContainsC()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_GetModelMetadata_ContainsC()
     {
         // Arrange
         var options = new PassiveAggressiveOptions<double>
@@ -705,8 +706,8 @@ public class LinearClassifierIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void Perceptron_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task Perceptron_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -736,8 +737,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void RidgeClassifier_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -766,8 +767,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void SGDClassifier_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -797,8 +798,8 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void PassiveAggressive_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task PassiveAggressive_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -832,8 +833,8 @@ public class LinearClassifierIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void AllLinearClassifiers_ThrowOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task AllLinearClassifiers_ThrowOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -846,8 +847,8 @@ public class LinearClassifierIntegrationTests
         Assert.Throws<ArgumentException>(() => new PassiveAggressiveClassifier<double>().Train(x, y));
     }
 
-    [Fact]
-    public void LinearClassifiers_PredictBeforeTrain_ThrowsOrReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task LinearClassifiers_PredictBeforeTrain_ThrowsOrReturnsEmpty()
     {
         // Arrange
         var testPoint = new Matrix<double>(1, 2);
@@ -875,8 +876,8 @@ public class LinearClassifierIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void SGDClassifier_LargeFeatureValues_Stable()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_LargeFeatureValues_Stable()
     {
         // Arrange: Data with large feature values
         var x = new Matrix<double>(10, 2);
@@ -908,8 +909,8 @@ public class LinearClassifierIntegrationTests
         }
     }
 
-    [Fact]
-    public void RidgeClassifier_CollinearFeatures_Regularized()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeClassifier_CollinearFeatures_Regularized()
     {
         // Arrange: Nearly collinear features
         var x = new Matrix<double>(10, 3);

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -75,8 +76,8 @@ public class BoostingRegressionIntegrationTests
 
     #region AdaBoostR2
 
-    [Fact]
-    public void AdaBoostR2_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoostR2_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.5 }, intercept: 3.0, noise: 0.5, seed: 42);
 
@@ -89,8 +90,8 @@ public class BoostingRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"AdaBoostR2 R²={r2:F4} should be > 0.5 on linear data");
     }
 
-    [Fact]
-    public void AdaBoostR2_MonotonicInFirstFeature()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoostR2_MonotonicInFirstFeature()
     {
         var (x, y) = CreateLinearData(60, new[] { 3.0, 0.5 }, intercept: 1.0, noise: 0.3, seed: 42);
 
@@ -110,8 +111,8 @@ public class BoostingRegressionIntegrationTests
             $"AdaBoostR2 should predict higher for x1=5 ({predHigh[0]:F4}) than x1=-5 ({predLow[0]:F4})");
     }
 
-    [Fact]
-    public void AdaBoostR2_DeterministicWithSeed()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoostR2_DeterministicWithSeed()
     {
         var (x, y) = CreateLinearData(40, new[] { 1.0, 2.0 }, intercept: 0, noise: 0.1, seed: 42);
 
@@ -133,8 +134,8 @@ public class BoostingRegressionIntegrationTests
 
     #region DART Regression
 
-    [Fact]
-    public void DARTRegression_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task DARTRegression_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.0, 0.5 }, intercept: 2.0, noise: 0.5, seed: 42);
 
@@ -147,8 +148,8 @@ public class BoostingRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"DART R²={r2:F4} should be > 0.5 on linear data");
     }
 
-    [Fact]
-    public void DARTRegression_OutputLengthMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DARTRegression_OutputLengthMatchesInput()
     {
         var (x, y) = CreateLinearData(50, new[] { 1.0 }, intercept: 0, noise: 0.1, seed: 42);
 
@@ -166,8 +167,8 @@ public class BoostingRegressionIntegrationTests
 
     #region GradientBoosting
 
-    [Fact]
-    public void GradientBoosting_FitsNonLinearData_BetterThanLinear()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_FitsNonLinearData_BetterThanLinear()
     {
         // Non-linear data: y = x1^2 + x2
         var random = new Random(42);
@@ -191,8 +192,8 @@ public class BoostingRegressionIntegrationTests
         Assert.True(r2 > 0.7, $"GradientBoosting R²={r2:F4} should be > 0.7 on quadratic data");
     }
 
-    [Fact]
-    public void GradientBoosting_MoreEstimatorsReduceError()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_MoreEstimatorsReduceError()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, 1.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -214,8 +215,8 @@ public class BoostingRegressionIntegrationTests
 
     #region HistGradientBoosting
 
-    [Fact]
-    public void HistGradientBoosting_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(100, new[] { 1.5, -2.0 }, intercept: 3.0, noise: 0.5, seed: 42);
 
@@ -228,8 +229,8 @@ public class BoostingRegressionIntegrationTests
         Assert.True(r2 > 0.5, $"HistGradientBoosting R²={r2:F4} should be > 0.5 on linear data");
     }
 
-    [Fact]
-    public void HistGradientBoosting_HandlesLargeDataset()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_HandlesLargeDataset()
     {
         // Hist-based methods should handle more data efficiently
         var (x, y) = CreateLinearData(500, new[] { 1.0, 2.0, -0.5 }, intercept: 0, noise: 1.0, seed: 42);
@@ -246,8 +247,8 @@ public class BoostingRegressionIntegrationTests
 
     #region NGBoost Regression
 
-    [Fact]
-    public void NGBoostRegression_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task NGBoostRegression_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, 1.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -264,8 +265,8 @@ public class BoostingRegressionIntegrationTests
 
     #region ExplainableBoostingMachine Regression
 
-    [Fact]
-    public void EBM_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task EBM_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -278,8 +279,8 @@ public class BoostingRegressionIntegrationTests
         Assert.True(r2 > 0.3, $"EBM R²={r2:F4} should be > 0.3 on linear data");
     }
 
-    [Fact]
-    public void EBM_InteractionDetection_TwoFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task EBM_InteractionDetection_TwoFeatures()
     {
         // Data with interaction: y = x1 * x2
         var random = new Random(42);
@@ -316,28 +317,28 @@ public class BoostingRegressionIntegrationTests
         Assert.True(AllFinite(predictions), $"{modelName} produced NaN/Infinity predictions");
     }
 
-    [Fact]
-    public void AdaBoostR2_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoostR2_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new AdaBoostR2Regression<double>(), "AdaBoostR2");
 
-    [Fact]
-    public void DART_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task DART_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new DARTRegression<double>(), "DART");
 
-    [Fact]
-    public void GradientBoosting_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new GradientBoostingRegression<double>(), "GradientBoosting");
 
-    [Fact]
-    public void HistGradientBoosting_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new HistGradientBoostingRegression<double>(), "HistGradientBoosting");
 
-    [Fact]
-    public void NGBoost_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task NGBoost_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new NGBoostRegression<double>(), "NGBoost");
 
-    [Fact]
-    public void EBM_PredictionsAreFinite()
+    [Fact(Timeout = 120000)]
+    public async Task EBM_PredictionsAreFinite()
         => AssertModelProducesFinitePredictions(new ExplainableBoostingMachineRegression<double>(), "EBM");
 
     #endregion

@@ -2,13 +2,14 @@ using System;
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class ConvolutionKernelValidationTests
 {
-    [Fact]
-    public void Conv2D_Throws_WhenKernelInChannelsMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task Conv2D_Throws_WhenKernelInChannelsMismatch()
     {
         var kernel = new ConvolutionKernel();
 

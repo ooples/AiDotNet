@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
@@ -32,8 +33,8 @@ public class DiversitySamplingTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_DefaultParameters_InitializesWithKCenterGreedy()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultParameters_InitializesWithKCenterGreedy()
     {
         // Arrange & Act
         var sampler = new DiversitySampling<double>();
@@ -74,8 +75,8 @@ public class DiversitySamplingTests
 
     #region Name Property Tests
 
-    [Fact]
-    public void Name_FarthestFirstEuclidean_ContainsMethodAndMetric()
+    [Fact(Timeout = 60000)]
+    public async Task Name_FarthestFirstEuclidean_ContainsMethodAndMetric()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -86,8 +87,8 @@ public class DiversitySamplingTests
         Assert.Equal("DiversitySampling-FarthestFirst-Euclidean", sampler.Name);
     }
 
-    [Fact]
-    public void Name_KCenterGreedyCosine_ContainsMethodAndMetric()
+    [Fact(Timeout = 60000)]
+    public async Task Name_KCenterGreedyCosine_ContainsMethodAndMetric()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -98,8 +99,8 @@ public class DiversitySamplingTests
         Assert.Equal("DiversitySampling-KCenterGreedy-Cosine", sampler.Name);
     }
 
-    [Fact]
-    public void Name_DensityPeaksManhattan_ContainsMethodAndMetric()
+    [Fact(Timeout = 60000)]
+    public async Task Name_DensityPeaksManhattan_ContainsMethodAndMetric()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -114,8 +115,8 @@ public class DiversitySamplingTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact]
-    public void UseBatchDiversity_DefaultValue_IsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_DefaultValue_IsTrue()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -125,8 +126,8 @@ public class DiversitySamplingTests
         Assert.True(sampler.UseBatchDiversity);
     }
 
-    [Fact]
-    public void UseBatchDiversity_SetToFalse_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_SetToFalse_UpdatesCorrectly()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -142,8 +143,8 @@ public class DiversitySamplingTests
 
     #region CoverageRadius Property Tests
 
-    [Fact]
-    public void CoverageRadius_BeforeSelection_IsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CoverageRadius_BeforeSelection_IsZero()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -152,8 +153,8 @@ public class DiversitySamplingTests
         Assert.Equal(0.0, sampler.CoverageRadius);
     }
 
-    [Fact]
-    public void CoverageRadius_AfterSelection_IsNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task CoverageRadius_AfterSelection_IsNonNegative()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -171,8 +172,8 @@ public class DiversitySamplingTests
 
     #region SelectSamples Tests
 
-    [Fact]
-    public void SelectSamples_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -182,8 +183,8 @@ public class DiversitySamplingTests
         Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact]
-    public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -197,8 +198,8 @@ public class DiversitySamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -212,8 +213,8 @@ public class DiversitySamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_ReturnsUniqueIndices()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -267,8 +268,8 @@ public class DiversitySamplingTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact]
-    public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -278,8 +279,8 @@ public class DiversitySamplingTests
         Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -293,8 +294,8 @@ public class DiversitySamplingTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ReturnsNonNegativeScores()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -336,8 +337,8 @@ public class DiversitySamplingTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact]
-    public void GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -355,8 +356,8 @@ public class DiversitySamplingTests
         Assert.Equal(0.0, stats["CoverageRadius"]);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();
@@ -376,8 +377,8 @@ public class DiversitySamplingTests
 
     #region Distance Metric Tests
 
-    [Fact]
-    public void EuclideanDistance_SameSample_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task EuclideanDistance_SameSample_ReturnsZero()
     {
         // This tests indirectly through selection behavior
         var sampler = new DiversitySampling<double>(
@@ -393,8 +394,8 @@ public class DiversitySamplingTests
         Assert.Equal(3, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void CosineDistance_NormalizedVectors_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CosineDistance_NormalizedVectors_WorksCorrectly()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -410,8 +411,8 @@ public class DiversitySamplingTests
         Assert.Equal(3, selected.Length);
     }
 
-    [Fact]
-    public void ManhattanDistance_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ManhattanDistance_WorksCorrectly()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -431,8 +432,8 @@ public class DiversitySamplingTests
 
     #region Integration Tests
 
-    [Fact]
-    public void DiversitySampling_CompleteWorkflow_ExecutesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task DiversitySampling_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
         var sampler = new DiversitySampling<double>(
@@ -459,8 +460,8 @@ public class DiversitySamplingTests
         Assert.True(coverage2 >= 0);
     }
 
-    [Fact]
-    public void DiversitySampling_DifferentMethods_ProduceDifferentSelections()
+    [Fact(Timeout = 60000)]
+    public async Task DiversitySampling_DifferentMethods_ProduceDifferentSelections()
     {
         // Arrange
         var samplerFarthest = new DiversitySampling<double>(DiversitySampling<double>.DiversityMethod.FarthestFirst);
@@ -477,8 +478,8 @@ public class DiversitySamplingTests
         Assert.Equal(5, selectedDensity.Length);
     }
 
-    [Fact]
-    public void DiversitySampling_LargerBatch_ReducesCoverageRadius()
+    [Fact(Timeout = 60000)]
+    public async Task DiversitySampling_LargerBatch_ReducesCoverageRadius()
     {
         // Arrange
         var sampler = new DiversitySampling<double>();

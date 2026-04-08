@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -18,8 +19,8 @@ public class ScalerMathTests
 {
     #region StandardScaler — (x - mean) / std
 
-    [Fact]
-    public void StandardScaler_Transform_ZeroMeanUnitVariance()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_Transform_ZeroMeanUnitVariance()
     {
         var data = CreateKnownData();
         var scaler = new StandardScaler<double>();
@@ -39,8 +40,8 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
-    public void StandardScaler_InverseTransform_RecoversOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
         var scaler = new StandardScaler<double>();
@@ -59,8 +60,8 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
-    public void StandardScaler_FitTransform_MatchesSeparateFitAndTransform()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_FitTransform_MatchesSeparateFitAndTransform()
     {
         var data = CreateKnownData();
 
@@ -84,8 +85,8 @@ public class ScalerMathTests
 
     #region MinMaxScaler — (x - min) / (max - min)
 
-    [Fact]
-    public void MinMaxScaler_Transform_OutputInZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_Transform_OutputInZeroOneRange()
     {
         var data = CreateKnownData();
         var scaler = new MinMaxScaler<double>();
@@ -117,8 +118,8 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
-    public void MinMaxScaler_InverseTransform_RecoversOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
         var scaler = new MinMaxScaler<double>();
@@ -141,8 +142,8 @@ public class ScalerMathTests
 
     #region RobustScaler — (x - median) / IQR
 
-    [Fact]
-    public void RobustScaler_Transform_MedianIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_Transform_MedianIsZero()
     {
         var data = CreateDataWithOutliers();
         var scaler = new RobustScaler<double>();
@@ -166,8 +167,8 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
-    public void RobustScaler_InverseTransform_RecoversOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateDataWithOutliers();
         var scaler = new RobustScaler<double>();
@@ -190,8 +191,8 @@ public class ScalerMathTests
 
     #region MaxAbsScaler — x / max(|x|)
 
-    [Fact]
-    public void MaxAbsScaler_Transform_OutputInNegOneToOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_Transform_OutputInNegOneToOneRange()
     {
         var data = CreateKnownData();
         var scaler = new MaxAbsScaler<double>();
@@ -208,8 +209,8 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
-    public void MaxAbsScaler_InverseTransform_RecoversOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
         var scaler = new MaxAbsScaler<double>();
@@ -232,8 +233,8 @@ public class ScalerMathTests
 
     #region Cross-Scaler Consistency
 
-    [Fact]
-    public void StandardScaler_TransformDoesNotMutateOriginalData()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_TransformDoesNotMutateOriginalData()
     {
         var data = CreateKnownData();
         var backup = CloneMatrix(data);

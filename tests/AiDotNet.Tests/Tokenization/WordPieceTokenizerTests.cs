@@ -3,13 +3,14 @@ using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Tokenization
 {
     public class WordPieceTokenizerTests
     {
-        [Fact]
-        public void Train_CreatesTokenizerWithSubwords()
+        [Fact(Timeout = 60000)]
+        public async Task Train_CreatesTokenizerWithSubwords()
         {
             // Arrange
             var corpus = new List<string>
@@ -27,8 +28,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(tokenizer.VocabularySize > 0);
         }
 
-        [Fact]
-        public void Tokenize_SplitsTextIntoSubwords()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_SplitsTextIntoSubwords()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -46,8 +47,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", tokens);
         }
 
-        [Fact]
-        public void Tokenize_HandlesUnknownWords()
+        [Fact(Timeout = 60000)]
+        public async Task Tokenize_HandlesUnknownWords()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -62,8 +63,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("[UNK]", tokens);
         }
 
-        [Fact]
-        public void Encode_AddsSpecialTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Encode_AddsSpecialTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -84,8 +85,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("[SEP]", result.Tokens);
         }
 
-        [Fact]
-        public void Decode_ReconstructsText()
+        [Fact(Timeout = 60000)]
+        public async Task Decode_ReconstructsText()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -103,8 +104,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal("helloing", decoded);
         }
 
-        [Fact]
-        public void Decode_SkipsSpecialTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Decode_SkipsSpecialTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -125,8 +126,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", decoded);
         }
 
-        [Fact]
-        public void EncodeBatch_EncodesMultipleTexts()
+        [Fact(Timeout = 60000)]
+        public async Task EncodeBatch_EncodesMultipleTexts()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");

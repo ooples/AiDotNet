@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Diffusion.Schedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Diffusion;
 
@@ -11,8 +12,8 @@ public class DiffusionSchedulersIntegrationTests
 {
     #region SchedulerConfig Tests
 
-    [Fact]
-    public void SchedulerConfig_CreateDefault_ReturnsValidConfig()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CreateDefault_ReturnsValidConfig()
     {
         var config = SchedulerConfig<double>.CreateDefault();
 
@@ -23,8 +24,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.False(config.ClipSample);
     }
 
-    [Fact]
-    public void SchedulerConfig_CreateStableDiffusion_ReturnsValidConfig()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CreateStableDiffusion_ReturnsValidConfig()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
 
@@ -34,8 +35,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
-    [Fact]
-    public void SchedulerConfig_CreateRectifiedFlow_ReturnsValidConfig()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CreateRectifiedFlow_ReturnsValidConfig()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
 
@@ -45,8 +46,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(DiffusionPredictionType.VPrediction, config.PredictionType);
     }
 
-    [Fact]
-    public void SchedulerConfig_CreateLCM_ReturnsValidConfig()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CreateLCM_ReturnsValidConfig()
     {
         var config = SchedulerConfig<double>.CreateLCM();
 
@@ -56,8 +57,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
-    [Fact]
-    public void SchedulerConfig_CustomParameters_SetsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CustomParameters_SetsCorrectly()
     {
         var config = new SchedulerConfig<double>(
             trainTimesteps: 500,
@@ -75,15 +76,15 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(DiffusionPredictionType.Sample, config.PredictionType);
     }
 
-    [Fact]
-    public void SchedulerConfig_InvalidTimesteps_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_InvalidTimesteps_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SchedulerConfig<double>(trainTimesteps: 1, betaStart: 0.0001, betaEnd: 0.02));
     }
 
-    [Fact]
-    public void SchedulerConfig_Float_CreateDefault_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_Float_CreateDefault_Works()
     {
         var config = SchedulerConfig<float>.CreateDefault();
 
@@ -91,8 +92,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(1000, config.TrainTimesteps);
     }
 
-    [Fact]
-    public void SchedulerConfig_AllBetaSchedules_Work()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_AllBetaSchedules_Work()
     {
         var schedules = new[] { BetaSchedule.Linear, BetaSchedule.ScaledLinear, BetaSchedule.SquaredCosine };
 
@@ -108,8 +109,8 @@ public class DiffusionSchedulersIntegrationTests
         }
     }
 
-    [Fact]
-    public void SchedulerConfig_AllPredictionTypes_Work()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_AllPredictionTypes_Work()
     {
         var predictions = new[] { DiffusionPredictionType.Epsilon, DiffusionPredictionType.Sample, DiffusionPredictionType.VPrediction };
 
@@ -129,16 +130,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DDIMScheduler Tests
 
-    [Fact]
-    public void DDIMScheduler_Construction_WithDefaultConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Construction_WithDefaultConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DDIMScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
@@ -146,8 +147,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(50, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void DDIMScheduler_SetTimesteps_DifferentValues_Work()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_SetTimesteps_DifferentValues_Work()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
@@ -159,24 +160,24 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(100, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void DDIMScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
         Assert.Same(config, scheduler.Config);
     }
 
-    [Fact]
-    public void DDIMScheduler_TrainTimesteps_MatchesConfig()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_TrainTimesteps_MatchesConfig()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
-    public void DDIMScheduler_Timesteps_AreDescending()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Timesteps_AreDescending()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
@@ -193,16 +194,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region PNDMScheduler Tests
 
-    [Fact]
-    public void PNDMScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new PNDMScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void PNDMScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new PNDMScheduler<double>(config);
@@ -210,8 +211,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(50, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void PNDMScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new PNDMScheduler<double>(config);
@@ -222,24 +223,24 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DDPMScheduler Tests
 
-    [Fact]
-    public void DDPMScheduler_Construction_WithDefaultConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMScheduler_Construction_WithDefaultConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDPMScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DDPMScheduler_Construction_WithStableDiffusionConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMScheduler_Construction_WithStableDiffusionConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new DDPMScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DDPMScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDPMScheduler<double>(config);
@@ -247,8 +248,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(50, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void DDPMScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDPMScheduler<double>(config);
@@ -256,8 +257,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
-    public void DDPMScheduler_Float_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMScheduler_Float_Works()
     {
         var config = SchedulerConfig<float>.CreateDefault();
         var scheduler = new DDPMScheduler<float>(config);
@@ -269,24 +270,24 @@ public class DiffusionSchedulersIntegrationTests
 
     #region EulerDiscreteScheduler Tests
 
-    [Fact]
-    public void EulerDiscreteScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EulerDiscreteScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerDiscreteScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void EulerDiscreteScheduler_WithStableDiffusionConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EulerDiscreteScheduler_WithStableDiffusionConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new EulerDiscreteScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void EulerDiscreteScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EulerDiscreteScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerDiscreteScheduler<double>(config);
@@ -294,8 +295,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(30, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void EulerDiscreteScheduler_Timesteps_AreDescending()
+    [Fact(Timeout = 120000)]
+    public async Task EulerDiscreteScheduler_Timesteps_AreDescending()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerDiscreteScheduler<double>(config);
@@ -311,16 +312,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region EulerAncestralDiscreteScheduler Tests
 
-    [Fact]
-    public void EulerAncestralDiscreteScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EulerAncestralDiscreteScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerAncestralDiscreteScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void EulerAncestralDiscreteScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EulerAncestralDiscreteScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerAncestralDiscreteScheduler<double>(config);
@@ -328,8 +329,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(25, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void EulerAncestralDiscreteScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task EulerAncestralDiscreteScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new EulerAncestralDiscreteScheduler<double>(config);
@@ -340,16 +341,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region HeunDiscreteScheduler Tests
 
-    [Fact]
-    public void HeunDiscreteScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task HeunDiscreteScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new HeunDiscreteScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void HeunDiscreteScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task HeunDiscreteScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new HeunDiscreteScheduler<double>(config);
@@ -357,8 +358,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(30, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void HeunDiscreteScheduler_WithSquaredCosineSchedule_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task HeunDiscreteScheduler_WithSquaredCosineSchedule_Succeeds()
     {
         var config = new SchedulerConfig<double>(
             trainTimesteps: 1000,
@@ -374,24 +375,24 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DPMSolverMultistepScheduler Tests
 
-    [Fact]
-    public void DPMSolverMultistepScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverMultistepScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverMultistepScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DPMSolverMultistepScheduler_WithStableDiffusionConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverMultistepScheduler_WithStableDiffusionConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new DPMSolverMultistepScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DPMSolverMultistepScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverMultistepScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverMultistepScheduler<double>(config);
@@ -399,8 +400,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(20, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void DPMSolverMultistepScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverMultistepScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverMultistepScheduler<double>(config);
@@ -411,16 +412,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DPMSolverSinglestepScheduler Tests
 
-    [Fact]
-    public void DPMSolverSinglestepScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverSinglestepScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverSinglestepScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DPMSolverSinglestepScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverSinglestepScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverSinglestepScheduler<double>(config);
@@ -432,16 +433,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DPMSolverSDEScheduler Tests
 
-    [Fact]
-    public void DPMSolverSDEScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverSDEScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverSDEScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DPMSolverSDEScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverSDEScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverSDEScheduler<double>(config);
@@ -453,16 +454,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region DEISMultistepScheduler Tests
 
-    [Fact]
-    public void DEISMultistepScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DEISMultistepScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DEISMultistepScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DEISMultistepScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DEISMultistepScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DEISMultistepScheduler<double>(config);
@@ -470,8 +471,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(20, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void DEISMultistepScheduler_WithStableDiffusionConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DEISMultistepScheduler_WithStableDiffusionConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new DEISMultistepScheduler<double>(config);
@@ -483,16 +484,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region LMSDiscreteScheduler Tests
 
-    [Fact]
-    public void LMSDiscreteScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LMSDiscreteScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new LMSDiscreteScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void LMSDiscreteScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LMSDiscreteScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new LMSDiscreteScheduler<double>(config);
@@ -504,16 +505,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region UniPCScheduler Tests
 
-    [Fact]
-    public void UniPCScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UniPCScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new UniPCScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void UniPCScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UniPCScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new UniPCScheduler<double>(config);
@@ -521,8 +522,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(20, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void UniPCScheduler_WithStableDiffusionConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UniPCScheduler_WithStableDiffusionConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
         var scheduler = new UniPCScheduler<double>(config);
@@ -534,16 +535,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region ConsistencyModelScheduler Tests
 
-    [Fact]
-    public void ConsistencyModelScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyModelScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new ConsistencyModelScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void ConsistencyModelScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyModelScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new ConsistencyModelScheduler<double>(config);
@@ -551,8 +552,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(4, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void ConsistencyModelScheduler_FewSteps_Work()
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyModelScheduler_FewSteps_Work()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new ConsistencyModelScheduler<double>(config);
@@ -565,16 +566,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region FlowMatchingScheduler Tests
 
-    [Fact]
-    public void FlowMatchingScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task FlowMatchingScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
         var scheduler = new FlowMatchingScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void FlowMatchingScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task FlowMatchingScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
         var scheduler = new FlowMatchingScheduler<double>(config);
@@ -582,8 +583,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(28, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void FlowMatchingScheduler_WithDefaultConfig_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task FlowMatchingScheduler_WithDefaultConfig_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new FlowMatchingScheduler<double>(config);
@@ -595,16 +596,16 @@ public class DiffusionSchedulersIntegrationTests
 
     #region LCMScheduler Tests
 
-    [Fact]
-    public void LCMScheduler_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LCMScheduler_Construction_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateLCM();
         var scheduler = new LCMScheduler<double>(config);
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void LCMScheduler_SetTimesteps_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LCMScheduler_SetTimesteps_Succeeds()
     {
         var config = SchedulerConfig<double>.CreateLCM();
         var scheduler = new LCMScheduler<double>(config);
@@ -612,8 +613,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(4, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void LCMScheduler_FewSteps_Work()
+    [Fact(Timeout = 120000)]
+    public async Task LCMScheduler_FewSteps_Work()
     {
         // LCM is designed for very few steps (1-8)
         var config = SchedulerConfig<double>.CreateLCM();
@@ -622,8 +623,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(2, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void LCMScheduler_Config_IsAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task LCMScheduler_Config_IsAccessible()
     {
         var config = SchedulerConfig<double>.CreateLCM();
         var scheduler = new LCMScheduler<double>(config);
@@ -634,8 +635,8 @@ public class DiffusionSchedulersIntegrationTests
 
     #region Cross-Scheduler Tests
 
-    [Fact]
-    public void AllSchedulers_SameConfig_ProduceSameTimestepCount()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_SameConfig_ProduceSameTimestepCount()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var ddim = new DDIMScheduler<double>(config);
@@ -654,8 +655,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(50, euler.Timesteps.Length);
     }
 
-    [Fact]
-    public void AllSchedulers_InvalidTimesteps_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_InvalidTimesteps_Throw()
     {
         var config = SchedulerConfig<double>.CreateDefault();
 
@@ -665,8 +666,8 @@ public class DiffusionSchedulersIntegrationTests
             new DDIMScheduler<double>(config).SetTimesteps(-1));
     }
 
-    [Fact]
-    public void AllSchedulers_ExceedingTrainTimesteps_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_ExceedingTrainTimesteps_Throws()
     {
         var config = new SchedulerConfig<double>(
             trainTimesteps: 100,
@@ -678,8 +679,8 @@ public class DiffusionSchedulersIntegrationTests
             scheduler.SetTimesteps(200));
     }
 
-    [Fact]
-    public void AllSchedulers_NullConfig_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_NullConfig_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(null));
         Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(null));
@@ -698,8 +699,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Throws<ArgumentNullException>(() => new LCMScheduler<double>(null));
     }
 
-    [Fact]
-    public void AllSchedulers_TrainTimesteps_MatchConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_TrainTimesteps_MatchConfig()
     {
         var config = new SchedulerConfig<double>(
             trainTimesteps: 500,
@@ -714,8 +715,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(500, new DPMSolverMultistepScheduler<double>(config).TrainTimesteps);
     }
 
-    [Fact]
-    public void AllSchedulers_Float_Construction_Works()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_Float_Construction_Works()
     {
         var config = SchedulerConfig<float>.CreateDefault();
 
@@ -736,8 +737,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.NotNull(new LCMScheduler<float>(config));
     }
 
-    [Fact]
-    public void AllSchedulers_WithSquaredCosineBeta_Construct()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_WithSquaredCosineBeta_Construct()
     {
         var config = new SchedulerConfig<double>(
             trainTimesteps: 1000,
@@ -751,8 +752,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.NotNull(new DPMSolverMultistepScheduler<double>(config));
     }
 
-    [Fact]
-    public void AllSchedulers_CanSetTimestepsMultipleTimes()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_CanSetTimestepsMultipleTimes()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new EulerDiscreteScheduler<double>(config);
@@ -767,8 +768,8 @@ public class DiffusionSchedulersIntegrationTests
         Assert.Equal(5, scheduler.Timesteps.Length);
     }
 
-    [Fact]
-    public void Scheduler_TimestepsInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task Scheduler_TimestepsInValidRange()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);
@@ -781,8 +782,8 @@ public class DiffusionSchedulersIntegrationTests
         }
     }
 
-    [Fact]
-    public void Scheduler_TimestepsAreUnique()
+    [Fact(Timeout = 120000)]
+    public async Task Scheduler_TimestepsAreUnique()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DDIMScheduler<double>(config);

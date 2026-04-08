@@ -9,6 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdversarialRobustness;
 
@@ -136,8 +137,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region FGSM Mathematical Properties
 
-    [Fact]
-    public void FGSM_PerturbationMagnitude_ExactlyEpsilonPerDimension()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_PerturbationMagnitude_ExactlyEpsilonPerDimension()
     {
         // FGSM formula: x_adv = clip(x + epsilon * sign(grad), 0, 1)
         // For interior points (not near 0 or 1), each dim should change by exactly epsilon
@@ -169,8 +170,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FGSM_Output_ClippedToZeroOne()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_Output_ClippedToZeroOne()
     {
         // FGSM clips output to [0, 1]
         var options = new AdversarialAttackOptions<double>
@@ -198,8 +199,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FGSM_TargetedNegation_VerifyWithSameGradientClass()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_TargetedNegation_VerifyWithSameGradientClass()
     {
         // When untargeted (trueClass=0) and targeted (targetClass=0) use the SAME class
         // for gradient computation, the targeted attack negates the perturbation.
@@ -248,8 +249,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(oppositeCount > 0, "No dimensions showed opposite perturbation directions");
     }
 
-    [Fact]
-    public void FGSM_CalculatePerturbation_EqualsAdversarialMinusOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_CalculatePerturbation_EqualsAdversarialMinusOriginal()
     {
         // CalculatePerturbation should return adversarial - original exactly
         var options = new AdversarialAttackOptions<double>
@@ -272,8 +273,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FGSM_LinfPerturbation_AllDimensionsWithinEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_LinfPerturbation_AllDimensionsWithinEpsilon()
     {
         // The L-infinity norm of the perturbation should be <= epsilon
         var epsilon = 0.08;
@@ -308,8 +309,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region PGD Mathematical Properties
 
-    [Fact]
-    public void PGD_Iterative_PerturbationGrowsWithIterations()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_Iterative_PerturbationGrowsWithIterations()
     {
         // PGD with more iterations should potentially create larger perturbation
         // (or at least not smaller, assuming no random start)
@@ -345,8 +346,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"5-iter L2 norm {norm5} < 1-iter L2 norm {norm1}");
     }
 
-    [Fact]
-    public void PGD_LinfProjection_EachDimensionClampedToEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_LinfProjection_EachDimensionClampedToEpsilon()
     {
         // After PGD, each dimension's perturbation should be <= epsilon (L-inf projection)
         var epsilon = 0.1;
@@ -377,8 +378,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PGD_L2Projection_TotalNormBoundedByEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_L2Projection_TotalNormBoundedByEpsilon()
     {
         // After PGD with L2 norm, total L2 perturbation should be <= epsilon
         var epsilon = 0.3;
@@ -413,8 +414,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"L2 perturbation norm {l2Norm} exceeds epsilon {epsilon}");
     }
 
-    [Fact]
-    public void PGD_OutputAlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_OutputAlwaysInValidRange()
     {
         // PGD output should always be clipped to [0, 1]
         var options = new AdversarialAttackOptions<double>
@@ -445,8 +446,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PGD_ZeroIterations_ReturnsStartingPoint()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_ZeroIterations_ReturnsStartingPoint()
     {
         // With 0 iterations, PGD should return the starting point
         // With UseRandomStart=false, starting point = original input
@@ -473,8 +474,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PGD_StepSizeAffectsConvergenceRate()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_StepSizeAffectsConvergenceRate()
     {
         // Larger step size should potentially create larger perturbation per iteration
         var input = new Vector<double>(4);
@@ -513,8 +514,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region CW Attack Mathematical Properties
 
-    [Fact]
-    public void CW_TanhTransform_MapsToZeroOneRange()
+    [Fact(Timeout = 120000)]
+    public async Task CW_TanhTransform_MapsToZeroOneRange()
     {
         // CW uses x = (tanh(w) + 1) / 2 to map from (-inf, inf) to (0, 1)
         // Verify this mathematical property:
@@ -534,8 +535,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.5, xAtZero, Tolerance);
     }
 
-    [Fact]
-    public void CW_TanhInverse_ConsistentWithForward()
+    [Fact(Timeout = 120000)]
+    public async Task CW_TanhInverse_ConsistentWithForward()
     {
         // atanh(2x - 1) should be the inverse of (tanh(w) + 1) / 2
         double[] xValues = { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -547,8 +548,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CW_AttackLoss_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task CW_AttackLoss_HandComputed()
     {
         // CW attack loss for untargeted: max(max_other_logit - true_logit, 0)
         // Example: logits = [2.0, 3.0, 1.0], true class = 0
@@ -566,8 +567,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(1.0, attackLoss, Tolerance);
     }
 
-    [Fact]
-    public void CW_AttackLoss_ZeroWhenCorrectlyClassified()
+    [Fact(Timeout = 120000)]
+    public async Task CW_AttackLoss_ZeroWhenCorrectlyClassified()
     {
         // If true class has highest logit, attack loss should be 0
         // logits = [5.0, 2.0, 1.0], true class = 0
@@ -579,8 +580,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.0, attackLoss, Tolerance);
     }
 
-    [Fact]
-    public void CW_ObjectiveFunction_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task CW_ObjectiveFunction_HandComputed()
     {
         // CW objective: ||x_adv - x_orig||^2 + c * attack_loss
         // x_orig = [0.5, 0.5], x_adv = [0.6, 0.7]
@@ -598,8 +599,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(1.05, objective, Tolerance);
     }
 
-    [Fact]
-    public void CW_GeneratesAdversarial_WithinBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CW_GeneratesAdversarial_WithinBounds()
     {
         // CW should produce output in [0, 1] due to tanh parameterization
         var options = new AdversarialAttackOptions<double>
@@ -627,8 +628,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CW_TargetedAttackLoss_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task CW_TargetedAttackLoss_HandComputed()
     {
         // Targeted CW loss: max(max_other_logit - target_logit, 0)
         // logits = [2.0, 3.0, 1.0], target class = 2
@@ -644,8 +645,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Randomized Smoothing Certified Radius
 
-    [Fact]
-    public void RandomizedSmoothing_CertifiedRadius_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifiedRadius_Formula()
     {
         // R = sigma * Phi^(-1)(pA)
         // For pA = 0.8, Phi^(-1)(0.8) ≈ 0.8416
@@ -660,8 +661,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.4207, expectedRadius, 2);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_CertifiedRadius_ZeroWhenPABelowHalf()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifiedRadius_ZeroWhenPABelowHalf()
     {
         // When pA <= 0.5, Phi^(-1)(pA) <= 0, so R = 0 (no certification possible)
         double sigma = 0.5;
@@ -674,8 +675,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.0, radius, Tolerance);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_CertifiedRadius_ScalesLinearly_WithSigma()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifiedRadius_ScalesLinearly_WithSigma()
     {
         // R = sigma * Phi^(-1)(pA), so doubling sigma doubles R
         double pA = 0.8;
@@ -689,8 +690,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(r1 * 2, r2, Tolerance);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_CertifiedRadius_IncreasesWithConfidence()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifiedRadius_IncreasesWithConfidence()
     {
         // Higher pA (more confident) -> higher certified radius
         double sigma = 0.5;
@@ -707,8 +708,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Higher pA should give larger radius: {r_high} vs {r_low}");
     }
 
-    [Fact]
-    public void RandomizedSmoothing_InverseNormalCDF_KnownValues()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_InverseNormalCDF_KnownValues()
     {
         // Verify Phi^(-1) at known quantiles:
         // Phi^(-1)(0.5) = 0
@@ -724,8 +725,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(2.576, inv_0995, 0.02);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_Certify_ProducesCertifiedRadius()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_Certify_ProducesCertifiedRadius()
     {
         // End-to-end: certify a prediction and verify radius properties
         var options = new CertifiedDefenseOptions<double>
@@ -761,8 +762,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Confidence {prediction.Confidence} should be > 0.5 for strong model");
     }
 
-    [Fact]
-    public void RandomizedSmoothing_LargerSigma_LargerRadius_ButLowerAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_LargerSigma_LargerRadius_ButLowerAccuracy()
     {
         // Property: larger sigma gives potentially larger certified radius
         // but may reduce clean accuracy due to more noise
@@ -797,8 +798,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(predLarge.CertifiedRadius >= 0);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_ConfidenceBounds_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_ConfidenceBounds_Consistent()
     {
         // Lower bound <= point estimate <= upper bound
         var options = new CertifiedDefenseOptions<double>
@@ -826,8 +827,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Cross-Entropy Loss Computation
 
-    [Fact]
-    public void CrossEntropy_HandComputed_ThreeClasses()
+    [Fact(Timeout = 120000)]
+    public async Task CrossEntropy_HandComputed_ThreeClasses()
     {
         // Softmax of logits [2.0, 1.0, 0.1]:
         // exp(2.0) = 7.389, exp(1.0) = 2.718, exp(0.1) = 1.105
@@ -848,16 +849,16 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.4170, crossEntropy, 3);
     }
 
-    [Fact]
-    public void CrossEntropy_PerfectPrediction_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CrossEntropy_PerfectPrediction_ZeroLoss()
     {
         // If probability of true class = 1.0, loss = -log(1.0) = 0
         double loss = -Math.Log(1.0);
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void CrossEntropy_UniformPrediction_LogK()
+    [Fact(Timeout = 120000)]
+    public async Task CrossEntropy_UniformPrediction_LogK()
     {
         // For uniform distribution over K classes, loss = -log(1/K) = log(K)
         int K = 3;
@@ -866,8 +867,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(Math.Log(K), loss, Tolerance);
     }
 
-    [Fact]
-    public void Softmax_Stability_ShiftByMaxLogit()
+    [Fact(Timeout = 120000)]
+    public async Task Softmax_Stability_ShiftByMaxLogit()
     {
         // Softmax(z) = softmax(z - max(z))
         // This is a key numerical stability property
@@ -893,8 +894,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Norm and Projection Mathematics
 
-    [Fact]
-    public void L2Norm_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task L2Norm_HandComputed()
     {
         // ||[3, 4]||_2 = sqrt(9 + 16) = sqrt(25) = 5
         double[] v = { 3.0, 4.0 };
@@ -902,8 +903,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(5.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void LInfNorm_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task LInfNorm_HandComputed()
     {
         // ||[3, -4, 2]||_inf = max(|3|, |-4|, |2|) = 4
         double[] v = { 3.0, -4.0, 2.0 };
@@ -911,8 +912,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(4.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void L2Projection_InsideBall_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task L2Projection_InsideBall_NoChange()
     {
         // If ||perturbation||_2 <= epsilon, projection is identity
         double[] perturbation = { 0.1, 0.1 };
@@ -927,8 +928,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(perturbation[1], projected[1], Tolerance);
     }
 
-    [Fact]
-    public void L2Projection_OutsideBall_ScalesDown()
+    [Fact(Timeout = 120000)]
+    public async Task L2Projection_OutsideBall_ScalesDown()
     {
         // If ||perturbation||_2 > epsilon, scale by epsilon / ||perturbation||
         double[] perturbation = { 3.0, 4.0 };
@@ -948,8 +949,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(epsilon, projectedNorm, Tolerance);
     }
 
-    [Fact]
-    public void LinfProjection_ClampsEachDimension()
+    [Fact(Timeout = 120000)]
+    public async Task LinfProjection_ClampsEachDimension()
     {
         // L-inf projection: clamp each dimension to [-epsilon, epsilon]
         double[] perturbation = { 0.5, -0.3, 0.05, -0.8 };
@@ -963,8 +964,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(-0.3, projected[3], Tolerance); // clamped from -0.8
     }
 
-    [Fact]
-    public void SignFunction_ReturnsCorrectSigns()
+    [Fact(Timeout = 120000)]
+    public async Task SignFunction_ReturnsCorrectSigns()
     {
         // sign(x) = -1 if x < 0, 0 if x == 0, +1 if x > 0
         Assert.Equal(1.0, Math.Sign(3.5));
@@ -978,8 +979,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Finite Difference Gradient Approximation
 
-    [Fact]
-    public void FiniteDifference_ApproximatesDerivative()
+    [Fact(Timeout = 120000)]
+    public async Task FiniteDifference_ApproximatesDerivative()
     {
         // For f(x) = x^2, f'(x) = 2x
         // Finite difference: (f(x+h) - f(x)) / h ≈ f'(x)
@@ -993,8 +994,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(exactDerivative, approxDerivative, 2); // 2 decimal places
     }
 
-    [Fact]
-    public void FiniteDifference_ForSoftmaxCrossEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task FiniteDifference_ForSoftmaxCrossEntropy()
     {
         // For softmax cross-entropy loss with respect to input:
         // Input [2.0, 1.0] -> softmax -> [0.731, 0.269]
@@ -1019,8 +1020,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Attack Comparison Properties
 
-    [Fact]
-    public void FGSM_SingleStep_PGD_OneIteration_Equivalent()
+    [Fact(Timeout = 120000)]
+    public async Task FGSM_SingleStep_PGD_OneIteration_Equivalent()
     {
         // PGD with 1 iteration and step_size = epsilon should be equivalent to FGSM
         // (when both use the same starting point and no random start)
@@ -1050,8 +1051,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PGD_StrongerThanFGSM_WithMultipleIterations()
+    [Fact(Timeout = 120000)]
+    public async Task PGD_StrongerThanFGSM_WithMultipleIterations()
     {
         // PGD with many iterations should produce perturbation at least as large as FGSM
         var epsilon = 0.15;
@@ -1086,8 +1087,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"PGD L2^2 norm {pgdNorm} < FGSM L2^2 norm {fgsmNorm}");
     }
 
-    [Fact]
-    public void AllAttacks_Deterministic_WithSameSeed()
+    [Fact(Timeout = 120000)]
+    public async Task AllAttacks_Deterministic_WithSameSeed()
     {
         // Same seed should produce same result
         var options = new AdversarialAttackOptions<double>
@@ -1116,16 +1117,16 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Softmax and Argmax Helper Tests
 
-    [Fact]
-    public void Softmax_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Softmax_SumsToOne()
     {
         double[] logits = { 1.0, 2.0, 3.0, 4.0 };
         double[] probs = SoftmaxHelper(logits);
         Assert.Equal(1.0, probs.Sum(), Tolerance);
     }
 
-    [Fact]
-    public void Softmax_PreservesOrdering()
+    [Fact(Timeout = 120000)]
+    public async Task Softmax_PreservesOrdering()
     {
         double[] logits = { 1.0, 3.0, 2.0 };
         double[] probs = SoftmaxHelper(logits);
@@ -1134,8 +1135,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(probs[2] > probs[0]);
     }
 
-    [Fact]
-    public void Softmax_HandComputed_TwoClasses()
+    [Fact(Timeout = 120000)]
+    public async Task Softmax_HandComputed_TwoClasses()
     {
         // softmax([1, 2]) = [exp(1)/(exp(1)+exp(2)), exp(2)/(exp(1)+exp(2))]
         // = [2.718/(2.718+7.389), 7.389/(2.718+7.389)]
@@ -1146,8 +1147,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.7311, probs[1], 3);
     }
 
-    [Fact]
-    public void Argmax_ReturnsCorrectIndex()
+    [Fact(Timeout = 120000)]
+    public async Task Argmax_ReturnsCorrectIndex()
     {
         double[] values = { 0.1, 0.7, 0.2 };
         int argmax = 0;
@@ -1161,8 +1162,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Clopper-Pearson Confidence Interval
 
-    [Fact]
-    public void ClopperPearson_HandComputed_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task ClopperPearson_HandComputed_Properties()
     {
         // Clopper-Pearson interval should contain the point estimate
         int successes = 80;
@@ -1183,8 +1184,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(upper <= 1, $"Upper bound {upper} > 1");
     }
 
-    [Fact]
-    public void ClopperPearson_NarrowsWithMoreSamples()
+    [Fact(Timeout = 120000)]
+    public async Task ClopperPearson_NarrowsWithMoreSamples()
     {
         // More samples -> narrower confidence interval
         double confidence = 0.95;
@@ -1199,8 +1200,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Width with 500 samples ({width500}) not narrower than 50 samples ({width50})");
     }
 
-    [Fact]
-    public void ClopperPearson_SymmetricForHalf()
+    [Fact(Timeout = 120000)]
+    public async Task ClopperPearson_SymmetricForHalf()
     {
         // For p_hat = 0.5, interval should be approximately symmetric
         int n = 100;

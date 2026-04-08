@@ -4,6 +4,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -56,8 +57,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithValidParameters_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidParameters_CreatesValidator()
     {
         // Act
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -69,8 +70,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new CrossValidationOptions { RandomSeed = 42 };
@@ -90,8 +91,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Temporal Ordering Tests
 
-    [Fact]
-    public void Validate_TrainingIndicesAlwaysPrecedeValidationIndices()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainingIndicesAlwaysPrecedeValidationIndices()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -120,8 +121,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_NoFutureDataLeakage()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoFutureDataLeakage()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -155,8 +156,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Expanding Window Tests
 
-    [Fact]
-    public void Validate_TrainingSetExpandsOverFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainingSetExpandsOverFolds()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -185,8 +186,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_ValidationSetSizeIsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ValidationSetSizeIsConstant()
     {
         // Arrange
         int validationSize = 5;
@@ -214,8 +215,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Fold Generation Tests
 
-    [Fact]
-    public void Validate_GeneratesCorrectNumberOfFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_GeneratesCorrectNumberOfFolds()
     {
         // Arrange - With 50 samples, initial=10, validation=5, step=5
         // Folds: train 0-9 val 10-14, train 0-14 val 15-19, etc.
@@ -238,8 +239,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
         Assert.True(result.FoldResults.Count >= 5, $"Expected at least 5 folds, got {result.FoldResults.Count}");
     }
 
-    [Fact]
-    public void Validate_ValidationIndicesAreContiguous()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ValidationIndicesAreContiguous()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -271,8 +272,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Step Size Tests
 
-    [Fact]
-    public void Validate_StepSizeAffectsFoldOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_StepSizeAffectsFoldOverlap()
     {
         // Arrange - Step size equals validation size means no overlap
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -304,8 +305,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -339,8 +340,8 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Validate_WithLargeInitialTrainSize_GeneratesFewFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithLargeInitialTrainSize_GeneratesFewFolds()
     {
         // Arrange
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(

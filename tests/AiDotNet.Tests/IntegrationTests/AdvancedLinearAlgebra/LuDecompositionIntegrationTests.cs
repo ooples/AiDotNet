@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -206,8 +207,8 @@ public class LuDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void LuDecomposition_2x2Matrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LuDecomposition_2x2Matrix_CorrectDecomposition()
     {
         // Arrange - Simple 2x2 matrix
         var A = new Matrix<double>(2, 2);
@@ -226,8 +227,8 @@ public class LuDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void LuDecomposition_SymmetricMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LuDecomposition_SymmetricMatrix_ValidDecomposition()
     {
         // Arrange - Symmetric positive definite matrix
         var A = new Matrix<double>(3, 3);
@@ -247,8 +248,8 @@ public class LuDecompositionIntegrationTests
             $"Symmetric matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void LuDecomposition_NonSquareMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task LuDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4);
@@ -261,8 +262,8 @@ public class LuDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void LuDecomposition_IllConditionedMatrix_StillDecomposes()
+    [Fact(Timeout = 120000)]
+    public async Task LuDecomposition_IllConditionedMatrix_StillDecomposes()
     {
         // Arrange - Create a moderately ill-conditioned matrix (Hilbert-like)
         int n = 4;
@@ -288,8 +289,8 @@ public class LuDecompositionIntegrationTests
             $"Ill-conditioned matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void LuDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LuDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         int size = 50;

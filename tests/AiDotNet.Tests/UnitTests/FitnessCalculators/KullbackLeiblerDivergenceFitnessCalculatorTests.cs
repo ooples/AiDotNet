@@ -5,13 +5,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class KullbackLeiblerDivergenceFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -28,8 +29,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithDifferentDistributions_ReturnsPositiveValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithDifferentDistributions_ReturnsPositiveValue()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -46,8 +47,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithUniformDistributions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithUniformDistributions_ReturnsZero()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -64,8 +65,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithSmallDivergence_ReturnsSmallPositiveValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithSmallDivergence_ReturnsSmallPositiveValue()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -83,8 +84,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result < 0.1); // Small divergence should result in small loss
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithLargeDivergence_ReturnsLargeValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithLargeDivergence_ReturnsLargeValue()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -101,8 +102,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result > 1.0); // Large divergence should result in larger loss
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -111,8 +112,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -124,8 +125,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -137,8 +138,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -155,8 +156,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -166,8 +167,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
@@ -177,8 +178,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMultipleClasses_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMultipleClasses_HandlesCorrectly()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -195,8 +196,8 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_IsAsymmetric_DifferentWhenSwapped()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_IsAsymmetric_DifferentWhenSwapped()
     {
         // Arrange
         var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();

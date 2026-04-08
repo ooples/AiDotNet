@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.LearningRateSchedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LearningRateSchedulers;
 
@@ -14,8 +15,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region CosineAnnealing
 
-    [Fact]
-    public void CosineAnnealing_AtStep0_ReturnsBaseLR()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_AtStep0_ReturnsBaseLR()
     {
         // lr = etaMin + 0.5*(baseLR - etaMin)*(1 + cos(0)) = etaMin + (baseLR - etaMin) = baseLR
         var scheduler = new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 100, etaMin: 0.001);
@@ -23,8 +24,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, lr, Tolerance);
     }
 
-    [Fact]
-    public void CosineAnnealing_AtTMax_ReturnsEtaMin()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_AtTMax_ReturnsEtaMin()
     {
         // lr = etaMin + 0.5*(baseLR - etaMin)*(1 + cos(pi)) = etaMin + 0 = etaMin
         var scheduler = new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 100, etaMin: 0.001);
@@ -32,8 +33,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.001, lr, Tolerance);
     }
 
-    [Fact]
-    public void CosineAnnealing_AtHalfway_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_AtHalfway_HandCalculated()
     {
         // step=50, tMax=100
         // lr = 0.001 + 0.5*(0.1-0.001)*(1 + cos(pi*50/100))
@@ -46,8 +47,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, lr, Tolerance);
     }
 
-    [Fact]
-    public void CosineAnnealing_AtQuarter_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_AtQuarter_HandCalculated()
     {
         // step=25, tMax=100
         // cos(pi*25/100) = cos(pi/4) = sqrt(2)/2 ≈ 0.7071
@@ -58,8 +59,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(expected, lr, Tolerance);
     }
 
-    [Fact]
-    public void CosineAnnealing_BeyondTMax_ClampsToEtaMin()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_BeyondTMax_ClampsToEtaMin()
     {
         // After tMax, step is clamped → cos(pi) = -1 → lr = etaMin
         var scheduler = new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 100, etaMin: 0.001);
@@ -67,8 +68,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.001, lr, Tolerance);
     }
 
-    [Fact]
-    public void CosineAnnealing_Monotonic_Decreasing()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_Monotonic_Decreasing()
     {
         // Cosine annealing should be monotonically decreasing from 0 to tMax
         var scheduler = new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 100, etaMin: 0.0);
@@ -81,8 +82,8 @@ public class LRSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CosineAnnealing_InvalidTMax_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CosineAnnealing_InvalidTMax_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 0));
@@ -94,8 +95,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region ExponentialLR
 
-    [Fact]
-    public void Exponential_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_HandCalculated()
     {
         // lr = base * gamma^step
         // base=0.1, gamma=0.9
@@ -111,8 +112,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1 * Math.Pow(0.9, 10), scheduler.GetLearningRateAtStep(10), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_StepMethod_AdvancesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_StepMethod_AdvancesCorrectly()
     {
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.5);
 
@@ -130,8 +131,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.025, lr2, Tolerance);
     }
 
-    [Fact]
-    public void Exponential_WithMinLR_Floors()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_WithMinLR_Floors()
     {
         // gamma=0.1, base=0.1, min=0.01
         // step=0: 0.1
@@ -143,8 +144,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.01, scheduler.GetLearningRateAtStep(2), Tolerance); // floored
     }
 
-    [Fact]
-    public void Exponential_InvalidGamma_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_InvalidGamma_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ExponentialLRScheduler(0.1, gamma: 0.0));
         Assert.Throws<ArgumentException>(() => new ExponentialLRScheduler(0.1, gamma: -0.5));
@@ -155,8 +156,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region StepLR
 
-    [Fact]
-    public void StepLR_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task StepLR_HandCalculated()
     {
         // base=0.1, stepSize=3, gamma=0.5
         // step 0: floor(0/3)=0, 0.1*0.5^0 = 0.1
@@ -175,8 +176,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.025, scheduler.GetLearningRateAtStep(6), Tolerance);
     }
 
-    [Fact]
-    public void StepLR_StepMethod_DecaysAtCorrectInterval()
+    [Fact(Timeout = 120000)]
+    public async Task StepLR_StepMethod_DecaysAtCorrectInterval()
     {
         var scheduler = new StepLRScheduler(baseLearningRate: 1.0, stepSize: 2, gamma: 0.1);
 
@@ -200,8 +201,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.01, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact]
-    public void StepLR_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StepLR_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() => new StepLRScheduler(0.1, stepSize: 0));
         Assert.Throws<ArgumentException>(() => new StepLRScheduler(0.1, stepSize: -1));
@@ -212,8 +213,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region PolynomialLR
 
-    [Fact]
-    public void Polynomial_LinearDecay_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_LinearDecay_HandCalculated()
     {
         // power=1 (linear), base=0.1, end=0.01, totalSteps=10
         // lr = (0.1-0.01) * (1 - step/10)^1 + 0.01
@@ -227,8 +228,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.01, scheduler.GetLearningRateAtStep(10), Tolerance);
     }
 
-    [Fact]
-    public void Polynomial_QuadraticDecay_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_QuadraticDecay_HandCalculated()
     {
         // power=2, base=0.1, end=0.0, totalSteps=10
         // lr = 0.1 * (1 - step/10)^2
@@ -243,15 +244,15 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.0, scheduler.GetLearningRateAtStep(10), Tolerance);
     }
 
-    [Fact]
-    public void Polynomial_BeyondTotalSteps_ReturnsEndLR()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_BeyondTotalSteps_ReturnsEndLR()
     {
         var scheduler = new PolynomialLRScheduler(baseLearningRate: 0.1, totalSteps: 10, power: 1.0, endLearningRate: 0.01);
         Assert.Equal(0.01, scheduler.GetLearningRateAtStep(20), Tolerance);
     }
 
-    [Fact]
-    public void Polynomial_LinearDecay_Monotonic()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_LinearDecay_Monotonic()
     {
         var scheduler = new PolynomialLRScheduler(baseLearningRate: 0.1, totalSteps: 100, power: 1.0, endLearningRate: 0.0);
         double prev = scheduler.GetLearningRateAtStep(0);
@@ -263,8 +264,8 @@ public class LRSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Polynomial_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new PolynomialLRScheduler(0.1, totalSteps: 0));
@@ -278,8 +279,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region LinearWarmup
 
-    [Fact]
-    public void LinearWarmup_WarmupPhase_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_WarmupPhase_HandCalculated()
     {
         // warmupSteps=10, base=0.1, warmupInitLr=0.0
         // At step k (during warmup): lr = 0 + (0.1 - 0) * k/10 = 0.01 * k
@@ -294,8 +295,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetLearningRateAtStep(10), Tolerance);
     }
 
-    [Fact]
-    public void LinearWarmup_ConstantAfterWarmup()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_ConstantAfterWarmup()
     {
         var scheduler = new LinearWarmupScheduler(
             baseLearningRate: 0.1, warmupSteps: 5, totalSteps: 100,
@@ -307,8 +308,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetLearningRateAtStep(100), Tolerance);
     }
 
-    [Fact]
-    public void LinearWarmup_LinearDecay_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_LinearDecay_HandCalculated()
     {
         // warmup: 10 steps (0→0.1), then linear decay over 90 steps (0.1→0.01)
         var scheduler = new LinearWarmupScheduler(
@@ -327,8 +328,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.01, scheduler.GetLearningRateAtStep(100), Tolerance);
     }
 
-    [Fact]
-    public void LinearWarmup_CosineDecay_BoundaryValues()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_CosineDecay_BoundaryValues()
     {
         var scheduler = new LinearWarmupScheduler(
             baseLearningRate: 0.1, warmupSteps: 10, totalSteps: 110,
@@ -346,8 +347,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.05, scheduler.GetLearningRateAtStep(60), Tolerance);
     }
 
-    [Fact]
-    public void LinearWarmup_CustomInitLR_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_CustomInitLR_HandCalculated()
     {
         // Start from 0.01, warm up to 0.1 in 10 steps
         // lr = 0.01 + (0.1 - 0.01) * step/10 = 0.01 + 0.009 * step
@@ -359,8 +360,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.055, scheduler.GetLearningRateAtStep(5), Tolerance);
     }
 
-    [Fact]
-    public void LinearWarmup_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LinearWarmup_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new LinearWarmupScheduler(0.1, warmupSteps: -1));
@@ -370,8 +371,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region CyclicLR
 
-    [Fact]
-    public void CyclicLR_Triangular_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_Triangular_HandCalculated()
     {
         // base=0.001, max=0.01, stepSizeUp=5, stepSizeDown=5
         // Cycle length = 10
@@ -394,8 +395,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.001, scheduler.GetLearningRateAtStep(10), Tolerance);
     }
 
-    [Fact]
-    public void CyclicLR_Triangular2_AmplitudeHalves()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_Triangular2_AmplitudeHalves()
     {
         // base=0.001, max=0.01, stepSizeUp=5
         // Cycle 0: amplitude=0.009 → peak = 0.01
@@ -419,8 +420,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.001 + 0.009 / 4.0, peak2, Tolerance);
     }
 
-    [Fact]
-    public void CyclicLR_Periodic_RepeatsExactly()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_Periodic_RepeatsExactly()
     {
         // Triangular mode should repeat exactly
         var scheduler = new CyclicLRScheduler(
@@ -436,8 +437,8 @@ public class LRSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CyclicLR_AlwaysBounded()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_AlwaysBounded()
     {
         // LR should always be between base and max
         var scheduler = new CyclicLRScheduler(
@@ -453,8 +454,8 @@ public class LRSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CyclicLR_AsymmetricSteps_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_AsymmetricSteps_HandCalculated()
     {
         // stepSizeUp=3, stepSizeDown=7, cycle length=10
         // base=0.0, max=1.0
@@ -478,8 +479,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0, scheduler.GetLearningRateAtStep(3), 1e-6);
     }
 
-    [Fact]
-    public void CyclicLR_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CyclicLR_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new CyclicLRScheduler(0.01, 0.001)); // max < base
@@ -491,8 +492,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region Constant LR
 
-    [Fact]
-    public void ConstantLR_NeverChanges()
+    [Fact(Timeout = 120000)]
+    public async Task ConstantLR_NeverChanges()
     {
         var scheduler = new ConstantLRScheduler(baseLearningRate: 0.05);
 
@@ -510,8 +511,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region State Management
 
-    [Fact]
-    public void Reset_RestoresInitialState()
+    [Fact(Timeout = 120000)]
+    public async Task Reset_RestoresInitialState()
     {
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.5);
         scheduler.Step(); // lr = 0.05
@@ -525,8 +526,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.CurrentLearningRate, Tolerance);
     }
 
-    [Fact]
-    public void GetState_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetState_ContainsExpectedKeys()
     {
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.9);
         scheduler.Step();
@@ -541,8 +542,8 @@ public class LRSchedulerDeepMathIntegrationTests
         Assert.Equal(1, Convert.ToInt32(state["current_step"]));
     }
 
-    [Fact]
-    public void LoadState_RestoresCorrectState()
+    [Fact(Timeout = 120000)]
+    public async Task LoadState_RestoresCorrectState()
     {
         var scheduler1 = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.9);
         scheduler1.Step();
@@ -561,22 +562,22 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region Base Class Validation
 
-    [Fact]
-    public void BaseLR_ZeroOrNegative_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BaseLR_ZeroOrNegative_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ExponentialLRScheduler(baseLearningRate: 0.0));
         Assert.Throws<ArgumentException>(() => new ExponentialLRScheduler(baseLearningRate: -0.1));
     }
 
-    [Fact]
-    public void MinLR_Negative_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MinLR_Negative_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.9, minLearningRate: -0.01));
     }
 
-    [Fact]
-    public void GetLearningRateAtStep_NegativeStep_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task GetLearningRateAtStep_NegativeStep_Throws()
     {
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.9);
         Assert.Throws<ArgumentException>(() => scheduler.GetLearningRateAtStep(-1));
@@ -586,8 +587,8 @@ public class LRSchedulerDeepMathIntegrationTests
 
     #region Cross-Scheduler Consistency
 
-    [Fact]
-    public void Exponential_Vs_StepLR_AtDecayPoints()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_Vs_StepLR_AtDecayPoints()
     {
         // StepLR with stepSize=1 and gamma=0.9 should match Exponential with gamma=0.9
         // because floor(step/1) = step, so lr = base * 0.9^step
@@ -603,8 +604,8 @@ public class LRSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Polynomial_Power1_Vs_LinearWarmup_LinearDecay()
+    [Fact(Timeout = 120000)]
+    public async Task Polynomial_Power1_Vs_LinearWarmup_LinearDecay()
     {
         // Polynomial with power=1 starting from step 0 should match
         // LinearWarmup with 0 warmup steps and linear decay

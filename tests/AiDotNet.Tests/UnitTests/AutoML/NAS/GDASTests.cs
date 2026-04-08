@@ -4,6 +4,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class GDASTests
     {
-        [Fact]
-        public void GDAS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -23,8 +24,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(gdas);
         }
 
-        [Fact]
-        public void GDAS_GetArchitectureParameters_ReturnsValidList()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact]
-        public void GDAS_GetArchitectureParameters_HasCorrectShape()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GetArchitectureParameters_HasCorrectShape()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -54,8 +55,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(3, params_[2].Rows); // Third node connects to 3 previous nodes
         }
 
-        [Fact]
-        public void GDAS_GetArchitectureGradients_MatchesParameterCount()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GetArchitectureGradients_MatchesParameterCount()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -69,8 +70,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(params_.Count, gradients.Count);
         }
 
-        [Fact]
-        public void GDAS_GetTemperature_ReturnsInitialTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GetTemperature_ReturnsInitialTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -83,8 +84,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5.0, temperature);
         }
 
-        [Fact]
-        public void GDAS_AnnealTemperature_DecreasesTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_AnnealTemperature_DecreasesTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -99,8 +100,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(midTemp < initialTemp);
         }
 
-        [Fact]
-        public void GDAS_AnnealTemperature_AtEnd_ApproachesFinalTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_AnnealTemperature_AtEnd_ApproachesFinalTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -114,8 +115,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(finalTemp < 0.5); // Should be close to 0.1
         }
 
-        [Fact]
-        public void GDAS_GumbelSoftmax_ReturnsValidProbabilities()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GumbelSoftmax_ReturnsValidProbabilities()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -135,8 +136,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(alpha.Columns, probs.Columns);
         }
 
-        [Fact]
-        public void GDAS_GumbelSoftmax_HardMode_ReturnsOneHotVectors()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_GumbelSoftmax_HardMode_ReturnsOneHotVectors()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -162,8 +163,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void GDAS_DeriveArchitecture_ReturnsValidArchitecture()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -177,8 +178,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
-        public void GDAS_DeriveArchitecture_ContainsOperationsFromSearchSpace()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_DeriveArchitecture_ContainsOperationsFromSearchSpace()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -193,8 +194,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Contains("Architecture with", description);
         }
 
-        [Fact]
-        public void GDAS_WithDifferentNumNodes_HasDifferentParameterCounts()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_WithDifferentNumNodes_HasDifferentParameterCounts()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -210,8 +211,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, params5.Count);
         }
 
-        [Fact]
-        public void GDAS_TemperatureAnnealing_MonotonicallyDecreases()
+        [Fact(Timeout = 60000)]
+        public async Task GDAS_TemperatureAnnealing_MonotonicallyDecreases()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

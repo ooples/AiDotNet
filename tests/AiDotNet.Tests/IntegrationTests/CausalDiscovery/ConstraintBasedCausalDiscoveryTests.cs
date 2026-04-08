@@ -2,6 +2,7 @@ using AiDotNet.CausalDiscovery;
 using AiDotNet.CausalDiscovery.ConstraintBased;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -121,8 +122,8 @@ public class ConstraintBasedCausalDiscoveryTests
         Assert.Equal(childrenByIndex.Length, childrenByName.Length);
     }
 
-    [Fact]
-    public void PC_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task PC_Discover_FindsCausalStructure()
     {
         var algo = new PCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -130,8 +131,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void FCI_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task FCI_Discover_FindsCausalStructure()
     {
         var algo = new FCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -139,8 +140,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void RFCI_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task RFCI_Discover_FindsCausalStructure()
     {
         var algo = new RFCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -148,8 +149,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void CPC_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CPC_Discover_FindsCausalStructure()
     {
         var algo = new CPCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -157,8 +158,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void MMPC_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task MMPC_Discover_FindsCausalStructure()
     {
         var algo = new MMPCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -166,8 +167,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void IAMB_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task IAMB_Discover_FindsCausalStructure()
     {
         var algo = new IAMBAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -175,8 +176,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void FastIAMB_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task FastIAMB_Discover_FindsCausalStructure()
     {
         var algo = new FastIAMBAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -184,8 +185,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void MarkovBlanket_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task MarkovBlanket_Discover_FindsCausalStructure()
     {
         var algo = new MarkovBlanketAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -193,8 +194,8 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void CDNOD_Discover_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CDNOD_Discover_FindsCausalStructure()
     {
         var algo = new CDNODAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

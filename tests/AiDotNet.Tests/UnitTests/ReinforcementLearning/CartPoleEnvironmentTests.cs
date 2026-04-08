@@ -1,13 +1,14 @@
 using AiDotNet.ReinforcementLearning.Environments;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 public class CartPoleEnvironmentTests
 {
-    [Fact]
-    public void Constructor_CreatesEnvironment()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CreatesEnvironment()
     {
         // Arrange & Act
         var env = new CartPoleEnvironment<double>();
@@ -17,8 +18,8 @@ public class CartPoleEnvironmentTests
         Assert.Equal(2, env.ActionSpaceSize);
     }
 
-    [Fact]
-    public void Reset_ReturnsValidState()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ReturnsValidState()
     {
         // Arrange
         var env = new CartPoleEnvironment<double>(seed: 42);
@@ -37,8 +38,8 @@ public class CartPoleEnvironmentTests
         }
     }
 
-    [Fact]
-    public void Step_WithValidAction_ReturnsValidTransition()
+    [Fact(Timeout = 60000)]
+    public async Task Step_WithValidAction_ReturnsValidTransition()
     {
         // Arrange
         var env = new CartPoleEnvironment<double>(seed: 42);
@@ -56,8 +57,8 @@ public class CartPoleEnvironmentTests
         Assert.NotNull(info);
     }
 
-    [Fact]
-    public void Step_WithInvalidAction_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Step_WithInvalidAction_ThrowsException()
     {
         // Arrange
         var env = new CartPoleEnvironment<double>();
@@ -70,8 +71,8 @@ public class CartPoleEnvironmentTests
         Assert.Throws<ArgumentException>(() => env.Step(invalidAction2));
     }
 
-    [Fact]
-    public void Episode_EventuallyTerminates()
+    [Fact(Timeout = 60000)]
+    public async Task Episode_EventuallyTerminates()
     {
         // Arrange
         var env = new CartPoleEnvironment<double>(maxSteps: 100, seed: 42);
@@ -96,8 +97,8 @@ public class CartPoleEnvironmentTests
         Assert.True(steps <= 100); // Should terminate before max steps
     }
 
-    [Fact]
-    public void Seed_MakesEnvironmentDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Seed_MakesEnvironmentDeterministic()
     {
         // Arrange
         var env1 = new CartPoleEnvironment<double>();
@@ -128,8 +129,8 @@ public class CartPoleEnvironmentTests
         }
     }
 
-    [Fact]
-    public void Close_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Close_DoesNotThrow()
     {
         // Arrange
         var env = new CartPoleEnvironment<double>();

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
-    public void Ensemble_NotWorseThanRandom()
+    [Fact(Timeout = 60000)]
+    public async Task Ensemble_NotWorseThanRandom()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -31,8 +32,8 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact]
-    public void Ensemble_ShouldProduceValidLabels()
+    [Fact(Timeout = 60000)]
+    public async Task Ensemble_ShouldProduceValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

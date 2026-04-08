@@ -200,8 +200,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -215,8 +215,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_WithCustomTopK_SetsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomTopK_SetsCorrectly()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -229,8 +229,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange
             var embeddingModel = new MockEmbeddingModel();
@@ -240,8 +240,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new DenseRetriever<double>(null!, embeddingModel));
         }
 
-        [Fact]
-        public void Constructor_NullEmbeddingModel_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -251,8 +251,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new DenseRetriever<double>(store, null!));
         }
 
-        [Fact]
-        public void Constructor_BothParametersNull_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_BothParametersNull_ThrowsArgumentNullException()
         {
             // Act & Assert - should throw for the first null parameter (documentStore)
             Assert.Throws<ArgumentNullException>(() =>
@@ -263,8 +263,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
-        public void Retrieve_EmptyStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -278,8 +278,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_SingleDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleDocument_ReturnsDocument()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -295,8 +295,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_MultipleDocuments_ReturnsRankedByRelevance()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleDocuments_ReturnsRankedByRelevance()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -314,8 +314,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_SimilarContent_RankedByVectorSimilarity()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SimilarContent_RankedByVectorSimilarity()
         {
             // Arrange - documents with similar content should have similar embeddings
             var store = CreateStoreWithDocuments(
@@ -332,8 +332,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_WithTopK_ReturnsLimitedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -352,8 +352,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
-        public void Retrieve_NullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -365,8 +365,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_EmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -378,8 +378,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
-        public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -391,8 +391,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("   ").ToList());
         }
 
-        [Fact]
-        public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -404,8 +404,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
-        public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -421,8 +421,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Vector Similarity Tests
 
-        [Fact]
-        public void Retrieve_IdenticalContent_HighestRelevance()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_IdenticalContent_HighestRelevance()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -439,8 +439,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_DocumentsHaveRelevanceScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -456,8 +456,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_RelevanceScoresAreInRange()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RelevanceScoresAreInRange()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -476,8 +476,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_ResultsOrderedByRelevance()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ResultsOrderedByRelevance()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -501,8 +501,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
@@ -520,8 +520,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
@@ -537,8 +537,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -555,8 +555,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "content"));
@@ -568,8 +568,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("content", topK: 5, null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_MultipleMetadataFilters_ReturnsMatchingAll()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleMetadataFilters_ReturnsMatchingAll()
         {
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
@@ -592,8 +592,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_SingleWordQuery_Works()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleWordQuery_Works()
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "fox"));
@@ -607,8 +607,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_SingleWordDocument_Works()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleWordDocument_Works()
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "fox"));
@@ -622,8 +622,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_LongDocument_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_LongDocument_HandlesCorrectly()
         {
             // Arrange
             var longContent = string.Join(" ", Enumerable.Repeat("The quick brown fox jumps over the lazy dog.", 100));
@@ -639,8 +639,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_SpecialCharactersInQuery_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SpecialCharactersInQuery_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "Hello, world! How are you?"));
@@ -654,8 +654,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -676,8 +676,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -693,8 +693,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_UnicodeContent_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_UnicodeContent_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -710,8 +710,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_EmojisInContent_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmojisInContent_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -731,8 +731,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Embedding Integration Tests
 
-        [Fact]
-        public void Retrieve_UsesEmbeddingModel()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_UsesEmbeddingModel()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -750,8 +750,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].RelevanceScore > 0.9);
         }
 
-        [Fact]
-        public void Retrieve_DifferentQueries_ReturnResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DifferentQueries_ReturnResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(

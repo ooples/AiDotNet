@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -45,8 +46,8 @@ public class PredictionStatsIntegrationTests
     /// Perfect prediction: R2 = 1.0
     /// When actual == predicted, all variance is explained.
     /// </summary>
-    [Fact]
-    public void R2_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task R2_PerfectPrediction_ReturnsOne()
     {
         // Arrange - Perfect predictions
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -64,8 +65,8 @@ public class PredictionStatsIntegrationTests
     /// from sklearn.metrics import r2_score
     /// r2_score([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]) = 0.9486081370449679
     /// </summary>
-    [Fact]
-    public void R2_SklearnExample_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task R2_SklearnExample_ReturnsExactValue()
     {
         // Arrange - sklearn documentation example
         var actual = new[] { 3.0, -0.5, 2.0, 7.0 };
@@ -82,8 +83,8 @@ public class PredictionStatsIntegrationTests
     /// Predicting the mean for all values gives R2 = 0.
     /// R2 = 1 - SS_res/SS_tot, when predicting mean, SS_res = SS_tot.
     /// </summary>
-    [Fact]
-    public void R2_PredictMean_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task R2_PredictMean_ReturnsZero()
     {
         // Arrange - Predict mean for all values
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -100,8 +101,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// When predictions are worse than mean, R2 can be negative.
     /// </summary>
-    [Fact]
-    public void R2_WorseThanMean_ReturnsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task R2_WorseThanMean_ReturnsNegative()
     {
         // Arrange - Predictions that are worse than predicting mean
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -122,8 +123,8 @@ public class PredictionStatsIntegrationTests
     /// Adjusted R2 should be less than or equal to R2.
     /// Adjusted R2 = 1 - (1 - R2) * (n - 1) / (n - p - 1)
     /// </summary>
-    [Fact]
-    public void AdjustedR2_IsLessThanOrEqualToR2()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_IsLessThanOrEqualToR2()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -140,8 +141,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Perfect predictions should give Adjusted R2 = 1.0.
     /// </summary>
-    [Fact]
-    public void AdjustedR2_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_PerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -161,8 +162,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.corrcoef([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])[0, 1] = 1.0
     /// </summary>
-    [Fact]
-    public void PearsonCorrelation_PerfectCorrelation_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_PerfectCorrelation_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -178,8 +179,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.corrcoef([1, 2, 3, 4, 5], [5, 4, 3, 2, 1])[0, 1] = -1.0
     /// </summary>
-    [Fact]
-    public void PearsonCorrelation_PerfectNegativeCorrelation_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_PerfectNegativeCorrelation_ReturnsNegativeOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -203,8 +204,8 @@ public class PredictionStatsIntegrationTests
     /// Σ(yi - ȳ)² = 889.2
     /// r = 920 / sqrt(1000 * 889.2) = 0.97563663656285926
     /// </summary>
-    [Fact]
-    public void PearsonCorrelation_HighCorrelation_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_HighCorrelation_ReturnsExactValue()
     {
         // Arrange
         var actual = new[] { 10.0, 20.0, 30.0, 40.0, 50.0 };
@@ -221,8 +222,8 @@ public class PredictionStatsIntegrationTests
     /// Linear transformation should preserve correlation.
     /// y' = a*y + b should have same correlation as y with x.
     /// </summary>
-    [Fact]
-    public void PearsonCorrelation_ScaledPredictions_SameCorrelation()
+    [Fact(Timeout = 120000)]
+    public async Task PearsonCorrelation_ScaledPredictions_SameCorrelation()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -245,8 +246,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with SciPy: scipy.stats.spearmanr([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])[0] = 1.0
     /// </summary>
-    [Fact]
-    public void SpearmanCorrelation_PerfectRankCorrelation_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task SpearmanCorrelation_PerfectRankCorrelation_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -262,8 +263,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with SciPy: scipy.stats.spearmanr([1, 2, 3, 4, 5], [5, 4, 3, 2, 1])[0] = -1.0
     /// </summary>
-    [Fact]
-    public void SpearmanCorrelation_PerfectNegativeRankCorrelation_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task SpearmanCorrelation_PerfectNegativeRankCorrelation_ReturnsNegativeOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -280,8 +281,8 @@ public class PredictionStatsIntegrationTests
     /// Spearman correlation should be robust to monotonic transformations.
     /// If y increases monotonically with x, correlation = 1.
     /// </summary>
-    [Fact]
-    public void SpearmanCorrelation_MonotonicTransformation_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task SpearmanCorrelation_MonotonicTransformation_ReturnsOne()
     {
         // Arrange - Monotonic but non-linear transformation
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -301,8 +302,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with SciPy: scipy.stats.kendalltau([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])[0] = 1.0
     /// </summary>
-    [Fact]
-    public void KendallTau_PerfectConcordance_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task KendallTau_PerfectConcordance_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -318,8 +319,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Verified with SciPy: scipy.stats.kendalltau([1, 2, 3, 4, 5], [5, 4, 3, 2, 1])[0] = -1.0
     /// </summary>
-    [Fact]
-    public void KendallTau_PerfectDiscordance_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task KendallTau_PerfectDiscordance_ReturnsNegativeOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -339,8 +340,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Perfect predictions should give ExplainedVarianceScore = 1.0.
     /// </summary>
-    [Fact]
-    public void ExplainedVarianceScore_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task ExplainedVarianceScore_PerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -357,8 +358,8 @@ public class PredictionStatsIntegrationTests
     /// Explained variance score should be 1 even with constant bias.
     /// y_pred = y_actual + constant should have EVS = 1.
     /// </summary>
-    [Fact]
-    public void ExplainedVarianceScore_WithConstantBias_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task ExplainedVarianceScore_WithConstantBias_ReturnsOne()
     {
         // Arrange - Predictions with constant bias
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -378,8 +379,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Mean prediction error should be zero for perfect predictions.
     /// </summary>
-    [Fact]
-    public void MeanPredictionError_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MeanPredictionError_PerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -396,8 +397,8 @@ public class PredictionStatsIntegrationTests
     /// Mean prediction error should be positive for overprediction.
     /// MeanPredictionError = mean(predicted - actual)
     /// </summary>
-    [Fact]
-    public void MeanPredictionError_Overprediction_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task MeanPredictionError_Overprediction_ReturnsPositive()
     {
         // Arrange - Predictions systematically higher
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -417,8 +418,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Median prediction error should be zero for perfect predictions.
     /// </summary>
-    [Fact]
-    public void MedianPredictionError_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MedianPredictionError_PerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -434,8 +435,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Median prediction error for constant overprediction.
     /// </summary>
-    [Fact]
-    public void MedianPredictionError_ConstantOverprediction_ReturnsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task MedianPredictionError_ConstantOverprediction_ReturnsConstant()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -455,8 +456,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// DTW distance should be zero for identical sequences.
     /// </summary>
-    [Fact]
-    public void DynamicTimeWarping_IdenticalSequences_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DynamicTimeWarping_IdenticalSequences_ReturnsZero()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -472,8 +473,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// DTW distance should be positive for different sequences.
     /// </summary>
-    [Fact]
-    public void DynamicTimeWarping_DifferentSequences_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task DynamicTimeWarping_DifferentSequences_ReturnsPositive()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -494,8 +495,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Prediction interval should have lower < upper.
     /// </summary>
-    [Fact]
-    public void PredictionInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -512,8 +513,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Perfect predictions should have narrow prediction interval.
     /// </summary>
-    [Fact]
-    public void PredictionInterval_PerfectPredictions_NarrowInterval()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionInterval_PerfectPredictions_NarrowInterval()
     {
         // Arrange - Perfect predictions
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -534,8 +535,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Confidence interval should have lower < upper.
     /// </summary>
-    [Fact]
-    public void ConfidenceInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ConfidenceInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -556,8 +557,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Credible interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void CredibleInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CredibleInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -578,8 +579,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Tolerance interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void ToleranceInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ToleranceInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -600,8 +601,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Bootstrap interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void BootstrapInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -622,8 +623,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Jackknife interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void JackknifeInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task JackknifeInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -644,8 +645,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Forecast interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void ForecastInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ForecastInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -666,8 +667,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Percentile interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void PercentileInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task PercentileInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -688,8 +689,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Simultaneous prediction interval should have valid bounds.
     /// </summary>
-    [Fact]
-    public void SimultaneousPredictionInterval_HasValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task SimultaneousPredictionInterval_HasValidBounds()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -710,8 +711,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Prediction interval coverage should be between 0 and 1.
     /// </summary>
-    [Fact]
-    public void PredictionIntervalCoverage_IsValidProportion()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionIntervalCoverage_IsValidProportion()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -732,8 +733,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Quantile intervals list should be initialized.
     /// </summary>
-    [Fact]
-    public void QuantileIntervals_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileIntervals_IsInitialized()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -753,8 +754,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Learning curve should be initialized as a list.
     /// </summary>
-    [Fact]
-    public void LearningCurve_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task LearningCurve_IsInitialized()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -774,8 +775,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Accuracy should be 1.0 for perfect classification.
     /// </summary>
-    [Fact]
-    public void Accuracy_PerfectClassification_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_PerfectClassification_ReturnsOne()
     {
         // Arrange - Binary classification (0 or 1)
         var actual = new[] { 0.0, 0.0, 1.0, 1.0, 1.0 };
@@ -791,8 +792,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Precision should be 1.0 when all positive predictions are correct.
     /// </summary>
-    [Fact]
-    public void Precision_AllCorrectPositives_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Precision_AllCorrectPositives_ReturnsOne()
     {
         // Arrange - All predicted positives are true positives
         var actual = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
@@ -808,8 +809,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// Recall should be 1.0 when all actual positives are detected.
     /// </summary>
-    [Fact]
-    public void Recall_AllPositivesDetected_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Recall_AllPositivesDetected_ReturnsOne()
     {
         // Arrange - All actual positives are predicted
         var actual = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
@@ -826,8 +827,8 @@ public class PredictionStatsIntegrationTests
     /// F1Score should be 1.0 for perfect classification.
     /// F1 = 2 * (precision * recall) / (precision + recall)
     /// </summary>
-    [Fact]
-    public void F1Score_PerfectClassification_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_PerfectClassification_ReturnsOne()
     {
         // Arrange
         var actual = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
@@ -843,8 +844,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// F1Score should be the harmonic mean of precision and recall.
     /// </summary>
-    [Fact]
-    public void F1Score_IsHarmonicMeanOfPrecisionAndRecall()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_IsHarmonicMeanOfPrecisionAndRecall()
     {
         // Arrange
         var actual = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
@@ -865,8 +866,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// RSquared property should be an alias for R2.
     /// </summary>
-    [Fact]
-    public void RSquared_IsAliasForR2()
+    [Fact(Timeout = 120000)]
+    public async Task RSquared_IsAliasForR2()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -886,8 +887,8 @@ public class PredictionStatsIntegrationTests
     /// <summary>
     /// BestDistributionFit should be initialized.
     /// </summary>
-    [Fact]
-    public void BestDistributionFit_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task BestDistributionFit_IsInitialized()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
@@ -904,8 +905,8 @@ public class PredictionStatsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void AllMetrics_FloatType_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_FloatType_ReturnsCorrectValues()
     {
         // Arrange
         var actual = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
@@ -928,8 +929,8 @@ public class PredictionStatsIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Empty_ReturnsZeroValues()
+    [Fact(Timeout = 120000)]
+    public async Task Empty_ReturnsZeroValues()
     {
         // Arrange & Act
         var stats = PredictionStats<double>.Empty();
@@ -950,8 +951,8 @@ public class PredictionStatsIntegrationTests
         Assert.Equal(0.0, stats.F1Score, Tolerance);
     }
 
-    [Fact]
-    public void TwoValues_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TwoValues_CalculatesCorrectly()
     {
         // Arrange
         var actual = new[] { 1.0, 5.0 };
@@ -966,8 +967,8 @@ public class PredictionStatsIntegrationTests
         Assert.Equal(1.0, stats.SpearmanCorrelation, Tolerance);
     }
 
-    [Fact]
-    public void ConstantValues_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task ConstantValues_HandledGracefully()
     {
         // Arrange - All same values (variance = 0)
         var actual = new[] { 5.0, 5.0, 5.0, 5.0, 5.0 };
@@ -981,8 +982,8 @@ public class PredictionStatsIntegrationTests
             $"R2 should be finite for constant values, got {stats.R2}");
     }
 
-    [Fact]
-    public void LargeDataset_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LargeDataset_CalculatesCorrectly()
     {
         // Arrange - 100 data points
         var actual = new double[100];

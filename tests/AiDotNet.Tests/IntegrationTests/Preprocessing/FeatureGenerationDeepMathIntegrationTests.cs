@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing.Discretizers;
 using AiDotNet.Preprocessing.FeatureGeneration;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -20,8 +21,8 @@ public class FeatureGenerationDeepMathIntegrationTests
     // PolynomialFeatures - Degree 2, Single Feature
     // ========================================================================
 
-    [Fact]
-    public void Poly_Degree2_SingleFeature_WithBias()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree2_SingleFeature_WithBias()
     {
         // Input [x] with degree=2, includeBias=true
         // Output: [1, x, x^2]
@@ -38,8 +39,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(9.0, result[0, 2], Tol); // x^2
     }
 
-    [Fact]
-    public void Poly_Degree2_SingleFeature_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree2_SingleFeature_NoBias()
     {
         // Input [x] with degree=2, includeBias=false
         // Output: [x, x^2]
@@ -55,8 +56,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(16.0, result[0, 1], Tol); // x^2
     }
 
-    [Fact]
-    public void Poly_Degree2_TwoFeatures_WithBias()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree2_TwoFeatures_WithBias()
     {
         // Input [a, b] with degree=2, includeBias=true
         // Should produce 6 features containing: 1, a, b, a^2, ab, b^2
@@ -83,8 +84,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Contains(9.0, outputValues); // b^2
     }
 
-    [Fact]
-    public void Poly_Degree2_TwoFeatures_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree2_TwoFeatures_NoBias()
     {
         // Input [a, b] with degree=2, includeBias=false
         // Should produce 5 features containing: a, b, a^2, ab, b^2
@@ -107,8 +108,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Contains(9.0, outputValues); // b^2
     }
 
-    [Fact]
-    public void Poly_Degree1_IsIdentityWithBias()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree1_IsIdentityWithBias()
     {
         // Degree 1 with bias: outputs 3 features
         // The recursive combination generator produces [0,1] before [1,0]
@@ -128,8 +129,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Contains(7.0, outputValues);
     }
 
-    [Fact]
-    public void Poly_Degree3_SingleFeature()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree3_SingleFeature()
     {
         // Input [x] with degree=3, includeBias=true
         // Output: [1, x, x^2, x^3]
@@ -147,8 +148,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(8.0, result[0, 3], Tol);
     }
 
-    [Fact]
-    public void Poly_InteractionOnly_Degree2()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_InteractionOnly_Degree2()
     {
         // Input [a, b] with degree=2, interactionOnly=true, includeBias=true
         // Should produce: [1, a, b, ab] (no a^2 or b^2)
@@ -174,8 +175,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.DoesNotContain(9.0, outputValues);
     }
 
-    [Fact]
-    public void Poly_MultipleRows_IndependentComputation()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_MultipleRows_IndependentComputation()
     {
         // Multiple rows computed independently
         var data = MakeMatrix(new double[,] { { 2 }, { 3 }, { 4 } });
@@ -200,8 +201,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(16.0, result[2, 2], Tol);
     }
 
-    [Fact]
-    public void Poly_ZeroInput_CorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_ZeroInput_CorrectOutput()
     {
         // x=0: [1, 0, 0]
         var data = MakeMatrix(new double[,] { { 0 } });
@@ -214,8 +215,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(0.0, result[0, 2], Tol); // 0^2
     }
 
-    [Fact]
-    public void Poly_NegativeInput_CorrectSquare()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_NegativeInput_CorrectSquare()
     {
         // x=-3: [1, -3, 9]
         var data = MakeMatrix(new double[,] { { -3 } });
@@ -228,8 +229,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(9.0, result[0, 2], Tol);
     }
 
-    [Fact]
-    public void Poly_NegativeInput_CubeIsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_NegativeInput_CubeIsNegative()
     {
         // x=-2: [1, -2, 4, -8]
         var data = MakeMatrix(new double[,] { { -2 } });
@@ -243,14 +244,14 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(-8.0, result[0, 3], Tol);
     }
 
-    [Fact]
-    public void Poly_InvalidDegree_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_InvalidDegree_Throws()
     {
         Assert.Throws<ArgumentException>(() => new PolynomialFeatures<double>(degree: 0));
     }
 
-    [Fact]
-    public void Poly_FeatureNamesOut_HasCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_FeatureNamesOut_HasCorrectCount()
     {
         var data = MakeMatrix(new double[,] { { 1, 2 } });
         var poly = new PolynomialFeatures<double>(degree: 2, includeBias: true);
@@ -260,8 +261,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(poly.NOutputFeatures, names.Length);
     }
 
-    [Fact]
-    public void Poly_NInputFeatures_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_NInputFeatures_IsCorrect()
     {
         var data = MakeMatrix(new double[,] { { 1, 2, 3 } });
         var poly = new PolynomialFeatures<double>(degree: 2);
@@ -270,8 +271,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(3, poly.NInputFeatures);
     }
 
-    [Fact]
-    public void Poly_InverseTransform_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_InverseTransform_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 } });
         var poly = new PolynomialFeatures<double>(degree: 2);
@@ -285,8 +286,8 @@ public class FeatureGenerationDeepMathIntegrationTests
     // Binarizer - Threshold-Based Binary Conversion
     // ========================================================================
 
-    [Fact]
-    public void Binarizer_DefaultThreshold0_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_DefaultThreshold0_HandComputed()
     {
         // Default threshold=0: positive -> 1, zero/negative -> 0
         // [-2, -1, 0, 1, 2] -> [0, 0, 0, 1, 1]
@@ -302,8 +303,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(1.0, result[4, 0], Tol);
     }
 
-    [Fact]
-    public void Binarizer_CustomThreshold5()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_CustomThreshold5()
     {
         // Threshold=5: [3, 5, 6, 8] -> [0, 0, 1, 1]
         var data = MakeMatrix(new double[,] { { 3 }, { 5 }, { 6 }, { 8 } });
@@ -317,8 +318,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(1.0, result[3, 0], Tol); // 8 > 5
     }
 
-    [Fact]
-    public void Binarizer_AllAboveThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_AllAboveThreshold()
     {
         var data = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 } });
         var binarizer = new Binarizer<double>(threshold: 5.0);
@@ -330,8 +331,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(1.0, result[2, 0], Tol);
     }
 
-    [Fact]
-    public void Binarizer_AllBelowThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_AllBelowThreshold()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
         var binarizer = new Binarizer<double>(threshold: 10.0);
@@ -343,8 +344,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(0.0, result[2, 0], Tol);
     }
 
-    [Fact]
-    public void Binarizer_NegativeThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_NegativeThreshold()
     {
         // Threshold=-1: [-3, -1, 0, 2] -> [0, 0, 1, 1]
         var data = MakeMatrix(new double[,] { { -3 }, { -1 }, { 0 }, { 2 } });
@@ -358,8 +359,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(1.0, result[3, 0], Tol); // 2 > -1
     }
 
-    [Fact]
-    public void Binarizer_MultipleColumns()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_MultipleColumns()
     {
         // Both columns binarized with threshold=0
         var data = MakeMatrix(new double[,] {
@@ -376,8 +377,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(0.0, result[1, 1], Tol); // -4 <= 0
     }
 
-    [Fact]
-    public void Binarizer_SpecificColumns_OnlyBinarizesSelected()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_SpecificColumns_OnlyBinarizesSelected()
     {
         // Only binarize column 0
         var data = MakeMatrix(new double[,] {
@@ -394,8 +395,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(88.0, result[1, 1], Tol);  // 88 unchanged
     }
 
-    [Fact]
-    public void Binarizer_InverseTransform_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_InverseTransform_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 } });
         var binarizer = new Binarizer<double>();
@@ -405,8 +406,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Throws<NotSupportedException>(() => binarizer.InverseTransform(result));
     }
 
-    [Fact]
-    public void Binarizer_Idempotent_AlreadyBinary()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_Idempotent_AlreadyBinary()
     {
         // Already binary data should stay the same
         var data = MakeMatrix(new double[,] { { 0 }, { 1 }, { 0 }, { 1 } });
@@ -427,8 +428,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Binarizer_OutputOnlyContains0sAnd1s()
+    [Fact(Timeout = 120000)]
+    public async Task Binarizer_OutputOnlyContains0sAnd1s()
     {
         var data = MakeMatrix(new double[,] {
             { -100 }, { -0.001 }, { 0 }, { 0.001 }, { 100 }
@@ -448,8 +449,8 @@ public class FeatureGenerationDeepMathIntegrationTests
     // Cross-Component: PolynomialFeatures Properties
     // ========================================================================
 
-    [Fact]
-    public void Poly_BiasColumnAlwaysOne()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_BiasColumnAlwaysOne()
     {
         // Bias column should always be 1 regardless of input
         var data = MakeMatrix(new double[,] { { -5 }, { 0 }, { 100 } });
@@ -463,8 +464,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Poly_Degree2_ThreeFeatures_OutputCount()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_Degree2_ThreeFeatures_OutputCount()
     {
         // [a, b, c] with degree=2, bias=true
         // Degree 0: [1]
@@ -478,8 +479,8 @@ public class FeatureGenerationDeepMathIntegrationTests
         Assert.Equal(10, poly.NOutputFeatures);
     }
 
-    [Fact]
-    public void Poly_FitTransform_EquivalentToSeparate()
+    [Fact(Timeout = 120000)]
+    public async Task Poly_FitTransform_EquivalentToSeparate()
     {
         var data = MakeMatrix(new double[,] { { 2, 3 } });
 

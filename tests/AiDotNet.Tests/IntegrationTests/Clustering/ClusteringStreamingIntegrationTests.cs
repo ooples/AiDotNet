@@ -1,13 +1,14 @@
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Streaming;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringStreamingIntegrationTests
 {
-    [Fact]
-    public void StreamingMiniBatchKMeans_TrainAndPredict_Works()
+    [Fact(Timeout = 120000)]
+    public async Task StreamingMiniBatchKMeans_TrainAndPredict_Works()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var options = new MiniBatchKMeansOptions<double>
@@ -35,8 +36,8 @@ public class ClusteringStreamingIntegrationTests
         Assert.Equal(dataset.Data.Rows, predicted.Length);
     }
 
-    [Fact]
-    public void StreamingMiniBatchKMeans_PartialFit_UpdatesCenters()
+    [Fact(Timeout = 120000)]
+    public async Task StreamingMiniBatchKMeans_PartialFit_UpdatesCenters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 4);
         var options = new MiniBatchKMeansOptions<double>
@@ -63,8 +64,8 @@ public class ClusteringStreamingIntegrationTests
         Assert.True(!double.IsInfinity(centersAfter[0, 0]));
     }
 
-    [Fact]
-    public void StreamingMiniBatchKMeans_FitPredict_ReturnsLabels()
+    [Fact(Timeout = 120000)]
+    public async Task StreamingMiniBatchKMeans_FitPredict_ReturnsLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
         var model = new MiniBatchKMeans<double>(new MiniBatchKMeansOptions<double>

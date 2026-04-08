@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Probabilistic;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -60,15 +61,15 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region BayesianDetector Tests
 
-    [Fact]
-    public void Bayesian_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task Bayesian_Construction_NotFittedByDefault()
     {
         var detector = new BayesianDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void Bayesian_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Bayesian_OutlierGetsHighestScore()
     {
         var detector = new BayesianDetector<double>();
         var data = CreateTestData();
@@ -79,8 +80,8 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Bayesian_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Bayesian_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new BayesianDetector<double>();
         var data = CreateTestData();
@@ -93,8 +94,8 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region GMMDetector Tests
 
-    [Fact]
-    public void GMM_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task GMM_OutlierGetsHighestScore()
     {
         var detector = new GMMDetector<double>(nComponents: 2);
         var data = CreateTestData();
@@ -104,8 +105,8 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void GMM_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task GMM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GMMDetector<double>(nComponents: 2);
         var data = CreateTestData();
@@ -118,8 +119,8 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region COPODDetector Tests
 
-    [Fact]
-    public void COPOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task COPOD_OutlierGetsHighestScore()
     {
         var detector = new COPODDetector<double>();
         var data = CreateTestData();
@@ -129,8 +130,8 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void COPOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task COPOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new COPODDetector<double>();
         var data = CreateTestData();
@@ -143,8 +144,8 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region ECODDetector Tests
 
-    [Fact]
-    public void ECOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ECOD_OutlierGetsHighestScore()
     {
         var detector = new ECODDetector<double>();
         var data = CreateTestData();
@@ -154,8 +155,8 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ECOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ECOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ECODDetector<double>();
         var data = CreateTestData();
@@ -168,8 +169,8 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllProbabilisticDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllProbabilisticDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

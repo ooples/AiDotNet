@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -56,8 +57,8 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>();
@@ -66,8 +67,8 @@ public class MonteCarloValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new MonteCarloValidationOptions
@@ -148,8 +149,8 @@ public class MonteCarloValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_TrainingSizeIsComplementOfValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainingSizeIsComplementOfValidation()
     {
         // Arrange
         int numSamples = 100;
@@ -184,8 +185,8 @@ public class MonteCarloValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
         var options = new MonteCarloValidationOptions
@@ -216,8 +217,8 @@ public class MonteCarloValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_TrainAndValidationCoverAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainAndValidationCoverAllIndices()
     {
         // Arrange
         int numSamples = 50;
@@ -251,8 +252,8 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Randomness Tests
 
-    [Fact]
-    public void Validate_DifferentIterationsHaveDifferentSplits()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_DifferentIterationsHaveDifferentSplits()
     {
         // Arrange
         var options = new MonteCarloValidationOptions
@@ -289,8 +290,8 @@ public class MonteCarloValidatorIntegrationTests
         Assert.True(foundDifferent, "Monte Carlo should produce different random splits across iterations");
     }
 
-    [Fact]
-    public void Validate_WithSameSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
         var options = new MonteCarloValidationOptions
@@ -331,8 +332,8 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var options = new MonteCarloValidationOptions
@@ -368,8 +369,8 @@ public class MonteCarloValidatorIntegrationTests
 
     #region Sample Usage Tests
 
-    [Fact]
-    public void Validate_SamplesMayAppearInMultipleValidationSets()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_SamplesMayAppearInMultipleValidationSets()
     {
         // Arrange - Monte Carlo allows samples to appear in multiple validation sets
         var options = new MonteCarloValidationOptions

@@ -1,6 +1,7 @@
 using AiDotNet.Evaluation.Metrics.Probabilistic;
 using AiDotNet.Evaluation.Metrics.TimeSeries;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -16,8 +17,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region SMAPE - Symmetric Mean Absolute Percentage Error
 
-    [Fact]
-    public void SMAPE_HandCalculated_SimpleCase()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_HandCalculated_SimpleCase()
     {
         // SMAPE = (100/N) * sum( |y - yhat| / ((|y| + |yhat|) / 2) )
         // y = [100, 200, 300], yhat = [110, 190, 330]
@@ -34,8 +35,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, LooseTolerance);
     }
 
-    [Fact]
-    public void SMAPE_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_PerfectPredictions_ReturnsZero()
     {
         var metric = new SMAPEMetric<double>();
         double[] values = [100, 200, 300, 400];
@@ -43,8 +44,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SMAPE_Bounded_Between0And200()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_Bounded_Between0And200()
     {
         // SMAPE should always be in [0, 200]
         var metric = new SMAPEMetric<double>();
@@ -55,8 +56,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.True(result <= 200, $"SMAPE {result} should be <= 200");
     }
 
-    [Fact]
-    public void SMAPE_SymmetricInOverUnderPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_SymmetricInOverUnderPrediction()
     {
         // SMAPE should give the same value for y=100,yhat=200 and y=200,yhat=100
         var metric = new SMAPEMetric<double>();
@@ -70,8 +71,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(result1, result2, Tolerance);
     }
 
-    [Fact]
-    public void SMAPE_UniformScaling_SameResult()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_UniformScaling_SameResult()
     {
         // SMAPE is scale-invariant: scaling both pred and actual by same factor gives same result
         var metric = new SMAPEMetric<double>();
@@ -85,8 +86,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(result1, result2, LooseTolerance);
     }
 
-    [Fact]
-    public void SMAPE_MaximumValue_OppositeSignPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_MaximumValue_OppositeSignPredictions()
     {
         // |y - yhat| / ((|y| + |yhat|)/2) = |100 - (-100)| / ((100+100)/2) = 200/100 = 2
         // SMAPE = 100 * 2 = 200
@@ -101,8 +102,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region MASE - Mean Absolute Scaled Error
 
-    [Fact]
-    public void MASE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_HandCalculated()
     {
         // Actuals: [10, 12, 14, 16, 18] with period=1
         // Naive forecast errors: |12-10|+|14-12|+|16-14|+|18-16| = 2+2+2+2=8
@@ -118,8 +119,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, LooseTolerance);
     }
 
-    [Fact]
-    public void MASE_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_PerfectPredictions_ReturnsZero()
     {
         var metric = new MASEMetric<double>();
         double[] values = [10, 20, 30, 40, 50];
@@ -127,8 +128,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void MASE_NaiveForecaster_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_NaiveForecaster_ReturnsOne()
     {
         // If MAE = MAE_naive, MASE = 1
         var metric = new MASEMetric<double>();
@@ -140,8 +141,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, LooseTolerance);
     }
 
-    [Fact]
-    public void MASE_WithSeasonalPeriod()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_WithSeasonalPeriod()
     {
         // Actuals: [1, 2, 3, 4, 5, 6] with period=3
         // Seasonal naive errors (i>=3): |4-1|+|5-2|+|6-3| = 3+3+3=9
@@ -158,8 +159,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(expectedMASE, result, LooseTolerance);
     }
 
-    [Fact]
-    public void MASE_BetterThanNaive_LessThanOne()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_BetterThanNaive_LessThanOne()
     {
         var metric = new MASEMetric<double>();
         // Linear trend with small prediction errors
@@ -173,8 +174,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region MASESeasonal - Seasonal MASE
 
-    [Fact]
-    public void MASESeasonal_MatchesMASE_WithSamePeriod()
+    [Fact(Timeout = 120000)]
+    public async Task MASESeasonal_MatchesMASE_WithSamePeriod()
     {
         var mase = new MASEMetric<double>();
         var maseSeasonal = new MASESeasonalMetric<double>(1);
@@ -187,8 +188,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(resultMASE, resultSeasonal, LooseTolerance);
     }
 
-    [Fact]
-    public void MASESeasonal_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MASESeasonal_PerfectPredictions_ReturnsZero()
     {
         var metric = new MASESeasonalMetric<double>(2);
         double[] values = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -196,8 +197,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void MASESeasonal_InsufficientData_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MASESeasonal_InsufficientData_ReturnsZero()
     {
         // When data length <= seasonal period, should return 0
         var metric = new MASESeasonalMetric<double>(10);
@@ -211,8 +212,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region Theil's U Statistic
 
-    [Fact]
-    public void TheilU_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_HandCalculated()
     {
         // Actuals: [10, 12, 15, 13, 16]
         // Predictions: [11, 13, 14, 14, 15]
@@ -228,8 +229,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, LooseTolerance);
     }
 
-    [Fact]
-    public void TheilU_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_PerfectPredictions_ReturnsZero()
     {
         var metric = new TheilUMetric<double>();
         double[] values = [10, 20, 30, 40];
@@ -237,8 +238,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TheilU_NaiveForecast_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_NaiveForecast_ReturnsOne()
     {
         // pred = [actual[0], actual[0], actual[1]] (naive no-change from first value)
         // actual = [10, 20, 30]
@@ -254,8 +255,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, LooseTolerance);
     }
 
-    [Fact]
-    public void TheilU_ConstantActuals_PerfectPred_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_ConstantActuals_PerfectPred_ReturnsZero()
     {
         var metric = new TheilUMetric<double>();
         double[] actual = [5, 5, 5, 5];
@@ -264,8 +265,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TheilU_BetterThanNaive_LessThanOne()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_BetterThanNaive_LessThanOne()
     {
         var metric = new TheilUMetric<double>();
         double[] actual = [10, 20, 30, 40, 50];
@@ -278,8 +279,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region WAPE - Weighted Absolute Percentage Error
 
-    [Fact]
-    public void WAPE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_HandCalculated()
     {
         // WAPE = sum(|y - yhat|) / sum(|y|)
         // sum(|error|) = 10+10+30 = 50, sum(|y|) = 100+200+300 = 600
@@ -292,8 +293,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(50.0 / 600.0, result, LooseTolerance);
     }
 
-    [Fact]
-    public void WAPE_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_PerfectPredictions_ReturnsZero()
     {
         var metric = new WAPEMetric<double>();
         double[] values = [100, 200, 300];
@@ -301,8 +302,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void WAPE_ScaleInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_ScaleInvariant()
     {
         var metric = new WAPEMetric<double>();
         double[] pred = [110, 190, 330];
@@ -316,8 +317,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(result1, result2, Tolerance);
     }
 
-    [Fact]
-    public void WAPE_EqualsMAETimesN_DividedBySumActuals()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_EqualsMAETimesN_DividedBySumActuals()
     {
         var metric = new WAPEMetric<double>();
         double[] pred = [12, 18, 25];
@@ -330,8 +331,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(wapeFromMAE, wape, Tolerance);
     }
 
-    [Fact]
-    public void WAPE_WeightsLargerActualsMore()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_WeightsLargerActualsMore()
     {
         var metric = new WAPEMetric<double>();
         var wape1 = metric.Compute(new double[] { 110 }, new double[] { 100 }); // 10/100 = 0.1
@@ -344,8 +345,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region CRPS - Continuous Ranked Probability Score (Point Predictions)
 
-    [Fact]
-    public void CRPS_PointPredictions_EqualsMAE()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_PointPredictions_EqualsMAE()
     {
         var metric = new CRPSMetric<double>();
         double[] pred = [11, 18, 32];
@@ -356,8 +357,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(mae, crps, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_PerfectPredictions_ReturnsZero()
     {
         var metric = new CRPSMetric<double>();
         double[] values = [1, 2, 3, 4, 5];
@@ -365,8 +366,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_NonNegative()
     {
         var metric = new CRPSMetric<double>();
         double[] pred = [-5, 100, 0];
@@ -375,8 +376,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.True(result >= 0, $"CRPS {result} should be non-negative");
     }
 
-    [Fact]
-    public void CRPS_TriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_TriangleInequality()
     {
         var metric = new CRPSMetric<double>();
         double[] pred = [10, 20, 30];
@@ -395,8 +396,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region Pinball Loss (Quantile Loss)
 
-    [Fact]
-    public void PinballLoss_Median_EqualsHalfMAE()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_Median_EqualsHalfMAE()
     {
         var metric = new PinballLossMetric<double>(0.5);
         double[] pred = [11, 18, 32];
@@ -407,8 +408,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(mae * 0.5, loss, Tolerance);
     }
 
-    [Fact]
-    public void PinballLoss_HandCalculated_Tau09()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_HandCalculated_Tau09()
     {
         // tau=0.9: overpred penalty = 0.1*|diff|, underpred penalty = 0.9*|diff|
         // pred=12, actual=10: overpred, loss = 0.1*2 = 0.2
@@ -421,8 +422,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal((0.2 + 1.8) / 2.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void PinballLoss_HandCalculated_Tau01()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_HandCalculated_Tau01()
     {
         // tau=0.1: overpred penalty = 0.9*|diff|, underpred penalty = 0.1*|diff|
         var metric = new PinballLossMetric<double>(0.1);
@@ -433,8 +434,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal((1.8 + 0.2) / 2.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void PinballLoss_SymmetricOverUnder_SameMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_SymmetricOverUnder_SameMagnitude()
     {
         // For same magnitude errors: Pinball(tau, overpredict) vs Pinball(1-tau, underpredict)
         var metricHigh = new PinballLossMetric<double>(0.9);
@@ -449,8 +450,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(lossHighOver, lossLowUnder, Tolerance);
     }
 
-    [Fact]
-    public void PinballLoss_PerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_PerfectPredictions_ReturnsZero()
     {
         var metric = new PinballLossMetric<double>(0.75);
         double[] values = [10, 20, 30];
@@ -458,8 +459,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void PinballLoss_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_NonNegative()
     {
         var metric = new PinballLossMetric<double>(0.5);
         double[] pred = [100, -50, 0];
@@ -468,8 +469,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.True(result >= 0, $"Pinball loss {result} should be non-negative");
     }
 
-    [Fact]
-    public void PinballLoss_HigherTau_PenalizesUnderpredictionMore()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_HigherTau_PenalizesUnderpredictionMore()
     {
         var metricLow = new PinballLossMetric<double>(0.1);
         var metricHigh = new PinballLossMetric<double>(0.9);
@@ -483,8 +484,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
             $"Higher tau should penalize underprediction more: {lossHigh} > {lossLow}");
     }
 
-    [Fact]
-    public void PinballLoss_InvalidTau_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_InvalidTau_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PinballLossMetric<double>(0.0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PinballLossMetric<double>(1.0));
@@ -492,8 +493,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new PinballLossMetric<double>(1.5));
     }
 
-    [Fact]
-    public void PinballLoss_AllQuantiles_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task PinballLoss_AllQuantiles_Consistent()
     {
         // For any quantile, pinball loss of perfect predictions is 0
         double[] values = [5, 10, 15];
@@ -509,8 +510,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region Cross-Metric Consistency
 
-    [Fact]
-    public void CRPS_WAPE_Relationship()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_WAPE_Relationship()
     {
         // CRPS = MAE = sum(|errors|)/N
         // WAPE = sum(|errors|)/sum(|actuals|)
@@ -527,8 +528,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(crps, wape * meanAbsActual, LooseTolerance);
     }
 
-    [Fact]
-    public void AllMetrics_PerfectPredictions_AllReturnZero()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_PerfectPredictions_AllReturnZero()
     {
         double[] values = [10, 20, 30, 40, 50];
 
@@ -539,8 +540,8 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, new CRPSMetric<double>().Compute(values, values), Tolerance);
     }
 
-    [Fact]
-    public void AllMetrics_WorsePredictions_GiveHigherValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_WorsePredictions_GiveHigherValues()
     {
         double[] actual = [10, 20, 30, 40, 50];
         double[] predGood = [11, 19, 31, 39, 51];
@@ -559,24 +560,24 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void SMAPE_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_EmptyInput_ReturnsZero()
     {
         var metric = new SMAPEMetric<double>();
         var result = metric.Compute(ReadOnlySpan<double>.Empty, ReadOnlySpan<double>.Empty);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void MASE_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MASE_EmptyInput_ReturnsZero()
     {
         var metric = new MASEMetric<double>();
         var result = metric.Compute(ReadOnlySpan<double>.Empty, ReadOnlySpan<double>.Empty);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TheilU_SingleElement_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_SingleElement_ReturnsZero()
     {
         var metric = new TheilUMetric<double>();
         double[] pred = [5];
@@ -585,31 +586,31 @@ public class TimeSeriesAndProbabilisticMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void WAPE_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_EmptyInput_ReturnsZero()
     {
         var metric = new WAPEMetric<double>();
         var result = metric.Compute(ReadOnlySpan<double>.Empty, ReadOnlySpan<double>.Empty);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_EmptyInput_ReturnsZero()
     {
         var metric = new CRPSMetric<double>();
         var result = metric.Compute(ReadOnlySpan<double>.Empty, ReadOnlySpan<double>.Empty);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void SMAPE_MismatchedLengths_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_MismatchedLengths_ThrowsException()
     {
         var metric = new SMAPEMetric<double>();
         Assert.Throws<ArgumentException>(() => metric.Compute(new double[] { 1, 2, 3 }, new double[] { 1, 2 }));
     }
 
-    [Fact]
-    public void TheilU_MismatchedLengths_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_MismatchedLengths_ThrowsException()
     {
         var metric = new TheilUMetric<double>();
         Assert.Throws<ArgumentException>(() => metric.Compute(new double[] { 1, 2, 3 }, new double[] { 1, 2 }));

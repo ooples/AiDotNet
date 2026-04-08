@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Statistics;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -37,8 +38,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -47,8 +48,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
             var options = new InformationCriteriaFitDetectorOptions
@@ -65,8 +66,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithValidData_ReturnsValidFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithValidData_ReturnsValidFitType()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -85,8 +86,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 result.FitType == FitType.Unstable);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsNonEmptyRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -115,8 +116,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_IncludesThresholdsInRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesThresholdsInRecommendations()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains(result.Recommendations, r => r.Contains("AIC threshold") || r.Contains("BIC threshold"));
         }
 
-        [Fact]
-        public void DetectFit_ReturnsRecommendationsForFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsRecommendationsForFitType()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasAdvice);
         }
 
-        [Fact]
-        public void DetectFit_WithLowMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -169,8 +170,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithHighMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_MultipleCallsReturnConsistentResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_MultipleCallsReturnConsistentResults()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_InitializesSuccessfully()
         {
             // Arrange
             var options = new InformationCriteriaFitDetectorOptions
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_WithSimilarMseValues_ProducesResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithSimilarMseValues_ProducesResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -270,8 +271,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithIdenticalMse_StillProducesResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithIdenticalMse_StillProducesResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -288,8 +289,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_GoodFitAdvice_ContainsDeploymentRecommendation()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_GoodFitAdvice_ContainsDeploymentRecommendation()
         {
             // Arrange - Use custom thresholds that make any fit "good"
             var options = new InformationCriteriaFitDetectorOptions
@@ -313,8 +314,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact]
-        public void DetectFit_OverfitAdvice_ContainsRegularizationRecommendation()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_OverfitAdvice_ContainsRegularizationRecommendation()
         {
             // Arrange - Use thresholds that detect overfitting more readily
             var options = new InformationCriteriaFitDetectorOptions
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact]
-        public void DetectFit_UnderfitAdvice_ContainsComplexityRecommendation()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_UnderfitAdvice_ContainsComplexityRecommendation()
         {
             // Arrange - Use thresholds that detect underfitting
             var options = new InformationCriteriaFitDetectorOptions
@@ -360,8 +361,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact]
-        public void DetectFit_HighVarianceAdvice_ContainsDataRecommendation()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_HighVarianceAdvice_ContainsDataRecommendation()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -380,8 +381,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact]
-        public void DetectFit_UnstableAdvice_ContainsInvestigationRecommendation()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_UnstableAdvice_ContainsInvestigationRecommendation()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -397,8 +398,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             }
         }
 
-        [Fact]
-        public void DetectFit_WithConsistentMetrics_ReturnsHighConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithConsistentMetrics_ReturnsHighConfidence()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -425,8 +426,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 $"inconsistent data confidence ({inconsistentResult.ConfidenceLevel:F4})");
         }
 
-        [Fact]
-        public void DetectFit_WithInconsistentMetrics_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithInconsistentMetrics_ReturnsValidResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -445,8 +446,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<float, Matrix<float>, Vector<float>>();

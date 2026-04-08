@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
 {
-    [Fact]
-    public void StabilizedOutput_PreservesLength()
+    [Fact(Timeout = 120000)]
+    public async Task StabilizedOutput_PreservesLength()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -22,8 +23,8 @@ public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
             $"Stabilized output ({output.Length}) much shorter than input ({input.Length}).");
     }
 
-    [Fact]
-    public void StabilizedValues_ShouldBeFinite()
+    [Fact(Timeout = 120000)]
+    public async Task StabilizedValues_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

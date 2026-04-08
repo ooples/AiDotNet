@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Statistics;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -46,8 +47,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
             var options = new AdaptiveFitDetectorOptions
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithValidData_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithValidData_ReturnsValidResult()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -78,8 +79,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_SelectsAppropriateDetector()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_SelectsAppropriateDetector()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 r.Contains("performance"));
         }
 
-        [Fact]
-        public void DetectFit_ReturnsValidFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsValidFitType()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -115,8 +116,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_ReturnsConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsNonEmptyRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -145,8 +146,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_IncludesDataCharacteristicsInRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesDataCharacteristicsInRecommendations()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -169,8 +170,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 r.Contains("Detector"));
         }
 
-        [Fact]
-        public void DetectFit_WithCustomComplexityThreshold_AffectsDetectorSelection()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomComplexityThreshold_AffectsDetectorSelection()
         {
             // Arrange - Use a very low complexity threshold so data appears "complex"
             var lowThresholdOptions = new AdaptiveFitDetectorOptions
@@ -209,8 +210,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(highThresholdResult.ConfidenceLevel >= 0.0 && highThresholdResult.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomPerformanceThreshold_AffectsPerformanceClassification()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomPerformanceThreshold_AffectsPerformanceClassification()
         {
             // Arrange - Use different performance thresholds
             var lowThresholdOptions = new AdaptiveFitDetectorOptions
@@ -253,8 +254,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(Enum.IsDefined(typeof(FitType), highThresholdResult.FitType));
         }
 
-        [Fact]
-        public void DetectFit_WithLowMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -268,8 +269,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithHighMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -283,8 +284,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ProducesConsistentResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ProducesConsistentResults()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -299,8 +300,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact]
-        public void DetectFit_WithDifferentMseValues_AdaptsSelection()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithDifferentMseValues_AdaptsSelection()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -320,8 +321,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(highMseResult.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -338,8 +339,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<float, Matrix<float>, Vector<float>>();
@@ -406,8 +407,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_ProvidesRecommendationsBasedOnSelection()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ProvidesRecommendationsBasedOnSelection()
         {
             // Arrange
             var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();

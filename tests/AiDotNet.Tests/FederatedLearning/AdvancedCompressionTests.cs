@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.Compression;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -35,8 +36,8 @@ public class AdvancedCompressionTests
 
     // ========== PowerSGDCompressor Tests ==========
 
-    [Fact]
-    public void PowerSGD_CompressAndDecompress_PreservesApproximately()
+    [Fact(Timeout = 60000)]
+    public async Task PowerSGD_CompressAndDecompress_PreservesApproximately()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -67,8 +68,8 @@ public class AdvancedCompressionTests
         Assert.True(anyNonZero, "Decompressed gradient should have non-zero values");
     }
 
-    [Fact]
-    public void PowerSGD_CompressionRatio_LessThanOne()
+    [Fact(Timeout = 60000)]
+    public async Task PowerSGD_CompressionRatio_LessThanOne()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -83,8 +84,8 @@ public class AdvancedCompressionTests
         Assert.True(ratio > 0.0, $"Compression ratio ({ratio}) should be positive");
     }
 
-    [Fact]
-    public void PowerSGD_WarmStart_ProducesConsistentResults()
+    [Fact(Timeout = 60000)]
+    public async Task PowerSGD_WarmStart_ProducesConsistentResults()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -107,16 +108,16 @@ public class AdvancedCompressionTests
         Assert.NotNull(decompressed2);
     }
 
-    [Fact]
-    public void PowerSGD_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task PowerSGD_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new PowerSGDCompressor<double>(null));
     }
 
     // ========== GradientSketchCompressor Tests ==========
 
-    [Fact]
-    public void GradientSketch_CompressAndDecompress_PreservesApproximately()
+    [Fact(Timeout = 60000)]
+    public async Task GradientSketch_CompressAndDecompress_PreservesApproximately()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -134,8 +135,8 @@ public class AdvancedCompressionTests
         Assert.Equal(gradient.Shape[0], decompressed.Shape[0]);
     }
 
-    [Fact]
-    public void GradientSketch_DecompressTopK_ReturnsCorrectSize()
+    [Fact(Timeout = 60000)]
+    public async Task GradientSketch_DecompressTopK_ReturnsCorrectSize()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -166,8 +167,8 @@ public class AdvancedCompressionTests
         Assert.True(nonZero <= 5, $"Top-5 should have at most 5 non-zero values, got {nonZero}");
     }
 
-    [Fact]
-    public void GradientSketch_GetCompressionRatio_LessThanOne()
+    [Fact(Timeout = 60000)]
+    public async Task GradientSketch_GetCompressionRatio_LessThanOne()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -182,16 +183,16 @@ public class AdvancedCompressionTests
         Assert.True(ratio < 1.0, $"Compression ratio ({ratio}) should be less than 1.0");
     }
 
-    [Fact]
-    public void GradientSketch_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task GradientSketch_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new GradientSketchCompressor<double>(null));
     }
 
     // ========== ErrorFeedbackCompressor Tests ==========
 
-    [Fact]
-    public void ErrorFeedback_AccumulatesResiduals()
+    [Fact(Timeout = 60000)]
+    public async Task ErrorFeedback_AccumulatesResiduals()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -226,8 +227,8 @@ public class AdvancedCompressionTests
         Assert.True(anyDifferent, "Error feedback should modify the gradient in the second round");
     }
 
-    [Fact]
-    public void ErrorFeedback_OneBitCompression_PreservesSigns()
+    [Fact(Timeout = 60000)]
+    public async Task ErrorFeedback_OneBitCompression_PreservesSigns()
     {
         var options = new AdvancedCompressionOptions { Strategy = AdvancedCompressionStrategy.OneBitSGD };
         var compressor = new ErrorFeedbackCompressor<double>(options);
@@ -247,8 +248,8 @@ public class AdvancedCompressionTests
         }
     }
 
-    [Fact]
-    public void ErrorFeedback_ApplyErrorFeedback_NoFeedback_ReturnsSame()
+    [Fact(Timeout = 60000)]
+    public async Task ErrorFeedback_ApplyErrorFeedback_NoFeedback_ReturnsSame()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -264,16 +265,16 @@ public class AdvancedCompressionTests
         Assert.Same(gradient, result);
     }
 
-    [Fact]
-    public void ErrorFeedback_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task ErrorFeedback_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ErrorFeedbackCompressor<double>(null));
     }
 
     // ========== AdaptiveCompressor Tests ==========
 
-    [Fact]
-    public void Adaptive_ComputesCompressionRatio()
+    [Fact(Timeout = 60000)]
+    public async Task Adaptive_ComputesCompressionRatio()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -294,8 +295,8 @@ public class AdvancedCompressionTests
         Assert.InRange(ratio, 0.01, 0.5);
     }
 
-    [Fact]
-    public void Adaptive_CompressProducesCompressedOutput()
+    [Fact(Timeout = 60000)]
+    public async Task Adaptive_CompressProducesCompressedOutput()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -315,8 +316,8 @@ public class AdvancedCompressionTests
         Assert.Equal(gradient.Shape[0], compressed.Shape[0]);
     }
 
-    [Fact]
-    public void Adaptive_CompressWithBandwidthMeasurement()
+    [Fact(Timeout = 60000)]
+    public async Task Adaptive_CompressWithBandwidthMeasurement()
     {
         var options = new AdvancedCompressionOptions
         {
@@ -339,16 +340,16 @@ public class AdvancedCompressionTests
         Assert.InRange(slowRatio, 0.05, 0.5);
     }
 
-    [Fact]
-    public void Adaptive_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Adaptive_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new AdaptiveCompressor<double>(null));
     }
 
     // ========== Options Tests ==========
 
-    [Fact]
-    public void AdvancedCompressionOptions_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task AdvancedCompressionOptions_DefaultValues()
     {
         var options = new AdvancedCompressionOptions();
 
@@ -362,8 +363,8 @@ public class AdvancedCompressionTests
         Assert.Equal(0.5, options.AdaptiveMaxRatio);
     }
 
-    [Fact]
-    public void AdvancedCompressionStrategy_HasAllExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task AdvancedCompressionStrategy_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(AdvancedCompressionStrategy), AdvancedCompressionStrategy.PowerSGD));
         Assert.True(Enum.IsDefined(typeof(AdvancedCompressionStrategy), AdvancedCompressionStrategy.GradientSketch));
@@ -373,8 +374,8 @@ public class AdvancedCompressionTests
 
     // ========== Integration with FederatedCompressionOptions ==========
 
-    [Fact]
-    public void FederatedCompressionOptions_CanSetAdvancedOptions()
+    [Fact(Timeout = 60000)]
+    public async Task FederatedCompressionOptions_CanSetAdvancedOptions()
     {
         var options = new FederatedCompressionOptions
         {

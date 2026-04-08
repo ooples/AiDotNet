@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -56,8 +57,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
         var validator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>();
@@ -66,8 +67,8 @@ public class KFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -117,8 +118,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Fold Size Tests
 
-    [Fact]
-    public void Validate_FoldSizesAreApproximatelyEqual()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_FoldSizesAreApproximatelyEqual()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -148,8 +149,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -184,8 +185,8 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_EachSampleUsedExactlyOnceAsValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EachSampleUsedExactlyOnceAsValidation()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -224,8 +225,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact]
-    public void Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -260,8 +261,8 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_WithoutShuffle_PreservesOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithoutShuffle_PreservesOrder()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -288,8 +289,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var options = new CrossValidationOptions { NumberOfFolds = 3 };
@@ -318,8 +319,8 @@ public class KFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_RecordsTotalTime()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_RecordsTotalTime()
     {
         // Arrange
         var options = new CrossValidationOptions { NumberOfFolds = 3 };
@@ -340,8 +341,8 @@ public class KFoldCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Validate_WithMinimumFolds_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithMinimumFolds_Works()
     {
         // Arrange - 2 folds is the minimum for meaningful CV
         var options = new CrossValidationOptions
@@ -364,8 +365,8 @@ public class KFoldCrossValidatorIntegrationTests
         Assert.Equal(5, result.FoldResults[0].ValidationIndices.Length);
     }
 
-    [Fact]
-    public void Validate_WithUnevenSplit_DistributesRemainderToFirstFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithUnevenSplit_DistributesRemainderToFirstFolds()
     {
         // Arrange - 11 samples with 3 folds means uneven split
         var options = new CrossValidationOptions

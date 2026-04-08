@@ -9,6 +9,7 @@ using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Specialized;
 using AiDotNet.Tokenization.Vocabulary;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Tokenization;
 
@@ -21,8 +22,8 @@ public class TokenizationIntegrationTests
 {
     #region Vocabulary Tests
 
-    [Fact]
-    public void Vocabulary_Creation_InitializesWithUnkToken()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_Creation_InitializesWithUnkToken()
     {
         var vocabulary = new Vocabulary();
 
@@ -31,8 +32,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(0, vocabulary.GetTokenId("[UNK]"));
     }
 
-    [Fact]
-    public void Vocabulary_CustomUnkToken_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_CustomUnkToken_Works()
     {
         var vocabulary = new Vocabulary("<unk>");
 
@@ -40,8 +41,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(0, vocabulary.GetTokenId("<unk>"));
     }
 
-    [Fact]
-    public void Vocabulary_AddToken_AssignsIncrementalIds()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_AddToken_AssignsIncrementalIds()
     {
         var vocabulary = new Vocabulary();
 
@@ -53,8 +54,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(3, vocabulary.Size);
     }
 
-    [Fact]
-    public void Vocabulary_AddToken_ReturnsSameIdForDuplicates()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_AddToken_ReturnsSameIdForDuplicates()
     {
         var vocabulary = new Vocabulary();
 
@@ -65,8 +66,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(2, vocabulary.Size); // [UNK] + "test"
     }
 
-    [Fact]
-    public void Vocabulary_AddTokens_AddsMultipleTokens()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_AddTokens_AddsMultipleTokens()
     {
         var vocabulary = new Vocabulary();
         var tokens = new[] { "a", "b", "c", "d", "e" };
@@ -80,8 +81,8 @@ public class TokenizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Vocabulary_GetTokenId_ReturnsUnkForMissingToken()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_GetTokenId_ReturnsUnkForMissingToken()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddToken("known");
@@ -92,8 +93,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(unkTokenId, unknownId);
     }
 
-    [Fact]
-    public void Vocabulary_GetToken_ReturnsNullForInvalidId()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_GetToken_ReturnsNullForInvalidId()
     {
         var vocabulary = new Vocabulary();
 
@@ -102,8 +103,8 @@ public class TokenizationIntegrationTests
         Assert.Null(token);
     }
 
-    [Fact]
-    public void Vocabulary_GetToken_ReturnsCorrectToken()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_GetToken_ReturnsCorrectToken()
     {
         var vocabulary = new Vocabulary();
         var id = vocabulary.AddToken("hello");
@@ -113,8 +114,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("hello", token);
     }
 
-    [Fact]
-    public void Vocabulary_ContainsId_ReturnsTrueForValidId()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_ContainsId_ReturnsTrueForValidId()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddToken("test");
@@ -124,8 +125,8 @@ public class TokenizationIntegrationTests
         Assert.False(vocabulary.ContainsId(999));
     }
 
-    [Fact]
-    public void Vocabulary_GetAllTokens_ReturnsAllTokens()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_GetAllTokens_ReturnsAllTokens()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "a", "b", "c" });
@@ -139,8 +140,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("c", allTokens);
     }
 
-    [Fact]
-    public void Vocabulary_Clear_ResetsVocabulary()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_Clear_ResetsVocabulary()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "a", "b", "c", "d", "e" });
@@ -153,8 +154,8 @@ public class TokenizationIntegrationTests
         Assert.False(vocabulary.ContainsToken("a"));
     }
 
-    [Fact]
-    public void Vocabulary_TokenToId_ReturnsCorrectMappings()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_TokenToId_ReturnsCorrectMappings()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "x", "y", "z" });
@@ -167,8 +168,8 @@ public class TokenizationIntegrationTests
         Assert.True(mapping.ContainsKey("z"));
     }
 
-    [Fact]
-    public void Vocabulary_IdToToken_ReturnsCorrectMappings()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_IdToToken_ReturnsCorrectMappings()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "x", "y" });
@@ -180,8 +181,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("y", mapping[2]);
     }
 
-    [Fact]
-    public void Vocabulary_FromDictionary_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_FromDictionary_InitializesCorrectly()
     {
         var tokenToId = new Dictionary<string, int>
         {
@@ -198,8 +199,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(2, vocabulary.GetTokenId("[UNK]"));
     }
 
-    [Fact]
-    public void Vocabulary_AddToken_ThrowsOnNullOrEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_AddToken_ThrowsOnNullOrEmpty()
     {
         var vocabulary = new Vocabulary();
 
@@ -211,8 +212,8 @@ public class TokenizationIntegrationTests
 
     #region SpecialTokens Tests
 
-    [Fact]
-    public void SpecialTokens_Default_UsesBertStyle()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_Default_UsesBertStyle()
     {
         var tokens = SpecialTokens.Default();
 
@@ -223,8 +224,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("[MASK]", tokens.MaskToken);
     }
 
-    [Fact]
-    public void SpecialTokens_Bert_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_Bert_ConfiguresCorrectly()
     {
         var tokens = SpecialTokens.Bert();
 
@@ -237,8 +238,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(string.Empty, tokens.EosToken);
     }
 
-    [Fact]
-    public void SpecialTokens_Gpt_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_Gpt_ConfiguresCorrectly()
     {
         var tokens = SpecialTokens.Gpt();
 
@@ -250,8 +251,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(string.Empty, tokens.SepToken);
     }
 
-    [Fact]
-    public void SpecialTokens_T5_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_T5_ConfiguresCorrectly()
     {
         var tokens = SpecialTokens.T5();
 
@@ -260,8 +261,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("</s>", tokens.EosToken);
     }
 
-    [Fact]
-    public void SpecialTokens_Clip_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_Clip_ConfiguresCorrectly()
     {
         var tokens = SpecialTokens.Clip();
 
@@ -270,8 +271,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("<|endoftext|>", tokens.EosToken);
     }
 
-    [Fact]
-    public void SpecialTokens_GetAllSpecialTokens_ReturnsAllNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_GetAllSpecialTokens_ReturnsAllNonEmpty()
     {
         var tokens = SpecialTokens.Bert();
 
@@ -285,8 +286,8 @@ public class TokenizationIntegrationTests
         Assert.DoesNotContain(string.Empty, allTokens);
     }
 
-    [Fact]
-    public void SpecialTokens_AdditionalTokens_AreIncluded()
+    [Fact(Timeout = 120000)]
+    public async Task SpecialTokens_AdditionalTokens_AreIncluded()
     {
         var tokens = new SpecialTokens
         {
@@ -304,8 +305,8 @@ public class TokenizationIntegrationTests
 
     #region EncodingOptions Tests
 
-    [Fact]
-    public void EncodingOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task EncodingOptions_DefaultValues_AreCorrect()
     {
         var options = new EncodingOptions();
 
@@ -321,8 +322,8 @@ public class TokenizationIntegrationTests
         Assert.False(options.ReturnOffsets);
     }
 
-    [Fact]
-    public void EncodingOptions_CanBeConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task EncodingOptions_CanBeConfigured()
     {
         var options = new EncodingOptions
         {
@@ -350,8 +351,8 @@ public class TokenizationIntegrationTests
 
     #region TokenizationResult Tests
 
-    [Fact]
-    public void TokenizationResult_DefaultConstructor_CreatesEmptyLists()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationResult_DefaultConstructor_CreatesEmptyLists()
     {
         var result = new TokenizationResult();
 
@@ -364,8 +365,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(result.Metadata);
     }
 
-    [Fact]
-    public void TokenizationResult_ParameterizedConstructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationResult_ParameterizedConstructor_InitializesCorrectly()
     {
         var tokens = new List<string> { "hello", "world" };
         var tokenIds = new List<int> { 1, 2 };
@@ -377,8 +378,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<int> { 1, 1 }, result.AttentionMask);
     }
 
-    [Fact]
-    public void TokenizationResult_ParameterizedConstructor_ThrowsOnMismatch()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationResult_ParameterizedConstructor_ThrowsOnMismatch()
     {
         var tokens = new List<string> { "hello", "world" };
         var tokenIds = new List<int> { 1 }; // Mismatched count
@@ -386,8 +387,8 @@ public class TokenizationIntegrationTests
         Assert.Throws<ArgumentException>(() => new TokenizationResult(tokens, tokenIds));
     }
 
-    [Fact]
-    public void TokenizationResult_Length_ReturnsNonPaddedCount()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationResult_Length_ReturnsNonPaddedCount()
     {
         var result = new TokenizationResult
         {
@@ -398,8 +399,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(3, result.Length);
     }
 
-    [Fact]
-    public void TokenizationResult_TotalLength_ReturnsTotalCount()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationResult_TotalLength_ReturnsTotalCount()
     {
         var result = new TokenizationResult
         {
@@ -413,8 +414,8 @@ public class TokenizationIntegrationTests
 
     #region TokenizationConfig Tests
 
-    [Fact]
-    public void TokenizationConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationConfig_DefaultValues_AreCorrect()
     {
         var config = new TokenizationConfig();
 
@@ -431,8 +432,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(32, config.ParallelBatchThreshold);
     }
 
-    [Fact]
-    public void TokenizationConfig_ForBert_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationConfig_ForBert_ConfiguresCorrectly()
     {
         var config = TokenizationConfig.ForBert(256);
 
@@ -444,8 +445,8 @@ public class TokenizationIntegrationTests
         Assert.True(config.ReturnTokenTypeIds);
     }
 
-    [Fact]
-    public void TokenizationConfig_ForGpt_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationConfig_ForGpt_ConfiguresCorrectly()
     {
         var config = TokenizationConfig.ForGpt(2048);
 
@@ -458,8 +459,8 @@ public class TokenizationIntegrationTests
         Assert.False(config.ReturnTokenTypeIds);
     }
 
-    [Fact]
-    public void TokenizationConfig_ForCode_ConfiguresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationConfig_ForCode_ConfiguresCorrectly()
     {
         var config = TokenizationConfig.ForCode();
 
@@ -471,8 +472,8 @@ public class TokenizationIntegrationTests
         Assert.False(config.ReturnTokenTypeIds);
     }
 
-    [Fact]
-    public void TokenizationConfig_ToEncodingOptions_TransfersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TokenizationConfig_ToEncodingOptions_TransfersCorrectly()
     {
         var config = new TokenizationConfig
         {
@@ -502,8 +503,8 @@ public class TokenizationIntegrationTests
 
     #region CharacterTokenizer Tests
 
-    [Fact]
-    public void CharacterTokenizer_CreateAscii_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_CreateAscii_CreatesValidTokenizer()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -512,8 +513,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 90); // ASCII + special tokens
     }
 
-    [Fact]
-    public void CharacterTokenizer_Tokenize_SplitsIntoCharacters()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Tokenize_SplitsIntoCharacters()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -522,8 +523,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<string> { "H", "e", "l", "l", "o" }, tokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Tokenize_HandlesCaseSensitivity()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Tokenize_HandlesCaseSensitivity()
     {
         var tokenizer = CharacterTokenizer.CreateAscii(lowercase: true);
 
@@ -532,8 +533,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<string> { "h", "e", "l", "l", "o" }, tokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -542,8 +543,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Tokenize_NullString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Tokenize_NullString_ReturnsEmptyList()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -552,8 +553,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Encode_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Encode_ReturnsValidResult()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -564,8 +565,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(4, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Encode_WithoutSpecialTokens()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Encode_WithoutSpecialTokens()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions { AddSpecialTokens = false };
@@ -576,8 +577,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<string> { "H", "i" }, result.Tokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Encode_WithPadding()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Encode_WithPadding()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -594,8 +595,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(0, result.AttentionMask.Skip(2).Sum()); // Rest is padding
     }
 
-    [Fact]
-    public void CharacterTokenizer_Encode_WithTruncation()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Encode_WithTruncation()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -610,8 +611,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(3, result.Tokens.Count);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Decode_ReconstructsText()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Decode_ReconstructsText()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var encoded = tokenizer.Encode("Test", new EncodingOptions { AddSpecialTokens = false });
@@ -621,8 +622,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("Test", decoded);
     }
 
-    [Fact]
-    public void CharacterTokenizer_EncodeBatch_EncodesMultipleTexts()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_EncodeBatch_EncodesMultipleTexts()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var texts = new List<string> { "Hi", "Bye" };
@@ -635,8 +636,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(3, results[1].Tokens.Count);
     }
 
-    [Fact]
-    public void CharacterTokenizer_DecodeBatch_DecodesMultipleSequences()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_DecodeBatch_DecodesMultipleSequences()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var encoded1 = tokenizer.Encode("Hi", new EncodingOptions { AddSpecialTokens = false });
@@ -649,8 +650,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("Bye", decoded[1]);
     }
 
-    [Fact]
-    public void CharacterTokenizer_ConvertTokensToIds_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_ConvertTokensToIds_WorksCorrectly()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var tokens = new List<string> { "A", "B", "C" };
@@ -661,8 +662,8 @@ public class TokenizationIntegrationTests
         Assert.All(ids, id => Assert.True(id >= 0));
     }
 
-    [Fact]
-    public void CharacterTokenizer_ConvertIdsToTokens_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_ConvertIdsToTokens_WorksCorrectly()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var tokens = new List<string> { "X", "Y", "Z" };
@@ -673,8 +674,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(tokens, convertedTokens);
     }
 
-    [Fact]
-    public void CharacterTokenizer_Train_CreatesFromCorpus()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Train_CreatesFromCorpus()
     {
         var corpus = new[] { "hello world", "hello there", "world peace" };
 
@@ -687,8 +688,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("o"));
     }
 
-    [Fact]
-    public void CharacterTokenizer_Train_WithMinFrequency_FiltersRareChars()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Train_WithMinFrequency_FiltersRareChars()
     {
         var corpus = new[] { "aaaa bbbb cccc x" }; // 'x' appears only once
 
@@ -699,14 +700,14 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("a"));
     }
 
-    [Fact]
-    public void CharacterTokenizer_Train_ThrowsOnNullCorpus()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_Train_ThrowsOnNullCorpus()
     {
         Assert.Throws<ArgumentNullException>(() => CharacterTokenizer.Train(null!));
     }
 
-    [Fact]
-    public void CharacterTokenizer_UnknownCharacter_MapsToUnk()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterTokenizer_UnknownCharacter_MapsToUnk()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "a", "b", "c" });
@@ -722,8 +723,8 @@ public class TokenizationIntegrationTests
 
     #region WordPieceTokenizer Tests
 
-    [Fact]
-    public void WordPieceTokenizer_Train_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Train_CreatesValidTokenizer()
     {
         var corpus = new[] { "hello world", "hello there", "world peace" };
 
@@ -733,8 +734,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_Tokenize_SplitsIntoSubwords()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Tokenize_SplitsIntoSubwords()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -745,8 +746,8 @@ public class TokenizationIntegrationTests
         // Should tokenize into subwords
     }
 
-    [Fact]
-    public void WordPieceTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -756,8 +757,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_Tokenize_HandlesUnknownWords()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Tokenize_HandlesUnknownWords()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -768,8 +769,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("[UNK]", tokens);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_Encode_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Encode_ReturnsValidResult()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -780,8 +781,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_Decode_ReconstructsText()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_Decode_ReconstructsText()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -793,8 +794,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_UsesBertSpecialTokensByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_UsesBertSpecialTokensByDefault()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50);
@@ -804,8 +805,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("[SEP]", tokenizer.SpecialTokens.SepToken);
     }
 
-    [Fact]
-    public void WordPieceTokenizer_ContinuingSubwordPrefix_IsConfigurable()
+    [Fact(Timeout = 120000)]
+    public async Task WordPieceTokenizer_ContinuingSubwordPrefix_IsConfigurable()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 50, continuingSubwordPrefix: "@@");
@@ -818,8 +819,8 @@ public class TokenizationIntegrationTests
 
     #region BpeTokenizer Tests
 
-    [Fact]
-    public void BpeTokenizer_Train_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Train_CreatesValidTokenizer()
     {
         var corpus = new[] { "hello world", "hello there", "world peace" };
 
@@ -829,8 +830,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void BpeTokenizer_Train_EmptyCorpus_CreatesMinimalTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Train_EmptyCorpus_CreatesMinimalTokenizer()
     {
         var corpus = Array.Empty<string>();
 
@@ -840,14 +841,14 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 0); // At least special tokens
     }
 
-    [Fact]
-    public void BpeTokenizer_Train_ThrowsOnNullCorpus()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Train_ThrowsOnNullCorpus()
     {
         Assert.Throws<ArgumentNullException>(() => BpeTokenizer.Train(null!, vocabSize: 100));
     }
 
-    [Fact]
-    public void BpeTokenizer_Tokenize_SplitsIntoSubwords()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Tokenize_SplitsIntoSubwords()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -857,8 +858,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void BpeTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -868,8 +869,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void BpeTokenizer_Tokenize_NullString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Tokenize_NullString_ReturnsEmptyList()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -879,8 +880,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void BpeTokenizer_Encode_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Encode_ReturnsValidResult()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -891,8 +892,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void BpeTokenizer_Decode_ReconstructsText()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_Decode_ReconstructsText()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -904,8 +905,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void BpeTokenizer_UsesGptSpecialTokensByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_UsesGptSpecialTokensByDefault()
     {
         var corpus = new[] { "hello world" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -913,8 +914,8 @@ public class TokenizationIntegrationTests
         Assert.Equal("<|endoftext|>", tokenizer.SpecialTokens.UnkToken);
     }
 
-    [Fact]
-    public void BpeTokenizer_CachesPreviouslyTokenizedWords()
+    [Fact(Timeout = 120000)]
+    public async Task BpeTokenizer_CachesPreviouslyTokenizedWords()
     {
         var corpus = new[] { "hello world", "hello there" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
@@ -931,8 +932,8 @@ public class TokenizationIntegrationTests
 
     #region MidiTokenizer Tests
 
-    [Fact]
-    public void MidiTokenizer_CreateREMI_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_CreateREMI_CreatesValidTokenizer()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -940,8 +941,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 100);
     }
 
-    [Fact]
-    public void MidiTokenizer_CreateCPWord_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_CreateCPWord_CreatesValidTokenizer()
     {
         var tokenizer = MidiTokenizer.CreateCPWord();
 
@@ -949,8 +950,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 100);
     }
 
-    [Fact]
-    public void MidiTokenizer_CreateSimpleNote_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_CreateSimpleNote_CreatesValidTokenizer()
     {
         var tokenizer = MidiTokenizer.CreateSimpleNote();
 
@@ -958,8 +959,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 100);
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_NoteEvent_REMI()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_NoteEvent_REMI()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -971,8 +972,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_NoteEvent_CPWord()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_NoteEvent_CPWord()
     {
         var tokenizer = MidiTokenizer.CreateCPWord();
 
@@ -982,8 +983,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("Note_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_NoteEvent_SimpleNote()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_NoteEvent_SimpleNote()
     {
         var tokenizer = MidiTokenizer.CreateSimpleNote();
 
@@ -994,8 +995,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_RestEvent()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_RestEvent()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -1005,8 +1006,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_BarEvent()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_BarEvent()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -1015,8 +1016,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("Bar", tokens);
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -1025,8 +1026,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void MidiTokenizer_Tokenize_MultipleEvents()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Tokenize_MultipleEvents()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -1036,8 +1037,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokens.Count > 3); // Multiple tokens from multiple events
     }
 
-    [Fact]
-    public void MidiTokenizer_TokenizeNotes_REMI()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_TokenizeNotes_REMI()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
         var notes = new List<MidiTokenizer.MidiNote>
@@ -1053,8 +1054,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.Contains("64")); // Pitch 64
     }
 
-    [Fact]
-    public void MidiTokenizer_TokenizeNotes_CPWord()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_TokenizeNotes_CPWord()
     {
         var tokenizer = MidiTokenizer.CreateCPWord();
         var notes = new List<MidiTokenizer.MidiNote>
@@ -1069,8 +1070,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("Note_60_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_TokenizeNotes_SimpleNote()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_TokenizeNotes_SimpleNote()
     {
         var tokenizer = MidiTokenizer.CreateSimpleNote();
         var notes = new List<MidiTokenizer.MidiNote>
@@ -1085,8 +1086,8 @@ public class TokenizationIntegrationTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact]
-    public void MidiTokenizer_Encode_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Encode_ReturnsValidResult()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
 
@@ -1096,8 +1097,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void MidiTokenizer_Decode_ReconstructsTokens()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_Decode_ReconstructsTokens()
     {
         var tokenizer = MidiTokenizer.CreateREMI();
         var options = new EncodingOptions { AddSpecialTokens = false };
@@ -1108,8 +1109,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void MidiTokenizer_VelocityBins_AreConfigurable()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_VelocityBins_AreConfigurable()
     {
         var tokenizer = MidiTokenizer.CreateREMI(numVelocityBins: 16);
 
@@ -1118,8 +1119,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Velocity_15"));
     }
 
-    [Fact]
-    public void MidiTokenizer_TicksPerBeat_IsConfigurable()
+    [Fact(Timeout = 120000)]
+    public async Task MidiTokenizer_TicksPerBeat_IsConfigurable()
     {
         // Different ticks per beat
         var tokenizer = MidiTokenizer.CreateREMI(ticksPerBeat: 960);
@@ -1131,8 +1132,8 @@ public class TokenizationIntegrationTests
 
     #region PhonemeTokenizer Tests
 
-    [Fact]
-    public void PhonemeTokenizer_CreateARPAbet_CreatesValidTokenizer()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_CreateARPAbet_CreatesValidTokenizer()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1140,8 +1141,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.VocabularySize > 30);
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Tokenize_ConvertsToPhonemes()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Tokenize_ConvertsToPhonemes()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1151,8 +1152,8 @@ public class TokenizationIntegrationTests
         // Should contain ARPAbet phonemes
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Tokenize_EmptyString_ReturnsEmptyList()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1161,8 +1162,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Tokenize_NullString_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Tokenize_NullString_ReturnsEmptyList()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1171,8 +1172,8 @@ public class TokenizationIntegrationTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Tokenize_HandlesMultipleWords()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Tokenize_HandlesMultipleWords()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1182,8 +1183,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("<space>", tokens); // Space separator
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Tokenize_HandlesCommonDigraphs()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Tokenize_HandlesCommonDigraphs()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1193,8 +1194,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("TH", tokens); // "th" digraph
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Encode_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Encode_ReturnsValidResult()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1204,8 +1205,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void PhonemeTokenizer_Decode_ReconstructsPhonemes()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_Decode_ReconstructsPhonemes()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
         var options = new EncodingOptions { AddSpecialTokens = false };
@@ -1216,8 +1217,8 @@ public class TokenizationIntegrationTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void PhonemeTokenizer_ARPAbet_ContainsStandardPhonemes()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_ARPAbet_ContainsStandardPhonemes()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1228,8 +1229,8 @@ public class TokenizationIntegrationTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("SH")); // digraph
     }
 
-    [Fact]
-    public void PhonemeTokenizer_HandlesPunctuation()
+    [Fact(Timeout = 120000)]
+    public async Task PhonemeTokenizer_HandlesPunctuation()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
@@ -1243,8 +1244,8 @@ public class TokenizationIntegrationTests
 
     #region ITokenizer Interface Tests
 
-    [Fact]
-    public void ITokenizer_AllImplementations_HaveVocabulary()
+    [Fact(Timeout = 120000)]
+    public async Task ITokenizer_AllImplementations_HaveVocabulary()
     {
         var tokenizers = new ITokenizer[]
         {
@@ -1262,8 +1263,8 @@ public class TokenizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void ITokenizer_AllImplementations_HaveSpecialTokens()
+    [Fact(Timeout = 120000)]
+    public async Task ITokenizer_AllImplementations_HaveSpecialTokens()
     {
         var tokenizers = new ITokenizer[]
         {
@@ -1281,8 +1282,8 @@ public class TokenizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void ITokenizer_AllImplementations_HandleEmptyInput()
+    [Fact(Timeout = 120000)]
+    public async Task ITokenizer_AllImplementations_HandleEmptyInput()
     {
         var tokenizers = new ITokenizer[]
         {
@@ -1304,8 +1305,8 @@ public class TokenizationIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void Tokenizer_Encode_WithTokenTypeIds_ReturnsCorrectIds()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Encode_WithTokenTypeIds_ReturnsCorrectIds()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -1320,8 +1321,8 @@ public class TokenizationIntegrationTests
         Assert.All(result.TokenTypeIds, id => Assert.Equal(0, id));
     }
 
-    [Fact]
-    public void Tokenizer_Encode_WithPositionIds_ReturnsCorrectIds()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Encode_WithPositionIds_ReturnsCorrectIds()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -1335,8 +1336,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<int> { 0, 1 }, result.PositionIds);
     }
 
-    [Fact]
-    public void Tokenizer_Encode_LeftPadding_PadsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Encode_LeftPadding_PadsCorrectly()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -1359,8 +1360,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(1, result.AttentionMask[4]);
     }
 
-    [Fact]
-    public void Tokenizer_Encode_LeftTruncation_TruncatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Encode_LeftTruncation_TruncatesCorrectly()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var options = new EncodingOptions
@@ -1377,8 +1378,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(new List<string> { "l", "o" }, result.Tokens); // Last 2 chars
     }
 
-    [Fact]
-    public void Tokenizer_Decode_EmptyList_ReturnsEmptyString()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Decode_EmptyList_ReturnsEmptyString()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -1387,8 +1388,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(string.Empty, decoded);
     }
 
-    [Fact]
-    public void Tokenizer_Decode_NullList_ReturnsEmptyString()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Decode_NullList_ReturnsEmptyString()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
@@ -1397,8 +1398,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(string.Empty, decoded);
     }
 
-    [Fact]
-    public void Tokenizer_Decode_WithSkipSpecialTokens_RemovesSpecialTokens()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Decode_WithSkipSpecialTokens_RemovesSpecialTokens()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var encoded = tokenizer.Encode("Hi"); // Includes [CLS] and [SEP]
@@ -1409,8 +1410,8 @@ public class TokenizationIntegrationTests
         Assert.DoesNotContain("[SEP]", decoded);
     }
 
-    [Fact]
-    public void Tokenizer_Decode_WithoutSkipSpecialTokens_IncludesSpecialTokens()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_Decode_WithoutSkipSpecialTokens_IncludesSpecialTokens()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
         var encoded = tokenizer.Encode("Hi"); // Includes [CLS] and [SEP]
@@ -1421,8 +1422,8 @@ public class TokenizationIntegrationTests
         Assert.Contains("[SEP]", decoded);
     }
 
-    [Fact]
-    public void Vocabulary_LargeVocabulary_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Vocabulary_LargeVocabulary_HandlesCorrectly()
     {
         var vocabulary = new Vocabulary();
 
@@ -1437,8 +1438,8 @@ public class TokenizationIntegrationTests
         Assert.Equal(10000, vocabulary.GetTokenId("token_9999"));
     }
 
-    [Fact]
-    public void Tokenizer_UnicodeCharacters_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tokenizer_UnicodeCharacters_HandlesCorrectly()
     {
         var vocabulary = new Vocabulary();
         vocabulary.AddTokens(new[] { "é", "ü", "中", "日" });

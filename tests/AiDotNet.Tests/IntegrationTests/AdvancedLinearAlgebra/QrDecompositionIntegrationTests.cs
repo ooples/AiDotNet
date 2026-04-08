@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -206,8 +207,8 @@ public class QrDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void QrDecomposition_2x2Matrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_2x2Matrix_CorrectDecomposition()
     {
         // Arrange
         var A = new Matrix<double>(2, 2);
@@ -225,8 +226,8 @@ public class QrDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void QrDecomposition_TallMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
         var A = CreateTestMatrix(6, 3);
@@ -242,8 +243,8 @@ public class QrDecompositionIntegrationTests
             $"Tall matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void QrDecomposition_IdentityMatrix_Q_Is_Identity()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_IdentityMatrix_Q_Is_Identity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -266,8 +267,8 @@ public class QrDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void QrDecomposition_Householder_AccurateOnIllConditionedMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_Householder_AccurateOnIllConditionedMatrix()
     {
         // Arrange - Create a Hilbert-like matrix that can cause numerical issues
         int n = 5;
@@ -295,8 +296,8 @@ public class QrDecompositionIntegrationTests
             "Q should remain orthogonal even for ill-conditioned matrices");
     }
 
-    [Fact]
-    public void QrDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(30, 30, seed: 999);
@@ -316,8 +317,8 @@ public class QrDecompositionIntegrationTests
 
     #region Orthogonality Preservation Tests
 
-    [Fact]
-    public void QrDecomposition_Q_Columns_AreUnitVectors()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_Q_Columns_AreUnitVectors()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);
@@ -340,8 +341,8 @@ public class QrDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void QrDecomposition_Q_Columns_AreMutuallyOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task QrDecomposition_Q_Columns_AreMutuallyOrthogonal()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);

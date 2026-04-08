@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class ForecastingModelTestBase : FinancialModelTestBase
 {
-    [Fact]
-    public void ForecastHorizon_ShouldProduceOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ForecastHorizon_ShouldProduceOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -21,8 +22,8 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
         Assert.True(output.Length > 0, "Forecasting model produced empty forecast.");
     }
 
-    [Fact]
-    public void DifferentHistories_DifferentForecasts()
+    [Fact(Timeout = 60000)]
+    public async Task DifferentHistories_DifferentForecasts()
     {
         var network = CreateNetwork();
         var history1 = CreateConstantTensor(InputShape, 0.1);

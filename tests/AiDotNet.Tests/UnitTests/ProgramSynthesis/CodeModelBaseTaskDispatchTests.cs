@@ -4,13 +4,14 @@ using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class CodeModelBaseTaskDispatchTests
 {
-    [Fact]
-    public void PerformTask_AllTasks_ReturnsStructuredResults()
+    [Fact(Timeout = 60000)]
+    public async Task PerformTask_AllTasks_ReturnsStructuredResults()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
 

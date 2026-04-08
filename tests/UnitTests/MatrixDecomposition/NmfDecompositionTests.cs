@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.MatrixDecomposition;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.MatrixDecomposition;
 /// </summary>
 public class NmfDecompositionTests
 {
-    [Fact]
-    public void Constructor_WithValidMatrix_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidMatrix_InitializesCorrectly()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -33,8 +34,8 @@ public class NmfDecompositionTests
         Assert.Equal(2, nmf.Components);
     }
 
-    [Fact]
-    public void Constructor_WithNegativeValues_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeValues_ThrowsArgumentException()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -47,8 +48,8 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix));
     }
 
-    [Fact]
-    public void Constructor_WithZeroComponents_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroComponents_ThrowsArgumentException()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -61,8 +62,8 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix, components: 0));
     }
 
-    [Fact]
-    public void Constructor_WithTooManyComponents_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTooManyComponents_ThrowsArgumentException()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -75,8 +76,8 @@ public class NmfDecompositionTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(matrix, components: 10));
     }
 
-    [Fact]
-    public void Reconstruct_ApproximatesOriginalMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task Reconstruct_ApproximatesOriginalMatrix()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -110,8 +111,8 @@ public class NmfDecompositionTests
         Assert.True(rmse < 2.0, $"RMSE {rmse} should be less than 2.0");
     }
 
-    [Fact]
-    public void WAndH_AreNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task WAndH_AreNonNegative()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -142,8 +143,8 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact]
-    public void Solve_ReturnsVectorOfCorrectSize()
+    [Fact(Timeout = 60000)]
+    public async Task Solve_ReturnsVectorOfCorrectSize()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -163,8 +164,8 @@ public class NmfDecompositionTests
         Assert.Equal(2, x.Length);
     }
 
-    [Fact]
-    public void Invert_ReturnsMatrixOfCorrectDimensions()
+    [Fact(Timeout = 60000)]
+    public async Task Invert_ReturnsMatrixOfCorrectDimensions()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -185,8 +186,8 @@ public class NmfDecompositionTests
         Assert.Equal(matrix.Rows, inverse.Columns);
     }
 
-    [Fact]
-    public void Factorization_WithIdentityMatrix_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Factorization_WithIdentityMatrix_WorksCorrectly()
     {
         // Arrange
         var matrix = Matrix<double>.CreateIdentityMatrix(3);
@@ -206,8 +207,8 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact]
-    public void Factorization_WithSparseMatrix_PreservesSparsity()
+    [Fact(Timeout = 60000)]
+    public async Task Factorization_WithSparseMatrix_PreservesSparsity()
     {
         // Arrange - Create a sparse matrix (mostly zeros)
         var matrix = new Matrix<double>(new double[,]
@@ -230,8 +231,8 @@ public class NmfDecompositionTests
         }
     }
 
-    [Fact]
-    public void Components_Property_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task Components_Property_ReturnsCorrectValue()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -248,8 +249,8 @@ public class NmfDecompositionTests
         Assert.Equal(2, nmf.Components);
     }
 
-    [Fact]
-    public void A_Property_ReturnsOriginalMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task A_Property_ReturnsOriginalMatrix()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -265,8 +266,8 @@ public class NmfDecompositionTests
         Assert.Equal(matrix, nmf.A);
     }
 
-    [Fact]
-    public void Factorization_WithDifferentNumericTypes_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Factorization_WithDifferentNumericTypes_WorksCorrectly()
     {
         // Arrange
         var matrixFloat = new Matrix<float>(new float[,]

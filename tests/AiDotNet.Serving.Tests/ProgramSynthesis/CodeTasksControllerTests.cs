@@ -10,12 +10,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class CodeTasksControllerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Completion_NullRequest_ReturnsBadRequest()
     {
         var controller = CreateController(
@@ -33,7 +34,7 @@ public sealed class CodeTasksControllerTests
         Assert.Equal("Request body is required.", payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Completion_InvalidRequest_ReturnsBadRequest()
     {
         var controller = CreateController(
@@ -51,7 +52,7 @@ public sealed class CodeTasksControllerTests
         Assert.Equal("bad", payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Completion_Timeout_ReturnsOk_WithFailureEnvelope()
     {
         var controller = CreateController(
@@ -78,7 +79,7 @@ public sealed class CodeTasksControllerTests
         Assert.NotNull(payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Completion_ExecutorThrows_Returns500()
     {
         var controller = CreateController(
@@ -93,7 +94,7 @@ public sealed class CodeTasksControllerTests
         Assert.Equal("Unhandled task execution error.", payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Completion_Success_ReturnsOk()
     {
         var controller = CreateController(

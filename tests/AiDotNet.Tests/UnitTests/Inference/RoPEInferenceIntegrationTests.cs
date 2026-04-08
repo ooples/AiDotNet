@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class RoPEInferenceIntegrationTests
 {
-    [Fact]
-    public void MHA_WithRoPE_ForwardProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MHA_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -26,8 +27,8 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MHA_WithRoPE_DifferentFromNoPositionalEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task MHA_WithRoPE_DifferentFromNoPositionalEncoding()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -49,8 +50,8 @@ public class RoPEInferenceIntegrationTests
             "RoPE should produce different output than no positional encoding");
     }
 
-    [Fact]
-    public void MHA_WithALiBi_ForwardProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MHA_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -65,8 +66,8 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_WithRoPE_ForwardProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -82,8 +83,8 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_WithALiBi_ForwardProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -99,8 +100,8 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void RoPE_RelativePositionProperty()
+    [Fact(Timeout = 120000)]
+    public async Task RoPE_RelativePositionProperty()
     {
         // RoPE encodes relative positions: shifting both Q and K by the same amount
         // should not change the attention pattern
@@ -122,8 +123,8 @@ public class RoPEInferenceIntegrationTests
         Assert.InRange(MathF.Abs(dot0 - dot10), 0f, 0.01f);
     }
 
-    [Fact]
-    public void MHA_PositionalEncoding_PreservedInMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task MHA_PositionalEncoding_PreservedInMetadata()
     {
         var layer = new MultiHeadAttentionLayer<float>(8, 32, 4);
         layer.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);

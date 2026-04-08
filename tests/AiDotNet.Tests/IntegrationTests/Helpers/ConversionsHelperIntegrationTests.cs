@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -16,8 +17,8 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertToMatrix
 
-    [Fact]
-    public void ConvertToMatrix_Matrix_ReturnsSameMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToMatrix_Matrix_ReturnsSameMatrix()
     {
         var matrix = new Matrix<double>(2, 3);
         matrix[0, 0] = 1.0; matrix[0, 1] = 2.0; matrix[0, 2] = 3.0;
@@ -29,8 +30,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(1.0, result[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void ConvertToMatrix_2DTensor_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToMatrix_2DTensor_ConvertsCorrectly()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var result = ConversionsHelper.ConvertToMatrix<double, Tensor<double>>(tensor);
@@ -38,8 +39,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void ConvertToMatrix_1DTensor_CreatesRowMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToMatrix_1DTensor_CreatesRowMatrix()
     {
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var result = ConversionsHelper.ConvertToMatrix<double, Tensor<double>>(tensor);
@@ -47,8 +48,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void ConvertToMatrix_UnsupportedType_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToMatrix_UnsupportedType_Throws()
     {
         Assert.Throws<InvalidOperationException>(() =>
             ConversionsHelper.ConvertToMatrix<double, string>("hello"));
@@ -58,8 +59,8 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertToVector
 
-    [Fact]
-    public void ConvertToVector_Vector_ReturnsSameVector()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_Vector_ReturnsSameVector()
     {
         var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var result = ConversionsHelper.ConvertToVector<double, Vector<double>>(vector);
@@ -67,16 +68,16 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void ConvertToVector_Tensor_FlattensToVector()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_Tensor_FlattensToVector()
     {
         var tensor = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1, 2, 3, 4 }));
         var result = ConversionsHelper.ConvertToVector<double, Tensor<double>>(tensor);
         Assert.Equal(4, result.Length);
     }
 
-    [Fact]
-    public void ConvertToVector_Array_WrapsInVector()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_Array_WrapsInVector()
     {
         var array = new double[] { 1.0, 2.0, 3.0 };
         var result = ConversionsHelper.ConvertToVector<double, double[]>(array);
@@ -84,8 +85,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void ConvertToVector_Scalar_CreatesBinaryVector()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_Scalar_CreatesBinaryVector()
     {
         // Scalar 0.7 -> [0.3, 0.7] for binary classification
         var result = ConversionsHelper.ConvertToVector<double, double>(0.7);
@@ -94,8 +95,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(0.7, result[1], Tolerance);
     }
 
-    [Fact]
-    public void ConvertToVector_ScalarOutOfRange_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_ScalarOutOfRange_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             ConversionsHelper.ConvertToVector<double, double>(1.5));
@@ -105,31 +106,31 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertToScalar
 
-    [Fact]
-    public void ConvertToScalar_Scalar_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToScalar_Scalar_ReturnsSame()
     {
         var result = ConversionsHelper.ConvertToScalar<double, double>(42.0);
         Assert.Equal(42.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ConvertToScalar_Vector_ReturnsFirstElement()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToScalar_Vector_ReturnsFirstElement()
     {
         var vector = new Vector<double>(new double[] { 7.0, 8.0, 9.0 });
         var result = ConversionsHelper.ConvertToScalar<double, Vector<double>>(vector);
         Assert.Equal(7.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ConvertToScalar_EmptyVector_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToScalar_EmptyVector_Throws()
     {
         var vector = new Vector<double>(0);
         Assert.Throws<InvalidOperationException>(() =>
             ConversionsHelper.ConvertToScalar<double, Vector<double>>(vector));
     }
 
-    [Fact]
-    public void ConvertToScalar_Matrix_ReturnsFirstElement()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToScalar_Matrix_ReturnsFirstElement()
     {
         var matrix = new Matrix<double>(2, 2);
         matrix[0, 0] = 99.0;
@@ -141,15 +142,15 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertObjectToVector
 
-    [Fact]
-    public void ConvertObjectToVector_Null_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertObjectToVector_Null_ReturnsNull()
     {
         var result = ConversionsHelper.ConvertObjectToVector<double>(null);
         Assert.Null(result);
     }
 
-    [Fact]
-    public void ConvertObjectToVector_Vector_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertObjectToVector_Vector_ReturnsSame()
     {
         var vector = new Vector<double>(new double[] { 1.0, 2.0 });
         var result = ConversionsHelper.ConvertObjectToVector<double>(vector);
@@ -157,8 +158,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
-    public void ConvertObjectToVector_Tensor_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertObjectToVector_Tensor_Converts()
     {
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var result = ConversionsHelper.ConvertObjectToVector<double>(tensor);
@@ -166,8 +167,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(3, result.Length);
     }
 
-    [Fact]
-    public void ConvertObjectToVector_UnsupportedType_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertObjectToVector_UnsupportedType_Throws()
     {
         Assert.Throws<InvalidOperationException>(() =>
             ConversionsHelper.ConvertObjectToVector<double>("unsupported"));
@@ -177,8 +178,8 @@ public class ConversionsHelperIntegrationTests
 
     #region TensorToMatrix
 
-    [Fact]
-    public void TensorToMatrix_ValidDimensions_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task TensorToMatrix_ValidDimensions_Converts()
     {
         var tensor = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var result = ConversionsHelper.TensorToMatrix<double>(tensor, 2, 3);
@@ -186,8 +187,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void TensorToMatrix_MismatchedSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorToMatrix_MismatchedSize_Throws()
     {
         var tensor = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         Assert.Throws<ArgumentException>(() =>
@@ -198,16 +199,16 @@ public class ConversionsHelperIntegrationTests
 
     #region MatrixToTensor
 
-    [Fact]
-    public void MatrixToTensor_ValidShape_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixToTensor_ValidShape_Converts()
     {
         var matrix = new Matrix<double>(2, 3);
         var result = ConversionsHelper.MatrixToTensor<double>(matrix, new[] { 2, 3 });
         Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void MatrixToTensor_MismatchedSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixToTensor_MismatchedSize_Throws()
     {
         var matrix = new Matrix<double>(2, 3); // 6 elements
         Assert.Throws<ArgumentException>(() =>
@@ -218,8 +219,8 @@ public class ConversionsHelperIntegrationTests
 
     #region VectorToTensor
 
-    [Fact]
-    public void VectorToTensor_ValidShape_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task VectorToTensor_ValidShape_Converts()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 });
         var result = ConversionsHelper.VectorToTensor<double>(vector, new[] { 2, 3 });
@@ -227,8 +228,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(6, result.Length);
     }
 
-    [Fact]
-    public void VectorToTensor_MismatchedLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task VectorToTensor_MismatchedLength_Throws()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         Assert.Throws<ArgumentException>(() =>
@@ -239,32 +240,32 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertToTensor
 
-    [Fact]
-    public void ConvertToTensor_Tensor_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToTensor_Tensor_ReturnsSame()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         var result = ConversionsHelper.ConvertToTensor<double>(tensor);
         Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void ConvertToTensor_Matrix_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToTensor_Matrix_Converts()
     {
         var matrix = new Matrix<double>(2, 3);
         var result = ConversionsHelper.ConvertToTensor<double>(matrix);
         Assert.Equal(6, result.Length);
     }
 
-    [Fact]
-    public void ConvertToTensor_Vector_Converts()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToTensor_Vector_Converts()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         var result = ConversionsHelper.ConvertToTensor<double>(vector);
         Assert.Equal(3, result.Length);
     }
 
-    [Fact]
-    public void ConvertToTensor_UnsupportedType_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToTensor_UnsupportedType_Throws()
     {
         Assert.Throws<InvalidOperationException>(() =>
             ConversionsHelper.ConvertToTensor<double>("unsupported"));
@@ -274,24 +275,24 @@ public class ConversionsHelperIntegrationTests
 
     #region ConvertVectorToInputWithoutReference
 
-    [Fact]
-    public void ConvertVectorToInputWithoutReference_ToVector_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertVectorToInputWithoutReference_ToVector_ReturnsSame()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         var result = ConversionsHelper.ConvertVectorToInputWithoutReference<double, Vector<double>>(vector);
         Assert.Equal(3, result.Length);
     }
 
-    [Fact]
-    public void ConvertVectorToInputWithoutReference_ToTensor_CreatesBatch1()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertVectorToInputWithoutReference_ToTensor_CreatesBatch1()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         var result = ConversionsHelper.ConvertVectorToInputWithoutReference<double, Tensor<double>>(vector);
         Assert.Equal(new[] { 1, 3 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void ConvertVectorToInputWithoutReference_ToArray_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertVectorToInputWithoutReference_ToArray_ConvertsCorrectly()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         var result = ConversionsHelper.ConvertVectorToInputWithoutReference<double, double[]>(vector);
@@ -299,8 +300,8 @@ public class ConversionsHelperIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance);
     }
 
-    [Fact]
-    public void ConvertVectorToInputWithoutReference_ToScalar_ReturnsFirst()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertVectorToInputWithoutReference_ToScalar_ReturnsFirst()
     {
         var vector = new Vector<double>(new double[] { 42.0 });
         var result = ConversionsHelper.ConvertVectorToInputWithoutReference<double, double>(vector);
@@ -311,32 +312,32 @@ public class ConversionsHelperIntegrationTests
 
     #region GetSampleCount
 
-    [Fact]
-    public void GetSampleCount_Matrix_ReturnsRows()
+    [Fact(Timeout = 120000)]
+    public async Task GetSampleCount_Matrix_ReturnsRows()
     {
         var matrix = new Matrix<double>(5, 3);
         int count = ConversionsHelper.GetSampleCount<double, Matrix<double>>(matrix);
         Assert.Equal(5, count);
     }
 
-    [Fact]
-    public void GetSampleCount_Vector_ReturnsLength()
+    [Fact(Timeout = 120000)]
+    public async Task GetSampleCount_Vector_ReturnsLength()
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         int count = ConversionsHelper.GetSampleCount<double, Vector<double>>(vector);
         Assert.Equal(3, count);
     }
 
-    [Fact]
-    public void GetSampleCount_Tensor_ReturnsFirstDim()
+    [Fact(Timeout = 120000)]
+    public async Task GetSampleCount_Tensor_ReturnsFirstDim()
     {
         var tensor = new Tensor<double>(new[] { 4, 3, 2 });
         int count = ConversionsHelper.GetSampleCount<double, Tensor<double>>(tensor);
         Assert.Equal(4, count);
     }
 
-    [Fact]
-    public void GetSampleCount_Null_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task GetSampleCount_Null_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ConversionsHelper.GetSampleCount<double, Matrix<double>>(null!));

@@ -2,33 +2,34 @@ using AiDotNet.FederatedLearning.Aggregators;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedProxFullModelAggregationStrategyTests
 {
-    [Fact]
-    public void Ctor_WithNegativeMu_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Ctor_WithNegativeMu_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(-0.1));
     }
 
-    [Fact]
-    public void GetMu_ReturnsConfiguredValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetMu_ReturnsConfiguredValue()
     {
         var strategy = new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(mu: 0.5);
         Assert.Equal(0.5, strategy.GetMu(), precision: 10);
     }
 
-    [Fact]
-    public void GetStrategyName_ReturnsFedProx()
+    [Fact(Timeout = 60000)]
+    public async Task GetStrategyName_ReturnsFedProx()
     {
         var strategy = new FedProxFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
         Assert.Equal("FedProx", strategy.GetStrategyName());
     }
 
-    [Fact]
-    public void Aggregate_DelegatesToFedAvg()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_DelegatesToFedAvg()
     {
         var model0 = new MockFullModel(_ => new Vector<double>(3), parameterCount: 3);
         model0.SetParameters(new Vector<double>(new[] { 1.0, 1.0, 1.0 }));

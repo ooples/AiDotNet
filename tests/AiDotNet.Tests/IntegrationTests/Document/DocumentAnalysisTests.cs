@@ -6,6 +6,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -36,16 +37,16 @@ public class DocumentAnalysisTests
 
     #region DocBank Tests
 
-    [Fact]
-    public void DocBank_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DocBank<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DocBank_Predict_ReturnsOutputWithShape()
+    [Fact(Timeout = 120000)]
+    public async Task DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
         var model = new DocBank<double>(arch, imageSize: 64);
@@ -56,8 +57,8 @@ public class DocumentAnalysisTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DocBank_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DocBank<double>(arch, imageSize: 64);
@@ -69,16 +70,16 @@ public class DocumentAnalysisTests
 
     #region TableTransformer Tests
 
-    [Fact]
-    public void TableTransformer_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new TableTransformer<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void TableTransformer_Predict_ReturnsOutputWithShape()
+    [Fact(Timeout = 120000)]
+    public async Task TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
         var model = new TableTransformer<double>(arch, imageSize: 64);
@@ -89,8 +90,8 @@ public class DocumentAnalysisTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void TableTransformer_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new TableTransformer<double>(arch, imageSize: 64);
@@ -102,24 +103,24 @@ public class DocumentAnalysisTests
 
     #region Result Class Tests
 
-    [Fact]
-    public void DocumentLayoutResult_Construction_EmptyRegions()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentLayoutResult_Construction_EmptyRegions()
     {
         var result = new DocumentLayoutResult<double>();
         Assert.Empty(result.Regions);
         Assert.Equal(0, result.TotalRegions);
     }
 
-    [Fact]
-    public void TextDetectionResult_Construction_EmptyRegions()
+    [Fact(Timeout = 120000)]
+    public async Task TextDetectionResult_Construction_EmptyRegions()
     {
         var result = new TextDetectionResult<double>();
         Assert.Empty(result.TextRegions);
         Assert.Equal(0, result.RegionCount);
     }
 
-    [Fact]
-    public void OCRResult_Construction_EmptyText()
+    [Fact(Timeout = 120000)]
+    public async Task OCRResult_Construction_EmptyText()
     {
         var result = new OCRResult<double> { AverageConfidence = default };
         Assert.Equal(string.Empty, result.FullText);
@@ -128,8 +129,8 @@ public class DocumentAnalysisTests
         Assert.Empty(result.Blocks);
     }
 
-    [Fact]
-    public void TableStructureResult_Construction_EmptyCells()
+    [Fact(Timeout = 120000)]
+    public async Task TableStructureResult_Construction_EmptyCells()
     {
         var result = new TableStructureResult<double> { Confidence = default };
         Assert.Empty(result.Cells);
@@ -137,8 +138,8 @@ public class DocumentAnalysisTests
         Assert.Equal(0, result.NumColumns);
     }
 
-    [Fact]
-    public void TableStructureResult_ToStringGrid_ReturnsEmptyForNoData()
+    [Fact(Timeout = 120000)]
+    public async Task TableStructureResult_ToStringGrid_ReturnsEmptyForNoData()
     {
         var result = new TableStructureResult<double>
         {
@@ -150,16 +151,16 @@ public class DocumentAnalysisTests
         Assert.Empty(grid);
     }
 
-    [Fact]
-    public void TextRegion_Construction_HasDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task TextRegion_Construction_HasDefaults()
     {
         var region = new TextRegion<double> { Confidence = default };
         Assert.NotNull(region.BoundingBox);
         Assert.Equal(0, region.Index);
     }
 
-    [Fact]
-    public void LayoutRegion_ConfidenceLevel_CategorizesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutRegion_ConfidenceLevel_CategorizesCorrectly()
     {
         var lowConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.2 };
         var highConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.95 };
@@ -167,8 +168,8 @@ public class DocumentAnalysisTests
         Assert.Equal(ConfidenceLevel.VeryHigh, highConfidence.ConfidenceLevel);
     }
 
-    [Fact]
-    public void DocumentLayoutResult_GetRegionsByType_FiltersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentLayoutResult_GetRegionsByType_FiltersCorrectly()
     {
         var result = new DocumentLayoutResult<double>
         {
@@ -184,8 +185,8 @@ public class DocumentAnalysisTests
         Assert.Equal(2, textRegions.Count);
     }
 
-    [Fact]
-    public void DocumentLayoutResult_GetHighConfidenceRegions_FiltersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentLayoutResult_GetHighConfidenceRegions_FiltersCorrectly()
     {
         var result = new DocumentLayoutResult<double>
         {
@@ -201,16 +202,16 @@ public class DocumentAnalysisTests
         Assert.Single(highConf);
     }
 
-    [Fact]
-    public void OCRWord_Construction_HasDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task OCRWord_Construction_HasDefaults()
     {
         var word = new OCRWord<double> { Confidence = default };
         Assert.Equal(string.Empty, word.Text);
         Assert.NotNull(word.BoundingBox);
     }
 
-    [Fact]
-    public void TableCell_Construction_HasDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task TableCell_Construction_HasDefaults()
     {
         var cell = new TableCell<double> { Confidence = default };
         Assert.Equal(1, cell.RowSpan);
@@ -223,8 +224,8 @@ public class DocumentAnalysisTests
 
     #region DocumentModelOptions Tests
 
-    [Fact]
-    public void DocumentModelOptions_DefaultValues_AreNull()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentModelOptions_DefaultValues_AreNull()
     {
         var options = new DocumentModelOptions<double>();
         Assert.Null(options.HiddenDimension);
@@ -237,8 +238,8 @@ public class DocumentAnalysisTests
         Assert.Null(options.RandomSeed);
     }
 
-    [Fact]
-    public void DocumentModelOptions_CustomValues_SetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentModelOptions_CustomValues_SetCorrectly()
     {
         var options = new DocumentModelOptions<double>
         {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class OnceForAllTests
     {
-        [Fact]
-        public void OnceForAll_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -22,8 +23,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(ofa);
         }
 
-        [Fact]
-        public void OnceForAll_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(ofa);
         }
 
-        [Fact]
-        public void OnceForAll_SampleSubNetwork_ReturnsValidConfig()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SampleSubNetwork_ReturnsValidConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -56,8 +57,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.ExpansionRatio > 0);
         }
 
-        [Fact]
-        public void OnceForAll_SampleSubNetwork_Stage0_ReturnsLargestConfig()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SampleSubNetwork_Stage0_ReturnsLargestConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -77,8 +78,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(1.25, config.WidthMultiplier);
         }
 
-        [Fact]
-        public void OnceForAll_SetTrainingStage_UpdatesStage()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SetTrainingStage_UpdatesStage()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -103,8 +104,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(depths.Count >= 1);
         }
 
-        [Fact]
-        public void OnceForAll_SetTrainingStage_AtStage4_AllDimensionsElastic()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SetTrainingStage_AtStage4_AllDimensionsElastic()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -138,8 +139,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(kernels.Count >= 1);
         }
 
-        [Fact]
-        public void OnceForAll_SpecializeForHardware_ReturnsValidConfig()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SpecializeForHardware_ReturnsValidConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -164,8 +165,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
-        public void OnceForAll_SpecializeForHardware_RespectsConstraints()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SpecializeForHardware_RespectsConstraints()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -205,8 +206,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(configLoose);
         }
 
-        [Fact]
-        public void OnceForAll_GetSharedWeights_ReturnsWeights()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_GetSharedWeights_ReturnsWeights()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -221,8 +222,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(32, weights.Columns);
         }
 
-        [Fact]
-        public void OnceForAll_GetSharedWeights_SameKey_ReturnsSameWeights()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_GetSharedWeights_SameKey_ReturnsSameWeights()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -236,8 +237,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Same(weights1, weights2);
         }
 
-        [Fact]
-        public void OnceForAll_GetSharedWeights_DifferentKeys_ReturnsDifferentWeights()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_GetSharedWeights_DifferentKeys_ReturnsDifferentWeights()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -251,8 +252,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotSame(weights1, weights2);
         }
 
-        [Fact]
-        public void OnceForAll_SampleSubNetwork_ProducesVariedConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SampleSubNetwork_ProducesVariedConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -276,8 +277,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(kernelSizes.Count > 1);
         }
 
-        [Fact]
-        public void OnceForAll_SubNetworkConfig_HasValidDefaults()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SubNetworkConfig_HasValidDefaults()
         {
             // Arrange
             var config = new SubNetworkConfig();
@@ -289,8 +290,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0, config.ExpansionRatio);
         }
 
-        [Fact]
-        public void OnceForAll_TrainingStages_ProgressivelyUnlockDimensions()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_TrainingStages_ProgressivelyUnlockDimensions()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -315,8 +316,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
-        public void OnceForAll_SingleElementElasticLists_SamplesOnlyValue()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SingleElementElasticLists_SamplesOnlyValue()
         {
             // Arrange - single element in each elastic list
             var searchSpace = new SearchSpaceBase<double>();
@@ -341,8 +342,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void OnceForAll_SetTrainingStage_BeyondMax_ClampsToMax()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SetTrainingStage_BeyondMax_ClampsToMax()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -358,8 +359,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
-        public void OnceForAll_SpecializeForHardware_MinimalPopulationAndGenerations_Works()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SpecializeForHardware_MinimalPopulationAndGenerations_Works()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -383,8 +384,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
-        public void OnceForAll_SpecializeForHardware_NoConstraints_ReturnsConfig()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SpecializeForHardware_NoConstraints_ReturnsConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -404,8 +405,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
-        public void OnceForAll_SpecializeForHardware_VeryTightConstraints_StillReturnsConfig()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SpecializeForHardware_VeryTightConstraints_StillReturnsConfig()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -428,8 +429,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(config);
         }
 
-        [Fact]
-        public void OnceForAll_GetSharedWeights_LargeDimensions_Works()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_GetSharedWeights_LargeDimensions_Works()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -444,8 +445,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(256, weights.Columns);
         }
 
-        [Fact]
-        public void OnceForAll_GetSharedWeights_SmallDimensions_Works()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_GetSharedWeights_SmallDimensions_Works()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -460,8 +461,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(1, weights.Columns);
         }
 
-        [Fact]
-        public void OnceForAll_SetTrainingStage_NegativeValue_HandledAsStage0()
+        [Fact(Timeout = 60000)]
+        public async Task OnceForAll_SetTrainingStage_NegativeValue_HandledAsStage0()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

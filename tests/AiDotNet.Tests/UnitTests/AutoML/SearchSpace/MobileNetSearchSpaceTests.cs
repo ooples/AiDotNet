@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
 {
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class MobileNetSearchSpaceTests
     {
-        [Fact]
-        public void MobileNetSearchSpace_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_Operations_ContainsMobileNetOperations()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Operations_ContainsMobileNetOperations()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("se_block", searchSpace.Operations);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_Operations_HasNineOperations()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Operations_HasNineOperations()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -48,8 +49,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_MaxNodes_IsTwenty()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_MaxNodes_IsTwenty()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -58,8 +59,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(20, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_InputChannels_IsThree()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_InputChannels_IsThree()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_OutputChannels_IsOneThousand()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_OutputChannels_IsOneThousand()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -78,8 +79,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_ExpansionRatios_ContainsThreeAndSix()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_ExpansionRatios_ContainsThreeAndSix()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -91,8 +92,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(6, searchSpace.ExpansionRatios);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_KernelSizes_ContainsThreeAndFive()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_KernelSizes_ContainsThreeAndFive()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -104,8 +105,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(5, searchSpace.KernelSizes);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_DepthMultiplier_DefaultIsOne()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_DepthMultiplier_DefaultIsOne()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -114,8 +115,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.0, searchSpace.DepthMultiplier);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_WidthMultiplier_DefaultIsOne()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_WidthMultiplier_DefaultIsOne()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -124,8 +125,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.0, searchSpace.WidthMultiplier);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_ExpansionRatios_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_ExpansionRatios_CanBeModified()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -140,8 +141,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(8, searchSpace.ExpansionRatios);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_KernelSizes_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_KernelSizes_CanBeModified()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -154,8 +155,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(7, searchSpace.KernelSizes);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_DepthMultiplier_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_DepthMultiplier_CanBeModified()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -167,8 +168,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.5, searchSpace.DepthMultiplier);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_WidthMultiplier_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_WidthMultiplier_CanBeModified()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -180,8 +181,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(0.75, searchSpace.WidthMultiplier);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_Float_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Float_WorksCorrectly()
         {
             // Arrange & Act
             var searchSpace = new MobileNetSearchSpace<float>();
@@ -192,8 +193,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_InheritsFromSearchSpaceBase()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_InheritsFromSearchSpaceBase()
         {
             // Arrange & Act
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -202,8 +203,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.IsAssignableFrom<SearchSpaceBase<double>>(searchSpace);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_Operations_IncludesInvertedResiduals()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Operations_IncludesInvertedResiduals()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();
@@ -213,8 +214,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(4, invertedResiduals.Count);
         }
 
-        [Fact]
-        public void MobileNetSearchSpace_Operations_IncludesSqueezeExcitation()
+        [Fact(Timeout = 60000)]
+        public async Task MobileNetSearchSpace_Operations_IncludesSqueezeExcitation()
         {
             // Arrange
             var searchSpace = new MobileNetSearchSpace<double>();

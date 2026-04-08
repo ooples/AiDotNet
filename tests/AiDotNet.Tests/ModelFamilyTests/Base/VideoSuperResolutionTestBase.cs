@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
 {
-    [Fact]
-    public void Output_AtLeastAsLargeAsInput()
+    [Fact(Timeout = 120000)]
+    public async Task Output_AtLeastAsLargeAsInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -22,8 +23,8 @@ public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
             "SR models should upscale, not downscale.");
     }
 
-    [Fact]
-    public void SuperResolved_ValuesShouldBeFinite()
+    [Fact(Timeout = 120000)]
+    public async Task SuperResolved_ValuesShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

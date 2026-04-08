@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -32,7 +33,7 @@ public class LeafBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithLeafBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");
@@ -108,7 +109,7 @@ public class LeafBenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EvaluateBenchmarksAsync_WithSeededSampling_IsDeterministicAndSeedAffectsSelection()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");

@@ -1,13 +1,14 @@
 using System;
 using AiDotNet.MetaLearning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
 public class MetaLearningAlgorithmTypeIntegrationTests
 {
-    [Fact]
-    public void Enum_ContainsCoreAlgorithms()
+    [Fact(Timeout = 120000)]
+    public async Task Enum_ContainsCoreAlgorithms()
     {
         var names = Enum.GetNames(typeof(MetaLearningAlgorithmType));
 

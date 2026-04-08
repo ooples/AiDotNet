@@ -1,6 +1,7 @@
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -20,8 +21,8 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
 
-    [Fact]
-    public void Calculate_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task Calculate_ShouldBeFinite()
     {
         var loss = CreateLoss();
         int batchSize = 3;
@@ -48,8 +49,8 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 2: Loss is non-negative
     // =========================================================================
 
-    [Fact]
-    public void Calculate_ShouldBeNonNegative()
+    [Fact(Timeout = 30000)]
+    public async Task Calculate_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
         int batchSize = 3;
@@ -73,8 +74,8 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 3: Higher target logits should reduce loss
     // =========================================================================
 
-    [Fact]
-    public void Calculate_HigherTargetLogits_ShouldReduceLoss()
+    [Fact(Timeout = 30000)]
+    public async Task Calculate_HigherTargetLogits_ShouldReduceLoss()
     {
         var loss = CreateLoss();
         int batchSize = 2;
@@ -97,8 +98,8 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 4: Gradients are finite
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
         int batchSize = 3;
@@ -130,8 +131,8 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 5: Dimension validation
     // =========================================================================
 
-    [Fact]
-    public void Calculate_MismatchedDimensions_ShouldThrow()
+    [Fact(Timeout = 30000)]
+    public async Task Calculate_MismatchedDimensions_ShouldThrow()
     {
         var loss = CreateLoss();
         var targetLogits = new Vector<double>(3);

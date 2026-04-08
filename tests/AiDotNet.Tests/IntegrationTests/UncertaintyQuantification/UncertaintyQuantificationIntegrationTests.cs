@@ -1,6 +1,7 @@
 using AiDotNet.UncertaintyQuantification.Calibration;
 using AiDotNet.UncertaintyQuantification.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.UncertaintyQuantification;
 
@@ -14,22 +15,22 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Construction
 
-    [Fact]
-    public void ECE_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_DefaultConstruction_DoesNotThrow()
     {
         var ece = new ExpectedCalibrationError<double>();
         Assert.NotNull(ece);
     }
 
-    [Fact]
-    public void ECE_CustomBins_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_CustomBins_DoesNotThrow()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 20);
         Assert.NotNull(ece);
     }
 
-    [Fact]
-    public void ECE_ZeroBins_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_ZeroBins_Throws()
     {
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: 0));
     }
@@ -38,8 +39,8 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Computation
 
-    [Fact]
-    public void ECE_PerfectCalibration_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_PerfectCalibration_ReturnsNonNegative()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
         var probabilities = new Vector<double>(new double[] { 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9 });
@@ -51,8 +52,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(result <= 1.0, "ECE should be at most 1.0");
     }
 
-    [Fact]
-    public void ECE_AllWrong_HighECE()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_AllWrong_HighECE()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
         var probabilities = new Vector<double>(new double[] { 0.95, 0.95, 0.95, 0.95, 0.95 });
@@ -63,8 +64,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(result > 0.5, $"ECE should be high when all predictions are wrong, got {result}");
     }
 
-    [Fact]
-    public void ECE_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_MismatchedLengths_Throws()
     {
         var ece = new ExpectedCalibrationError<double>();
         var probabilities = new Vector<double>(new double[] { 0.9, 0.9 });
@@ -78,8 +79,8 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region ExpectedCalibrationError - Reliability Diagram
 
-    [Fact]
-    public void ECE_GetReliabilityDiagram_ReturnsNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_GetReliabilityDiagram_ReturnsNonEmpty()
     {
         var ece = new ExpectedCalibrationError<double>(numBins: 5);
         var probabilities = new Vector<double>(new double[] { 0.1, 0.3, 0.5, 0.7, 0.9 });
@@ -100,28 +101,28 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - Construction
 
-    [Fact]
-    public void TemperatureScaling_DefaultConstruction_TemperatureIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_DefaultConstruction_TemperatureIsOne()
     {
         var ts = new TemperatureScaling<double>();
         Assert.Equal(1.0, ts.Temperature, Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_CustomTemperature()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_CustomTemperature()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
         Assert.Equal(2.0, ts.Temperature, Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_ZeroTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ZeroTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TemperatureScaling<double>(initialTemperature: 0.0));
     }
 
-    [Fact]
-    public void TemperatureScaling_NegativeTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_NegativeTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TemperatureScaling<double>(initialTemperature: -1.0));
     }
@@ -130,8 +131,8 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - ScaleLogits
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_TemperatureOne_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_TemperatureOne_NoChange()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 1.0);
         var logits = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 2.0, 1.0, 0.5 }));
@@ -142,8 +143,8 @@ public class UncertaintyQuantificationIntegrationTests
         }
     }
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_HighTemperature_Softens()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_HighTemperature_Softens()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
         var logits = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 4.0, 2.0, 0.0 }));
@@ -153,8 +154,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(0.0, scaled[2], Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_LowTemperature_Sharpens()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_LowTemperature_Sharpens()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 0.5);
         var logits = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 2.0, 1.0, 0.0 }));
@@ -168,8 +169,8 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region TemperatureScaling - Calibration
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_TemperatureStaysPositive()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_TemperatureStaysPositive()
     {
         var ts = new TemperatureScaling<double>(initialTemperature: 1.0);
         var logits = new Matrix<double>(5, 3);
@@ -185,8 +186,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(ts.Temperature > 0, "Temperature should remain positive after calibration");
     }
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_MismatchedLengths_Throws()
     {
         var ts = new TemperatureScaling<double>();
         var logits = new Matrix<double>(5, 3);
@@ -198,37 +199,37 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region MCDropoutLayer - Construction
 
-    [Fact]
-    public void MCDropoutLayer_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_DefaultConstruction_DoesNotThrow()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
         Assert.NotNull(layer);
         Assert.False(layer.MonteCarloMode);
     }
 
-    [Fact]
-    public void MCDropoutLayer_WithMCMode_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_WithMCMode_DoesNotThrow()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.3, mcMode: true);
         Assert.True(layer.MonteCarloMode);
     }
 
-    [Fact]
-    public void MCDropoutLayer_InvalidRate_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_InvalidRate_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(dropoutRate: 1.0));
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(dropoutRate: -0.1));
     }
 
-    [Fact]
-    public void MCDropoutLayer_SupportsTraining()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_SupportsTraining()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void MCDropoutLayer_MonteCarloMode_CanToggle()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_MonteCarloMode_CanToggle()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5);
         Assert.False(layer.MonteCarloMode);
@@ -242,8 +243,8 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region MCDropoutLayer - Forward Pass
 
-    [Fact]
-    public void MCDropoutLayer_Forward_InTraining_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_Forward_InTraining_ProducesOutput()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, randomSeed: 42);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -252,8 +253,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MCDropoutLayer_Forward_InInference_NoDropout()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_Forward_InInference_NoDropout()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, randomSeed: 42);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -266,8 +267,8 @@ public class UncertaintyQuantificationIntegrationTests
         }
     }
 
-    [Fact]
-    public void MCDropoutLayer_Forward_InMCMode_AppliesDropout()
+    [Fact(Timeout = 120000)]
+    public async Task MCDropoutLayer_Forward_InMCMode_AppliesDropout()
     {
         var layer = new MCDropoutLayer<double>(dropoutRate: 0.5, mcMode: true, randomSeed: 42);
         var data = new double[100];
@@ -290,16 +291,16 @@ public class UncertaintyQuantificationIntegrationTests
 
     #region BayesianDenseLayer - Construction
 
-    [Fact]
-    public void BayesianDenseLayer_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianDenseLayer_DefaultConstruction_DoesNotThrow()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 2, randomSeed: 42);
         Assert.NotNull(layer);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void BayesianDenseLayer_Forward_ProducesCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianDenseLayer_Forward_ProducesCorrectShape()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 3, randomSeed: 42);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -308,8 +309,8 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.Equal(3, output.Shape[^1]);
     }
 
-    [Fact]
-    public void BayesianDenseLayer_Forward_MultipleCallsProduceDifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianDenseLayer_Forward_MultipleCallsProduceDifferentOutputs()
     {
         var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 2, randomSeed: 42);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));

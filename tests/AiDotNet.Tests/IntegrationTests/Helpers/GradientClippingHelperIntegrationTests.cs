@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -14,14 +15,14 @@ public class GradientClippingHelperIntegrationTests
 
     #region Constants
 
-    [Fact]
-    public void DefaultMaxNorm_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultMaxNorm_IsOne()
     {
         Assert.Equal(1.0, GradientClippingHelper.DefaultMaxNorm);
     }
 
-    [Fact]
-    public void DefaultMaxValue_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultMaxValue_IsOne()
     {
         Assert.Equal(1.0, GradientClippingHelper.DefaultMaxValue);
     }
@@ -30,8 +31,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByValue
 
-    [Fact]
-    public void ClipByValue_WithinRange_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_WithinRange_Unchanged()
     {
         var grads = new Vector<double>(new double[] { 0.5, -0.3, 0.8 });
         var clipped = GradientClippingHelper.ClipByValue(grads, 1.0);
@@ -41,8 +42,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(0.8, clipped[2], Tolerance);
     }
 
-    [Fact]
-    public void ClipByValue_ExceedsRange_ClipsToMax()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_ExceedsRange_ClipsToMax()
     {
         var grads = new Vector<double>(new double[] { 5.0, -3.0, 0.5 });
         var clipped = GradientClippingHelper.ClipByValue(grads, 1.0);
@@ -52,15 +53,15 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(0.5, clipped[2], Tolerance);
     }
 
-    [Fact]
-    public void ClipByValue_Null_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_Null_ReturnsNull()
     {
         var result = GradientClippingHelper.ClipByValue<double>(null);
         Assert.Null(result);
     }
 
-    [Fact]
-    public void ClipByValue_CustomMaxValue()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValue_CustomMaxValue()
     {
         var grads = new Vector<double>(new double[] { 10.0, -10.0 });
         var clipped = GradientClippingHelper.ClipByValue(grads, 0.5);
@@ -73,8 +74,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByValueInPlace
 
-    [Fact]
-    public void ClipByValueInPlace_ModifiesOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByValueInPlace_ModifiesOriginal()
     {
         var grads = new Vector<double>(new double[] { 5.0, -3.0 });
         GradientClippingHelper.ClipByValueInPlace(grads, 1.0);
@@ -86,8 +87,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByNorm
 
-    [Fact]
-    public void ClipByNorm_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_BelowThreshold_Unchanged()
     {
         var grads = new Vector<double>(new double[] { 0.3, 0.4 }); // norm = 0.5
         var clipped = GradientClippingHelper.ClipByNorm(grads, 1.0);
@@ -96,8 +97,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(0.4, clipped[1], Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_AboveThreshold_ScalesDown()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_AboveThreshold_ScalesDown()
     {
         var grads = new Vector<double>(new double[] { 3.0, 4.0 }); // norm = 5.0
         var clipped = GradientClippingHelper.ClipByNorm(grads, 1.0);
@@ -108,8 +109,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(1.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_PreservesDirection()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_PreservesDirection()
     {
         var grads = new Vector<double>(new double[] { 6.0, 8.0 }); // norm = 10
         var clipped = GradientClippingHelper.ClipByNorm(grads, 2.0);
@@ -121,8 +122,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(originalRatio, clippedRatio, Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_Null_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_Null_ReturnsNull()
     {
         Vector<double>? nullVector = null;
         var result = GradientClippingHelper.ClipByNorm(nullVector);
@@ -133,8 +134,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByNormInPlace
 
-    [Fact]
-    public void ClipByNormInPlace_AboveThreshold_ReturnsTrueAndClips()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNormInPlace_AboveThreshold_ReturnsTrueAndClips()
     {
         var grads = new Vector<double>(new double[] { 3.0, 4.0 }); // norm = 5
         bool wasClipped = GradientClippingHelper.ClipByNormInPlace(grads, 1.0);
@@ -144,8 +145,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(1.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ClipByNormInPlace_BelowThreshold_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNormInPlace_BelowThreshold_ReturnsFalse()
     {
         var grads = new Vector<double>(new double[] { 0.1, 0.2 }); // norm < 1
         bool wasClipped = GradientClippingHelper.ClipByNormInPlace(grads, 1.0);
@@ -156,8 +157,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByGlobalNorm
 
-    [Fact]
-    public void ClipByGlobalNorm_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByGlobalNorm_BelowThreshold_Unchanged()
     {
         var grads1 = new Vector<double>(new double[] { 0.1, 0.2 });
         var grads2 = new Vector<double>(new double[] { 0.1, 0.1 });
@@ -169,8 +170,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(0.1, clipped[0][0], Tolerance);
     }
 
-    [Fact]
-    public void ClipByGlobalNorm_AboveThreshold_ScalesAll()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByGlobalNorm_AboveThreshold_ScalesAll()
     {
         var grads1 = new Vector<double>(new double[] { 3.0, 4.0 }); // norm = 5
         var grads2 = new Vector<double>(new double[] { 6.0, 8.0 }); // norm = 10
@@ -188,8 +189,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(1.0, Math.Sqrt(globalNormSq), Tolerance);
     }
 
-    [Fact]
-    public void ClipByGlobalNorm_Null_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByGlobalNorm_Null_ReturnsNull()
     {
         var result = GradientClippingHelper.ClipByGlobalNorm<double>(null);
         Assert.Null(result);
@@ -199,8 +200,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipByNorm (Tensor)
 
-    [Fact]
-    public void ClipByNorm_Tensor_AboveThreshold_ScalesDown()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_Tensor_AboveThreshold_ScalesDown()
     {
         var grads = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 3.0, 4.0, 6.0, 8.0 }));
         // norm = sqrt(9+16+36+64) = sqrt(125) = ~11.18
@@ -215,8 +216,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(1.0, Math.Sqrt(normSq), Tolerance);
     }
 
-    [Fact]
-    public void ClipByNorm_Tensor_BelowThreshold_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipByNorm_Tensor_BelowThreshold_Unchanged()
     {
         var grads = new Tensor<double>(new[] { 2 }, new Vector<double>(new double[] { 0.3, 0.4 }));
         var clipped = GradientClippingHelper.ClipByNorm(grads, 5.0);
@@ -229,24 +230,24 @@ public class GradientClippingHelperIntegrationTests
 
     #region ComputeNorm
 
-    [Fact]
-    public void ComputeNorm_KnownVector()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeNorm_KnownVector()
     {
         var v = new Vector<double>(new double[] { 3.0, 4.0 });
         double norm = GradientClippingHelper.ComputeNorm(v);
         Assert.Equal(5.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ComputeNorm_ZeroVector()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeNorm_ZeroVector()
     {
         var v = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
         double norm = GradientClippingHelper.ComputeNorm(v);
         Assert.Equal(0.0, norm, Tolerance);
     }
 
-    [Fact]
-    public void ComputeNorm_UnitVector()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeNorm_UnitVector()
     {
         var v = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
         double norm = GradientClippingHelper.ComputeNorm(v);
@@ -257,8 +258,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ComputeGlobalNorm
 
-    [Fact]
-    public void ComputeGlobalNorm_MultipleVectors()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeGlobalNorm_MultipleVectors()
     {
         var v1 = new Vector<double>(new double[] { 3.0, 0.0 });
         var v2 = new Vector<double>(new double[] { 0.0, 4.0 });
@@ -268,8 +269,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(5.0, globalNorm, Tolerance);
     }
 
-    [Fact]
-    public void ComputeGlobalNorm_Empty_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeGlobalNorm_Empty_ReturnsZero()
     {
         var list = new List<Vector<double>>();
         double globalNorm = GradientClippingHelper.ComputeGlobalNorm(list);
@@ -280,8 +281,8 @@ public class GradientClippingHelperIntegrationTests
 
     #region ClipAdaptive
 
-    [Fact]
-    public void ClipAdaptive_SmallGradients_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_SmallGradients_Unchanged()
     {
         var grads = new Vector<double>(new double[] { 0.001, 0.001 });
         var parameters = new Vector<double>(new double[] { 10.0, 10.0 });
@@ -291,8 +292,8 @@ public class GradientClippingHelperIntegrationTests
         Assert.Equal(0.001, clipped[0], Tolerance);
     }
 
-    [Fact]
-    public void ClipAdaptive_LargeGradients_GetsClipped()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_LargeGradients_GetsClipped()
     {
         var grads = new Vector<double>(new double[] { 100.0, 100.0 }); // norm = ~141.4
         var parameters = new Vector<double>(new double[] { 1.0, 1.0 }); // param norm = ~1.414
@@ -305,16 +306,16 @@ public class GradientClippingHelperIntegrationTests
         Assert.True(clippedNorm < originalNorm, "Clipped norm should be less than original");
     }
 
-    [Fact]
-    public void ClipAdaptive_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_MismatchedLengths_Throws()
     {
         var grads = new Vector<double>(new double[] { 1.0, 2.0 });
         var parameters = new Vector<double>(new double[] { 1.0 });
         Assert.Throws<ArgumentException>(() => GradientClippingHelper.ClipAdaptive(grads, parameters));
     }
 
-    [Fact]
-    public void ClipAdaptive_NullGradients_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ClipAdaptive_NullGradients_ReturnsNull()
     {
         var parameters = new Vector<double>(new double[] { 1.0 });
         var result = GradientClippingHelper.ClipAdaptive<double>(null, parameters);
@@ -325,29 +326,29 @@ public class GradientClippingHelperIntegrationTests
 
     #region AreGradientsExploding
 
-    [Fact]
-    public void AreGradientsExploding_Normal_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_Normal_ReturnsFalse()
     {
         var grads = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         Assert.False(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_VeryLarge_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_VeryLarge_ReturnsTrue()
     {
         var grads = new Vector<double>(new double[] { 1e7, 1e7 });
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_ContainsNaN_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_ContainsNaN_ReturnsTrue()
     {
         var grads = new Vector<double>(new double[] { 1.0, double.NaN });
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
     }
 
-    [Fact]
-    public void AreGradientsExploding_ContainsInfinity_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsExploding_ContainsInfinity_ReturnsTrue()
     {
         var grads = new Vector<double>(new double[] { 1.0, double.PositiveInfinity });
         Assert.True(GradientClippingHelper.AreGradientsExploding(grads));
@@ -357,29 +358,29 @@ public class GradientClippingHelperIntegrationTests
 
     #region AreGradientsVanishing
 
-    [Fact]
-    public void AreGradientsVanishing_Normal_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_Normal_ReturnsFalse()
     {
         var grads = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         Assert.False(GradientClippingHelper.AreGradientsVanishing(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_VerySmall_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_VerySmall_ReturnsTrue()
     {
         var grads = new Vector<double>(new double[] { 1e-10, 1e-10 });
         Assert.True(GradientClippingHelper.AreGradientsVanishing(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_Zero_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_Zero_ReturnsTrue()
     {
         var grads = new Vector<double>(new double[] { 0.0, 0.0 });
         Assert.True(GradientClippingHelper.AreGradientsVanishing(grads));
     }
 
-    [Fact]
-    public void AreGradientsVanishing_Null_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AreGradientsVanishing_Null_ReturnsTrue()
     {
         Assert.True(GradientClippingHelper.AreGradientsVanishing<double>(null));
     }

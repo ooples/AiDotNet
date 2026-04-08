@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinearAlgebra;
 
@@ -16,8 +17,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Forward / Inverse Roundtrip
 
-    [Fact]
-    public void FFT_Forward_Inverse_Roundtrip_PowerOf2()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_Inverse_Roundtrip_PowerOf2()
     {
         // x -> FFT -> IFFT -> x
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -28,8 +29,8 @@ public class FFTDeepMathIntegrationTests
             Assert.Equal(x[i], recovered[i], Tolerance);
     }
 
-    [Fact]
-    public void FFT_Forward_Inverse_Roundtrip_Size4()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_Inverse_Roundtrip_Size4()
     {
         var x = new Vector<double>(new double[] { 3, -1, 4, -2 });
         var freq = FFT.Forward(x);
@@ -39,8 +40,8 @@ public class FFTDeepMathIntegrationTests
             Assert.Equal(x[i], recovered[i], Tolerance);
     }
 
-    [Fact]
-    public void FFT_Forward_Inverse_Roundtrip_Size2()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_Inverse_Roundtrip_Size2()
     {
         var x = new Vector<double>(new double[] { 5, 3 });
         var freq = FFT.Forward(x);
@@ -50,8 +51,8 @@ public class FFTDeepMathIntegrationTests
         Assert.Equal(3.0, recovered[1], Tolerance);
     }
 
-    [Fact]
-    public void FFT_Forward_Inverse_Roundtrip_Size1()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_Inverse_Roundtrip_Size1()
     {
         var x = new Vector<double>(new double[] { 7 });
         var freq = FFT.Forward(x);
@@ -64,8 +65,8 @@ public class FFTDeepMathIntegrationTests
 
     #region DC Component (X[0] = sum of all samples)
 
-    [Fact]
-    public void FFT_DCComponent_EqualsSum()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_DCComponent_EqualsSum()
     {
         // X[0] = sum(x[n]) for DFT (no normalization in forward)
         var x = new Vector<double>(new double[] { 1, 2, 3, 4 });
@@ -76,8 +77,8 @@ public class FFTDeepMathIntegrationTests
         Assert.Equal(0.0, freq[0].Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void FFT_DCComponent_EqualsSum_Size8()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_DCComponent_EqualsSum_Size8()
     {
         var x = new Vector<double>(new double[] { 2, -1, 3, 0, 5, -2, 1, 4 });
         var freq = FFT.Forward(x);
@@ -91,8 +92,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Constant Signal
 
-    [Fact]
-    public void FFT_ConstantSignal_OnlyDCComponent()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_ConstantSignal_OnlyDCComponent()
     {
         // Constant signal c: X[0] = N*c, X[k] = 0 for k > 0
         double c = 5.0;
@@ -116,8 +117,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Parseval's Theorem
 
-    [Fact]
-    public void FFT_ParsevalsTheorem_EnergyConservation()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_ParsevalsTheorem_EnergyConservation()
     {
         // sum(|x[n]|^2) = (1/N) * sum(|X[k]|^2)
         var x = new Vector<double>(new double[] { 1, -2, 3, -4, 5, -6, 7, -8 });
@@ -143,8 +144,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Linearity
 
-    [Fact]
-    public void FFT_Linearity_FFTofAx_Plus_By_Equals_aFFTx_Plus_bFFTy()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Linearity_FFTofAx_Plus_By_Equals_aFFTx_Plus_bFFTy()
     {
         // FFT(a*x + b*y) = a*FFT(x) + b*FFT(y)
         double a = 2.0, b = -3.0;
@@ -173,8 +174,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Hand-Calculated DFT
 
-    [Fact]
-    public void FFT_HandCalculated_Size2()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_HandCalculated_Size2()
     {
         // DFT of [a, b]:
         // X[0] = a + b, X[1] = a - b
@@ -187,8 +188,8 @@ public class FFTDeepMathIntegrationTests
         Assert.Equal(0.0, freq[1].Imaginary, Tolerance);
     }
 
-    [Fact]
-    public void FFT_HandCalculated_Size4()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_HandCalculated_Size4()
     {
         // DFT of [1, 0, 0, 0] (impulse):
         // X[k] = 1 for all k (since sum of e^0 = 1 for each freq)
@@ -202,8 +203,8 @@ public class FFTDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FFT_HandCalculated_Size4_AllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_HandCalculated_Size4_AllOnes()
     {
         // DFT of [1, 1, 1, 1]:
         // X[0] = 4, X[1] = X[2] = X[3] = 0
@@ -219,8 +220,8 @@ public class FFTDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FFT_HandCalculated_Size4_Alternating()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_HandCalculated_Size4_Alternating()
     {
         // DFT of [1, -1, 1, -1]:
         // X[0] = 0, X[1] = 0, X[2] = 4, X[3] = 0
@@ -238,8 +239,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Real Signal Symmetry
 
-    [Fact]
-    public void FFT_RealSignal_ConjugateSymmetry()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_RealSignal_ConjugateSymmetry()
     {
         // For real input: X[k] = conj(X[N-k])
         var x = new Vector<double>(new double[] { 2, -1, 3, 0, 5, -2, 1, 4 });
@@ -257,8 +258,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Pure Sine Wave
 
-    [Fact]
-    public void FFT_PureSineWave_SingleFrequencyPeak()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_PureSineWave_SingleFrequencyPeak()
     {
         // x[n] = sin(2*pi*f*n/N), f=1 -> peak at k=1 and k=N-1
         int n = 8;
@@ -291,8 +292,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Pure Cosine Wave
 
-    [Fact]
-    public void FFT_PureCosineWave_RealSymmetricPeaks()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_PureCosineWave_RealSymmetricPeaks()
     {
         // x[n] = cos(2*pi*f*n/N), f=1 -> real peaks at k=1 and k=N-1
         int n = 8;
@@ -313,8 +314,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Zero Signal
 
-    [Fact]
-    public void FFT_ZeroSignal_AllZeroSpectrum()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_ZeroSignal_AllZeroSpectrum()
     {
         var x = new Vector<double>(new double[] { 0, 0, 0, 0, 0, 0, 0, 0 });
         var freq = FFT.Forward(x);
@@ -330,8 +331,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Scaling Property
 
-    [Fact]
-    public void FFT_ScalingProperty_FFTofScaledSignal()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_ScalingProperty_FFTofScaledSignal()
     {
         // FFT(c*x) = c * FFT(x)
         double c = 3.5;
@@ -353,8 +354,8 @@ public class FFTDeepMathIntegrationTests
 
     #region Time Reversal
 
-    [Fact]
-    public void FFT_TimeReversal_ConjugateSpectrum()
+    [Fact(Timeout = 120000)]
+    public async Task FFT_TimeReversal_ConjugateSpectrum()
     {
         // If Y[n] = X[N-n], then FFT(Y)[k] = conj(FFT(X)[k])
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });

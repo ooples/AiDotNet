@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.AdversarialRobustness;
 
@@ -21,8 +22,8 @@ public class CROWNVerificationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_Default_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_Default_CreatesInstance()
     {
         // Act
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -35,8 +36,8 @@ public class CROWNVerificationTests
         Assert.True(options.UseTightBounds);
     }
 
-    [Fact]
-    public void Constructor_WithOptions_UsesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithOptions_UsesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -59,8 +60,8 @@ public class CROWNVerificationTests
         Assert.True(returnedOptions.UseTightBounds);
     }
 
-    [Fact]
-    public void Constructor_WithNullOptions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new CROWNVerification<double, Vector<double>, Vector<double>>(null!));
@@ -70,8 +71,8 @@ public class CROWNVerificationTests
 
     #region CertifyPrediction Tests
 
-    [Fact]
-    public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -81,8 +82,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(null!, mockModel));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -92,8 +93,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(input, null!));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithValidInput_ReturnsCertification()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithValidInput_ReturnsCertification()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -115,8 +116,8 @@ public class CROWNVerificationTests
         Assert.True(result.Confidence >= 0.0 && result.Confidence <= 1.0);
     }
 
-    [Fact]
-    public void CertifyPrediction_WithSmallEpsilon_MayCertify()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithSmallEpsilon_MayCertify()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -137,8 +138,8 @@ public class CROWNVerificationTests
         Assert.True(result.IsCertified);
     }
 
-    [Fact]
-    public void CertifyPrediction_CROWN_ShouldProduceTighterBounds_ThanIBP()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_CROWN_ShouldProduceTighterBounds_ThanIBP()
     {
         // Arrange - CROWN should produce tighter bounds than IBP
         var options = new CertifiedDefenseOptions<double>
@@ -163,8 +164,8 @@ public class CROWNVerificationTests
         Assert.True(crownResult.UpperBound <= ibpResult.UpperBound + Tolerance);
     }
 
-    [Fact]
-    public void CertifyPrediction_ReturnsBoundsForPredictedClass()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_ReturnsBoundsForPredictedClass()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -188,8 +189,8 @@ public class CROWNVerificationTests
 
     #region CertifyBatch Tests
 
-    [Fact]
-    public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -199,8 +200,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(null!, mockModel));
     }
 
-    [Fact]
-    public void CertifyBatch_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -210,8 +211,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(inputs, null!));
     }
 
-    [Fact]
-    public void CertifyBatch_ReturnsCorrectNumberOfResults()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_ReturnsCorrectNumberOfResults()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -245,8 +246,8 @@ public class CROWNVerificationTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact]
-    public void ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -256,8 +257,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(null!, mockModel));
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -267,8 +268,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(input, null!));
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_ReturnsNonNegativeRadius()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -287,8 +288,8 @@ public class CROWNVerificationTests
         Assert.True(radius >= 0.0);
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_CROWN_ShouldGiveTighterRadius_ThanIBP()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_CROWN_ShouldGiveTighterRadius_ThanIBP()
     {
         // Arrange - CROWN with tighter bounds should give larger certified radius
         var options = new CertifiedDefenseOptions<double>
@@ -315,8 +316,8 @@ public class CROWNVerificationTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -328,8 +329,8 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -341,8 +342,8 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -354,8 +355,8 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -372,8 +373,8 @@ public class CROWNVerificationTests
             crown.EvaluateCertifiedAccuracy(testData, labels, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -413,8 +414,8 @@ public class CROWNVerificationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_ReturnsNonEmptyBytes()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_ReturnsNonEmptyBytes()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -433,8 +434,8 @@ public class CROWNVerificationTests
         Assert.True(bytes.Length > 0);
     }
 
-    [Fact]
-    public void Deserialize_WithNullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -443,8 +444,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentNullException>(() => crown.Deserialize(null!));
     }
 
-    [Fact]
-    public void SerializeDeserialize_PreservesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task SerializeDeserialize_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -480,8 +481,8 @@ public class CROWNVerificationTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact]
-    public void SaveModel_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -490,8 +491,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.SaveModel(null!));
     }
 
-    [Fact]
-    public void SaveModel_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_WithEmptyPath_ThrowsArgumentException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -500,8 +501,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.SaveModel(string.Empty));
     }
 
-    [Fact]
-    public void LoadModel_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -510,8 +511,8 @@ public class CROWNVerificationTests
         Assert.Throws<ArgumentException>(() => crown.LoadModel(null!));
     }
 
-    [Fact]
-    public void LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -520,8 +521,8 @@ public class CROWNVerificationTests
         Assert.Throws<FileNotFoundException>(() => crown.LoadModel("nonexistent_crown_model_12345.json"));
     }
 
-    [Fact]
-    public void SaveAndLoadModel_RoundTrip_PreservesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task SaveAndLoadModel_RoundTrip_PreservesOptions()
     {
         // Arrange
         var tempPath = Path.Combine(Path.GetTempPath(), $"crown_test_{Guid.NewGuid()}.json");
@@ -562,8 +563,8 @@ public class CROWNVerificationTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_ResetsToDefaultOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ResetsToDefaultOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -587,8 +588,8 @@ public class CROWNVerificationTests
 
     #region CROWN-Specific Linear Relaxation Tests
 
-    [Fact]
-    public void CROWN_WithIdenticalInputs_ProducesSameCertification()
+    [Fact(Timeout = 60000)]
+    public async Task CROWN_WithIdenticalInputs_ProducesSameCertification()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -613,8 +614,8 @@ public class CROWNVerificationTests
         Assert.Equal(result1.UpperBound, result2.UpperBound, Tolerance);
     }
 
-    [Fact]
-    public void CROWN_WithLargerEpsilon_ProducesWiderBounds()
+    [Fact(Timeout = 60000)]
+    public async Task CROWN_WithLargerEpsilon_ProducesWiderBounds()
     {
         // Arrange
         var smallEpsOptions = new CertifiedDefenseOptions<double>
@@ -646,8 +647,8 @@ public class CROWNVerificationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void CertifyPrediction_FloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_FloatType_WorksCorrectly()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<float>

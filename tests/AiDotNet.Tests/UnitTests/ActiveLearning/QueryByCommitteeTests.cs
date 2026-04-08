@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning;
 using AiDotNet.Interfaces;
 using Moq;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
@@ -21,8 +22,8 @@ public class QueryByCommitteeTests
         return committee;
     }
 
-    [Fact]
-    public void Constructor_ValidCommitteeSize_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidCommitteeSize_InitializesSuccessfully()
     {
         // Arrange
         var committee = CreateMockCommittee(5);
@@ -36,8 +37,8 @@ public class QueryByCommitteeTests
         Assert.Equal(5, strategy.Committee.Count);
     }
 
-    [Fact]
-    public void Constructor_CommitteeSizeLessThan2_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CommitteeSizeLessThan2_ThrowsArgumentException()
     {
         // Arrange
         var committee = CreateMockCommittee(1);
@@ -49,16 +50,16 @@ public class QueryByCommitteeTests
         Assert.Contains("at least 2", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_NullCommittee_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullCommittee_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new QueryByCommittee<double>(null!));
     }
 
-    [Fact]
-    public void Constructor_WithDifferentMeasures_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDifferentMeasures_InitializesCorrectly()
     {
         // Arrange
         var committee = CreateMockCommittee(3);
@@ -82,8 +83,8 @@ public class QueryByCommitteeTests
         Assert.Equal("QueryByCommittee-PredictionVariance", predictionVariance.Name);
     }
 
-    [Fact]
-    public void UseBatchDiversity_DefaultsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_DefaultsFalse()
     {
         // Arrange
         var committee = CreateMockCommittee(3);
@@ -95,8 +96,8 @@ public class QueryByCommitteeTests
         Assert.False(strategy.UseBatchDiversity);
     }
 
-    [Fact]
-    public void UseBatchDiversity_CanBeSet()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_CanBeSet()
     {
         // Arrange
         var committee = CreateMockCommittee(3);
@@ -109,8 +110,8 @@ public class QueryByCommitteeTests
         Assert.True(strategy.UseBatchDiversity);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_ContainsCommitteeSize()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_ContainsCommitteeSize()
     {
         // Arrange
         var committee = CreateMockCommittee(5);
@@ -125,8 +126,8 @@ public class QueryByCommitteeTests
         Assert.Equal(5.0, stats["CommitteeSize"]);
     }
 
-    [Fact]
-    public void Constructor_ExactlyTwoMembers_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ExactlyTwoMembers_Succeeds()
     {
         // Arrange
         var committee = CreateMockCommittee(2);

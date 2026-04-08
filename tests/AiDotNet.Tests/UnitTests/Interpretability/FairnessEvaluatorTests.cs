@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Interpretability
 {
@@ -13,8 +14,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
     /// </summary>
     public class FairnessEvaluatorTests
     {
-        [Fact]
-        public void EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -26,8 +27,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
                 evaluator.EvaluateFairness(model, inputs, 5));
         }
 
-        [Fact]
-        public void EvaluateFairness_WithBalancedPredictions_ReturnsZeroMetrics()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithBalancedPredictions_ReturnsZeroMetrics()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -60,8 +61,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference, 2);
         }
 
-        [Fact]
-        public void EvaluateFairness_WithUnbalancedPredictions_DetectsBias()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithUnbalancedPredictions_DetectsBias()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -92,8 +93,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.StatisticalParityDifference > 0.9); // Large difference
         }
 
-        [Fact]
-        public void EvaluateFairness_WithActualLabels_ComputesAllMetrics()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithActualLabels_ComputesAllMetrics()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.NotEqual(0.0, result.PredictiveParity);
         }
 
-        [Fact]
-        public void EvaluateFairness_WithSingleGroup_ReturnsZeroMetrics()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithSingleGroup_ReturnsZeroMetrics()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -155,8 +156,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference);
         }
 
-        [Fact]
-        public void EvaluateFairness_AdditionalMetrics_ContainGroupStatistics()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_AdditionalMetrics_ContainGroupStatistics()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -181,8 +182,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.AdditionalMetrics.ContainsKey("Group_1_Size"));
         }
 
-        [Fact]
-        public void EvaluateFairness_WithThreeGroups_HandlesMultipleGroups()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -212,8 +213,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.AdditionalMetrics.ContainsKey("Group_2_Size"));
         }
 
-        [Fact]
-        public void EvaluateFairness_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<float>();
@@ -234,8 +235,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(1.0f, result.DisparateImpact, 2);
         }
 
-        [Fact]
-        public void EvaluateFairness_ComputesDemographicParity_Correctly()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_ComputesDemographicParity_Correctly()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.5, result.StatisticalParityDifference, 2);
         }
 
-        [Fact]
-        public void EvaluateFairness_ComputesDisparateImpact_Correctly()
+        [Fact(Timeout = 60000)]
+        public async Task EvaluateFairness_ComputesDisparateImpact_Correctly()
         {
             // Arrange
             var evaluator = new ComprehensiveFairnessEvaluator<double>();

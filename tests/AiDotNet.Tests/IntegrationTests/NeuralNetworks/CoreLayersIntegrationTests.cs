@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -53,8 +54,8 @@ public class CoreLayersIntegrationTests
 
     #region DenseLayer Tests
 
-    [Fact]
-    public void DenseLayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         int inputSize = 64;
@@ -71,8 +72,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]); // output features
     }
 
-    [Fact]
-    public void DenseLayer_Forward_1DInput_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Forward_1DInput_ProducesCorrectOutputShape()
     {
         // Arrange
         int inputSize = 16;
@@ -88,8 +89,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[0]);
     }
 
-    [Fact]
-    public void DenseLayer_Forward_3DInput_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Forward_3DInput_ProducesCorrectOutputShape()
     {
         // Arrange
         int inputSize = 16;
@@ -109,8 +110,8 @@ public class CoreLayersIntegrationTests
 
 
 
-    [Fact]
-    public void DenseLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 16;
@@ -131,8 +132,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void DenseLayer_SetAndGetWeights_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_SetAndGetWeights_WorksCorrectly()
     {
         // Arrange
         int inputSize = 8;
@@ -152,8 +153,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void DenseLayer_ParameterCount_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ParameterCount_ReturnsCorrectValue()
     {
         // Arrange
         int inputSize = 64;
@@ -169,8 +170,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(expected, paramCount);
     }
 
-    [Fact]
-    public void DenseLayer_WithDifferentActivations_ProducesDifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_WithDifferentActivations_ProducesDifferentOutputs()
     {
         // Arrange
         int inputSize = 16;
@@ -199,8 +200,8 @@ public class CoreLayersIntegrationTests
         Assert.True(outputsDiffer, "Different activations should produce different outputs");
     }
 
-    [Fact]
-    public void DenseLayer_L2Regularization_ComputesAuxiliaryLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_L2Regularization_ComputesAuxiliaryLoss()
     {
         // Arrange
         int inputSize = 16;
@@ -223,8 +224,8 @@ public class CoreLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact]
-    public void ConvolutionalLayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
@@ -254,8 +255,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ConvolutionalLayer_WithStride2_ReducesSpatialDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_WithStride2_ReducesSpatialDimensions()
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
@@ -283,8 +284,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(8, output.Shape[3]);
     }
 
-    [Fact]
-    public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
@@ -304,8 +305,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ConvolutionalLayer_ParameterCount_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ParameterCount_ReturnsCorrectValue()
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
@@ -327,8 +328,8 @@ public class CoreLayersIntegrationTests
 
     #region MaxPoolingLayer Tests
 
-    [Fact]
-    public void MaxPoolingLayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         int channels = 16;
@@ -351,8 +352,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(inputWidth / poolSize, output.Shape[3]); // width halved
     }
 
-    [Fact]
-    public void MaxPoolingLayer_Forward_PreservesMaxValues()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_Forward_PreservesMaxValues()
     {
         // Arrange
         int channels = 1;
@@ -380,8 +381,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var layer = new MaxPoolingLayer<float>([4, 8, 8], 2, 2);
@@ -404,8 +405,8 @@ public class CoreLayersIntegrationTests
 
     #region AveragePoolingLayer Tests
 
-    [Fact]
-    public void AveragePoolingLayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         int channels = 16;
@@ -428,8 +429,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(inputWidth / poolSize, output.Shape[3]); // width halved
     }
 
-    [Fact]
-    public void AveragePoolingLayer_Forward_ComputesCorrectAverages()
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_Forward_ComputesCorrectAverages()
     {
         // Arrange
         int channels = 1;
@@ -461,8 +462,8 @@ public class CoreLayersIntegrationTests
 
     #region DropoutLayer Tests
 
-    [Fact]
-    public void DropoutLayer_Forward_TrainingMode_AppliesDropout()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Forward_TrainingMode_AppliesDropout()
     {
         // Arrange
         int[] shape = [8, 16];
@@ -486,8 +487,8 @@ public class CoreLayersIntegrationTests
         Assert.True(zeroCount < output.Length * 0.8, "Dropout should not zero all values");
     }
 
-    [Fact]
-    public void DropoutLayer_Forward_InferenceMode_PassesThroughUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Forward_InferenceMode_PassesThroughUnchanged()
     {
         // Arrange
         int[] shape = [8, 16];
@@ -507,8 +508,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void DropoutLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] shape = [4, 16];
@@ -534,8 +535,8 @@ public class CoreLayersIntegrationTests
 
     #region FlattenLayer Tests
 
-    [Fact]
-    public void FlattenLayer_Forward_Flattens3DTo1D()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_Forward_Flattens3DTo1D()
     {
         // Arrange
         int[] inputShape = [8, 8, 3];
@@ -551,8 +552,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(8 * 8 * 3, output.Shape[1]); // flattened
     }
 
-    [Fact]
-    public void FlattenLayer_Forward_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_Forward_PreservesData()
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
@@ -574,8 +575,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void FlattenLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
@@ -599,8 +600,8 @@ public class CoreLayersIntegrationTests
 
     #region ReshapeLayer Tests
 
-    [Fact]
-    public void ReshapeLayer_Forward_ReshapesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_Forward_ReshapesCorrectly()
     {
         // Arrange
         int[] inputShape = [32];
@@ -618,8 +619,8 @@ public class CoreLayersIntegrationTests
         Assert.Equal(8, output.Shape[2]);
     }
 
-    [Fact]
-    public void ReshapeLayer_Forward_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_Forward_PreservesData()
     {
         // Arrange
         int[] inputShape = [24];
@@ -642,8 +643,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ReshapeLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] inputShape = [16];
@@ -668,8 +669,8 @@ public class CoreLayersIntegrationTests
 
     #region ActivationLayer Tests
 
-    [Fact]
-    public void ActivationLayer_ReLU_Forward_ZerosNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_ReLU_Forward_ZerosNegativeValues()
     {
         // Arrange
         int[] shape = [8, 16];
@@ -700,8 +701,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_Sigmoid_Forward_OutputsInRange01()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Sigmoid_Forward_OutputsInRange01()
     {
         // Arrange
         int[] shape = [8, 16];
@@ -719,8 +720,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_Tanh_Forward_OutputsInRangeMinus1To1()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Tanh_Forward_OutputsInRangeMinus1To1()
     {
         // Arrange
         int[] shape = [8, 16];
@@ -739,8 +740,8 @@ public class CoreLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void ActivationLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int[] shape = [4, 8];
@@ -769,8 +770,8 @@ public class CoreLayersIntegrationTests
     /// FusedLinear(None) + ApplyActivation separately (even for fused-supported activations).
     /// In inference mode it uses the fused path.  Both paths must produce identical values.
     /// </summary>
-    [Fact]
-    public void DenseLayer_TrainingVsInferenceMode_ProduceIdenticalOutputValues()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_TrainingVsInferenceMode_ProduceIdenticalOutputValues()
     {
         // Arrange
         int inputSize = 8;
@@ -794,8 +795,8 @@ public class CoreLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void DenseLayer_InferenceModeWithFusedActivation_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_InferenceModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Inference mode takes the new fused path — verify output is well-formed
         var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
@@ -811,8 +812,8 @@ public class CoreLayersIntegrationTests
             Assert.False(float.IsNaN(v) || float.IsInfinity(v), "Inference output must be finite.");
     }
 
-    [Fact]
-    public void DenseLayer_TrainingModeWithFusedActivation_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_TrainingModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Training mode now always goes through else-branch — verify output shape and finiteness
         var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
@@ -828,8 +829,8 @@ public class CoreLayersIntegrationTests
             Assert.False(float.IsNaN(v) || float.IsInfinity(v), "Training output must be finite.");
     }
 
-    [Fact]
-    public void DenseLayer_TrainingMode_WithIdentityActivation_ProducesSameOutputAsInference()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_TrainingMode_WithIdentityActivation_ProducesSameOutputAsInference()
     {
         // IdentityActivation has no fused type, so both training and inference go through else-branch.
         // The new Activate(Tensor) override returns the same reference — verify consistent results.
@@ -846,8 +847,8 @@ public class CoreLayersIntegrationTests
             Assert.Equal(inferenceOutput[i], trainingOutput[i], Tolerance);
     }
 
-    [Fact]
-    public void DenseLayer_ReLUActivation_TrainingMode_OutputsAreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ReLUActivation_TrainingMode_OutputsAreNonNegative()
     {
         // Regression: after the PR change the else-branch applies ApplyActivation(preActivation).
         // ReLU should still zero out negatives.
@@ -862,8 +863,8 @@ public class CoreLayersIntegrationTests
             Assert.True(v >= 0f, $"ReLU output must be non-negative; got {v}");
     }
 
-    [Fact]
-    public void DenseLayer_SwitchingModesDuringMultiplePasses_ProducesConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_SwitchingModesDuringMultiplePasses_ProducesConsistentResults()
     {
         // Stress-test the training/inference switch: alternating modes should never corrupt output.
         var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new ReLUActivation<float>());
@@ -888,8 +889,8 @@ public class CoreLayersIntegrationTests
 
 
 
-    [Fact]
-    public void DenseWithDropout_TrainingVsInference_BehavesDifferently()
+    [Fact(Timeout = 120000)]
+    public async Task DenseWithDropout_TrainingVsInference_BehavesDifferently()
     {
         // Arrange
         var dense = new DenseLayer<float>(32, 16);

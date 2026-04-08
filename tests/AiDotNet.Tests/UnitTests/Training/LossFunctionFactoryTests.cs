@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Training.Factories;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Training
 {
@@ -55,8 +56,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsAssignableFrom<ILossFunction<double>>(lossFunction);
         }
 
-        [Fact]
-        public void Create_HuberWithCustomDelta_ProducesDifferentLoss()
+        [Fact(Timeout = 60000)]
+        public async Task Create_HuberWithCustomDelta_ProducesDifferentLoss()
         {
             // Arrange - different deltas should produce different losses
             var defaultHuber = LossFunctionFactory<double>.Create(LossType.Huber);
@@ -77,8 +78,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotEqual(defaultLoss, customLoss);
         }
 
-        [Fact]
-        public void Create_FocalWithCustomParams_ProducesDifferentLoss()
+        [Fact(Timeout = 60000)]
+        public async Task Create_FocalWithCustomParams_ProducesDifferentLoss()
         {
             // Arrange - different gamma values should produce different losses
             var gamma1 = LossFunctionFactory<double>.Create(
@@ -103,8 +104,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.True(loss5 >= 0.0);
         }
 
-        [Fact]
-        public void Create_QuantileWithCustomValue_ProducesDifferentLoss()
+        [Fact(Timeout = 60000)]
+        public async Task Create_QuantileWithCustomValue_ProducesDifferentLoss()
         {
             // Arrange - different quantiles should produce different losses for asymmetric errors
             var q10 = LossFunctionFactory<double>.Create(
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<QuantileLoss<double>>(q90);
         }
 
-        [Fact]
-        public void Create_ByNameString_ReturnsLossFunction()
+        [Fact(Timeout = 60000)]
+        public async Task Create_ByNameString_ReturnsLossFunction()
         {
             // Act
             var lossFunction = LossFunctionFactory<double>.Create("MeanSquaredError");
@@ -139,8 +140,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
         }
 
-        [Fact]
-        public void Create_ByNameString_CaseInsensitive()
+        [Fact(Timeout = 60000)]
+        public async Task Create_ByNameString_CaseInsensitive()
         {
             // Act
             var lossFunction = LossFunctionFactory<double>.Create("meansquarederror");
@@ -150,32 +151,32 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MeanSquaredErrorLoss<double>>(lossFunction);
         }
 
-        [Fact]
-        public void Create_WithInvalidName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithInvalidName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 LossFunctionFactory<double>.Create("NonExistentLoss"));
         }
 
-        [Fact]
-        public void Create_WithEmptyName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithEmptyName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 LossFunctionFactory<double>.Create(""));
         }
 
-        [Fact]
-        public void Create_WithNullName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithNullName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 LossFunctionFactory<double>.Create((string)null));
         }
 
-        [Fact]
-        public void Create_ElasticNetWithCustomParams_ProducesDifferentLoss()
+        [Fact(Timeout = 60000)]
+        public async Task Create_ElasticNetWithCustomParams_ProducesDifferentLoss()
         {
             // Arrange - different L1 ratios should produce different losses
             var l1Heavy = LossFunctionFactory<double>.Create(
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.True(lossL2 >= 0.0);
         }
 
-        [Fact]
-        public void Create_MarginWithCustomParams_ReturnsCorrectType()
+        [Fact(Timeout = 60000)]
+        public async Task Create_MarginWithCustomParams_ReturnsCorrectType()
         {
             // Arrange
             var parameters = new Dictionary<string, object>
@@ -219,8 +220,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsType<MarginLoss<double>>(lossFunction);
         }
 
-        [Fact]
-        public void Create_WithStringParams_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithStringParams_ConvertsCorrectly()
         {
             // Arrange - YAML deserializer may produce strings for numeric values
             var parameters = new Dictionary<string, object> { { "delta", "1.5" } };

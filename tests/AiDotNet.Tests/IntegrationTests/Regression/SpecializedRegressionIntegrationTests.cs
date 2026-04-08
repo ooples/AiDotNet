@@ -1,6 +1,7 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -17,8 +18,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region PolynomialRegression Tests
 
-    [Fact]
-    public void PolynomialRegression_Train_QuadraticData_FitsPolynomial()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_Train_QuadraticData_FitsPolynomial()
     {
         // Arrange: y = x^2 + 2x + 1
         var options = new PolynomialRegressionOptions<double> { Degree = 2, UseIntercept = true };
@@ -41,8 +42,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PolynomialRegression_Train_Degree1_EquivalentToLinear()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_Train_Degree1_EquivalentToLinear()
     {
         // Arrange
         var polyOptions = new PolynomialRegressionOptions<double> { Degree = 1, UseIntercept = true };
@@ -69,8 +70,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PolynomialRegression_Train_HighDegree_Overfits()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_Train_HighDegree_Overfits()
     {
         // Arrange - high degree polynomial on few points should fit exactly
         var options = new PolynomialRegressionOptions<double> { Degree = 4, UseIntercept = true };
@@ -90,8 +91,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PolynomialRegression_Predict_Extrapolation_ReturnsValues()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_Predict_Extrapolation_ReturnsValues()
     {
         // Arrange
         var options = new PolynomialRegressionOptions<double> { Degree = 2, UseIntercept = true };
@@ -113,8 +114,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region SplineRegression Tests
 
-    [Fact]
-    public void SplineRegression_Train_SmoothData_FitsWell()
+    [Fact(Timeout = 120000)]
+    public async Task SplineRegression_Train_SmoothData_FitsWell()
     {
         // Arrange
         var options = new SplineRegressionOptions { NumberOfKnots = 3 };
@@ -141,8 +142,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region IsotonicRegression Tests
 
-    [Fact]
-    public void IsotonicRegression_Train_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task IsotonicRegression_Train_PreservesMonotonicity()
     {
         // Arrange
         var regression = new IsotonicRegression<double>();
@@ -164,8 +165,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void IsotonicRegression_Train_AlreadyMonotonic_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task IsotonicRegression_Train_AlreadyMonotonic_PreservesValues()
     {
         // Arrange
         var regression = new IsotonicRegression<double>();
@@ -191,8 +192,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region QuantileRegression Tests
 
-    [Fact]
-    public void QuantileRegression_Train_MedianQuantile_SimilarToMean()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileRegression_Train_MedianQuantile_SimilarToMean()
     {
         // Arrange - median (0.5 quantile) should be similar to mean for symmetric data
         var options = new QuantileRegressionOptions<double> { Quantile = 0.5 };
@@ -211,8 +212,8 @@ public class SpecializedRegressionIntegrationTests
         Assert.True(!double.IsNaN(predictions[0]), "Prediction should not be NaN");
     }
 
-    [Fact]
-    public void QuantileRegression_Train_LowQuantile_BelowMedian()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileRegression_Train_LowQuantile_BelowMedian()
     {
         // Arrange
         var lowQuantileOptions = new QuantileRegressionOptions<double> { Quantile = 0.1 };
@@ -244,8 +245,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region RobustRegression Tests
 
-    [Fact]
-    public void RobustRegression_Train_WithOutliers_ResistsInfluence()
+    [Fact(Timeout = 120000)]
+    public async Task RobustRegression_Train_WithOutliers_ResistsInfluence()
     {
         // Arrange
         var robustOptions = new RobustRegressionOptions<double>();
@@ -278,8 +279,8 @@ public class SpecializedRegressionIntegrationTests
             $"Robust regression should resist outlier influence better: robust error={robustError}, regular error={regularError}");
     }
 
-    [Fact]
-    public void RobustRegression_Train_NoOutliers_SimilarToOLS()
+    [Fact(Timeout = 120000)]
+    public async Task RobustRegression_Train_NoOutliers_SimilarToOLS()
     {
         // Arrange
         var robustOptions = new RobustRegressionOptions<double>();
@@ -312,8 +313,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region BayesianRegression Tests
 
-    [Fact]
-    public void BayesianRegression_Train_FitsData()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianRegression_Train_FitsData()
     {
         // Arrange
         var options = new BayesianRegressionOptions<double> { UseIntercept = true };
@@ -336,8 +337,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void BayesianRegression_Train_ProvidesUncertainty()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianRegression_Train_ProvidesUncertainty()
     {
         // Arrange
         var options = new BayesianRegressionOptions<double> { UseIntercept = true };
@@ -359,8 +360,8 @@ public class SpecializedRegressionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void PolynomialRegression_Train_NegativeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_Train_NegativeValues_HandlesCorrectly()
     {
         // Arrange
         var options = new PolynomialRegressionOptions<double> { Degree = 2, UseIntercept = true };
@@ -383,8 +384,8 @@ public class SpecializedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void IsotonicRegression_Train_SinglePoint_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task IsotonicRegression_Train_SinglePoint_HandlesGracefully()
     {
         // Arrange
         var regression = new IsotonicRegression<double>();
@@ -399,8 +400,8 @@ public class SpecializedRegressionIntegrationTests
         Assert.Equal(5.0, predictions[0], LooseTolerance);
     }
 
-    [Fact]
-    public void QuantileRegression_Train_ConstantTarget_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileRegression_Train_ConstantTarget_HandlesCorrectly()
     {
         // Arrange
         var options = new QuantileRegressionOptions<double> { Quantile = 0.5 };

@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -31,8 +32,8 @@ public class MambaLanguageModelTests
             outputSize: vocabSize);
     }
 
-    [Fact]
-    public void Constructor_ValidParameters_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesModel()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(),
@@ -44,36 +45,36 @@ public class MambaLanguageModelTests
         Assert.Equal(8, model.StateDimension);
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenVocabSizeNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenVocabSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(1), vocabSize: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenModelDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenNumLayersNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenNumLayersNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenStateDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, stateDimension: 0));
     }
 
-    [Fact]
-    public void Predict_3D_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_3D_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int seqLen = 4;
@@ -91,8 +92,8 @@ public class MambaLanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Predict_2D_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_2D_ProducesCorrectOutputShape()
     {
         int seqLen = 4;
         int vocabSize = 50;
@@ -111,8 +112,8 @@ public class MambaLanguageModelTests
 
 
 
-    [Fact]
-    public void Train_ForwardBackwardUpdate_NoErrors()
+    [Fact(Timeout = 120000)]
+    public async Task Train_ForwardBackwardUpdate_NoErrors()
     {
         int seqLen = 4;
         int vocabSize = 30;
@@ -134,8 +135,8 @@ public class MambaLanguageModelTests
         Assert.False(ContainsNaN(output2));
     }
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(50),
@@ -155,16 +156,16 @@ public class MambaLanguageModelTests
         }
     }
 
-    [Fact]
-    public void SetParameters_ThrowsOnWrongLength()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact]
-    public void Predict_DeterministicWithSameParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_DeterministicWithSameParameters()
     {
         int seqLen = 4;
         int vocabSize = 30;
@@ -192,8 +193,8 @@ public class MambaLanguageModelTests
         }
     }
 
-    [Fact]
-    public void ResetState_AllowsReuse()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_AllowsReuse()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
@@ -207,16 +208,16 @@ public class MambaLanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrue()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void GetModelMetadata_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ContainsExpectedKeys()
     {
         var model = new MambaLanguageModel<float>(
             CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
@@ -232,8 +233,8 @@ public class MambaLanguageModelTests
         Assert.Equal(4, metadata.AdditionalInfo["NumLayers"]);
     }
 
-    [Fact]
-    public void Predict_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int vocabSize = 30;
@@ -249,8 +250,8 @@ public class MambaLanguageModelTests
         Assert.False(ContainsNaNDouble(output));
     }
 
-    [Fact]
-    public void MultiLayerModel_ProducesNonTrivialOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiLayerModel_ProducesNonTrivialOutput()
     {
         int seqLen = 4;
         int vocabSize = 20;

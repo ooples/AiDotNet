@@ -8,6 +8,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var retriever = new TrackingMockRetriever(CreateTestDocuments());
@@ -165,8 +166,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new SelfCorrectingRetriever<double>(null!, retriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -208,8 +209,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(selfCorrector);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultMaxIterations_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultMaxIterations_InitializesCorrectly()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -226,8 +227,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RetrieveAndAnswer Tests
 
-        [Fact]
-        public void RetrieveAndAnswer_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -239,8 +240,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 selfCorrector.RetrieveAndAnswer(null!, 10));
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -268,8 +269,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 selfCorrector.RetrieveAndAnswer("What caused the fall of Rome?", topK));
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithValidQuery_ReturnsAnswer()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithValidQuery_ReturnsAnswer()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(result);
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithNoDocuments_ReturnsNoInfoMessage()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithNoDocuments_ReturnsNoInfoMessage()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should have additional retrieval attempts due to negative critique
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_CountsPositiveVsNegativeIndicators()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_CountsPositiveVsNegativeIndicators()
         {
             // Arrange - Critique with more positive than negative indicators
             // "complete" and "accurate" (2 positive) vs nothing negative
@@ -376,8 +377,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, retriever.RetrievalCallCount);
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_MixedIndicators_ComparesCount()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_MixedIndicators_ComparesCount()
         {
             // Arrange - Critique with mixed indicators
             // "complete" (1 positive) vs "missing" and "unclear" (2 negative)
@@ -435,8 +436,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should have extracted missing info and done additional retrieval
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_StopsIfNoMissingInfoExtracted()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_StopsIfNoMissingInfoExtracted()
         {
             // Arrange - Negative critique but no extractable missing info pattern
             var critiques = new[]
@@ -459,8 +460,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Iteration Limit Tests
 
-        [Fact]
-        public void RetrieveAndAnswer_RespectsMaxIterations()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_RespectsMaxIterations()
         {
             // Arrange - Always negative critiques to force max iterations
             var critiques = Enumerable.Repeat(
@@ -483,8 +484,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 $"Expected at most 6 retrieval calls but got {retriever.RetrievalCallCount}");
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithMaxIterationsOne_OnlyIteratesOnce()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithMaxIterationsOne_OnlyIteratesOnce()
         {
             // Arrange
             var critiques = new[] { "The answer is incomplete." };
@@ -505,8 +506,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Document Deduplication Tests
 
-        [Fact]
-        public void RetrieveAndAnswer_DoesNotAddDuplicateDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_DoesNotAddDuplicateDocuments()
         {
             // Arrange - Additional docs are same as initial (by ID)
             var docs = CreateTestDocuments();
@@ -531,8 +532,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Early Termination Tests
 
-        [Fact]
-        public void RetrieveAndAnswer_StopsWhenNoNewDocumentsFound()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_StopsWhenNoNewDocumentsFound()
         {
             // Arrange - Return empty list for additional retrieval
             var critiques = new[]
@@ -558,8 +559,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filter Tests
 
-        [Fact]
-        public void RetrieveAndAnswer_PassesMetadataFilters()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_PassesMetadataFilters()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -579,8 +580,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Filters should be passed to retriever (verified by retriever mock if extended)
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithNullFilters_UsesEmptyDictionary()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithNullFilters_UsesEmptyDictionary()
         {
             // Arrange
             var generator = new CritiqueMockGenerator();
@@ -598,8 +599,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void RetrieveAndAnswer_HandlesEmptyAnswer()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_HandlesEmptyAnswer()
         {
             // Arrange - Generator returns empty grounded answer
             var groundedAnswers = new[] { "" };
@@ -617,8 +618,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should handle empty answer gracefully
         }
 
-        [Fact]
-        public void RetrieveAndAnswer_WithVeryLargeCritique_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveAndAnswer_WithVeryLargeCritique_HandlesCorrectly()
         {
             // Arrange - Very long critique
             var longCritique = "The answer is complete and accurate. " + new string('x', 10000);

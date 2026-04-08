@@ -1,6 +1,7 @@
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class BlockManagerTests
 {
-    [Fact]
-    public void BlockManager_Creation_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_Creation_InitializesCorrectly()
     {
         // Arrange & Act
         var config = new BlockManagerConfig
@@ -30,8 +31,8 @@ public class BlockManagerTests
         Assert.Equal(0, manager.MemoryUtilization);
     }
 
-    [Fact]
-    public void BlockManager_AllocateBlock_DecrementsFreeCount()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_AllocateBlock_DecrementsFreeCount()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -46,8 +47,8 @@ public class BlockManagerTests
         Assert.Equal(1, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_AllocateBlocks_AllocatesMultiple()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_AllocateBlocks_AllocatesMultiple()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 20 };
@@ -63,8 +64,8 @@ public class BlockManagerTests
         Assert.Equal(5, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_AllocateBlocks_ReturnsNullWhenNotEnough()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_AllocateBlocks_ReturnsNullWhenNotEnough()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 5 };
@@ -78,8 +79,8 @@ public class BlockManagerTests
         Assert.Equal(5, manager.FreeBlockCount); // No change
     }
 
-    [Fact]
-    public void BlockManager_FreeBlock_ReturnsToPool()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_FreeBlock_ReturnsToPool()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -94,8 +95,8 @@ public class BlockManagerTests
         Assert.Equal(0, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_AddReference_IncreasesRefCount()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_AddReference_IncreasesRefCount()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -109,8 +110,8 @@ public class BlockManagerTests
         Assert.Equal(2, manager.GetReferenceCount(blockId));
     }
 
-    [Fact]
-    public void BlockManager_FreeBlock_WithMultipleRefs_OnlyDecrementsRef()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_FreeBlock_WithMultipleRefs_OnlyDecrementsRef()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -126,8 +127,8 @@ public class BlockManagerTests
         Assert.Equal(9, manager.FreeBlockCount); // Still allocated
     }
 
-    [Fact]
-    public void BlockManager_CopyOnWrite_CreatesNewBlock()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_CopyOnWrite_CreatesNewBlock()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -144,8 +145,8 @@ public class BlockManagerTests
         Assert.Equal(1, manager.GetReferenceCount(newBlockId));
     }
 
-    [Fact]
-    public void BlockManager_CopyOnWrite_NoopForSingleRef()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_CopyOnWrite_NoopForSingleRef()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 10 };
@@ -159,8 +160,8 @@ public class BlockManagerTests
         Assert.Equal(blockId, result); // Same block returned
     }
 
-    [Fact]
-    public void BlockManager_CanAllocate_ChecksAvailability()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_CanAllocate_ChecksAvailability()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 5 };
@@ -172,8 +173,8 @@ public class BlockManagerTests
         Assert.False(manager.CanAllocate(3));
     }
 
-    [Fact]
-    public void BlockManager_BlocksForTokens_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_BlocksForTokens_CalculatesCorrectly()
     {
         // Arrange
         var config = new BlockManagerConfig { BlockSize = 16, NumBlocks = 100 };
@@ -186,8 +187,8 @@ public class BlockManagerTests
         Assert.Equal(7, manager.BlocksForTokens(100));
     }
 
-    [Fact]
-    public void BlockManager_GetStats_ReturnsCorrectStats()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_GetStats_ReturnsCorrectStats()
     {
         // Arrange
         var config = new BlockManagerConfig { BlockSize = 16, NumBlocks = 100 };
@@ -204,8 +205,8 @@ public class BlockManagerTests
         Assert.Equal(0.25, stats.MemoryUtilization, 0.001);
     }
 
-    [Fact]
-    public void BlockManager_Reset_FreesAllBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockManager_Reset_FreesAllBlocks()
     {
         // Arrange
         var config = new BlockManagerConfig { NumBlocks = 50 };
@@ -226,8 +227,8 @@ public class BlockManagerTests
 /// </summary>
 public class BlockTableTests
 {
-    [Fact]
-    public void BlockTable_Creation_InitializesEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_Creation_InitializesEmpty()
     {
         // Act
         var table = new BlockTable(1, 16);
@@ -239,8 +240,8 @@ public class BlockTableTests
         Assert.Equal(0, table.Capacity);
     }
 
-    [Fact]
-    public void BlockTable_AppendBlock_IncreasesCapacity()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_AppendBlock_IncreasesCapacity()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -254,8 +255,8 @@ public class BlockTableTests
         Assert.Equal(32, table.Capacity);
     }
 
-    [Fact]
-    public void BlockTable_GetPhysicalBlock_ReturnsCorrectId()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_GetPhysicalBlock_ReturnsCorrectId()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -267,8 +268,8 @@ public class BlockTableTests
         Assert.Equal(15, table.GetPhysicalBlock(2));
     }
 
-    [Fact]
-    public void BlockTable_GetBlockAndOffset_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_GetBlockAndOffset_CalculatesCorrectly()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -282,8 +283,8 @@ public class BlockTableTests
         Assert.Equal((15, 0), table.GetBlockAndOffset(32));
     }
 
-    [Fact]
-    public void BlockTable_ReplaceBlock_UpdatesMapping()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_ReplaceBlock_UpdatesMapping()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -297,8 +298,8 @@ public class BlockTableTests
         Assert.Equal(99, table.GetPhysicalBlock(1));
     }
 
-    [Fact]
-    public void BlockTable_RemoveLastBlock_DecreasesCapacity()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_RemoveLastBlock_DecreasesCapacity()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -313,8 +314,8 @@ public class BlockTableTests
         Assert.Equal(32, table.Capacity);
     }
 
-    [Fact]
-    public void BlockTable_Copy_CreatesShallowCopy()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_Copy_CreatesShallowCopy()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -329,8 +330,8 @@ public class BlockTableTests
         Assert.Equal(table.GetPhysicalBlock(0), copy.GetPhysicalBlock(0));
     }
 
-    [Fact]
-    public void BlockTable_TruncateTo_RemovesExcessBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_TruncateTo_RemovesExcessBlocks()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -346,8 +347,8 @@ public class BlockTableTests
         Assert.Equal(2, table.NumLogicalBlocks);
     }
 
-    [Fact]
-    public void BlockTable_BlocksNeededFor_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTable_BlocksNeededFor_CalculatesCorrectly()
     {
         // Arrange
         var table = new BlockTable(1, 16);
@@ -365,8 +366,8 @@ public class BlockTableTests
 /// </summary>
 public class BlockTableManagerTests
 {
-    [Fact]
-    public void BlockTableManager_CreateBlockTable_AllocatesInitialBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTableManager_CreateBlockTable_AllocatesInitialBlocks()
     {
         // Arrange
         var blockManager = new BlockManager<float>(new BlockManagerConfig { NumBlocks = 100 });
@@ -381,8 +382,8 @@ public class BlockTableManagerTests
         Assert.Equal(1, tableManager.ActiveTableCount);
     }
 
-    [Fact]
-    public void BlockTableManager_GetBlockTable_ReturnsExisting()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTableManager_GetBlockTable_ReturnsExisting()
     {
         // Arrange
         var blockManager = new BlockManager<float>(new BlockManagerConfig { NumBlocks = 100 });
@@ -397,8 +398,8 @@ public class BlockTableManagerTests
         Assert.Equal(1, table.SequenceId);
     }
 
-    [Fact]
-    public void BlockTableManager_FreeBlockTable_ReleasesBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTableManager_FreeBlockTable_ReleasesBlocks()
     {
         // Arrange
         var blockManager = new BlockManager<float>(new BlockManagerConfig { NumBlocks = 100 });
@@ -413,8 +414,8 @@ public class BlockTableManagerTests
         Assert.Equal(100, blockManager.FreeBlockCount);
     }
 
-    [Fact]
-    public void BlockTableManager_ForkBlockTable_SharesBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTableManager_ForkBlockTable_SharesBlocks()
     {
         // Arrange
         var blockManager = new BlockManager<float>(new BlockManagerConfig { NumBlocks = 100, BlockSize = 16 });
@@ -431,8 +432,8 @@ public class BlockTableManagerTests
         Assert.Equal(2, blockManager.GetReferenceCount(sourceTable!.GetPhysicalBlock(0)));
     }
 
-    [Fact]
-    public void BlockTableManager_EnsureCapacity_AllocatesMoreBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task BlockTableManager_EnsureCapacity_AllocatesMoreBlocks()
     {
         // Arrange
         var blockManager = new BlockManager<float>(new BlockManagerConfig { NumBlocks = 100, BlockSize = 16 });
@@ -454,8 +455,8 @@ public class BlockTableManagerTests
 /// </summary>
 public class PagedKVCacheTests
 {
-    [Fact]
-    public void PagedKVCache_Creation_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_Creation_InitializesCorrectly()
     {
         // Arrange & Act
         var config = new PagedKVCacheConfig
@@ -474,8 +475,8 @@ public class PagedKVCacheTests
         Assert.NotNull(cache.BlockTableManager);
     }
 
-    [Fact]
-    public void PagedKVCache_AllocateSequence_CreatesEntry()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_AllocateSequence_CreatesEntry()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -497,8 +498,8 @@ public class PagedKVCacheTests
         Assert.Equal(32, cache.GetSequenceLength(1));
     }
 
-    [Fact]
-    public void PagedKVCache_ExtendSequence_IncreasesLength()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_ExtendSequence_IncreasesLength()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -520,8 +521,8 @@ public class PagedKVCacheTests
         Assert.Equal(36, cache.GetSequenceLength(1));
     }
 
-    [Fact]
-    public void PagedKVCache_FreeSequence_RemovesEntry()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_FreeSequence_RemovesEntry()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -543,8 +544,8 @@ public class PagedKVCacheTests
         Assert.Equal(0, cache.GetSequenceLength(1));
     }
 
-    [Fact]
-    public void PagedKVCache_ForkSequence_CreatesSharedCopy()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_ForkSequence_CreatesSharedCopy()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -567,8 +568,8 @@ public class PagedKVCacheTests
         Assert.Equal(32, cache.GetSequenceLength(2));
     }
 
-    [Fact]
-    public void PagedKVCache_WriteReadKey_RoundTrips()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_WriteReadKey_RoundTrips()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -597,8 +598,8 @@ public class PagedKVCacheTests
         }
     }
 
-    [Fact]
-    public void PagedKVCache_WriteReadValue_RoundTrips()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_WriteReadValue_RoundTrips()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -627,8 +628,8 @@ public class PagedKVCacheTests
         }
     }
 
-    [Fact]
-    public void PagedKVCache_GetStats_ReturnsValidStats()
+    [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_GetStats_ReturnsValidStats()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -670,8 +671,8 @@ public class PagedAttentionKernelTests
         });
     }
 
-    [Fact]
-    public void PagedAttentionKernel_ComputeAttention_ProducesOutput()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionKernel_ComputeAttention_ProducesOutput()
     {
         // Arrange
         using var cache = CreateTestCache();
@@ -699,8 +700,8 @@ public class PagedAttentionKernelTests
         Assert.Contains(output, v => v != 0); // Output should not be all zeros
     }
 
-    [Fact]
-    public void PagedAttentionKernel_ComputeTiledAttention_ProducesOutput()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionKernel_ComputeTiledAttention_ProducesOutput()
     {
         // Arrange
         using var cache = CreateTestCache();
@@ -728,8 +729,8 @@ public class PagedAttentionKernelTests
         Assert.Contains(output, v => v != 0);
     }
 
-    [Fact]
-    public void PagedAttentionKernel_UpdateCache_ExtendsSequence()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionKernel_UpdateCache_ExtendsSequence()
     {
         // Arrange
         using var cache = CreateTestCache();
@@ -746,8 +747,8 @@ public class PagedAttentionKernelTests
         Assert.True(cache.GetSequenceLength(1) >= 8);
     }
 
-    [Fact]
-    public void PagedAttentionKernel_ComputeBatchedAttention_ProcessesMultiple()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionKernel_ComputeBatchedAttention_ProcessesMultiple()
     {
         // Arrange
         using var cache = CreateTestCache();
@@ -779,8 +780,8 @@ public class PagedAttentionKernelTests
         Assert.Contains(outputs, v => v != 0);
     }
 
-    [Fact]
-    public void PagedAttentionKernel_ForwardQuantized_MatchesFloatWithinTolerance()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionKernel_ForwardQuantized_MatchesFloatWithinTolerance()
     {
         // Arrange
         using var cacheFloat = CreateTestCache();
@@ -845,8 +846,8 @@ public class PagedAttentionKernelTests
 /// </summary>
 public class PagedAttentionServerTests
 {
-    [Fact]
-    public void PagedAttentionServer_RegisterSequence_Works()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionServer_RegisterSequence_Works()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -866,8 +867,8 @@ public class PagedAttentionServerTests
         Assert.True(success);
     }
 
-    [Fact]
-    public void PagedAttentionServer_UnregisterSequence_Frees()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionServer_UnregisterSequence_Frees()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -888,8 +889,8 @@ public class PagedAttentionServerTests
         Assert.Equal(0, server.GetStats().ActiveSequences);
     }
 
-    [Fact]
-    public void PagedAttentionServer_ForkSequence_ForBeamSearch()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttentionServer_ForkSequence_ForBeamSearch()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -911,7 +912,7 @@ public class PagedAttentionServerTests
         Assert.Equal(4, server.GetStats().ActiveSequences);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "Integration")]  // Skip on net471 - 4GB allocation exceeds .NET Framework array size limits
     public void PagedAttentionServer_ForModel_CreatesValidServer()
     {
@@ -929,8 +930,8 @@ public class PagedAttentionServerTests
 /// </summary>
 public class PagedAttentionIntegrationTests
 {
-    [Fact]
-    public void PagedAttention_MultipleSequences_ManagesMemoryEfficiently()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttention_MultipleSequences_ManagesMemoryEfficiently()
     {
         // Arrange - Small config for testing
         var config = new PagedKVCacheConfig
@@ -963,8 +964,8 @@ public class PagedAttentionIntegrationTests
         Assert.Equal(25, cache.GetStats().TotalTokensCached);
     }
 
-    [Fact]
-    public void PagedAttention_BeamSearchFork_SharesMemory()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttention_BeamSearchFork_SharesMemory()
     {
         // Arrange
         var config = new PagedKVCacheConfig
@@ -996,8 +997,8 @@ public class PagedAttentionIntegrationTests
         Assert.Equal(initialBlocks, afterForkBlocks); // Same blocks, just shared
     }
 
-    [Fact]
-    public void PagedAttention_SequenceExtension_WorksAcrossBlocks()
+    [Fact(Timeout = 60000)]
+    public async Task PagedAttention_SequenceExtension_WorksAcrossBlocks()
     {
         // Arrange
         var config = new PagedKVCacheConfig

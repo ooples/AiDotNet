@@ -7,6 +7,7 @@ using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
@@ -14,8 +15,8 @@ public class ClusteringSklearnComparisonIntegrationTests
 {
     private static readonly Lazy<SklearnReferenceData> Reference = new(SklearnReferenceData.Load);
 
-    [Fact]
-    public void KMeans_MatchesSklearnReference()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_MatchesSklearnReference()
     {
         var reference = Reference.Value;
         var options = new KMeansOptions<double>
@@ -56,8 +57,8 @@ public class ClusteringSklearnComparisonIntegrationTests
         Assert.Equal(reference.KMeansInertia, inertia, 1e-2);
     }
 
-    [Fact]
-    public void ClusterMetrics_MatchSklearnReference()
+    [Fact(Timeout = 120000)]
+    public async Task ClusterMetrics_MatchSklearnReference()
     {
         var reference = Reference.Value;
         var metrics = new ClusterMetrics<double>().Evaluate(reference.TwoClusterData, reference.KMeansLabels);
@@ -67,8 +68,8 @@ public class ClusteringSklearnComparisonIntegrationTests
         Assert.Equal(reference.CalinskiHarabasz, metrics.CalinskiHarabasz, 1e-4);
     }
 
-    [Fact]
-    public void DBSCAN_MatchesSklearnReference()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_MatchesSklearnReference()
     {
         var reference = Reference.Value;
         var options = new DBSCANOptions<double>

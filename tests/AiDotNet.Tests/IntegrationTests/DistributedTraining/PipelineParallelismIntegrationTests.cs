@@ -8,6 +8,7 @@ using AiDotNet.Enums;
 using AiDotNet.Autodiff;
 using AiDotNet.LossFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 
@@ -20,8 +21,8 @@ public class PipelineParallelismIntegrationTests
 {
     #region End-to-End Training with Each Schedule
 
-    [Fact]
-    public void GPipe_SingleRank_TrainAndPredict_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task GPipe_SingleRank_TrainAndPredict_ParametersChange()
     {
         // Arrange - single rank pipeline to test the full training flow
         var envId = Guid.NewGuid().ToString();
@@ -64,8 +65,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void OneForwardOneBackward_SingleRank_TrainAndPredict_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task OneForwardOneBackward_SingleRank_TrainAndPredict_ParametersChange()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -104,8 +105,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZeroBubbleH1_SingleRank_TrainWithDecomposedBackward_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroBubbleH1_SingleRank_TrainWithDecomposedBackward_ParametersChange()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -144,8 +145,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZeroBubbleH1_SingleRank_TrainWithEmulatedDecomposition_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroBubbleH1_SingleRank_TrainWithEmulatedDecomposition_ParametersChange()
     {
         // Use a non-decomposable model to test the emulated B/W split path
         var envId = Guid.NewGuid().ToString();
@@ -185,8 +186,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZeroBubbleH2_SingleRank_TrainAndPredict_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroBubbleH2_SingleRank_TrainAndPredict_ParametersChange()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -225,8 +226,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZeroBubbleV_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroBubbleV_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -265,8 +266,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void Interleaved1F1B_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task Interleaved1F1B_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -305,8 +306,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void LoopedBFS_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
+    [Fact(Timeout = 120000)]
+    public async Task LoopedBFS_SingleRank_TrainWithTwoVirtualStages_ParametersChange()
     {
         // This test exercises the LoopedBFS forward output retention fix:
         // vStage 0's forward outputs must be retained during vStage 0's backward
@@ -354,8 +355,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Multi-Rank Pipeline Communication
 
-    [Fact]
-    public void GPipe_TwoRanks_SendReceiveActivations()
+    [Fact(Timeout = 120000)]
+    public async Task GPipe_TwoRanks_SendReceiveActivations()
     {
         // Test that two pipeline stages can exchange activations via Send/Receive
         var envId = Guid.NewGuid().ToString();
@@ -391,8 +392,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void Pipeline_TwoRanks_PredictFlowsThroughStages()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_TwoRanks_PredictFlowsThroughStages()
     {
         var envId = Guid.NewGuid().ToString();
         var backend0 = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
@@ -439,8 +440,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Micro-Batch Slicing
 
-    [Fact]
-    public void MicroBatchSlicing_EvenSlicing_CoversAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task MicroBatchSlicing_EvenSlicing_CoversAllElements()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -466,8 +467,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void MicroBatchSlicing_UnevenSlicing_LastBatchGetsRemainder()
+    [Fact(Timeout = 120000)]
+    public async Task MicroBatchSlicing_UnevenSlicing_LastBatchGetsRemainder()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -493,8 +494,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void MicroBatchSlicing_SingleMicroBatch_UsesFullInput()
+    [Fact(Timeout = 120000)]
+    public async Task MicroBatchSlicing_SingleMicroBatch_UsesFullInput()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -521,8 +522,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void MicroBatchSlicing_TooManyMicroBatches_ThrowsMeaningfulError()
+    [Fact(Timeout = 120000)]
+    public async Task MicroBatchSlicing_TooManyMicroBatches_ThrowsMeaningfulError()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -552,8 +553,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Activation Checkpointing Integration
 
-    [Fact]
-    public void ActivationCheckpointing_Enabled_TrainingStillWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointing_Enabled_TrainingStillWorks()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -599,8 +600,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationCheckpointing_MaxActivationsInMemory_LimitsStorage()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointing_MaxActivationsInMemory_LimitsStorage()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -632,8 +633,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationCheckpointing_EveryNLayers_InterleavedCheckpoints()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointing_EveryNLayers_InterleavedCheckpoints()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -669,8 +670,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Load-Balanced Partitioning Integration
 
-    [Fact]
-    public void LoadBalancedPartition_ExplicitBoundaries_TrainingWorks()
+    [Fact(Timeout = 120000)]
+    public async Task LoadBalancedPartition_ExplicitBoundaries_TrainingWorks()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -698,8 +699,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void LoadBalancedPartition_AutoDetect_TrainingWorks()
+    [Fact(Timeout = 120000)]
+    public async Task LoadBalancedPartition_AutoDetect_TrainingWorks()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -727,8 +728,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void LoadBalancedPartition_CustomCostEstimator_ProducesValidPartitions()
+    [Fact(Timeout = 120000)]
+    public async Task LoadBalancedPartition_CustomCostEstimator_ProducesValidPartitions()
     {
         // Custom cost estimator: linear cost (simpler than default quadratic)
         var strategy = new LoadBalancedPartitionStrategy<double>(
@@ -746,8 +747,8 @@ public class PipelineParallelismIntegrationTests
             "Both stages should have non-zero parameters.");
     }
 
-    [Fact]
-    public void LoadBalancedPartition_MoreStagesThanLayers_EmptyStagesHandled()
+    [Fact(Timeout = 120000)]
+    public async Task LoadBalancedPartition_MoreStagesThanLayers_EmptyStagesHandled()
     {
         var strategy = new LoadBalancedPartitionStrategy<double>(new[] { 0, 50 });
 
@@ -767,8 +768,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Virtual Stage Dependencies (Looped BFS Regression Test)
 
-    [Fact]
-    public void LoopedBFS_VStage0OutputRetained_ForVStage1Forward()
+    [Fact(Timeout = 120000)]
+    public async Task LoopedBFS_VStage0OutputRetained_ForVStage1Forward()
     {
         // This is a specific regression test for the bug where Looped BFS
         // freed vStage 0's forward outputs during its backward phase,
@@ -797,8 +798,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void Interleaved1F1B_VirtualStages_HandleCrossStageOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task Interleaved1F1B_VirtualStages_HandleCrossStageOutputs()
     {
         // Interleaved 1F1B also uses virtual stages, test that cross-stage outputs work
         var envId = Guid.NewGuid().ToString();
@@ -824,8 +825,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void LoopedBFS_ThreeVirtualStages_TrainingCompletes()
+    [Fact(Timeout = 120000)]
+    public async Task LoopedBFS_ThreeVirtualStages_TrainingCompletes()
     {
         // Test with V=3 to exercise multi-stage retention more thoroughly
         var envId = Guid.NewGuid().ToString();
@@ -855,8 +856,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Multiple Training Steps
 
-    [Fact]
-    public void Pipeline_MultipleTrainingSteps_ParametersConverge()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_MultipleTrainingSteps_ParametersConverge()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -900,8 +901,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Serialization and Model State
 
-    [Fact]
-    public void PipelineModel_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_SerializeDeserialize_PreservesState()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -946,8 +947,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void PipelineModel_Deserialize_ThrowsOnMicroBatchSizeMismatch()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_Deserialize_ThrowsOnMicroBatchSizeMismatch()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -974,8 +975,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void PipelineModel_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_Clone_CreatesIndependentCopy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -1015,8 +1016,8 @@ public class PipelineParallelismIntegrationTests
 
     #region Metadata Verification
 
-    [Fact]
-    public void PipelineModel_Metadata_IncludesAllScheduleTypes()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_Metadata_IncludesAllScheduleTypes()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -1054,8 +1055,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void PipelineModel_Metadata_IncludesVirtualStageInfo()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_Metadata_IncludesVirtualStageInfo()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -1077,8 +1078,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void PipelineModel_BubbleFraction_ZeroBubbleSchedulesReport0()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineModel_BubbleFraction_ZeroBubbleSchedulesReport0()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -1158,8 +1159,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZBV_Schedule_ProducesOpsForBothVirtualStages()
+    [Fact(Timeout = 120000)]
+    public async Task ZBV_Schedule_ProducesOpsForBothVirtualStages()
     {
         var schedule = new ZeroBubbleVSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
@@ -1176,8 +1177,8 @@ public class PipelineParallelismIntegrationTests
         Assert.True(vStage1Ops.Any(o => o.Type == PipelineOperationType.BackwardWeight));
     }
 
-    [Fact]
-    public void LoopedBFS_Schedule_VStage0CompletesBeforeVStage1()
+    [Fact(Timeout = 120000)]
+    public async Task LoopedBFS_Schedule_VStage0CompletesBeforeVStage1()
     {
         var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
@@ -1225,8 +1226,8 @@ public class PipelineParallelismIntegrationTests
         }
     }
 
-    [Fact]
-    public void ZeroBubbleSchedules_AchieveZeroBubble_WhenEnoughMicroBatches()
+    [Fact(Timeout = 120000)]
+    public async Task ZeroBubbleSchedules_AchieveZeroBubble_WhenEnoughMicroBatches()
     {
         var zbH2 = new ZeroBubbleH2Schedule<double>();
         var zbV = new ZeroBubbleVSchedule<double>();
@@ -1238,8 +1239,8 @@ public class PipelineParallelismIntegrationTests
         Assert.Equal(0.0, zbV.EstimateBubbleFraction(numStages: 4, numMicroBatches: 8));
     }
 
-    [Fact]
-    public void GPipe_HasHigherBubble_Than1F1B()
+    [Fact(Timeout = 120000)]
+    public async Task GPipe_HasHigherBubble_Than1F1B()
     {
         var gpipe = new GPipeSchedule<double>();
         var oneF1B = new OneForwardOneBackwardSchedule<double>();

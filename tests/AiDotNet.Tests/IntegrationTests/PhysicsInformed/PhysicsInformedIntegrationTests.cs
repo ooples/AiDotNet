@@ -16,6 +16,7 @@ using AiDotNet.PhysicsInformed.ScientificML;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PhysicsInformed;
 
@@ -37,8 +38,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PhysicsInformedLoss Tests
 
-    [Fact]
-    public void PhysicsInformedLoss_Constructor_DefaultWeights()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_Constructor_DefaultWeights()
     {
         var loss = new PhysicsInformedLoss<double>();
 
@@ -46,8 +47,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal("Physics-Informed Loss", loss.Name);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_Constructor_CustomWeights()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_Constructor_CustomWeights()
     {
         var loss = new PhysicsInformedLoss<double>(
             dataWeight: 2.0,
@@ -58,8 +59,8 @@ public class PhysicsInformedIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLoss_DataLossOnly()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLoss_DataLossOnly()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -73,8 +74,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(0.0, lossValue, Tolerance);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLoss_WithPDESpecification()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLoss_WithPDESpecification()
     {
         var pde = new HeatEquation<double>(thermalDiffusivity: 1.0);
         var loss = new PhysicsInformedLoss<double>(pde, pdeWeight: 1.0);
@@ -92,8 +93,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(lossValue >= 0); // Loss should be non-negative
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLoss_NullTargets()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLoss_NullTargets()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1.0 });
@@ -106,8 +107,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(0.0, lossValue, Tolerance);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLossGradients_NullPredictions_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLossGradients_NullPredictions_ThrowsArgumentNull()
     {
         var loss = new PhysicsInformedLoss<double>();
         var derivatives = CreateEmptyDerivatives(1, 1);
@@ -117,8 +118,8 @@ public class PhysicsInformedIntegrationTests
             loss.ComputePhysicsLossGradients(null!, null, derivatives, inputs));
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLossGradients_NullInputs_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLossGradients_NullInputs_ThrowsArgumentNull()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1.0 });
@@ -128,8 +129,8 @@ public class PhysicsInformedIntegrationTests
             loss.ComputePhysicsLossGradients(predictions, null, derivatives, null!));
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_ComputePhysicsLossGradients_MismatchedLengths_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_ComputePhysicsLossGradients_MismatchedLengths_ThrowsArgument()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1.0, 2.0 });
@@ -141,8 +142,8 @@ public class PhysicsInformedIntegrationTests
             loss.ComputePhysicsLossGradients(predictions, targets, derivatives, inputs));
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_CalculateLoss_Vector_ReturnsCorrectMSE()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_CalculateLoss_Vector_ReturnsCorrectMSE()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -153,8 +154,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(0.0, lossValue, Tolerance);
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_CalculateDerivative_Vector_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_CalculateDerivative_Vector_ReturnsCorrectGradient()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predicted = new Vector<double>(new double[] { 2.0 });
@@ -171,8 +172,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PhysicsLossGradient Tests
 
-    [Fact]
-    public void PhysicsLossGradient_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsLossGradient_Constructor_InitializesCorrectly()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var gradient = new PhysicsLossGradient<double>(outputDimension: 2, inputDimension: 3, numOps);
@@ -185,8 +186,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(3, gradient.SecondDerivatives.GetLength(2));
     }
 
-    [Fact]
-    public void PhysicsLossGradient_Constructor_NullNumOps_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsLossGradient_Constructor_NullNumOps_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new PhysicsLossGradient<double>(2, 3, null!));
@@ -201,8 +202,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PDEDerivatives Tests
 
-    [Fact]
-    public void PDEDerivatives_FirstDerivatives_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_FirstDerivatives_SetAndGet()
     {
         var derivatives = new PDEDerivatives<double>
         {
@@ -216,8 +217,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(2.5, derivatives.FirstDerivatives[1, 2]);
     }
 
-    [Fact]
-    public void PDEDerivatives_SecondDerivatives_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_SecondDerivatives_SetAndGet()
     {
         var derivatives = new PDEDerivatives<double>
         {
@@ -231,8 +232,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(2.5, derivatives.SecondDerivatives[0, 1, 1]);
     }
 
-    [Fact]
-    public void PDEDerivatives_ThirdDerivatives_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_ThirdDerivatives_SetAndGet()
     {
         var derivatives = new PDEDerivatives<double>
         {
@@ -244,8 +245,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(3.0, derivatives.ThirdDerivatives[0, 0, 0, 0]);
     }
 
-    [Fact]
-    public void PDEDerivatives_NullByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task PDEDerivatives_NullByDefault()
     {
         var derivatives = new PDEDerivatives<double>();
 
@@ -259,8 +260,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PDEResidualGradient Tests
 
-    [Fact]
-    public void PDEResidualGradient_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PDEResidualGradient_Constructor_InitializesCorrectly()
     {
         var gradient = new PDEResidualGradient<double>(outputDimension: 2, inputDimension: 3);
 
@@ -280,8 +281,8 @@ public class PhysicsInformedIntegrationTests
 
     #region HeatEquation Tests
 
-    [Fact]
-    public void HeatEquation_Constructor_ValidDiffusivity()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_Constructor_ValidDiffusivity()
     {
         var pde = new HeatEquation<double>(thermalDiffusivity: 1.5);
 
@@ -290,20 +291,20 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Heat Equation", pde.Name);
     }
 
-    [Fact]
-    public void HeatEquation_Constructor_ZeroDiffusivity_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_Constructor_ZeroDiffusivity_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() => new HeatEquation<double>(0.0));
     }
 
-    [Fact]
-    public void HeatEquation_Constructor_NegativeDiffusivity_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_Constructor_NegativeDiffusivity_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() => new HeatEquation<double>(-1.0));
     }
 
-    [Fact]
-    public void HeatEquation_ComputeResidual_AnalyticalSolution_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_ComputeResidual_AnalyticalSolution_ZeroResidual()
     {
         double alpha = 1.0;
         double k = 1.0;
@@ -330,8 +331,8 @@ public class PhysicsInformedIntegrationTests
             $"Heat equation residual should be ~0 for analytical solution, got {residual}");
     }
 
-    [Fact]
-    public void HeatEquation_ComputeResidual_NullDerivatives_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_ComputeResidual_NullDerivatives_ThrowsArgument()
     {
         var pde = new HeatEquation<double>(1.0);
         var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
@@ -341,8 +342,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Throws<ArgumentException>(() => pde.ComputeResidual(inputs, outputs, derivatives));
     }
 
-    [Fact]
-    public void HeatEquation_ComputeResidualGradient_ReturnsCorrectGradients()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_ComputeResidualGradient_ReturnsCorrectGradients()
     {
         double alpha = 1.5;
         var pde = new HeatEquation<double>(alpha);
@@ -365,8 +366,8 @@ public class PhysicsInformedIntegrationTests
 
     #region WaveEquation Tests
 
-    [Fact]
-    public void WaveEquation_Constructor_ValidWaveSpeed()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_Constructor_ValidWaveSpeed()
     {
         var pde = new WaveEquation<double>(waveSpeed: 2.0);
 
@@ -375,14 +376,14 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Wave Equation", pde.Name);
     }
 
-    [Fact]
-    public void WaveEquation_Constructor_ZeroWaveSpeed_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_Constructor_ZeroWaveSpeed_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() => new WaveEquation<double>(0.0));
     }
 
-    [Fact]
-    public void WaveEquation_ComputeResidual_StandingWave_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task WaveEquation_ComputeResidual_StandingWave_ZeroResidual()
     {
         double c = 1.0;
         double k = 1.0;
@@ -412,8 +413,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PoissonEquation Tests
 
-    [Fact]
-    public void PoissonEquation_Constructor_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_Constructor_Valid()
     {
         Func<double[], double> source = x => 2.0;
         var pde = new PoissonEquation<double>(source, spatialDimension: 1);
@@ -423,8 +424,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Poisson", pde.Name);
     }
 
-    [Fact]
-    public void PoissonEquation_ComputeResidual_QuadraticSolution_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonEquation_ComputeResidual_QuadraticSolution_ZeroResidual()
     {
         // f(x) = 2, u(x) = x² satisfies ∂²u/∂x² = 2
         Func<double[], double> source = x => 2.0;
@@ -450,8 +451,8 @@ public class PhysicsInformedIntegrationTests
 
     #region BurgersEquation Tests
 
-    [Fact]
-    public void BurgersEquation_Constructor_ValidViscosity()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersEquation_Constructor_ValidViscosity()
     {
         var pde = new BurgersEquation<double>(viscosity: 0.1);
 
@@ -460,14 +461,14 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Burgers", pde.Name);
     }
 
-    [Fact]
-    public void BurgersEquation_Constructor_NegativeViscosity_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersEquation_Constructor_NegativeViscosity_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() => new BurgersEquation<double>(-0.1));
     }
 
-    [Fact]
-    public void BurgersEquation_ComputeResidual_ConstantSolution_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task BurgersEquation_ComputeResidual_ConstantSolution_ZeroResidual()
     {
         var pde = new BurgersEquation<double>(viscosity: 0.1);
 
@@ -488,8 +489,8 @@ public class PhysicsInformedIntegrationTests
 
     #region AllenCahnEquation Tests
 
-    [Fact]
-    public void AllenCahnEquation_Constructor_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task AllenCahnEquation_Constructor_Valid()
     {
         var pde = new AllenCahnEquation<double>(epsilon: 1.0);
 
@@ -522,8 +523,8 @@ public class PhysicsInformedIntegrationTests
 
     #region KortewegDeVriesEquation Tests
 
-    [Fact]
-    public void KdVEquation_Constructor_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task KdVEquation_Constructor_Valid()
     {
         var pde = new KortewegDeVriesEquation<double>();
 
@@ -532,8 +533,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Korteweg-de Vries", pde.Name);
     }
 
-    [Fact]
-    public void KdVEquation_ComputeResidual_ConstantSolution_ZeroResidual()
+    [Fact(Timeout = 120000)]
+    public async Task KdVEquation_ComputeResidual_ConstantSolution_ZeroResidual()
     {
         var pde = new KortewegDeVriesEquation<double>();
 
@@ -555,8 +556,8 @@ public class PhysicsInformedIntegrationTests
 
     #region AdvectionDiffusionEquation Tests
 
-    [Fact]
-    public void AdvectionDiffusionEquation_Constructor_Valid1D()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_Constructor_Valid1D()
     {
         // 1D constructor: (diffusionCoeff, velocityX, sourceTerm)
         var pde = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0);
@@ -566,8 +567,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("Advection-Diffusion", pde.Name);
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_Constructor_Valid2D()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_Constructor_Valid2D()
     {
         // 2D constructor: (diffusionCoeff, velocityX, velocityY, sourceTerm)
         var pde = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0, velocityY: 0.5);
@@ -577,8 +578,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Contains("2D", pde.Name);
     }
 
-    [Fact]
-    public void AdvectionDiffusionEquation_Constructor_NegativeDiffusion_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task AdvectionDiffusionEquation_Constructor_NegativeDiffusion_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() =>
             new AdvectionDiffusionEquation<double>(diffusionCoeff: -0.1, velocityX: 1.0));
@@ -588,8 +589,8 @@ public class PhysicsInformedIntegrationTests
 
     #region TrainingHistory Tests
 
-    [Fact]
-    public void TrainingHistory_AddEpoch_StoresLoss()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_AddEpoch_StoresLoss()
     {
         var history = new TrainingHistory<double>();
 
@@ -603,8 +604,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(0.25, history.Losses[2]);
     }
 
-    [Fact]
-    public void TrainingHistory_LossesStartsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingHistory_LossesStartsEmpty()
     {
         var history = new TrainingHistory<double>();
 
@@ -615,8 +616,8 @@ public class PhysicsInformedIntegrationTests
 
     #region PhysicsInformedNeuralNetwork Tests
 
-    [Fact]
-    public void PINN_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -632,8 +633,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(pinn.SupportsTraining);
     }
 
-    [Fact]
-    public void PINN_Constructor_NullPDE_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_Constructor_NullPDE_ThrowsArgumentNull()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
 
@@ -644,8 +645,8 @@ public class PhysicsInformedIntegrationTests
                 Array.Empty<IBoundaryCondition<double>>()));
     }
 
-    [Fact]
-    public void PINN_Constructor_NullBoundaryConditions_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_Constructor_NullBoundaryConditions_ThrowsArgumentNull()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -657,8 +658,8 @@ public class PhysicsInformedIntegrationTests
                 null!));
     }
 
-    [Fact]
-    public void PINN_GetSolution_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_GetSolution_ReturnsOutput()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -676,8 +677,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsInfinity(solution[0]));
     }
 
-    [Fact]
-    public void PINN_EvaluatePDEResidual_ReturnsFiniteValue()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_EvaluatePDEResidual_ReturnsFiniteValue()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -721,8 +722,8 @@ public class PhysicsInformedIntegrationTests
     }
 
 
-    [Fact]
-    public void PINN_SetCollocationPoints_CustomPoints()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_SetCollocationPoints_CustomPoints()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -744,8 +745,8 @@ public class PhysicsInformedIntegrationTests
         pinn.SetCollocationPoints(customPoints);
     }
 
-    [Fact]
-    public void PINN_SetCollocationPoints_WrongDimension_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_SetCollocationPoints_WrongDimension_ThrowsArgument()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -761,8 +762,8 @@ public class PhysicsInformedIntegrationTests
             pinn.SetCollocationPoints(wrongDimPoints));
     }
 
-    [Fact]
-    public void PINN_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_Predict_ReturnsCorrectShape()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -780,8 +781,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(1, output.Shape[1]);
     }
 
-    [Fact]
-    public void PINN_GetModelMetadata_ContainsPDEInfo()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_GetModelMetadata_ContainsPDEInfo()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -804,8 +805,8 @@ public class PhysicsInformedIntegrationTests
 
     #region VariationalPINN Tests
 
-    [Fact]
-    public void VariationalPINN_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalPINN_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
         Func<double[], double[], double[,], double[], double[,], double> weakForm =
@@ -821,8 +822,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(vpinn.SupportsTraining);
     }
 
-    [Fact]
-    public void VariationalPINN_Constructor_NullWeakForm_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalPINN_Constructor_NullWeakForm_ThrowsArgumentNull()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -830,8 +831,8 @@ public class PhysicsInformedIntegrationTests
             new VariationalPINN<double>(architecture, null!));
     }
 
-    [Fact]
-    public void VariationalPINN_GetSolution_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalPINN_GetSolution_ReturnsOutput()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
         Func<double[], double[], double[,], double[], double[,], double> weakForm =
@@ -851,8 +852,8 @@ public class PhysicsInformedIntegrationTests
     }
 
 
-    [Fact]
-    public void VariationalPINN_ComputeWeakResidual_ReturnsFiniteValue()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalPINN_ComputeWeakResidual_ReturnsFiniteValue()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
         Func<double[], double[], double[,], double[], double[,], double> weakForm =
@@ -874,8 +875,8 @@ public class PhysicsInformedIntegrationTests
 
     #region DeepRitzMethod Tests
 
-    [Fact]
-    public void DeepRitzMethod_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task DeepRitzMethod_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
         Func<double[], double[], double[,], double> energyFunctional =
@@ -890,8 +891,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(drm.SupportsTraining);
     }
 
-    [Fact]
-    public void DeepRitzMethod_Constructor_NullEnergy_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task DeepRitzMethod_Constructor_NullEnergy_ThrowsArgumentNull()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -899,8 +900,8 @@ public class PhysicsInformedIntegrationTests
             new DeepRitzMethod<double>(architecture, null!));
     }
 
-    [Fact]
-    public void DeepRitzMethod_GetSolution_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DeepRitzMethod_GetSolution_ReturnsOutput()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
         Func<double[], double[], double[,], double> energyFunctional =
@@ -923,8 +924,8 @@ public class PhysicsInformedIntegrationTests
 
     #region HamiltonianNeuralNetwork Tests
 
-    [Fact]
-    public void HamiltonianNN_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
 
@@ -934,8 +935,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(hnn.SupportsTraining);
     }
 
-    [Fact]
-    public void HamiltonianNN_Constructor_OddStateDim_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Constructor_OddStateDim_ThrowsArgument()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 3, outputSize: 1);
 
@@ -944,8 +945,8 @@ public class PhysicsInformedIntegrationTests
             new HamiltonianNeuralNetwork<double>(architecture, stateDim: 3));
     }
 
-    [Fact]
-    public void HamiltonianNN_Constructor_ZeroStateDim_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Constructor_ZeroStateDim_ThrowsArgument()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
 
@@ -953,8 +954,8 @@ public class PhysicsInformedIntegrationTests
             new HamiltonianNeuralNetwork<double>(architecture, stateDim: 0));
     }
 
-    [Fact]
-    public void HamiltonianNN_Constructor_OutputSizeNotOne_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Constructor_OutputSizeNotOne_ThrowsArgument()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 2);
 
@@ -962,8 +963,8 @@ public class PhysicsInformedIntegrationTests
             new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2));
     }
 
-    [Fact]
-    public void HamiltonianNN_ComputeHamiltonian_ReturnsScalar()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_ComputeHamiltonian_ReturnsScalar()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -975,8 +976,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsInfinity(hamiltonian));
     }
 
-    [Fact]
-    public void HamiltonianNN_ComputeHamiltonian_NullState_ThrowsArgumentNull()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_ComputeHamiltonian_NullState_ThrowsArgumentNull()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -985,8 +986,8 @@ public class PhysicsInformedIntegrationTests
             hnn.ComputeHamiltonian(null!));
     }
 
-    [Fact]
-    public void HamiltonianNN_ComputeHamiltonian_WrongStateLength_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_ComputeHamiltonian_WrongStateLength_ThrowsArgument()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -995,8 +996,8 @@ public class PhysicsInformedIntegrationTests
             hnn.ComputeHamiltonian(new double[] { 0.5 })); // Wrong length
     }
 
-    [Fact]
-    public void HamiltonianNN_ComputeTimeDerivative_ReturnsCorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_ComputeTimeDerivative_ReturnsCorrectLength()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -1009,8 +1010,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsNaN(derivative[1]));
     }
 
-    [Fact]
-    public void HamiltonianNN_Simulate_ReturnsTrajectory()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Simulate_ReturnsTrajectory()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -1029,8 +1030,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(initialState[1], trajectory[0, 1], LooseTolerance);
     }
 
-    [Fact]
-    public void HamiltonianNN_Simulate_ZeroSteps_ThrowsArgumentOutOfRange()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_Simulate_ZeroSteps_ThrowsArgumentOutOfRange()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
@@ -1045,8 +1046,8 @@ public class PhysicsInformedIntegrationTests
 
     #region FourierNeuralOperator Tests
 
-    [Fact]
-    public void FNO_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -1061,8 +1062,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(fno.SupportsTraining);
     }
 
-    [Fact]
-    public void FNO_Forward_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_Forward_ReturnsCorrectShape()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -1083,8 +1084,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(8, output.Shape[2]); // spatial
     }
 
-    [Fact]
-    public void FNO_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_Predict_ReturnsCorrectShape()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -1102,8 +1103,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FNO_GetParameters_ReturnsNonEmptyVector()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_GetParameters_ReturnsNonEmptyVector()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -1120,8 +1121,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(fno.ParameterCount, parameters.Length);
     }
 
-    [Fact]
-    public void FNO_Train_SingleStep_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_Train_SingleStep_UpdatesParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
@@ -1157,8 +1158,8 @@ public class PhysicsInformedIntegrationTests
 
     #region FourierLayer Tests
 
-    [Fact]
-    public void FourierLayer_Constructor_ValidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_Constructor_ValidParameters()
     {
         var layer = new FourierLayer<double>(
             width: 16,
@@ -1169,22 +1170,22 @@ public class PhysicsInformedIntegrationTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void FourierLayer_Constructor_EmptySpatialDimensions_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_Constructor_EmptySpatialDimensions_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() =>
             new FourierLayer<double>(16, 8, Array.Empty<int>()));
     }
 
-    [Fact]
-    public void FourierLayer_Constructor_NullSpatialDimensions_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_Constructor_NullSpatialDimensions_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() =>
             new FourierLayer<double>(16, 8, null!));
     }
 
-    [Fact]
-    public void FourierLayer_Forward_CorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_Forward_CorrectShape()
     {
         var layer = new FourierLayer<double>(
             width: 8,
@@ -1199,8 +1200,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FourierLayer_Forward_WrongChannels_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_Forward_WrongChannels_ThrowsArgument()
     {
         var layer = new FourierLayer<double>(
             width: 8,
@@ -1212,8 +1213,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Throws<ArgumentException>(() => layer.Forward(wrongInput));
     }
 
-    [Fact]
-    public void FourierLayer_GetSetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_GetSetParameters_RoundTrip()
     {
         var layer = new FourierLayer<double>(
             width: 8,
@@ -1236,8 +1237,8 @@ public class PhysicsInformedIntegrationTests
         }
     }
 
-    [Fact]
-    public void FourierLayer_ResetState_ClearsInternalState()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_ResetState_ClearsInternalState()
     {
         var layer = new FourierLayer<double>(
             width: 8,
@@ -1255,8 +1256,8 @@ public class PhysicsInformedIntegrationTests
 
     #region Edge Cases and Numerical Stability
 
-    [Fact]
-    public void PhysicsInformedLoss_VerySmallValues_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_VerySmallValues_NoNaN()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1e-300, 1e-300 });
@@ -1270,8 +1271,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsInfinity(lossValue));
     }
 
-    [Fact]
-    public void PhysicsInformedLoss_LargeValues_NoInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task PhysicsInformedLoss_LargeValues_NoInfinity()
     {
         var loss = new PhysicsInformedLoss<double>();
         var predictions = new Vector<double>(new double[] { 1e150 });
@@ -1286,8 +1287,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Equal(0.0, lossValue, Tolerance);
     }
 
-    [Fact]
-    public void HeatEquation_ExtremeParameters_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task HeatEquation_ExtremeParameters_HandlesCorrectly()
     {
         // Very small diffusivity
         var pde1 = new HeatEquation<double>(1e-10);
@@ -1298,8 +1299,8 @@ public class PhysicsInformedIntegrationTests
         Assert.NotNull(pde2);
     }
 
-    [Fact]
-    public void PINN_SingleCollocationPoint_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_SingleCollocationPoint_Works()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -1316,8 +1317,8 @@ public class PhysicsInformedIntegrationTests
         Assert.Single(solution);
     }
 
-    [Fact]
-    public void FourierLayer_PowerOfTwoSpatialDim_UsesFFT()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_PowerOfTwoSpatialDim_UsesFFT()
     {
         // Power of 2 should use fast FFT
         var layer = new FourierLayer<double>(
@@ -1331,8 +1332,8 @@ public class PhysicsInformedIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FourierLayer_NonPowerOfTwoSpatialDim_UsesDFT()
+    [Fact(Timeout = 120000)]
+    public async Task FourierLayer_NonPowerOfTwoSpatialDim_UsesDFT()
     {
         // Non power of 2 should use DFT
         var layer = new FourierLayer<double>(
@@ -1351,8 +1352,8 @@ public class PhysicsInformedIntegrationTests
     #region Integration Workflow Tests
 
 
-    [Fact]
-    public void HamiltonianNN_FullWorkflow_TrainAndSimulate()
+    [Fact(Timeout = 120000)]
+    public async Task HamiltonianNN_FullWorkflow_TrainAndSimulate()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 4, outputSize: 1);
 
@@ -1394,8 +1395,8 @@ public class PhysicsInformedIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void PINN_GetModelMetadata_SerializationInfo()
+    [Fact(Timeout = 120000)]
+    public async Task PINN_GetModelMetadata_SerializationInfo()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
@@ -1412,8 +1413,8 @@ public class PhysicsInformedIntegrationTests
         Assert.True(metadata.ModelData.Length > 0);
     }
 
-    [Fact]
-    public void FNO_GetModelMetadata_ContainsExpectedInfo()
+    [Fact(Timeout = 120000)]
+    public async Task FNO_GetModelMetadata_ContainsExpectedInfo()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 

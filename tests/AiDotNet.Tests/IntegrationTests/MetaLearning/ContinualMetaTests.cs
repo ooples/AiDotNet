@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -49,8 +50,8 @@ public class ContinualMetaTests
         return false;
     }
 
-    [Fact]
-    public void ACL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task ACL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new ACLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -69,8 +70,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void iTAML_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task iTAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new iTAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -89,8 +90,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaContinualAL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaContinualAL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaContinualALOptions<double, Matrix<double>, Vector<double>>(model)
@@ -109,8 +110,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MePo_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MePo_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MePoOptions<double, Matrix<double>, Vector<double>>(model)
@@ -129,8 +130,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void OML_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task OML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new OMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -149,8 +150,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MOCA_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MOCA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MOCAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -169,8 +170,8 @@ public class ContinualMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ACL_MultiStep_StableLoss()
+    [Fact(Timeout = 120000)]
+    public async Task ACL_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
         var options = new ACLOptions<double, Matrix<double>, Vector<double>>(model)

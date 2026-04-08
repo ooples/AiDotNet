@@ -4,13 +4,14 @@ using AiDotNet.Enums;
 using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Factories
 {
     public class ActivationFunctionFactoryTests
     {
-        [Fact]
-        public void CreateActivationFunction_Returns_For_Scalar_Compatible()
+        [Fact(Timeout = 60000)]
+        public async Task CreateActivationFunction_Returns_For_Scalar_Compatible()
         {
             // Scalar-compatible functions in current enum
             var scalarValues = new[]
@@ -37,15 +38,15 @@ namespace AiDotNet.Tests.Factories
             }
         }
 
-        [Fact]
-        public void CreateActivationFunction_Throws_For_Softmax_Scalar()
+        [Fact(Timeout = 60000)]
+        public async Task CreateActivationFunction_Throws_For_Softmax_Scalar()
         {
             Assert.Throws<NotSupportedException>(() =>
                 ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Softmax));
         }
 
-        [Fact]
-        public void CreateVectorActivationFunction_Returns_For_Vector_Compatible()
+        [Fact(Timeout = 60000)]
+        public async Task CreateVectorActivationFunction_Returns_For_Vector_Compatible()
         {
             // Vector-compatible functions in current enum (includes Softmax)
             var vectorValues = new[]

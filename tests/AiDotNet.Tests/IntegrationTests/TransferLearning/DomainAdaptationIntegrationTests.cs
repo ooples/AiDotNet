@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.TransferLearning.DomainAdaptation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TransferLearning;
 
@@ -16,8 +17,8 @@ public class DomainAdaptationIntegrationTests
 
     #region CORAL Domain Adapter Tests
 
-    [Fact]
-    public void CORALDomainAdapter_AdaptSource_IdenticalDomains_ReturnsDataWithSimilarDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_AdaptSource_IdenticalDomains_ReturnsDataWithSimilarDistribution()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -45,8 +46,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Equal(sourceData.Columns, adapted.Columns);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_ComputeDomainDiscrepancy_IdenticalDomains_ReturnsNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_ComputeDomainDiscrepancy_IdenticalDomains_ReturnsNearZero()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -70,8 +71,8 @@ public class DomainAdaptationIntegrationTests
         Assert.True(discrepancy < 0.1, $"Expected near-zero discrepancy for identical domains, got {discrepancy}");
     }
 
-    [Fact]
-    public void CORALDomainAdapter_ComputeDomainDiscrepancy_DifferentDomains_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_ComputeDomainDiscrepancy_DifferentDomains_ReturnsPositiveValue()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -95,8 +96,8 @@ public class DomainAdaptationIntegrationTests
         Assert.True(discrepancy > 0, $"Expected positive discrepancy for different domains, got {discrepancy}");
     }
 
-    [Fact]
-    public void CORALDomainAdapter_AdaptSource_PreservesRowCount()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_AdaptSource_PreservesRowCount()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -123,8 +124,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Equal(sourceData.Columns, adapted.Columns);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_AdaptTarget_ReturnsValidMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_AdaptTarget_ReturnsValidMatrix()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -158,8 +159,8 @@ public class DomainAdaptationIntegrationTests
         }
     }
 
-    [Fact]
-    public void CORALDomainAdapter_RequiresTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_RequiresTraining_ReturnsTrue()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -168,8 +169,8 @@ public class DomainAdaptationIntegrationTests
         Assert.True(adapter.RequiresTraining);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_AdaptationMethod_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_AdaptationMethod_ReturnsCorrectName()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -178,8 +179,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Contains("CORAL", adapter.AdaptationMethod);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_SingleRow_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_SingleRow_HandlesGracefully()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -201,8 +202,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Equal(3, adapted.Columns);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_HighVariance_AdaptsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_HighVariance_AdaptsCorrectly()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
@@ -240,8 +241,8 @@ public class DomainAdaptationIntegrationTests
 
     #region MMD Domain Adapter Tests
 
-    [Fact]
-    public void MMDDomainAdapter_ComputeDomainDiscrepancy_IdenticalDomains_ReturnsNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_ComputeDomainDiscrepancy_IdenticalDomains_ReturnsNearZero()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -259,8 +260,8 @@ public class DomainAdaptationIntegrationTests
         Assert.True(discrepancy < Tolerance, $"Expected near-zero MMD for identical data, got {discrepancy}");
     }
 
-    [Fact]
-    public void MMDDomainAdapter_ComputeDomainDiscrepancy_DifferentDomains_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_ComputeDomainDiscrepancy_DifferentDomains_ReturnsPositiveValue()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -284,8 +285,8 @@ public class DomainAdaptationIntegrationTests
         Assert.True(discrepancy > 0, $"Expected positive MMD for different domains, got {discrepancy}");
     }
 
-    [Fact]
-    public void MMDDomainAdapter_ComputeDomainDiscrepancy_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_ComputeDomainDiscrepancy_IsSymmetric()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -308,8 +309,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Equal(discrepancy1, discrepancy2, RelaxedTolerance);
     }
 
-    [Fact]
-    public void MMDDomainAdapter_AdaptSource_ShiftsMeanTowardTarget()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_AdaptSource_ShiftsMeanTowardTarget()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -339,8 +340,8 @@ public class DomainAdaptationIntegrationTests
             $"Adapted mean ({adaptedMean[0]}) should be greater than source mean ({sourceMean[0]})");
     }
 
-    [Fact]
-    public void MMDDomainAdapter_RequiresTraining_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_RequiresTraining_ReturnsFalse()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>();
@@ -349,8 +350,8 @@ public class DomainAdaptationIntegrationTests
         Assert.False(adapter.RequiresTraining);
     }
 
-    [Fact]
-    public void MMDDomainAdapter_AdaptationMethod_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_AdaptationMethod_ReturnsCorrectName()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>();
@@ -359,8 +360,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Contains("MMD", adapter.AdaptationMethod);
     }
 
-    [Fact]
-    public void MMDDomainAdapter_Train_UpdatesSigmaWithMedianHeuristic()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_Train_UpdatesSigmaWithMedianHeuristic()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -388,8 +389,8 @@ public class DomainAdaptationIntegrationTests
         Assert.False(double.IsNaN(discrepancy), "Discrepancy should not be NaN");
     }
 
-    [Fact]
-    public void MMDDomainAdapter_AdaptTarget_ReturnsValidMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_AdaptTarget_ReturnsValidMatrix()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -420,8 +421,8 @@ public class DomainAdaptationIntegrationTests
         }
     }
 
-    [Fact]
-    public void MMDDomainAdapter_DifferentSigmaValues_AffectDiscrepancy()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_DifferentSigmaValues_AffectDiscrepancy()
     {
         // Arrange
         var sourceData = new Matrix<double>(new double[,]
@@ -450,8 +451,8 @@ public class DomainAdaptationIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void CORALDomainAdapter_ZeroVarianceColumn_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task CORALDomainAdapter_ZeroVarianceColumn_HandlesGracefully()
     {
         // Arrange - One column has zero variance
         var adapter = new CORALDomainAdapter<double>();
@@ -477,8 +478,8 @@ public class DomainAdaptationIntegrationTests
         Assert.Equal(sourceData.Columns, adapted.Columns);
     }
 
-    [Fact]
-    public void MMDDomainAdapter_SingleSample_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task MMDDomainAdapter_SingleSample_HandlesGracefully()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
@@ -499,8 +500,8 @@ public class DomainAdaptationIntegrationTests
         Assert.False(double.IsNaN(discrepancy), "Discrepancy should not be NaN");
     }
 
-    [Fact]
-    public void DomainAdapters_LargeDimensionData_HandlesWithoutOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task DomainAdapters_LargeDimensionData_HandlesWithoutOverflow()
     {
         // Arrange
         var coralAdapter = new CORALDomainAdapter<double>();

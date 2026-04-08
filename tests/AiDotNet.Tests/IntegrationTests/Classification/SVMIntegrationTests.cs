@@ -2,6 +2,7 @@ using AiDotNet.Classification.SVM;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -16,8 +17,8 @@ public class SVMIntegrationTests
 
     #region SupportVectorClassifier Core Tests
 
-    [Fact]
-    public void SVC_LinearKernel_LinearSeparableData_PerfectClassification()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_LinearKernel_LinearSeparableData_PerfectClassification()
     {
         // Arrange: Clearly linearly separable data
         var x = new Matrix<double>(20, 2);
@@ -62,8 +63,8 @@ public class SVMIntegrationTests
         Assert.True(correct >= 18, $"SVC with linear kernel should achieve high accuracy on separable data. Got {correct}/20");
     }
 
-    [Fact]
-    public void SVC_RBFKernel_NonLinearData_BetterThanLinear()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_RBFKernel_NonLinearData_BetterThanLinear()
     {
         // Arrange: XOR-like pattern (non-linearly separable)
         var x = new Matrix<double>(20, 2);
@@ -133,8 +134,8 @@ public class SVMIntegrationTests
         Assert.True(correctRBF >= 10, $"RBF should classify at least half correctly. Got {correctRBF}/20");
     }
 
-    [Fact]
-    public void SVC_DecisionFunction_SignDeterminesPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_DecisionFunction_SignDeterminesPrediction()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -175,8 +176,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void SVC_PredictProbabilities_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_PredictProbabilities_SumToOne()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -213,8 +214,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void SVC_HigherC_TighterMargin()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_HigherC_TighterMargin()
     {
         // Arrange: Data with some overlap
         var x = new Matrix<double>(12, 2);
@@ -262,8 +263,8 @@ public class SVMIntegrationTests
         Assert.True(correctHigh >= 8, $"High C should work. Got {correctHigh}/12");
     }
 
-    [Fact]
-    public void SVC_PolynomialKernel_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_PolynomialKernel_Works()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -303,8 +304,8 @@ public class SVMIntegrationTests
 
     #region LinearSupportVectorClassifier Tests
 
-    [Fact]
-    public void LinearSVC_EfficientForLargeData()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_EfficientForLargeData()
     {
         // Arrange: Larger dataset
         var x = new Matrix<double>(100, 5);
@@ -344,8 +345,8 @@ public class SVMIntegrationTests
         Assert.True(correct >= 80, $"Linear SVC should achieve good accuracy on separable data. Got {correct}/100");
     }
 
-    [Fact]
-    public void LinearSVC_DecisionFunction_LinearCombination()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_DecisionFunction_LinearCombination()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -390,8 +391,8 @@ public class SVMIntegrationTests
         Assert.True(correctSigns >= 4, $"Most decision values should have correct sign. Got {correctSigns}/6");
     }
 
-    [Fact]
-    public void LinearSVC_PredictProbabilities_SigmoidTransform()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_PredictProbabilities_SigmoidTransform()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -429,8 +430,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearSVC_HigherC_MoreAggressive()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_HigherC_MoreAggressive()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -472,8 +473,8 @@ public class SVMIntegrationTests
 
     #region Kernel Tests
 
-    [Fact]
-    public void SVC_LinearKernel_DotProduct()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_LinearKernel_DotProduct()
     {
         // Arrange: Simple data
         var x = new Matrix<double>(4, 2);
@@ -503,8 +504,8 @@ public class SVMIntegrationTests
             "At least one class 1 sample should be classified correctly");
     }
 
-    [Fact]
-    public void SVC_RBFKernel_GammaAffectsComplexity()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_RBFKernel_GammaAffectsComplexity()
     {
         // Arrange: Non-linear data
         var x = new Matrix<double>(12, 2);
@@ -571,8 +572,8 @@ public class SVMIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void SVC_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -607,8 +608,8 @@ public class SVMIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void LinearSVC_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -647,8 +648,8 @@ public class SVMIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void SVC_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -660,8 +661,8 @@ public class SVMIntegrationTests
         Assert.Throws<ArgumentException>(() => svc.Train(x, y));
     }
 
-    [Fact]
-    public void LinearSVC_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -673,8 +674,8 @@ public class SVMIntegrationTests
         Assert.Throws<ArgumentException>(() => svc.Train(x, y));
     }
 
-    [Fact]
-    public void SVC_PredictBeforeTrain_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_PredictBeforeTrain_Throws()
     {
         // Arrange
         var svc = new SupportVectorClassifier<double>();
@@ -685,8 +686,8 @@ public class SVMIntegrationTests
         Assert.Throws<InvalidOperationException>(() => svc.Predict(testPoint));
     }
 
-    [Fact]
-    public void LinearSVC_PredictBeforeTrain_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_PredictBeforeTrain_Throws()
     {
         // Arrange
         var svc = new LinearSupportVectorClassifier<double>();
@@ -701,8 +702,8 @@ public class SVMIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void SVC_LargeFeatureValues_Stable()
+    [Fact(Timeout = 120000)]
+    public async Task SVC_LargeFeatureValues_Stable()
     {
         // Arrange: Data with large feature values
         var x = new Matrix<double>(6, 2);
@@ -735,8 +736,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearSVC_SmallFeatureValues_Stable()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_SmallFeatureValues_Stable()
     {
         // Arrange: Data with small feature values
         var x = new Matrix<double>(6, 2);
@@ -772,8 +773,8 @@ public class SVMIntegrationTests
 
     #region NuSupportVectorClassifier Tests
 
-    [Fact]
-    public void NuSVC_BasicBinaryClassification_Works()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_BasicBinaryClassification_Works()
     {
         // Arrange: Well-separated data
         var x = new Matrix<double>(16, 2);
@@ -807,8 +808,8 @@ public class SVMIntegrationTests
         Assert.True(correct >= 12, $"Nu-SVC should classify most samples correctly. Got {correct}/16");
     }
 
-    [Fact]
-    public void NuSVC_NuParameterValidation_ThrowsOnInvalidNu()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_NuParameterValidation_ThrowsOnInvalidNu()
     {
         // Arrange & Act & Assert: Nu must be in (0, 1]
         Assert.Throws<ArgumentException>(() => new NuSupportVectorClassifier<double>(null, null, nu: 0.0));
@@ -816,8 +817,8 @@ public class SVMIntegrationTests
         Assert.Throws<ArgumentException>(() => new NuSupportVectorClassifier<double>(null, null, nu: 1.5));
     }
 
-    [Fact]
-    public void NuSVC_NuBoundsEdgeCases_ValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_NuBoundsEdgeCases_ValidValues()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -842,8 +843,8 @@ public class SVMIntegrationTests
         Assert.Equal(10, pred2.Length);
     }
 
-    [Fact]
-    public void NuSVC_DifferentNuValues_AffectsSupportVectors()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_DifferentNuValues_AffectsSupportVectors()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -873,8 +874,8 @@ public class SVMIntegrationTests
         Assert.Equal(20, predsHigh.Length);
     }
 
-    [Fact]
-    public void NuSVC_DecisionFunction_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_DecisionFunction_ReturnsValidValues()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -909,8 +910,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void NuSVC_PredictProbabilities_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_PredictProbabilities_SumToOne()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -947,8 +948,8 @@ public class SVMIntegrationTests
         }
     }
 
-    [Fact]
-    public void NuSVC_RBFKernel_Works()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_RBFKernel_Works()
     {
         // Arrange
         var x = new Matrix<double>(12, 2);
@@ -983,8 +984,8 @@ public class SVMIntegrationTests
         Assert.True(correct >= 8, $"Nu-SVC with RBF kernel should work. Got {correct}/12");
     }
 
-    [Fact]
-    public void NuSVC_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(8, 2);
@@ -1021,8 +1022,8 @@ public class SVMIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void NuSVC_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -1034,8 +1035,8 @@ public class SVMIntegrationTests
         Assert.Throws<ArgumentException>(() => nuSvc.Train(x, y));
     }
 
-    [Fact]
-    public void NuSVC_PredictBeforeTrain_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_PredictBeforeTrain_Throws()
     {
         // Arrange
         var nuSvc = new NuSupportVectorClassifier<double>();
@@ -1046,8 +1047,8 @@ public class SVMIntegrationTests
         Assert.Throws<InvalidOperationException>(() => nuSvc.Predict(testPoint));
     }
 
-    [Fact]
-    public void NuSVC_GetModelMetadata_ContainsNuParameter()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_GetModelMetadata_ContainsNuParameter()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -1078,8 +1079,8 @@ public class SVMIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("Rho"));
     }
 
-    [Fact]
-    public void NuSVC_PolynomialKernel_Works()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_PolynomialKernel_Works()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -1115,8 +1116,8 @@ public class SVMIntegrationTests
         Assert.True(correct >= 6, $"Nu-SVC with polynomial kernel should work. Got {correct}/10");
     }
 
-    [Fact]
-    public void NuSVC_NumericalStability_LargeFeatureValues()
+    [Fact(Timeout = 120000)]
+    public async Task NuSVC_NumericalStability_LargeFeatureValues()
     {
         // Arrange: Data with large feature values
         var x = new Matrix<double>(8, 2);
@@ -1155,8 +1156,8 @@ public class SVMIntegrationTests
 
     #region GetModelMetadata Tests
 
-    [Fact]
-    public void LinearSVC_GetModelMetadata_ContainsAlgorithmInfo()
+    [Fact(Timeout = 120000)]
+    public async Task LinearSVC_GetModelMetadata_ContainsAlgorithmInfo()
     {
         // Arrange
         var x = new Matrix<double>(4, 2);

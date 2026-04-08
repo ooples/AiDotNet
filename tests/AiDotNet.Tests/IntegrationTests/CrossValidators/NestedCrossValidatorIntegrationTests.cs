@@ -6,6 +6,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -67,8 +68,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithValidators_CreatesNestedValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidators_CreatesNestedValidator()
     {
         // Arrange
         var outerOptions = new CrossValidationOptions { NumberOfFolds = 3 };
@@ -84,8 +85,8 @@ public class NestedCrossValidatorIntegrationTests
         Assert.NotNull(nestedValidator);
     }
 
-    [Fact]
-    public void Constructor_WithOptions_CreatesNestedValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithOptions_CreatesNestedValidator()
     {
         // Arrange
         var outerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -106,8 +107,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Outer Loop Tests
 
-    [Fact]
-    public void Validate_ReturnsCorrectNumberOfOuterFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsCorrectNumberOfOuterFolds()
     {
         // Arrange
         int outerFolds = 3;
@@ -135,8 +136,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_OuterFoldsHaveNoOverlap()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_OuterFoldsHaveNoOverlap()
     {
         // Arrange
         var outerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -172,8 +173,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var outerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -206,8 +207,8 @@ public class NestedCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_RecordsTotalTimeIncludingInnerLoops()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_RecordsTotalTimeIncludingInnerLoops()
     {
         // Arrange
         var outerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -240,8 +241,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Model Selection Tests
 
-    [Fact]
-    public void Validate_UsesModelSelectorForEachOuterFold()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_UsesModelSelectorForEachOuterFold()
     {
         // Arrange
         int modelSelectionCallCount = 0;
@@ -277,8 +278,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Different Validator Combinations Tests
 
-    [Fact]
-    public void Validate_WorksWithDifferentValidatorTypes()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WorksWithDifferentValidatorTypes()
     {
         // Arrange - Use KFold for outer and Standard for inner
         var outerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -306,8 +307,8 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Training Index Tests
 
-    [Fact]
-    public void Validate_TrainingIndicesAreFromOuterFold()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainingIndicesAreFromOuterFold()
     {
         // Arrange
         int numSamples = 60;

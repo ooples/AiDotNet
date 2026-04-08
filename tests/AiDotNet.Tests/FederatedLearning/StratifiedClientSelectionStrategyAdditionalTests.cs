@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using AiDotNet.FederatedLearning.Selection;
@@ -7,16 +8,16 @@ using Xunit;
 
 public class StratifiedClientSelectionStrategyAdditionalTests
 {
-    [Fact]
-    public void SelectClients_Throws_WhenRequestNull()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_Throws_WhenRequestNull()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
         Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(request: null!));
     }
 
-    [Fact]
-    public void SelectClients_FallsBackToShuffle_WhenGroupKeysNull()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_FallsBackToShuffle_WhenGroupKeysNull()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
@@ -35,8 +36,8 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
-    public void SelectClients_FallsBackToShuffle_WhenGroupKeysEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_FallsBackToShuffle_WhenGroupKeysEmpty()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
@@ -55,8 +56,8 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
-    public void SelectClients_FallsBackToShuffle_WhenOnlyOneGroup()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_FallsBackToShuffle_WhenOnlyOneGroup()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
@@ -81,8 +82,8 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
-    public void SelectClients_AssignsDefaultGroup_WhenGroupKeyMissingOrBlank()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_AssignsDefaultGroup_WhenGroupKeyMissingOrBlank()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
@@ -106,8 +107,8 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
-    public void SelectClients_IncreasesGroupAllocations_WhenAllocatedLessThanDesired()
+    [Fact(Timeout = 60000)]
+    public async Task SelectClients_IncreasesGroupAllocations_WhenAllocatedLessThanDesired()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 

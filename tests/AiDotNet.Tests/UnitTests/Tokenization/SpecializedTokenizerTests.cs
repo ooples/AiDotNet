@@ -3,6 +3,7 @@ using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Specialized;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.UnitTests.Tokenization;
 /// </summary>
 public class PhonemeTokenizerTests
 {
-    [Fact]
-    public void CreateARPAbet_CreatesValidTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task CreateARPAbet_CreatesValidTokenizer()
     {
         // Act
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -22,8 +23,8 @@ public class PhonemeTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void Tokenize_SimpleWord_ReturnsPhonemes()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_SimpleWord_ReturnsPhonemes()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -36,8 +37,8 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_EmptyText_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_EmptyText_ReturnsEmpty()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -49,8 +50,8 @@ public class PhonemeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_MultipleWords_AddsSeparators()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_MultipleWords_AddsSeparators()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -64,8 +65,8 @@ public class PhonemeTokenizerTests
         Assert.Contains("<space>", tokens);
     }
 
-    [Fact]
-    public void Encode_ReturnsValidTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsValidTokenIds()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -78,8 +79,8 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void Vocabulary_ContainsARPAbetPhonemes()
+    [Fact(Timeout = 60000)]
+    public async Task Vocabulary_ContainsARPAbetPhonemes()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -90,8 +91,8 @@ public class PhonemeTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("B"));
     }
 
-    [Fact]
-    public void Decode_ReturnsPhonemeString()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_ReturnsPhonemeString()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -105,8 +106,8 @@ public class PhonemeTokenizerTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void Tokenize_Digraph_UsesCorrectPhoneme()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_Digraph_UsesCorrectPhoneme()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
@@ -127,8 +128,8 @@ public class PhonemeTokenizerTests
 /// </summary>
 public class MidiTokenizerTests
 {
-    [Fact]
-    public void CreateREMI_CreatesValidTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task CreateREMI_CreatesValidTokenizer()
     {
         // Act
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -138,8 +139,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void Tokenize_NoteEvent_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_NoteEvent_ReturnsTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -152,8 +153,8 @@ public class MidiTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_EmptyText_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_EmptyText_ReturnsEmpty()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -165,8 +166,8 @@ public class MidiTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_RestEvent_ReturnsTimeShift()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_RestEvent_ReturnsTimeShift()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -180,8 +181,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
     }
 
-    [Fact]
-    public void Tokenize_BarEvent_ReturnsBarToken()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_BarEvent_ReturnsBarToken()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -195,8 +196,8 @@ public class MidiTokenizerTests
         Assert.Equal("Bar", tokens[0]);
     }
 
-    [Fact]
-    public void TokenizeNotes_SingleNote_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeNotes_SingleNote_ReturnsTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -215,8 +216,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact]
-    public void TokenizeNotes_EmptyList_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeNotes_EmptyList_ReturnsEmpty()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -229,8 +230,8 @@ public class MidiTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void TokenizeNotes_MultipleNotes_IncludesPosition()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeNotes_MultipleNotes_IncludesPosition()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -248,8 +249,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Position_"));
     }
 
-    [Fact]
-    public void TokenizeNotes_CrossingBarLine_IncludesBar()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeNotes_CrossingBarLine_IncludesBar()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -266,8 +267,8 @@ public class MidiTokenizerTests
         Assert.Contains("Bar", tokens);
     }
 
-    [Fact]
-    public void Encode_ReturnsValidTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsValidTokenIds()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -280,8 +281,8 @@ public class MidiTokenizerTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void Vocabulary_ContainsPitchTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Vocabulary_ContainsPitchTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -292,8 +293,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_127"));
     }
 
-    [Fact]
-    public void Vocabulary_ContainsVelocityTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Vocabulary_ContainsVelocityTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateREMI();
@@ -305,8 +306,8 @@ public class MidiTokenizerTests
 
     // CPWord Strategy Tests
 
-    [Fact]
-    public void CreateCPWord_CreatesValidTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task CreateCPWord_CreatesValidTokenizer()
     {
         // Act
         var tokenizer = MidiTokenizer.CreateCPWord();
@@ -316,8 +317,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void CPWord_TokenizeNotes_SingleNote_ReturnsCompoundToken()
+    [Fact(Timeout = 60000)]
+    public async Task CPWord_TokenizeNotes_SingleNote_ReturnsCompoundToken()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateCPWord();
@@ -335,8 +336,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Note_60_"));
     }
 
-    [Fact]
-    public void CPWord_TokenizeNotes_MultipleNotes_IncludesTimeShift()
+    [Fact(Timeout = 60000)]
+    public async Task CPWord_TokenizeNotes_MultipleNotes_IncludesTimeShift()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateCPWord();
@@ -354,8 +355,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
     }
 
-    [Fact]
-    public void CPWord_Vocabulary_ContainsCompoundTokens()
+    [Fact(Timeout = 60000)]
+    public async Task CPWord_Vocabulary_ContainsCompoundTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateCPWord();
@@ -366,8 +367,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Bar"));
     }
 
-    [Fact]
-    public void CPWord_Encode_ReturnsValidTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task CPWord_Encode_ReturnsValidTokenIds()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateCPWord();
@@ -382,8 +383,8 @@ public class MidiTokenizerTests
 
     // SimpleNote Strategy Tests
 
-    [Fact]
-    public void CreateSimpleNote_CreatesValidTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimpleNote_CreatesValidTokenizer()
     {
         // Act
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -393,8 +394,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void SimpleNote_TokenizeNotes_SingleNote_ReturnsPitchAndDuration()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleNote_TokenizeNotes_SingleNote_ReturnsPitchAndDuration()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -413,8 +414,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Duration_"));
     }
 
-    [Fact]
-    public void SimpleNote_TokenizeNotes_MultipleNotes_IncludesRest()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleNote_TokenizeNotes_MultipleNotes_IncludesRest()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -433,8 +434,8 @@ public class MidiTokenizerTests
         Assert.Contains(tokens, t => t.StartsWith("Rest_"));
     }
 
-    [Fact]
-    public void SimpleNote_Vocabulary_ContainsPitchTokens()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleNote_Vocabulary_ContainsPitchTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -445,8 +446,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_127"));
     }
 
-    [Fact]
-    public void SimpleNote_Vocabulary_ContainsDurationTokens()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleNote_Vocabulary_ContainsDurationTokens()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -456,8 +457,8 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Duration_16"));
     }
 
-    [Fact]
-    public void SimpleNote_Encode_ReturnsValidTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task SimpleNote_Encode_ReturnsValidTokenIds()
     {
         // Arrange
         var tokenizer = MidiTokenizer.CreateSimpleNote();
@@ -472,8 +473,8 @@ public class MidiTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void CreateREMI_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateREMI_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
             MidiTokenizer.CreateREMI(ticksPerBeat: 0));
@@ -481,8 +482,8 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateREMI(ticksPerBeat: -1));
     }
 
-    [Fact]
-    public void CreateREMI_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateREMI_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
             MidiTokenizer.CreateREMI(numVelocityBins: 0));
@@ -490,8 +491,8 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateREMI(numVelocityBins: -1));
     }
 
-    [Fact]
-    public void CreateCPWord_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateCPWord_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
             MidiTokenizer.CreateCPWord(ticksPerBeat: 0));
@@ -499,8 +500,8 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateCPWord(ticksPerBeat: -1));
     }
 
-    [Fact]
-    public void CreateCPWord_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateCPWord_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
             MidiTokenizer.CreateCPWord(numVelocityBins: 0));
@@ -508,8 +509,8 @@ public class MidiTokenizerTests
             MidiTokenizer.CreateCPWord(numVelocityBins: -1));
     }
 
-    [Fact]
-    public void CreateSimpleNote_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimpleNote_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() =>
             MidiTokenizer.CreateSimpleNote(ticksPerBeat: 0));
@@ -539,15 +540,15 @@ public class SentencePieceTokenizerTests
         _tokenizer = SentencePieceTokenizer.Train(corpus, 500);
     }
 
-    [Fact]
-    public void Train_CreatesVocabulary()
+    [Fact(Timeout = 60000)]
+    public async Task Train_CreatesVocabulary()
     {
         // Assert
         Assert.True(_tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void Tokenize_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_ReturnsTokens()
     {
         // Arrange
         var text = "Hello world";
@@ -559,8 +560,8 @@ public class SentencePieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_UsesSentencePieceMarker()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_UsesSentencePieceMarker()
     {
         // Arrange
         var text = "Hello world";
@@ -574,8 +575,8 @@ public class SentencePieceTokenizerTests
         Assert.Contains("\u2581", joinedTokens);
     }
 
-    [Fact]
-    public void Decode_RemovesMarker()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_RemovesMarker()
     {
         // Arrange
         var text = "test";
@@ -588,8 +589,8 @@ public class SentencePieceTokenizerTests
         Assert.DoesNotContain("\u2581", decoded);
     }
 
-    [Fact]
-    public void Roundtrip_PreservesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Roundtrip_PreservesContent()
     {
         // Arrange - Use text from training corpus to ensure tokens are in vocabulary
         var text = "Machine learning";
@@ -603,8 +604,8 @@ public class SentencePieceTokenizerTests
         Assert.Contains("learning", decoded.ToLowerInvariant());
     }
 
-    [Fact]
-    public void Encode_ReturnsValidResult()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsValidResult()
     {
         // Arrange
         var text = "Hello world";

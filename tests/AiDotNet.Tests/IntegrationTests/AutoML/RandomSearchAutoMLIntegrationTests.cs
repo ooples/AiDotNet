@@ -4,12 +4,13 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
 
 public class RandomSearchAutoMLIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SearchAsync_MatrixVector_ProducesBestModelAndTrialHistory()
     {
         // Arrange

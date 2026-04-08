@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 {
@@ -11,8 +12,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
     {
         #region GraphConvolutionalLayer Tests
 
-        [Fact]
-        public void GraphConvolutionalLayer_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphConvolutionalLayer_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, layer.OutputFeatures);
         }
 
-        [Fact]
-        public void GraphConvolutionalLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
+        [Fact(Timeout = 120000)]
+        public async Task GraphConvolutionalLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
         {
             // Arrange
             var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
@@ -35,8 +36,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Throws<InvalidOperationException>(() => layer.Forward(input));
         }
 
-        [Fact]
-        public void GraphConvolutionalLayer_Forward_WithAdjacencyMatrix_ReturnsCorrectShape()
+        [Fact(Timeout = 120000)]
+        public async Task GraphConvolutionalLayer_Forward_WithAdjacencyMatrix_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
@@ -77,8 +78,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, output.Shape[2]);
         }
 
-        [Fact]
-        public void GraphConvolutionalLayer_GetAdjacencyMatrix_ReturnsSetMatrix()
+        [Fact(Timeout = 120000)]
+        public async Task GraphConvolutionalLayer_GetAdjacencyMatrix_ReturnsSetMatrix()
         {
             // Arrange
             var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
         #region GraphAttentionLayer Tests
 
-        [Fact]
-        public void GraphAttentionLayer_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphAttentionLayer_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new GraphAttentionLayer<double>(
@@ -115,8 +116,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, layer.OutputFeatures);
         }
 
-        [Fact]
-        public void GraphAttentionLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
+        [Fact(Timeout = 120000)]
+        public async Task GraphAttentionLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
         {
             // Arrange
             var layer = new GraphAttentionLayer<double>(inputFeatures: 10, outputFeatures: 16);
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Throws<InvalidOperationException>(() => layer.Forward(input));
         }
 
-        [Fact]
-        public void GraphAttentionLayer_Forward_WithAdjacencyMatrix_ReturnsCorrectShape()
+        [Fact(Timeout = 120000)]
+        public async Task GraphAttentionLayer_Forward_WithAdjacencyMatrix_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new GraphAttentionLayer<double>(
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, output.Shape[2]);
         }
 
-        [Fact]
-        public void GraphAttentionLayer_MultipleHeads_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphAttentionLayer_MultipleHeads_WorksCorrectly()
         {
             // Arrange
             var layer = new GraphAttentionLayer<double>(
@@ -214,8 +215,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
         #region GraphSAGELayer Tests
 
-        [Fact]
-        public void GraphSAGELayer_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphSAGELayer_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new GraphSAGELayer<double>(
@@ -230,8 +231,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, layer.OutputFeatures);
         }
 
-        [Fact]
-        public void GraphSAGELayer_MeanAggregator_ReturnsCorrectShape()
+        [Fact(Timeout = 120000)]
+        public async Task GraphSAGELayer_MeanAggregator_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new GraphSAGELayer<double>(
@@ -277,8 +278,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(12, output.Shape[2]);
         }
 
-        [Fact]
-        public void GraphSAGELayer_MaxPoolAggregator_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphSAGELayer_MaxPoolAggregator_WorksCorrectly()
         {
             // Arrange
             var layer = new GraphSAGELayer<double>(
@@ -316,8 +317,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(8, output.Shape[2]);
         }
 
-        [Fact]
-        public void GraphSAGELayer_SumAggregator_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphSAGELayer_SumAggregator_WorksCorrectly()
         {
             // Arrange
             var layer = new GraphSAGELayer<double>(
@@ -357,8 +358,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
         #region GraphIsomorphismLayer Tests
 
-        [Fact]
-        public void GraphIsomorphismLayer_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphIsomorphismLayer_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var layer = new GraphIsomorphismLayer<double>(
@@ -373,8 +374,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(16, layer.OutputFeatures);
         }
 
-        [Fact]
-        public void GraphIsomorphismLayer_Forward_ReturnsCorrectShape()
+        [Fact(Timeout = 120000)]
+        public async Task GraphIsomorphismLayer_Forward_ReturnsCorrectShape()
         {
             // Arrange
             var layer = new GraphIsomorphismLayer<double>(
@@ -414,8 +415,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             Assert.Equal(12, output.Shape[2]);
         }
 
-        [Fact]
-        public void GraphIsomorphismLayer_WithLearnableEpsilon_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task GraphIsomorphismLayer_WithLearnableEpsilon_WorksCorrectly()
         {
             // Arrange
             var layer = new GraphIsomorphismLayer<double>(
@@ -455,8 +456,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
         #region Interface Compliance Tests
 
-        [Fact]
-        public void AllGraphLayers_ImplementIGraphConvolutionLayer()
+        [Fact(Timeout = 120000)]
+        public async Task AllGraphLayers_ImplementIGraphConvolutionLayer()
         {
             // Arrange & Act
             var gcn = new GraphConvolutionalLayer<double>(5, 10, (IActivationFunction<double>?)null);

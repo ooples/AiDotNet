@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -94,8 +95,8 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(samples, ica.IndependentComponents.Columns);
     }
 
-    [Fact]
-    public void IcaDecomposition_DefaultComponents_UsesMinDimension()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_DefaultComponents_UsesMinDimension()
     {
         // Arrange
         var X = CreateRandomMatrix(50, 4);
@@ -122,8 +123,8 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(features, ica.Mean.Length);
     }
 
-    [Fact]
-    public void IcaDecomposition_WhiteningMatrix_HasCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_WhiteningMatrix_HasCorrectDimensions()
     {
         // Arrange
         int samples = 100;
@@ -143,8 +144,8 @@ public class IcaDecompositionIntegrationTests
 
     #region Unmixing Matrix Properties Tests
 
-    [Fact]
-    public void IcaDecomposition_UnmixingMatrix_RowsAreApproximatelyOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_UnmixingMatrix_RowsAreApproximatelyOrthogonal()
     {
         // Arrange
         var X = CreateMixedSignals(200, 3);
@@ -170,8 +171,8 @@ public class IcaDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void IcaDecomposition_NoNaNOrInfinity_InMatrices()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_NoNaNOrInfinity_InMatrices()
     {
         // Arrange
         var X = CreateRandomMatrix(100, 4);
@@ -208,8 +209,8 @@ public class IcaDecompositionIntegrationTests
 
     #region Transform Tests
 
-    [Fact]
-    public void IcaDecomposition_Transform_ProducesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_Transform_ProducesCorrectDimensions()
     {
         // Arrange
         var X = CreateRandomMatrix(100, 5);
@@ -224,8 +225,8 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(3, transformed.Columns);
     }
 
-    [Fact]
-    public void IcaDecomposition_Transform_WrongDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_Transform_WrongDimensions_ThrowsArgumentException()
     {
         // Arrange
         var X = CreateRandomMatrix(100, 5);
@@ -240,8 +241,8 @@ public class IcaDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void IcaDecomposition_ZeroComponents_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_ZeroComponents_ThrowsArgumentException()
     {
         // Arrange
         var X = CreateRandomMatrix(50, 4);
@@ -250,8 +251,8 @@ public class IcaDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(X, 0));
     }
 
-    [Fact]
-    public void IcaDecomposition_TooManyComponents_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_TooManyComponents_ThrowsArgumentException()
     {
         // Arrange
         var X = CreateRandomMatrix(50, 4);
@@ -260,8 +261,8 @@ public class IcaDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(X, 10));
     }
 
-    [Fact]
-    public void IcaDecomposition_NegativeComponents_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_NegativeComponents_ThrowsArgumentException()
     {
         // Arrange
         var X = CreateRandomMatrix(50, 4);
@@ -280,8 +281,8 @@ public class IcaDecompositionIntegrationTests
 
     #region Convergence Tests
 
-    [Fact]
-    public void IcaDecomposition_VaryingIterations_ProducesValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_VaryingIterations_ProducesValidResults()
     {
         // Arrange
         var X = CreateMixedSignals(150, 3);
@@ -295,8 +296,8 @@ public class IcaDecompositionIntegrationTests
         Assert.False(double.IsNaN(FrobeniusNorm(icaMany.UnmixingMatrix)));
     }
 
-    [Fact]
-    public void IcaDecomposition_TightTolerance_StillConverges()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_TightTolerance_StillConverges()
     {
         // Arrange
         var X = CreateRandomMatrix(100, 3);
@@ -313,8 +314,8 @@ public class IcaDecompositionIntegrationTests
 
     #region Independent Components Properties Tests
 
-    [Fact]
-    public void IcaDecomposition_IndependentComponents_HaveFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_IndependentComponents_HaveFiniteValues()
     {
         // Arrange
         var X = CreateRandomMatrix(100, 4);
@@ -335,8 +336,8 @@ public class IcaDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void IcaDecomposition_IndependentComponents_AreApproximatelyUncorrelated()
+    [Fact(Timeout = 120000)]
+    public async Task IcaDecomposition_IndependentComponents_AreApproximatelyUncorrelated()
     {
         // Arrange
         var X = CreateMixedSignals(200, 4);

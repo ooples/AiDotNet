@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Tools;
 
@@ -12,15 +13,15 @@ public class VectorSearchToolTests
 {
     #region PR #756 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void Constructor_ThrowsOnNullRetriever()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNullRetriever()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new VectorSearchTool<double>(null!));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnZeroTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnZeroTopK()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -28,8 +29,8 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnNegativeTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnNegativeTopK()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -37,8 +38,8 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: -1));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnExcessiveTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsOnExcessiveTopK()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -46,8 +47,8 @@ public class VectorSearchToolTests
             new VectorSearchTool<double>(mockRetriever, topK: 101));
     }
 
-    [Fact]
-    public void Constructor_AcceptsMaxAllowedTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsMaxAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -57,8 +58,8 @@ public class VectorSearchToolTests
         Assert.Equal("VectorSearch", tool.Name);
     }
 
-    [Fact]
-    public void Constructor_AcceptsMinAllowedTopK()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_AcceptsMinAllowedTopK()
     {
         var mockRetriever = new MockRetriever<double>();
 
@@ -67,8 +68,8 @@ public class VectorSearchToolTests
         Assert.NotNull(tool);
     }
 
-    [Fact]
-    public void Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_EmptyInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
         var tool = new VectorSearchTool<double>(mockRetriever);
@@ -79,8 +80,8 @@ public class VectorSearchToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_WhitespaceInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WhitespaceInput_ReturnsError()
     {
         var mockRetriever = new MockRetriever<double>();
         var tool = new VectorSearchTool<double>(mockRetriever);
@@ -90,8 +91,8 @@ public class VectorSearchToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact]
-    public void Execute_ValidQuery_ReturnsResults()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_ValidQuery_ReturnsResults()
     {
         var mockRetriever = new MockRetriever<double>();
         mockRetriever.AddDocument("doc1", "Test content about machine learning");
@@ -102,8 +103,8 @@ public class VectorSearchToolTests
         Assert.Contains("Test content", result);
     }
 
-    [Fact]
-    public void Execute_WithTopKParameter_RespectsLimit()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WithTopKParameter_RespectsLimit()
     {
         var mockRetriever = new MockRetriever<double>();
         mockRetriever.AddDocument("doc1", "Content 1");
@@ -116,8 +117,8 @@ public class VectorSearchToolTests
         Assert.Contains("Found 1", result);
     }
 
-    [Fact]
-    public void Execute_NoResults_ReturnsNoDocumentsMessage()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_NoResults_ReturnsNoDocumentsMessage()
     {
         var mockRetriever = new MockRetriever<double>(returnEmpty: true);
         var tool = new VectorSearchTool<double>(mockRetriever);

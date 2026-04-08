@@ -1,13 +1,14 @@
 using System;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class CompressionMetricsTests
     {
-        [Fact]
-        public void CalculateDerivedMetrics_ComputesCompressionRatio()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_ComputesCompressionRatio()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10.0, metrics.CompressionRatio);
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_ComputesSizeReductionPercentage()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_ComputesSizeReductionPercentage()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -40,8 +41,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(75.0, metrics.SizeReductionPercentage);
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_ComputesInferenceSpeedup()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_ComputesInferenceSpeedup()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -57,8 +58,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(2.0, metrics.InferenceSpeedup);
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_ComputesAccuracyLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_ComputesAccuracyLoss()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -74,8 +75,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(0.02, metrics.AccuracyLoss, 10);
         }
 
-        [Fact]
-        public void MeetsQualityThreshold_WithAcceptableMetrics_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task MeetsQualityThreshold_WithAcceptableMetrics_ReturnsTrue()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(meetsThreshold);
         }
 
-        [Fact]
-        public void MeetsQualityThreshold_WithExcessiveAccuracyLoss_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task MeetsQualityThreshold_WithExcessiveAccuracyLoss_ReturnsFalse()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -118,8 +119,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.False(meetsThreshold);
         }
 
-        [Fact]
-        public void MeetsQualityThreshold_WithInsufficientCompression_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task MeetsQualityThreshold_WithInsufficientCompression_ReturnsFalse()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -140,8 +141,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.False(meetsThreshold);
         }
 
-        [Fact]
-        public void ToString_ReturnsFormattedSummary()
+        [Fact(Timeout = 60000)]
+        public async Task ToString_ReturnsFormattedSummary()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -169,8 +170,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Contains("2.00x", summary); // Inference speedup
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_WithZeroCompressedSize_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_WithZeroCompressedSize_HandlesGracefully()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(0.0, metrics.CompressionRatio);
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_WithZeroInferenceTime_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_WithZeroInferenceTime_HandlesGracefully()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -205,8 +206,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(0.0, metrics.InferenceSpeedup);
         }
 
-        [Fact]
-        public void CalculateDerivedMetrics_WithAllMetrics_ComputesAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivedMetrics_WithAllMetrics_ComputesAllValues()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(0.01, metrics.AccuracyLoss, 10);
         }
 
-        [Fact]
-        public void MeetsQualityThreshold_WithCustomThresholds_UsesProvidedValues()
+        [Fact(Timeout = 60000)]
+        public async Task MeetsQualityThreshold_WithCustomThresholds_UsesProvidedValues()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -255,8 +256,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(meetsRelaxedThreshold);
         }
 
-        [Fact]
-        public void CalculateCompositeFitness_ReturnsValueInRange()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateCompositeFitness_ReturnsValueInRange()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -277,8 +278,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(fitness >= 0.0 && fitness <= 1.0);
         }
 
-        [Fact]
-        public void IsBetterThan_WithHigherFitness_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterThan_WithHigherFitness_ReturnsTrue()
         {
             // Arrange
             var better = new CompressionMetrics<double>
@@ -304,8 +305,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.False(worse.IsBetterThan(better));
         }
 
-        [Fact]
-        public void IsBetterThan_WithNullOther_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterThan_WithNullOther_ReturnsTrue()
         {
             // Arrange
             var metrics = new CompressionMetrics<double>
@@ -319,8 +320,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(metrics.IsBetterThan(null!));
         }
 
-        [Fact]
-        public void FromDeepCompressionStats_CreatesMetricsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FromDeepCompressionStats_CreatesMetricsCorrectly()
         {
             // Arrange
             var stats = new DeepCompressionStats
@@ -342,8 +343,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal("Test Compression", metrics.CompressionTechnique);
         }
 
-        [Fact]
-        public void CompressionMetrics_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionMetrics_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var metrics = new CompressionMetrics<float>
@@ -362,8 +363,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(metrics.MeetsQualityThreshold(2.0, 2.0));
         }
 
-        [Fact]
-        public void NewProperties_HaveDefaultValues()
+        [Fact(Timeout = 60000)]
+        public async Task NewProperties_HaveDefaultValues()
         {
             // Arrange & Act
             var metrics = new CompressionMetrics<double>();

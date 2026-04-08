@@ -1,5 +1,6 @@
 using AiDotNet.Serving.Scheduling;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -8,8 +9,8 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PriorityQueueTests
 {
-    [Fact]
-    public void PriorityQueue_ShouldEnqueueAndDequeue()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldEnqueueAndDequeue()
     {
         // Arrange
         var queue = new PriorityRequestQueue<int>();
@@ -23,8 +24,8 @@ public class PriorityQueueTests
         Assert.Equal(3, queue.Count);
     }
 
-    [Fact]
-    public void PriorityQueue_ShouldDequeueHigherPriorityFirst()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldDequeueHigherPriorityFirst()
     {
         // Arrange
         var queue = new PriorityRequestQueue<string>();
@@ -47,8 +48,8 @@ public class PriorityQueueTests
         Assert.Equal("low", item4);
     }
 
-    [Fact]
-    public void PriorityQueue_ShouldImplementFairScheduling()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldImplementFairScheduling()
     {
         // Arrange
         var queue = new PriorityRequestQueue<string>();
@@ -75,8 +76,8 @@ public class PriorityQueueTests
         Assert.Contains(firstFiveItems, item => item!.StartsWith("high"));
     }
 
-    [Fact]
-    public void PriorityQueue_ShouldHandleBackpressure()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldHandleBackpressure()
     {
         // Arrange
         var queue = new PriorityRequestQueue<int>(maxQueueSize: 5);
@@ -99,8 +100,8 @@ public class PriorityQueueTests
         Assert.True(queue.IsFull);
     }
 
-    [Fact]
-    public void PriorityQueue_ShouldReturnPriorityCounts()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldReturnPriorityCounts()
     {
         // Arrange
         var queue = new PriorityRequestQueue<int>();
@@ -121,8 +122,8 @@ public class PriorityQueueTests
         Assert.Equal(1, counts[RequestPriority.Critical]);
     }
 
-    [Fact]
-    public void PriorityQueue_ShouldClearAllItems()
+    [Fact(Timeout = 60000)]
+    public async Task PriorityQueue_ShouldClearAllItems()
     {
         // Arrange
         var queue = new PriorityRequestQueue<int>();

@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -28,16 +29,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region SegNeXt
 
-    [Fact]
-    public void SegNeXt_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SegNeXt_Construction_Succeeds()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SegNeXt_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SegNeXt_Predict_ReturnsOutput()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -45,8 +46,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SegNeXt_Train_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SegNeXt_Train_DoesNotThrow()
     {
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
         var input = Rand(1, 3, 32, 32);
@@ -55,8 +56,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact]
-    public void SegNeXt_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SegNeXt_Dispose_DoesNotThrow()
     {
         var model = new SegNeXt<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -66,16 +67,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region InternImage
 
-    [Fact]
-    public void InternImage_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task InternImage_Construction_Succeeds()
     {
         var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void InternImage_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InternImage_Predict_ReturnsOutput()
     {
         var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -83,8 +84,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void InternImage_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task InternImage_Dispose_DoesNotThrow()
     {
         var model = new InternImage<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -94,16 +95,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region ViTAdapter
 
-    [Fact]
-    public void ViTAdapter_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ViTAdapter_Construction_Succeeds()
     {
         var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void ViTAdapter_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ViTAdapter_Predict_ReturnsOutput()
     {
         var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -111,8 +112,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ViTAdapter_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ViTAdapter_Dispose_DoesNotThrow()
     {
         var model = new ViTAdapter<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -122,16 +123,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region ViTCoMer
 
-    [Fact]
-    public void ViTCoMer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ViTCoMer_Construction_Succeeds()
     {
         var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void ViTCoMer_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ViTCoMer_Predict_ReturnsOutput()
     {
         var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -139,8 +140,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ViTCoMer_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ViTCoMer_Dispose_DoesNotThrow()
     {
         var model = new ViTCoMer<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -150,16 +151,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region DiffCut
 
-    [Fact]
-    public void DiffCut_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCut_Construction_Succeeds()
     {
         var model = new DiffCut<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DiffCut_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCut_Predict_ReturnsOutput()
     {
         var model = new DiffCut<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -167,8 +168,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DiffCut_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DiffCut_Dispose_DoesNotThrow()
     {
         var model = new DiffCut<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -178,16 +179,16 @@ public class SemanticSegmentationIntegrationTests
 
     #region DiffSeg
 
-    [Fact]
-    public void DiffSeg_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DiffSeg_Construction_Succeeds()
     {
         var model = new DiffSeg<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DiffSeg_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DiffSeg_Predict_ReturnsOutput()
     {
         var model = new DiffSeg<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -195,8 +196,8 @@ public class SemanticSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void DiffSeg_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task DiffSeg_Dispose_DoesNotThrow()
     {
         var model = new DiffSeg<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));

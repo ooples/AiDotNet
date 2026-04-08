@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
-    public void OrdinalPredictions_ShouldBeValidIndices()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalPredictions_ShouldBeValidIndices()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -28,8 +29,8 @@ public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact]
-    public void OrdinalPredictions_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task OrdinalPredictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

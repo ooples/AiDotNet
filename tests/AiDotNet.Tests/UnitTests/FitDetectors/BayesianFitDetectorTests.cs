@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Statistics;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -46,8 +47,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
             var options = new BayesianFitDetectorOptions
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithValidData_ReturnsValidFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithValidData_ReturnsValidFitType()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 result.FitType == FitType.Unstable);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_IncludesBayesianMetricsInRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesBayesianMetricsInRecommendations()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -117,8 +118,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains(result.Recommendations, r => r.Contains("Bayes Factor:"));
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_InitializesSuccessfully()
         {
             // Arrange
             var options = new BayesianFitDetectorOptions
@@ -137,8 +138,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsRecommendationsForFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsRecommendationsForFitType()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -160,8 +161,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasAdvice);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsNonEmptyRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -176,8 +177,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 5); // At least fit advice + 5 metrics
         }
 
-        [Fact]
-        public void DetectFit_WithLowMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithHighMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -222,8 +223,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -238,8 +239,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_MultipleCallsReturnConsistentResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_MultipleCallsReturnConsistentResults()
         {
             // Arrange
             var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();

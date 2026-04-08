@@ -1,11 +1,12 @@
 using AiDotNet.Serving.Sandboxing.Docker;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class DockerRunnerValidationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_ValidatesArguments()
     {
         var runner = new DockerRunner();

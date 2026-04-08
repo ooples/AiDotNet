@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -38,8 +39,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 2: count=2, sum=70, mean=35
     ///   smoothed = (2*35 + 1*25) / (2+1) = (70+25)/3 = 95/3 ≈ 31.666...
     /// </summary>
-    [Fact]
-    public void TargetEncoder_SimpleSmoothing_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_SimpleSmoothing_HandComputed()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -60,8 +61,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// With smoothing=0, encoding should equal the exact category mean (no smoothing).
     /// Formula: (count * mean + 0 * global) / (count + 0) = mean
     /// </summary>
-    [Fact]
-    public void TargetEncoder_SmoothingZero_ExactCategoryMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_SmoothingZero_ExactCategoryMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 0.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -81,8 +82,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// With very large smoothing, encoding should approach global mean.
     /// As smoothing → ∞: smoothed = (count*mean + smoothing*global) / (count+smoothing) → global
     /// </summary>
-    [Fact]
-    public void TargetEncoder_VeryLargeSmoothing_ApproachesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_VeryLargeSmoothing_ApproachesGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 10000.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -101,8 +102,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 1: mean=25, Category 2: mean=25, global=25
     /// smoothed = (2*25 + 1*25) / (2+1) = 75/3 = 25
     /// </summary>
-    [Fact]
-    public void TargetEncoder_SameTargetMean_EncodedEqualsGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_SameTargetMean_EncodedEqualsGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -133,8 +134,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 3: count=1, sum=60, mean=60
     ///   smoothed = (1*60 + 2*35) / (1+2) = (60+70)/3 = 130/3 ≈ 43.333...
     /// </summary>
-    [Fact]
-    public void TargetEncoder_3Categories_Smoothing2_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_3Categories_Smoothing2_HandComputed()
     {
         var encoder = new TargetEncoder<double>(smoothing: 2.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 }, { 3.0 } });
@@ -157,8 +158,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Weight of global_mean = smoothing/(count+smoothing)
     /// These weights always sum to 1.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_WeightsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_WeightsSumToOne()
     {
         double smoothing = 3.0;
         int count = 5;
@@ -199,8 +200,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Categories with fewer samples than minSamplesLeaf should use global mean.
     /// With minSamplesLeaf=3: category with count=1 uses global mean.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_MinSamplesLeaf_RareCategoryUsesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_MinSamplesLeaf_RareCategoryUsesGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, minSamplesLeaf: 3);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 1.0 }, { 2.0 } });
@@ -226,8 +227,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with UseGlobalMean mode should return global target mean.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_UnknownCategory_UseGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_UnknownCategory_UseGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, handleUnknown: TargetEncoderHandleUnknown.UseGlobalMean);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 } });
@@ -244,8 +245,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with Error mode should throw.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_UnknownCategory_Error_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_UnknownCategory_Error_Throws()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, handleUnknown: TargetEncoderHandleUnknown.Error);
         var data = M(new double[,] { { 1.0 }, { 2.0 } });
@@ -265,8 +266,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// global_mean = category_mean = some value
     /// smoothed = (count * mean + smoothing * mean) / (count + smoothing) = mean
     /// </summary>
-    [Fact]
-    public void TargetEncoder_SingleCategory_SmoothedEqualsGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_SingleCategory_SmoothedEqualsGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 1.0 } });
@@ -289,8 +290,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Cat 1 smoothed = (3 * 2/3 + 1 * 0.5) / (3+1) = (2 + 0.5) / 4 = 2.5/4 = 0.625
     /// Cat 2 smoothed = (3 * 1/3 + 1 * 0.5) / (3+1) = (1 + 0.5) / 4 = 1.5/4 = 0.375
     /// </summary>
-    [Fact]
-    public void TargetEncoder_BinaryTarget_SmoothedProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_BinaryTarget_SmoothedProbabilities()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
         var data = M(new double[,] { { 1.0 }, { 1.0 }, { 1.0 }, { 2.0 }, { 2.0 }, { 2.0 } });
@@ -308,8 +309,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Target length must match data rows.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_MismatchedLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_MismatchedLength_Throws()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
         var data = M(new double[,] { { 1.0 }, { 2.0 } });
@@ -320,8 +321,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Negative smoothing should throw.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_NegativeSmoothing_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_NegativeSmoothing_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TargetEncoder<double>(smoothing: -1.0));
     }
@@ -329,8 +330,8 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Pass-through column should preserve original values.
     /// </summary>
-    [Fact]
-    public void TargetEncoder_PassThroughColumn_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_PassThroughColumn_PreservesValues()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, columnIndices: new[] { 0 });
         var data = M(new double[,] { { 1.0, 42.0 }, { 1.0, 88.0 }, { 2.0, 77.0 }, { 2.0, 33.0 } });

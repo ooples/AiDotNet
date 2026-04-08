@@ -7,6 +7,7 @@ using AiDotNet.Evaluation.Metrics.Classification;
 using AiDotNet.Evaluation.Metrics.Regression;
 using AiDotNet.Evaluation.Metrics.TimeSeries;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -21,8 +22,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Regression Metrics - Exact Math Verification
 
-    [Fact]
-    public void MSE_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_HandCalculated_ExactValue()
     {
         // actuals:     [1, 2, 3, 4, 5]
         // predictions: [1.1, 2.2, 2.7, 4.5, 4.8]
@@ -37,8 +38,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.086, result, 10);
     }
 
-    [Fact]
-    public void MAE_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_HandCalculated_ExactValue()
     {
         // actuals:     [1, 2, 3, 4, 5]
         // predictions: [1.1, 2.2, 2.7, 4.5, 4.8]
@@ -52,8 +53,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.26, result, 10);
     }
 
-    [Fact]
-    public void RMSE_Is_SqrtOfMSE_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_Is_SqrtOfMSE_ExactValue()
     {
         var mseMetric = new MSEMetric<double>();
         var rmseMetric = new RMSEMetric<double>();
@@ -67,8 +68,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(0.086), rmse, 10);
     }
 
-    [Fact]
-    public void R2Score_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task R2Score_HandCalculated_ExactValue()
     {
         // actuals: [3, -0.5, 2, 7] (scikit-learn example)
         // preds:   [2.5, 0.0, 2, 8]
@@ -86,8 +87,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 10);
     }
 
-    [Fact]
-    public void R2Score_ConstantActuals_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task R2Score_ConstantActuals_PerfectPrediction_ReturnsOne()
     {
         // All actuals are the same, predictions are also the same => R2 = 1
         var metric = new R2ScoreMetric<double>();
@@ -98,8 +99,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, 10);
     }
 
-    [Fact]
-    public void R2Score_ConstantActuals_ImperfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task R2Score_ConstantActuals_ImperfectPrediction_ReturnsZero()
     {
         // All actuals are the same but predictions differ => SS_tot ~= 0, SS_res > 0 => R2 = 0
         var metric = new R2ScoreMetric<double>();
@@ -110,8 +111,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void R2Score_CanBeNegative_WorseThanMean()
+    [Fact(Timeout = 120000)]
+    public async Task R2Score_CanBeNegative_WorseThanMean()
     {
         // Predictions are systematically worse than just predicting the mean
         var metric = new R2ScoreMetric<double>();
@@ -122,8 +123,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.True(result < 0, $"R2 should be negative for terrible predictions, got {result}");
     }
 
-    [Fact]
-    public void AdjustedR2_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_HandCalculated_ExactValue()
     {
         // R2 = 0.948 (from above), n=4, p=1
         // Adjusted R2 = 1 - (1 - R2) * (n-1) / (n-p-1) = 1 - (1-0.948...) * 3 / 2
@@ -137,8 +138,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expectedAdj, result, 10);
     }
 
-    [Fact]
-    public void AdjustedR2_AlwaysLessOrEqual_R2()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_AlwaysLessOrEqual_R2()
     {
         var r2Metric = new R2ScoreMetric<double>();
         var adjR2Metric = new AdjustedR2Metric<double>(numPredictors: 3);
@@ -152,8 +153,8 @@ public class EvaluationDeepMathIntegrationTests
             $"Adjusted R2 ({adjR2}) should be <= R2 ({r2}) for p>0");
     }
 
-    [Fact]
-    public void AdjustedR2_InsufficientSamples_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_InsufficientSamples_ReturnsZero()
     {
         // n=2, p=1 => n <= p + 1 => returns 0
         var metric = new AdjustedR2Metric<double>(numPredictors: 1);
@@ -164,8 +165,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void MAPE_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_HandCalculated_ExactValue()
     {
         // actuals:     [100, 200, 300]
         // predictions: [110, 190, 330]
@@ -179,8 +180,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(100.0 * 0.25 / 3.0, result, 8);
     }
 
-    [Fact]
-    public void MAPE_SkipsZeroActuals()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_SkipsZeroActuals()
     {
         // actuals with zeros should be excluded from the calculation
         var metric = new MAPEMetric<double>();
@@ -193,8 +194,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(10.0, result, 8);
     }
 
-    [Fact]
-    public void SMAPE_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_HandCalculated_ExactValue()
     {
         // sMAPE = (100/N) * Σ |y - ŷ| / ((|y| + |ŷ|) / 2)
         // actuals:     [100, 200]
@@ -211,8 +212,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 8);
     }
 
-    [Fact]
-    public void SMAPE_Symmetry_SwapPredActuals_SameResult()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_Symmetry_SwapPredActuals_SameResult()
     {
         // sMAPE should give the same value when swapping predictions and actuals
         var metric = new SymmetricMAPEMetric<double>();
@@ -224,8 +225,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(result1, result2, 10);
     }
 
-    [Fact]
-    public void HuberLoss_BelowDelta_IsHalfSquaredError()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_BelowDelta_IsHalfSquaredError()
     {
         // delta=1.0, error=0.5 => loss = 0.5 * 0.5^2 = 0.125
         var metric = new HuberLossMetric<double>(delta: 1.0);
@@ -236,8 +237,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.5 * 0.5 * 0.5, result, 10);
     }
 
-    [Fact]
-    public void HuberLoss_AboveDelta_IsLinearPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_AboveDelta_IsLinearPenalty()
     {
         // delta=1.0, error=3.0 => loss = 1.0 * (3.0 - 0.5 * 1.0) = 2.5
         var metric = new HuberLossMetric<double>(delta: 1.0);
@@ -248,8 +249,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(1.0 * (3.0 - 0.5 * 1.0), result, 10);
     }
 
-    [Fact]
-    public void HuberLoss_AtDelta_QuadraticAndLinearAgree()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_AtDelta_QuadraticAndLinearAgree()
     {
         // At exactly delta, both formulas should give the same result
         double delta = 1.5;
@@ -264,8 +265,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(quadratic, result, 10);
     }
 
-    [Fact]
-    public void MeanSquaredLogError_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MeanSquaredLogError_HandCalculated_ExactValue()
     {
         // MSLE = (1/N) * Σ(log(1+y) - log(1+ŷ))²
         // actuals: [3, 5], predictions: [2.5, 5]
@@ -282,8 +283,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 10);
     }
 
-    [Fact]
-    public void MeanSquaredLogError_NegativeValues_ClampedToZero()
+    [Fact(Timeout = 120000)]
+    public async Task MeanSquaredLogError_NegativeValues_ClampedToZero()
     {
         // Negative values should be treated as 0, so log(1 + max(0, x))
         var metric = new MeanSquaredLogErrorMetric<double>();
@@ -299,8 +300,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Classification Metrics - Exact Math Verification
 
-    [Fact]
-    public void F1Score_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_HandCalculated_ExactValue()
     {
         // Binary classification with known confusion matrix:
         // TP=3, FP=1, FN=2, TN=4 (positive label = 1.0)
@@ -321,8 +322,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 10);
     }
 
-    [Fact]
-    public void F1Score_NoPredictedPositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_NoPredictedPositives_ReturnsZero()
     {
         // No predicted positives: precision is 0, F1 should be 0
         var metric = new F1ScoreMetric<double>(positiveLabel: 1.0);
@@ -333,8 +334,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void F1Score_NoActualPositives_NoPredPositives_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_NoActualPositives_NoPredPositives_ReturnsOne()
     {
         // No actual positives AND no predicted positives = perfect empty case
         var metric = new F1ScoreMetric<double>(positiveLabel: 1.0);
@@ -345,8 +346,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(1.0, result, 10);
     }
 
-    [Fact]
-    public void MCC_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_HandCalculated_ExactValue()
     {
         // TP=3, FP=1, FN=2, TN=4
         // MCC = (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
@@ -361,8 +362,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 8);
     }
 
-    [Fact]
-    public void MCC_AllSameClass_ReturnZero()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_AllSameClass_ReturnZero()
     {
         // All predictions and actuals are the same class => denominator is 0 => MCC = 0
         var metric = new MatthewsCorrelationCoefficientMetric<double>(positiveLabel: 1.0);
@@ -375,8 +376,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void MCC_PerfectInversion_ReturnsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_PerfectInversion_ReturnsMinusOne()
     {
         // Every prediction is the opposite of the actual
         var metric = new MatthewsCorrelationCoefficientMetric<double>(positiveLabel: 1.0);
@@ -389,8 +390,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(-1.0, result, 10);
     }
 
-    [Fact]
-    public void CohensKappa_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_HandCalculated_ExactValue()
     {
         // 3 classes: predictions vs actuals
         // Confusion matrix:
@@ -414,8 +415,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 6);
     }
 
-    [Fact]
-    public void CohensKappa_RandomAgreement_NearZero()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_RandomAgreement_NearZero()
     {
         // When predictions are random (no agreement beyond chance), kappa should be near 0
         var metric = new CohensKappaMetric<double>();
@@ -429,8 +430,8 @@ public class EvaluationDeepMathIntegrationTests
             $"Kappa should be near zero for random agreement, got {result}");
     }
 
-    [Fact]
-    public void F1Score_MacroAvg_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task F1Score_MacroAvg_HandCalculated()
     {
         // 3-class example
         // Class 0: TP=2, FP=0, FN=1 => P=2/2=1.0, R=2/3=0.667, F1=0.8
@@ -451,8 +452,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Cross-Validation - Structural Correctness
 
-    [Fact]
-    public void KFold_ProducesCorrectNumberOfSplits()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_ProducesCorrectNumberOfSplits()
     {
         var strategy = new KFoldStrategy<double>(k: 5, shuffle: false);
         var splits = strategy.Split(100).ToList();
@@ -460,8 +461,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(5, splits.Count);
     }
 
-    [Fact]
-    public void KFold_EachSampleAppearsInValidationExactlyOnce()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_EachSampleAppearsInValidationExactlyOnce()
     {
         int n = 100;
         int k = 5;
@@ -481,8 +482,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_TrainAndValAreDisjoint()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_TrainAndValAreDisjoint()
     {
         int n = 50;
         var strategy = new KFoldStrategy<double>(k: 5, shuffle: false);
@@ -500,8 +501,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_UnevenSplit_HandlesRemainder()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_UnevenSplit_HandlesRemainder()
     {
         // 7 samples, 3 folds: sizes should be 3, 2, 2 (or 3, 3, 1 depending on impl)
         int n = 7;
@@ -520,8 +521,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(n, totalVal);
     }
 
-    [Fact]
-    public void KFold_Shuffled_SameSeeed_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_Shuffled_SameSeeed_Reproducible()
     {
         int n = 50;
         var strategy1 = new KFoldStrategy<double>(k: 5, shuffle: true, randomSeed: 42);
@@ -537,15 +538,15 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void KFold_MinDataSize_ThrowsWhenTooFew()
+    [Fact(Timeout = 120000)]
+    public async Task KFold_MinDataSize_ThrowsWhenTooFew()
     {
         var strategy = new KFoldStrategy<double>(k: 5);
         Assert.Throws<ArgumentException>(() => strategy.Split(3).ToList());
     }
 
-    [Fact]
-    public void StratifiedKFold_PreservesClassDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_PreservesClassDistribution()
     {
         // 70% class 0, 30% class 1
         int n = 100;
@@ -573,8 +574,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StratifiedKFold_EachSampleAppearsOnce()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_EachSampleAppearsOnce()
     {
         int n = 60;
         var labels = new double[n];
@@ -597,8 +598,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StratifiedKFold_RequiresLabels_ThrowsWithout()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedKFold_RequiresLabels_ThrowsWithout()
     {
         var strategy = new StratifiedKFoldStrategy<double>(k: 3);
         Assert.Throws<ArgumentException>(() => strategy.Split(10).ToList());
@@ -608,8 +609,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Metric Properties - Mathematical Invariants
 
-    [Fact]
-    public void MSE_IsAlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_IsAlwaysNonNegative()
     {
         var metric = new MSEMetric<double>();
         var random = new Random(42);
@@ -625,8 +626,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void RMSE_AlwaysGreaterOrEqualTo_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_AlwaysGreaterOrEqualTo_MAE()
     {
         // RMSE >= MAE is a mathematical property (Cauchy-Schwarz inequality)
         var rmse = new RMSEMetric<double>();
@@ -647,8 +648,8 @@ public class EvaluationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void RMSE_EqualToMAE_WhenAllErrorsSameSize()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_EqualToMAE_WhenAllErrorsSameSize()
     {
         // When all errors are the same magnitude, RMSE = MAE
         var rmse = new RMSEMetric<double>();
@@ -662,8 +663,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(rmseVal, maeVal, 10);
     }
 
-    [Fact]
-    public void MetricDirection_RegressionErrorMetrics_AreLowerIsBetter()
+    [Fact(Timeout = 120000)]
+    public async Task MetricDirection_RegressionErrorMetrics_AreLowerIsBetter()
     {
         Assert.Equal(MetricDirection.LowerIsBetter, new MSEMetric<double>().Direction);
         Assert.Equal(MetricDirection.LowerIsBetter, new MAEMetric<double>().Direction);
@@ -673,8 +674,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(MetricDirection.LowerIsBetter, new HuberLossMetric<double>().Direction);
     }
 
-    [Fact]
-    public void MetricDirection_ScoreMetrics_AreHigherIsBetter()
+    [Fact(Timeout = 120000)]
+    public async Task MetricDirection_ScoreMetrics_AreHigherIsBetter()
     {
         Assert.Equal(MetricDirection.HigherIsBetter, new R2ScoreMetric<double>().Direction);
         Assert.Equal(MetricDirection.HigherIsBetter, new AdjustedR2Metric<double>().Direction);
@@ -687,8 +688,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Confidence Intervals - Bootstrap Validity
 
-    [Fact]
-    public void BootstrapCI_LowerBoundLessThanUpperBound()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapCI_LowerBoundLessThanUpperBound()
     {
         var metric = new MSEMetric<double>();
         double[] preds = { 1.1, 2.2, 3.3, 4.1, 5.2, 6.1, 7.3, 8.0, 9.1, 10.2 };
@@ -706,8 +707,8 @@ public class EvaluationDeepMathIntegrationTests
             $"Value ({ci.Value}) should be <= upper ({ci.UpperBound})");
     }
 
-    [Fact]
-    public void BootstrapCI_HigherConfidence_WiderInterval()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapCI_HigherConfidence_WiderInterval()
     {
         var metric = new MAEMetric<double>();
         double[] preds = { 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5 };
@@ -725,8 +726,8 @@ public class EvaluationDeepMathIntegrationTests
             $"99% CI width ({width99}) should be >= 90% CI width ({width90})");
     }
 
-    [Fact]
-    public void BootstrapCI_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapCI_InvalidParams_Throws()
     {
         var metric = new MSEMetric<double>();
         double[] preds = { 1.0, 2.0, 3.0 };
@@ -746,8 +747,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Edge Cases - Empty Input and Single Element
 
-    [Fact]
-    public void AllRegressionMetrics_EmptyInput_ReturnZero()
+    [Fact(Timeout = 120000)]
+    public async Task AllRegressionMetrics_EmptyInput_ReturnZero()
     {
         double[] empty = Array.Empty<double>();
 
@@ -761,8 +762,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(0.0, new MeanSquaredLogErrorMetric<double>().Compute(empty, empty), 10);
     }
 
-    [Fact]
-    public void AllMetrics_MismatchedLengths_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_MismatchedLengths_Throw()
     {
         double[] a = { 1.0, 2.0 };
         double[] b = { 1.0 };
@@ -775,8 +776,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new MatthewsCorrelationCoefficientMetric<double>().Compute(a, b));
     }
 
-    [Fact]
-    public void SingleElement_MSE_IsSquaredError()
+    [Fact(Timeout = 120000)]
+    public async Task SingleElement_MSE_IsSquaredError()
     {
         var metric = new MSEMetric<double>();
         double[] preds = { 3.0 };
@@ -786,8 +787,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(4.0, result, 10); // (5-3)^2 = 4
     }
 
-    [Fact]
-    public void SingleElement_R2Score_ConstantActual_PerfectPred()
+    [Fact(Timeout = 120000)]
+    public async Task SingleElement_R2Score_ConstantActual_PerfectPred()
     {
         // Single element: SS_tot = 0 (only one value), SS_res = 0 => R2 = 1
         var metric = new R2ScoreMetric<double>();
@@ -802,8 +803,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Float Type Verification
 
-    [Fact]
-    public void MSE_Float_SameAsDouble()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Float_SameAsDouble()
     {
         var doubleMetric = new MSEMetric<double>();
         var floatMetric = new MSEMetric<float>();
@@ -820,8 +821,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(doubleResult, (double)floatResult, 3);
     }
 
-    [Fact]
-    public void R2Score_Float_ReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task R2Score_Float_ReasonableAccuracy()
     {
         var metric = new R2ScoreMetric<float>();
         float[] preds = { 2.5f, 0.0f, 2.0f, 8.0f };
@@ -836,8 +837,8 @@ public class EvaluationDeepMathIntegrationTests
 
     #region Time Series Metrics
 
-    [Fact]
-    public void SMAPETimeSeries_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPETimeSeries_HandCalculated()
     {
         var metric = new SMAPEMetric<double>();
         double[] preds = { 110, 180 };
@@ -849,8 +850,8 @@ public class EvaluationDeepMathIntegrationTests
         Assert.Equal(expected, result, 6);
     }
 
-    [Fact]
-    public void WAPE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task WAPE_HandCalculated()
     {
         // WAPE = Σ|y - ŷ| / Σ|y|
         // actuals: [100, 200], predictions: [110, 180]

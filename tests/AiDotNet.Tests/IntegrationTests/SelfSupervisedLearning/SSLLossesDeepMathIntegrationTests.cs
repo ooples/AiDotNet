@@ -2,6 +2,7 @@ using System;
 using AiDotNet.SelfSupervisedLearning;
 using AiDotNet.SelfSupervisedLearning.Losses;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SelfSupervisedLearning;
 
@@ -17,8 +18,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region InfoNCE Loss - Exact Math Verification
 
-    [Fact]
-    public void InfoNCE_IdenticalQueryAndKey_MinimalLoss()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_IdenticalQueryAndKey_MinimalLoss()
     {
         // When query and positive key are identical (and normalized), the positive logit
         // is maximized (1/tau), and the loss should be minimal
@@ -39,8 +40,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_OrthogonalQueryAndKey_HigherLoss()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_OrthogonalQueryAndKey_HigherLoss()
     {
         // When query is orthogonal to positive key, loss is higher
         var loss = new InfoNCELoss<double>(temperature: 1.0, normalize: false);
@@ -60,8 +61,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_LowerTemperature_SharperDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_LowerTemperature_SharperDistribution()
     {
         // Lower temperature should make the distribution sharper
         // With correct positive pair, lower temp should give LOWER loss
@@ -83,8 +84,8 @@ public class SSLLossesDeepMathIntegrationTests
             $"Low temp loss ({lowTempResult}) should be lower than high temp ({highTempResult}) for correct match");
     }
 
-    [Fact]
-    public void InfoNCE_HandCalculated_MultipleNegatives()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_HandCalculated_MultipleNegatives()
     {
         // 1 query, 1 positive, 2 negatives
         var loss = new InfoNCELoss<double>(temperature: 1.0, normalize: false);
@@ -107,8 +108,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_Accuracy_PerfectMatch_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_Accuracy_PerfectMatch_ReturnsOne()
     {
         var loss = new InfoNCELoss<double>(temperature: 0.1, normalize: false);
 
@@ -121,8 +122,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(1.0, accuracy, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_InBatch_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_InBatch_HandCalculated()
     {
         // In-batch contrastive: positive pairs are along the diagonal
         var loss = new InfoNCELoss<double>(temperature: 1.0, normalize: false);
@@ -142,8 +143,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_WithGradients_LossMatchesForwardOnly()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_WithGradients_LossMatchesForwardOnly()
     {
         var loss = new InfoNCELoss<double>(temperature: 0.5, normalize: false);
 
@@ -156,8 +157,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(forwardLoss, gradLoss, Tol);
     }
 
-    [Fact]
-    public void InfoNCE_NegativeTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_NegativeTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new InfoNCELoss<double>(temperature: -0.1));
@@ -169,8 +170,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region NT-Xent Loss - Exact Math Verification
 
-    [Fact]
-    public void NTXent_IdenticalViews_MinimalLoss()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_IdenticalViews_MinimalLoss()
     {
         // When both views produce identical embeddings, the loss should be minimal
         var loss = new NTXentLoss<double>(temperature: 1.0, normalize: false);
@@ -208,8 +209,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void NTXent_LowerTemperature_SharperContrast()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_LowerTemperature_SharperContrast()
     {
         // Lower temperature should make the contrast sharper
         var highTempLoss = new NTXentLoss<double>(temperature: 1.0, normalize: false);
@@ -228,8 +229,8 @@ public class SSLLossesDeepMathIntegrationTests
             $"Low temp ({lowTempResult}) should be less than high temp ({highTempResult}) for good pairs");
     }
 
-    [Fact]
-    public void NTXent_NegativeTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_NegativeTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new NTXentLoss<double>(temperature: -0.1));
@@ -237,8 +238,8 @@ public class SSLLossesDeepMathIntegrationTests
             new NTXentLoss<double>(temperature: 0));
     }
 
-    [Fact]
-    public void NTXent_WithGradients_LossMatchesForwardOnly()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_WithGradients_LossMatchesForwardOnly()
     {
         var loss = new NTXentLoss<double>(temperature: 0.5, normalize: false);
 
@@ -251,8 +252,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(forwardLoss, gradLoss, Tol);
     }
 
-    [Fact]
-    public void NTXent_SymmetricLoss()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_SymmetricLoss()
     {
         // NT-Xent loss should be symmetric: L(z1, z2) = L(z2, z1)
         var loss = new NTXentLoss<double>(temperature: 0.5, normalize: true);
@@ -266,8 +267,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(loss12, loss21, Tol);
     }
 
-    [Fact]
-    public void NTXent_LossAlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NTXent_LossAlwaysNonNegative()
     {
         var loss = new NTXentLoss<double>(temperature: 0.5, normalize: true);
 
@@ -282,8 +283,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region Barlow Twins Loss - Exact Math Verification
 
-    [Fact]
-    public void BarlowTwins_IdentityCrossCorrelation_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_IdentityCrossCorrelation_ZeroLoss()
     {
         // When cross-correlation is identity matrix, loss should be 0
         // This happens when z1 = z2 and they're already normalized
@@ -308,8 +309,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void BarlowTwins_HandCalculated_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_HandCalculated_2x2()
     {
         // No normalization for easier hand calculation
         var loss = new BarlowTwinsLoss<double>(lambda: 1.0, normalize: false);
@@ -331,8 +332,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(1171.0, result, Tol);
     }
 
-    [Fact]
-    public void BarlowTwins_CrossCorrelation_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_CrossCorrelation_HandCalculated()
     {
         var loss = new BarlowTwinsLoss<double>(lambda: 0.005, normalize: false);
 
@@ -347,8 +348,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.5, cc[1, 1], Tol);
     }
 
-    [Fact]
-    public void BarlowTwins_OffDiagonalSum_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_OffDiagonalSum_HandCalculated()
     {
         var loss = new BarlowTwinsLoss<double>(lambda: 0.005, normalize: false);
 
@@ -360,8 +361,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.13, offDiag, Tol);
     }
 
-    [Fact]
-    public void BarlowTwins_LambdaEffect_HigherLambdaPenalizesRedundancy()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_LambdaEffect_HigherLambdaPenalizesRedundancy()
     {
         // Higher lambda should penalize off-diagonal elements more
         var lowLambda = new BarlowTwinsLoss<double>(lambda: 0.001, normalize: false);
@@ -379,15 +380,15 @@ public class SSLLossesDeepMathIntegrationTests
             $"High lambda loss ({highResult}) should be >= low lambda ({lowResult})");
     }
 
-    [Fact]
-    public void BarlowTwins_NegativeLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_NegativeLambda_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BarlowTwinsLoss<double>(lambda: -0.1));
     }
 
-    [Fact]
-    public void BarlowTwins_WithGradients_LossMatchesForwardOnly()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_WithGradients_LossMatchesForwardOnly()
     {
         var loss = new BarlowTwinsLoss<double>(lambda: 0.005, normalize: false);
 
@@ -400,8 +401,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(forwardLoss, gradLoss, Tol);
     }
 
-    [Fact]
-    public void BarlowTwins_LossAlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwins_LossAlwaysNonNegative()
     {
         var loss = new BarlowTwinsLoss<double>(lambda: 0.005, normalize: true);
 
@@ -416,8 +417,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region BYOL Loss - Exact Math Verification
 
-    [Fact]
-    public void BYOL_IdenticalVectors_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_IdenticalVectors_ZeroLoss()
     {
         // When prediction equals target (after normalization), cosine similarity = 1
         // Loss = 2 - 2*1 = 0
@@ -430,8 +431,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void BYOL_OppositeVectors_MaximumLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_OppositeVectors_MaximumLoss()
     {
         // When prediction is opposite of target, cosine similarity = -1
         // Loss = 2 - 2*(-1) = 4
@@ -444,8 +445,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(4.0, result, Tol);
     }
 
-    [Fact]
-    public void BYOL_OrthogonalVectors_LossIsTwo()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_OrthogonalVectors_LossIsTwo()
     {
         // When prediction and target are orthogonal, cosine similarity = 0
         // Loss = 2 - 2*0 = 2
@@ -458,8 +459,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
-    public void BYOL_HandCalculated_CosineSimilarity()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_HandCalculated_CosineSimilarity()
     {
         // pred = [3, 4], target = [1, 0]
         // |pred| = 5, |target| = 1
@@ -477,8 +478,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.8, result, RelaxedTol);
     }
 
-    [Fact]
-    public void BYOL_SymmetricLoss_IsAverageBothDirections()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_SymmetricLoss_IsAverageBothDirections()
     {
         var loss = new BYOLLoss<double>(normalize: true, symmetric: true);
 
@@ -496,8 +497,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(expected, symLoss, Tol);
     }
 
-    [Fact]
-    public void BYOL_MSELoss_EquivalentToCosineLoss_ForNormalized()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_MSELoss_EquivalentToCosineLoss_ForNormalized()
     {
         // For normalized vectors: MSE = 2 - 2*cos_sim = BYOL loss
         // This is because ||a - b||^2 = ||a||^2 + ||b||^2 - 2*a.b = 2 - 2*cos_sim
@@ -518,8 +519,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(cosineLoss, mseLoss * dim, RelaxedTol);
     }
 
-    [Fact]
-    public void BYOL_LossBoundedZeroToFour()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_LossBoundedZeroToFour()
     {
         // BYOL loss = 2 - 2*cos, and cos ranges from -1 to 1
         // So loss ranges from 0 to 4
@@ -533,8 +534,8 @@ public class SSLLossesDeepMathIntegrationTests
             $"BYOL loss should be in [0, 4], got {result}");
     }
 
-    [Fact]
-    public void BYOL_WithGradients_LossMatchesForwardOnly()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_WithGradients_LossMatchesForwardOnly()
     {
         var loss = new BYOLLoss<double>(normalize: true, symmetric: false);
 
@@ -551,8 +552,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region Temperature Scheduler - Exact Math Verification
 
-    [Fact]
-    public void TempScheduler_Constant_AlwaysReturnsInitial()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_Constant_AlwaysReturnsInitial()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.Constant,
@@ -564,8 +565,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(100000), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_LinearDecay_BoundaryValues()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_LinearDecay_BoundaryValues()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.LinearDecay,
@@ -583,8 +584,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetTemperature(200), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_CosineDecay_BoundaryValues()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_CosineDecay_BoundaryValues()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.CosineDecay,
@@ -607,8 +608,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetTemperature(200), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_ExponentialDecay_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_ExponentialDecay_HandCalculated()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.ExponentialDecay,
@@ -626,8 +627,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.01, scheduler.GetTemperature(100), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_LinearWarmup_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_LinearWarmup_HandCalculated()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.LinearWarmup,
@@ -658,8 +659,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(100), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_CosineWarmup_BoundaryValues()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_CosineWarmup_BoundaryValues()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.CosineWarmup,
@@ -683,8 +684,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(150), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_NegativeStep_ClampsToZero()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_NegativeStep_ClampsToZero()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.LinearDecay,
@@ -696,8 +697,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(1.0, scheduler.GetTemperature(-5), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_InvalidParameters_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_InvalidParameters_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TemperatureScheduler(initialTemperature: 0));
@@ -711,8 +712,8 @@ public class SSLLossesDeepMathIntegrationTests
             new TemperatureScheduler(totalSteps: 0));
     }
 
-    [Fact]
-    public void TempScheduler_ConstantFactory_ReturnsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_ConstantFactory_ReturnsConstant()
     {
         var scheduler = TemperatureScheduler.Constant(0.1);
         Assert.Equal(TemperatureScheduleType.Constant, scheduler.ScheduleType);
@@ -720,8 +721,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.1, scheduler.GetTemperature(99999), Tol);
     }
 
-    [Fact]
-    public void TempScheduler_ForEpoch_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task TempScheduler_ForEpoch_HandCalculated()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.LinearDecay,
@@ -743,8 +744,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region Momentum Scheduler - Exact Math Verification
 
-    [Fact]
-    public void MomentumSchedule_CosineFromBaseToFinal()
+    [Fact(Timeout = 120000)]
+    public async Task MomentumSchedule_CosineFromBaseToFinal()
     {
         // ScheduleMomentum uses cosine schedule
         double baseMomentum = 0.99;
@@ -766,8 +767,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.Equal(0.999, m100, Tol);
     }
 
-    [Fact]
-    public void MomentumSchedule_Monotonic()
+    [Fact(Timeout = 120000)]
+    public async Task MomentumSchedule_Monotonic()
     {
         // Momentum should increase monotonically (base < final)
         double baseMomentum = 0.99;
@@ -782,8 +783,8 @@ public class SSLLossesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MomentumSchedule_ZeroEpochs_ReturnsFinal()
+    [Fact(Timeout = 120000)]
+    public async Task MomentumSchedule_ZeroEpochs_ReturnsFinal()
     {
         double result = MomentumEncoder<double>.ScheduleMomentum(0.99, 0.999, 50, 0);
         Assert.Equal(0.999, result, Tol);
@@ -793,8 +794,8 @@ public class SSLLossesDeepMathIntegrationTests
 
     #region Cross-Loss Consistency Tests
 
-    [Fact]
-    public void InfoNCE_And_NTXent_SameForInBatch_WithSameSetup()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCE_And_NTXent_SameForInBatch_WithSameSetup()
     {
         // InfoNCE in-batch mode should behave similarly to NTXent for asymmetric pairs
         // Note: NTXent is symmetric (considers both z1->z2 and z2->z1)
@@ -813,8 +814,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.True(ntxentResult >= 0, $"NT-Xent loss should be non-negative: {ntxentResult}");
     }
 
-    [Fact]
-    public void AllLosses_NonNegative_ForRandomInput()
+    [Fact(Timeout = 120000)]
+    public async Task AllLosses_NonNegative_ForRandomInput()
     {
         var infonce = new InfoNCELoss<double>(temperature: 0.5, normalize: true);
         var ntxent = new NTXentLoss<double>(temperature: 0.5, normalize: true);
@@ -837,8 +838,8 @@ public class SSLLossesDeepMathIntegrationTests
         Assert.True(byolResult >= 0, $"BYOL loss should be non-negative: {byolResult}");
     }
 
-    [Fact]
-    public void BYOL_ConsistentWithMSE_ForNormalizedVectors()
+    [Fact(Timeout = 120000)]
+    public async Task BYOL_ConsistentWithMSE_ForNormalizedVectors()
     {
         // BYOL cosine loss and MSE loss should be related for normalized vectors
         // For unit vectors: ||a-b||^2 = 2 - 2*cos(a,b)

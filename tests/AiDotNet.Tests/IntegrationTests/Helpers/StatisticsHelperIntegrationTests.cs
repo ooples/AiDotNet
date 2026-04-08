@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
 using AiDotNet.Enums;
@@ -15,8 +16,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Basic Statistics Tests
 
-    [Fact]
-    public void CalculateMean_WithValidValues_ReturnsCorrectMean()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMean_WithValidValues_ReturnsCorrectMean()
     {
         // Arrange
         var values = new double[] { 1, 2, 3, 4, 5 };
@@ -28,8 +29,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMean_WithSingleValue_ReturnsThatValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMean_WithSingleValue_ReturnsThatValue()
     {
         // Arrange
         var values = new double[] { 42.0 };
@@ -41,8 +42,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(42.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMedian_WithOddCount_ReturnsMiddleValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMedian_WithOddCount_ReturnsMiddleValue()
     {
         // Arrange
         var values = new double[] { 1, 3, 2, 5, 4 };
@@ -54,8 +55,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMedian_WithEvenCount_ReturnsAverageOfMiddleValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMedian_WithEvenCount_ReturnsAverageOfMiddleValues()
     {
         // Arrange
         var values = new double[] { 1, 2, 3, 4 };
@@ -67,8 +68,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.5, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateVariance_WithValidValues_ReturnsCorrectVariance()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateVariance_WithValidValues_ReturnsCorrectVariance()
     {
         // Arrange
         var values = new double[] { 2, 4, 4, 4, 5, 5, 7, 9 };
@@ -81,8 +82,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
-    public void CalculateStandardDeviation_WithValidValues_ReturnsCorrectStdDev()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateStandardDeviation_WithValidValues_ReturnsCorrectStdDev()
     {
         // Arrange
         var values = new double[] { 2, 4, 4, 4, 5, 5, 7, 9 };
@@ -97,8 +98,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(Math.Sqrt(variance), result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMeanAndStandardDeviation_ReturnsConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanAndStandardDeviation_ReturnsConsistentResults()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -111,8 +112,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(stdDev > 0);
     }
 
-    [Fact]
-    public void CalculateMeanAbsoluteDeviation_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanAbsoluteDeviation_ReturnsCorrectValue()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -125,8 +126,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateMedianAbsoluteDeviation_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMedianAbsoluteDeviation_ReturnsCorrectValue()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -138,8 +139,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateQuantiles_ReturnsFirstAndThirdQuantiles()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateQuantiles_ReturnsFirstAndThirdQuantiles()
     {
         // Arrange
         var data = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 });
@@ -153,8 +154,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(q3 >= 1 && q3 <= 12);
     }
 
-    [Fact]
-    public void CalculateSkewnessAndKurtosis_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateSkewnessAndKurtosis_ReturnsValidValues()
     {
         // Arrange
         var sample = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -172,8 +173,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Error Metrics Tests
 
-    [Fact]
-    public void CalculateMeanSquaredError_WithPerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanSquaredError_WithPerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -186,8 +187,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMeanSquaredError_WithDifferences_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanSquaredError_WithDifferences_ReturnsPositiveValue()
     {
         // Arrange
         var actual = new double[] { 1, 2, 3, 4, 5 };
@@ -201,8 +202,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.01, result, Tolerance); // Average of 0.01 squared differences
     }
 
-    [Fact]
-    public void CalculateRootMeanSquaredError_ReturnsSquareRootOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateRootMeanSquaredError_ReturnsSquareRootOfMSE()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -216,8 +217,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(Math.Sqrt(mse), rmse, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMeanAbsoluteError_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanAbsoluteError_ReturnsCorrectValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -230,8 +231,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMeanAbsolutePercentageError_ReturnsPercentage()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanAbsolutePercentageError_ReturnsPercentage()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 100, 200, 300, 400, 500 });
@@ -244,8 +245,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(10.0, result, Tolerance); // 10% error
     }
 
-    [Fact]
-    public void CalculateR2_WithPerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateR2_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -258,8 +259,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateR2_WithRandomPrediction_ReturnsLowValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateR2_WithRandomPrediction_ReturnsLowValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -272,8 +273,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result < 0.5); // Poor fit
     }
 
-    [Fact]
-    public void CalculateAdjustedR2_IsLessThanOrEqualToR2()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateAdjustedR2_IsLessThanOrEqualToR2()
     {
         // Arrange
         double r2 = 0.85;
@@ -287,8 +288,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(adjustedR2 <= r2);
     }
 
-    [Fact]
-    public void CalculateExplainedVarianceScore_WithPerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateExplainedVarianceScore_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -301,8 +302,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMaxError_ReturnsLargestAbsoluteDifference()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMaxError_ReturnsLargestAbsoluteDifference()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -315,8 +316,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMedianAbsoluteError_ReturnsMedianOfErrors()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMedianAbsoluteError_ReturnsMedianOfErrors()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -329,8 +330,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateMeanBiasError_ReturnsAverageBias()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanBiasError_ReturnsAverageBias()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -343,8 +344,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance); // Systematic over-prediction
     }
 
-    [Fact]
-    public void CalculateSymmetricMeanAbsolutePercentageError_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateSymmetricMeanAbsolutePercentageError_ReturnsValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 100, 200, 300, 400, 500 });
@@ -357,8 +358,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 200.0); // SMAPE is between 0 and 200
     }
 
-    [Fact]
-    public void CalculateMeanSquaredLogError_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanSquaredLogError_ReturnsPositiveValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -375,8 +376,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Correlation Tests
 
-    [Fact]
-    public void CalculatePearsonCorrelation_WithPerfectPositiveCorrelation_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePearsonCorrelation_WithPerfectPositiveCorrelation_ReturnsOne()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -389,8 +390,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculatePearsonCorrelation_WithPerfectNegativeCorrelation_ReturnsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePearsonCorrelation_WithPerfectNegativeCorrelation_ReturnsMinusOne()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -403,8 +404,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculatePearsonCorrelationCoefficient_MatchesPearsonCorrelation()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePearsonCorrelationCoefficient_MatchesPearsonCorrelation()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -418,8 +419,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(result1, result2, Tolerance);
     }
 
-    [Fact]
-    public void CalculateSpearmanRankCorrelationCoefficient_WithMonotonicData_ReturnsHighValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateSpearmanRankCorrelationCoefficient_WithMonotonicData_ReturnsHighValue()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -432,8 +433,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0.9);
     }
 
-    [Fact]
-    public void CalculateKendallTau_WithConcordantPairs_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateKendallTau_WithConcordantPairs_ReturnsPositive()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -450,8 +451,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Distance Metrics Tests
 
-    [Fact]
-    public void EuclideanDistance_WithIdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_WithIdenticalVectors_ReturnsZero()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -464,8 +465,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_WithKnownVectors_ReturnsCorrectDistance()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_WithKnownVectors_ReturnsCorrectDistance()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 0, 0, 0 });
@@ -478,8 +479,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(5.0, result, Tolerance); // 3-4-5 triangle
     }
 
-    [Fact]
-    public void ManhattanDistance_WithKnownVectors_ReturnsCorrectDistance()
+    [Fact(Timeout = 120000)]
+    public async Task ManhattanDistance_WithKnownVectors_ReturnsCorrectDistance()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 0, 0, 0 });
@@ -492,8 +493,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(6.0, result, Tolerance); // |1| + |2| + |3|
     }
 
-    [Fact]
-    public void CosineSimilarity_WithIdenticalVectors_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_WithIdenticalVectors_ReturnsOne()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -506,8 +507,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_WithOrthogonalVectors_ReturnsZero()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 0, 0 });
@@ -520,8 +521,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void JaccardSimilarity_WithIdenticalSets_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task JaccardSimilarity_WithIdenticalSets_ReturnsOne()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 1, 0, 0 });
@@ -534,8 +535,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void HammingDistance_WithDifferentBits_ReturnsCount()
+    [Fact(Timeout = 120000)]
+    public async Task HammingDistance_WithDifferentBits_ReturnsCount()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 0, 1, 0 });
@@ -548,8 +549,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(2.0, result, Tolerance); // Two positions differ
     }
 
-    [Fact]
-    public void CalculateDistance_WithDifferentMetrics_ReturnsValidDistances()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDistance_WithDifferentMetrics_ReturnsValidDistances()
     {
         // Arrange
         var v1 = new Vector<double>(new double[] { 1, 2, 3 });
@@ -570,8 +571,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Distribution Tests
 
-    [Fact]
-    public void CalculateNormalCDF_AtMean_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateNormalCDF_AtMean_ReturnsHalf()
     {
         // Arrange
         double mean = 0.0;
@@ -585,8 +586,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateNormalPDF_AtMean_ReturnsMaxValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateNormalPDF_AtMean_ReturnsMaxValue()
     {
         // Arrange
         double mean = 0.0;
@@ -600,8 +601,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(atMean > awayFromMean);
     }
 
-    [Fact]
-    public void CalculateInverseNormalCDF_AtHalf_ReturnsMean()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateInverseNormalCDF_AtHalf_ReturnsMean()
     {
         // Arrange
         double probability = 0.5;
@@ -613,8 +614,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, 0.01); // Standard normal mean is 0
     }
 
-    [Fact]
-    public void CalculateChiSquareCDF_WithPositiveX_ReturnsValidProbability()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateChiSquareCDF_WithPositiveX_ReturnsValidProbability()
     {
         // Arrange
         int df = 5;
@@ -627,8 +628,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 1);
     }
 
-    [Fact]
-    public void CalculateChiSquarePDF_WithValidInput_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateChiSquarePDF_WithValidInput_ReturnsPositive()
     {
         // Arrange
         int df = 5;
@@ -641,8 +642,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void DetermineBestFitDistribution_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task DetermineBestFitDistribution_ReturnsValidResult()
     {
         // Arrange - normally distributed data
         var random = new Random(42);
@@ -656,8 +657,8 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void CalculateBetaCDF_AtBoundaries_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateBetaCDF_AtBoundaries_ReturnsValidValues()
     {
         // Arrange
         double alpha = 2.0;
@@ -676,8 +677,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Statistical Tests
 
-    [Fact]
-    public void TTest_WithSameDistributions_ReturnsHighPValue()
+    [Fact(Timeout = 120000)]
+    public async Task TTest_WithSameDistributions_ReturnsHighPValue()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -691,8 +692,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact]
-    public void TTest_WithDifferentDistributions_ReturnsLowPValue()
+    [Fact(Timeout = 120000)]
+    public async Task TTest_WithDifferentDistributions_ReturnsLowPValue()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -706,8 +707,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue < 0.05); // Significant difference
     }
 
-    [Fact]
-    public void MannWhitneyUTest_WithValidData_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task MannWhitneyUTest_WithValidData_ReturnsResult()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -721,8 +722,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact]
-    public void ChiSquareTest_WithValidData_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task ChiSquareTest_WithValidData_ReturnsResult()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -735,8 +736,8 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void FTest_WithValidData_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task FTest_WithValidData_ReturnsResult()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -750,8 +751,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact]
-    public void PermutationTest_WithValidData_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationTest_WithValidData_ReturnsResult()
     {
         // Arrange
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -765,8 +766,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.PValue >= 0 && result.PValue <= 1);
     }
 
-    [Fact]
-    public void CalculatePValue_WithDifferentTestTypes_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePValue_WithDifferentTestTypes_ReturnsValidValues()
     {
         // Arrange - continuous data for t-test
         var leftY = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -789,8 +790,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Model Evaluation Tests
 
-    [Fact]
-    public void CalculateAIC_WithValidInputs_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateAIC_WithValidInputs_ReturnsValue()
     {
         // Arrange
         int sampleSize = 100;
@@ -804,8 +805,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(result));
     }
 
-    [Fact]
-    public void CalculateBIC_PenalizesMoreParametersThanAIC()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateBIC_PenalizesMoreParametersThanAIC()
     {
         // Arrange
         int sampleSize = 100;
@@ -821,8 +822,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(bic));
     }
 
-    [Fact]
-    public void CalculateAccuracy_WithPerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateAccuracy_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 0, 1, 0, 1, 1 });
@@ -835,8 +836,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculatePrecisionRecallF1_WithValidData_ReturnsValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePrecisionRecallF1_WithValidData_ReturnsValidMetrics()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 1, 0, 0, 1, 0, 1, 1 });
@@ -851,8 +852,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(f1 >= 0 && f1 <= 1);
     }
 
-    [Fact]
-    public void CalculateF1Score_IsHarmonicMean()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateF1Score_IsHarmonicMean()
     {
         // Arrange
         double precision = 0.8;
@@ -867,8 +868,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(expected, f1, Tolerance);
     }
 
-    [Fact]
-    public void CalculateConfusionMatrix_WithBinaryData_ReturnsValidMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateConfusionMatrix_WithBinaryData_ReturnsValidMatrix()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 1, 0, 0, 1, 0 });
@@ -881,8 +882,8 @@ public class StatisticsHelperIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void CalculateROCAUC_WithPerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateROCAUC_WithPerfectPrediction_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
@@ -895,8 +896,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateROCCurve_ReturnsValidCurve()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateROCCurve_ReturnsValidCurve()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 0, 0, 1, 1, 0, 1 });
@@ -911,8 +912,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(fpr.Length, tpr.Length);
     }
 
-    [Fact]
-    public void CalculateDurbinWatsonStatistic_WithResiduals_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDurbinWatsonStatistic_WithResiduals_ReturnsValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -925,8 +926,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0 && result <= 4); // DW statistic range
     }
 
-    [Fact]
-    public void CalculateTheilUStatistic_WithValidData_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateTheilUStatistic_WithValidData_ReturnsValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -943,8 +944,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Information Theory Tests
 
-    [Fact]
-    public void CalculateMutualInformation_WithDependentVariables_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMutualInformation_WithDependentVariables_ReturnsPositive()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -957,8 +958,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateNormalizedMutualInformation_ReturnsBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateNormalizedMutualInformation_ReturnsBetweenZeroAndOne()
     {
         // Arrange
         var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -975,8 +976,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Clustering Metrics Tests
 
-    [Fact]
-    public void CalculateSilhouetteScore_WithWellSeparatedClusters_ReturnsHighValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateSilhouetteScore_WithWellSeparatedClusters_ReturnsHighValue()
     {
         // Arrange - Two well-separated clusters
         var data = new Matrix<double>(new double[,]
@@ -993,8 +994,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0.5); // Well-separated should have high silhouette
     }
 
-    [Fact]
-    public void CalculateCalinskiHarabaszIndex_WithValidClusters_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCalinskiHarabaszIndex_WithValidClusters_ReturnsPositive()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -1011,8 +1012,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
-    public void CalculateDaviesBouldinIndex_WithValidClusters_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDaviesBouldinIndex_WithValidClusters_ReturnsPositive()
     {
         // Arrange
         var data = new Matrix<double>(new double[,]
@@ -1029,8 +1030,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateAdjustedRandIndex_WithIdenticalLabels_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateAdjustedRandIndex_WithIdenticalLabels_ReturnsOne()
     {
         // Arrange
         var labels1 = new Vector<double>(new double[] { 0, 0, 1, 1, 2, 2 });
@@ -1047,8 +1048,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Time Series Tests
 
-    [Fact]
-    public void CalculateAutoCorrelationFunction_WithLag_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateAutoCorrelationFunction_WithLag_ReturnsValidValues()
     {
         // Arrange
         var series = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1063,8 +1064,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result[0], Tolerance); // ACF at lag 0 is always 1
     }
 
-    [Fact]
-    public void CalculatePartialAutoCorrelationFunction_WithLag_ReturnsValidValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePartialAutoCorrelationFunction_WithLag_ReturnsValidValues()
     {
         // Arrange
         var series = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 });
@@ -1078,8 +1079,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result.Length > 0);
     }
 
-    [Fact]
-    public void CalculateDynamicTimeWarping_WithIdenticalSeries_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDynamicTimeWarping_WithIdenticalSeries_ReturnsZero()
     {
         // Arrange
         var series1 = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1092,8 +1093,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateDynamicTimeWarping_WithDifferentSeries_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateDynamicTimeWarping_WithDifferentSeries_ReturnsPositive()
     {
         // Arrange
         var series1 = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1110,8 +1111,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Interval and Confidence Tests
 
-    [Fact]
-    public void CalculatePredictionIntervals_ReturnsValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePredictionIntervals_ReturnsValidBounds()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1124,8 +1125,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact]
-    public void CalculateConfidenceIntervals_WithNormalDistribution_ReturnsValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateConfidenceIntervals_WithNormalDistribution_ReturnsValidBounds()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1137,8 +1138,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact]
-    public void CalculateCredibleIntervals_ReturnsValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCredibleIntervals_ReturnsValidBounds()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1150,8 +1151,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact]
-    public void CalculateBootstrapInterval_ReturnsValidBounds()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateBootstrapInterval_ReturnsValidBounds()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1164,8 +1165,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_ReturnsBinomialConfidenceInterval()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateClopperPearsonInterval_ReturnsBinomialConfidenceInterval()
     {
         // Arrange
         int successes = 7;
@@ -1181,8 +1182,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(lower < upper);
     }
 
-    [Fact]
-    public void CalculateTValue_ReturnsPositiveForValidInputs()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateTValue_ReturnsPositiveForValidInputs()
     {
         // Arrange
         int degreesOfFreedom = 10;
@@ -1199,8 +1200,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Residual Analysis Tests
 
-    [Fact]
-    public void CalculateResiduals_ReturnsCorrectDifferences()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateResiduals_ReturnsCorrectDifferences()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1215,8 +1216,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(-0.2, residuals[1], Tolerance);
     }
 
-    [Fact]
-    public void CalculateTotalSumOfSquares_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateTotalSumOfSquares_ReturnsPositive()
     {
         // Arrange
         var values = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1228,8 +1229,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
-    public void CalculateResidualSumOfSquares_WithPerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateResidualSumOfSquares_WithPerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1246,8 +1247,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Ranking Metrics Tests
 
-    [Fact]
-    public void CalculateMeanAveragePrecision_WithPerfectRanking_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanAveragePrecision_WithPerfectRanking_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 1, 1, 0, 0 });
@@ -1260,8 +1261,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateNDCG_WithPerfectRanking_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateNDCG_WithPerfectRanking_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 3, 2, 1, 0, 0 });
@@ -1274,8 +1275,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateMeanReciprocalRank_WithFirstCorrect_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMeanReciprocalRank_WithFirstCorrect_ReturnsOne()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 0, 0, 0, 0 });
@@ -1292,8 +1293,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Covariance Matrix Tests
 
-    [Fact]
-    public void CalculateCovarianceMatrix_ReturnsSymmetricMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCovarianceMatrix_ReturnsSymmetricMatrix()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -1320,8 +1321,8 @@ public class StatisticsHelperIntegrationTests
         }
     }
 
-    [Fact]
-    public void CalculateCorrelationMatrix_ReturnsDiagonalOnes()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCorrelationMatrix_ReturnsDiagonalOnes()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -1347,8 +1348,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Gamma and Special Functions Tests
 
-    [Fact]
-    public void Gamma_WithPositiveInteger_ReturnsFactorial()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_WithPositiveInteger_ReturnsFactorial()
     {
         // Arrange & Act
         var gamma5 = StatisticsHelper<double>.Gamma(5.0); // Should be 4! = 24
@@ -1357,8 +1358,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(24.0, gamma5, Tolerance);
     }
 
-    [Fact]
-    public void Digamma_WithPositiveValue_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task Digamma_WithPositiveValue_ReturnsValue()
     {
         // Arrange
         double x = 2.0;
@@ -1370,8 +1371,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(!double.IsNaN(result));
     }
 
-    [Fact]
-    public void IncompleteGamma_WithValidInputs_ReturnsBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task IncompleteGamma_WithValidInputs_ReturnsBetweenZeroAndOne()
     {
         // Arrange
         double a = 2.0;
@@ -1388,8 +1389,8 @@ public class StatisticsHelperIntegrationTests
 
     #region CRPS Tests
 
-    [Fact]
-    public void CalculateCRPS_WithPerfectPrediction_ReturnsLowValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCRPS_WithPerfectPrediction_ReturnsLowValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1402,8 +1403,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CalculateCRPS_WithMeanAndStdDev_ReturnsValidValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateCRPS_WithMeanAndStdDev_ReturnsValidValue()
     {
         // Arrange
         var actual = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -1421,8 +1422,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Split Score Tests
 
-    [Fact]
-    public void CalculateVarianceReduction_WithValidSplit_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateVarianceReduction_WithValidSplit_ReturnsPositive()
     {
         // Arrange
         var y = new Vector<double>(new double[] { 1, 2, 3, 10, 11, 12 });
@@ -1436,8 +1437,8 @@ public class StatisticsHelperIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
-    public void CalculateSplitScore_WithDifferentCriteria_ReturnsValues()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateSplitScore_WithDifferentCriteria_ReturnsValues()
     {
         // Arrange
         var y = new Vector<double>(new double[] { 1, 2, 3, 10, 11, 12 });
@@ -1459,8 +1460,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Learning Curve Tests
 
-    [Fact]
-    public void CalculateLearningCurve_ReturnsCorrectNumberOfSteps()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateLearningCurve_ReturnsCorrectNumberOfSteps()
     {
         // Arrange
         var yActual = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -1478,8 +1479,8 @@ public class StatisticsHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void CalculateMean_WithFloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateMean_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange
         var values = new float[] { 1f, 2f, 3f, 4f, 5f };
@@ -1491,8 +1492,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(3.0f, result, 0.001f);
     }
 
-    [Fact]
-    public void CalculatePearsonCorrelation_WithFloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalculatePearsonCorrelation_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange
         var x = new Vector<float>(new float[] { 1f, 2f, 3f, 4f, 5f });
@@ -1505,8 +1506,8 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(1.0f, result, 0.001f);
     }
 
-    [Fact]
-    public void EuclideanDistance_WithFloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_WithFloatType_ReturnsCorrectValue()
     {
         // Arrange
         var v1 = new Vector<float>(new float[] { 0f, 0f, 0f });

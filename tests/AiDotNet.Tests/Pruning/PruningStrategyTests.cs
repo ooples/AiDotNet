@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Pruning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Pruning;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.Pruning;
 /// </summary>
 public class PruningStrategyTests
 {
-    [Fact]
-    public void MagnitudePruning_50Percent_PrunesSmallestWeights()
+    [Fact(Timeout = 60000)]
+    public async Task MagnitudePruning_50Percent_PrunesSmallestWeights()
     {
         // Arrange
         var weights = new Matrix<double>(2, 2);
@@ -35,8 +36,8 @@ public class PruningStrategyTests
         Assert.Equal(0.8, pruned[1, 1]); // Kept
     }
 
-    [Fact]
-    public void MagnitudePruning_70Percent_PrunesMostWeights()
+    [Fact(Timeout = 60000)]
+    public async Task MagnitudePruning_70Percent_PrunesMostWeights()
     {
         // Arrange
         var weights = new Matrix<double>(2, 5);
@@ -61,8 +62,8 @@ public class PruningStrategyTests
         Assert.Equal(0.7, mask.GetSparsity(), precision: 1);
     }
 
-    [Fact]
-    public void MagnitudePruning_RequiresGradients_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task MagnitudePruning_RequiresGradients_ReturnsFalse()
     {
         // Arrange
         var strategy = new MagnitudePruningStrategy<double>();
@@ -71,8 +72,8 @@ public class PruningStrategyTests
         Assert.False(strategy.RequiresGradients);
     }
 
-    [Fact]
-    public void GradientPruning_RequiresGradients()
+    [Fact(Timeout = 60000)]
+    public async Task GradientPruning_RequiresGradients()
     {
         // Arrange
         var strategy = new GradientPruningStrategy<double>();
@@ -81,8 +82,8 @@ public class PruningStrategyTests
         Assert.True(strategy.RequiresGradients);
     }
 
-    [Fact]
-    public void GradientPruning_PrunesLowSensitivityWeights()
+    [Fact(Timeout = 60000)]
+    public async Task GradientPruning_PrunesLowSensitivityWeights()
     {
         // Arrange
         var weights = new Matrix<double>(2, 2);
@@ -109,8 +110,8 @@ public class PruningStrategyTests
         Assert.Equal(0.5, pruned[0, 1]); // High gradient → kept
     }
 
-    [Fact]
-    public void GradientPruning_WithoutGradients_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task GradientPruning_WithoutGradients_ThrowsException()
     {
         // Arrange
         var weights = new Matrix<double>(2, 2);
@@ -121,8 +122,8 @@ public class PruningStrategyTests
             strategy.ComputeImportanceScores(weights, null));
     }
 
-    [Fact]
-    public void LotteryTicket_StoresAndRestoresInitialWeights()
+    [Fact(Timeout = 60000)]
+    public async Task LotteryTicket_StoresAndRestoresInitialWeights()
     {
         // Arrange
         var initialWeights = new Matrix<double>(2, 2);
@@ -161,8 +162,8 @@ public class PruningStrategyTests
         }
     }
 
-    [Fact]
-    public void LotteryTicket_WithoutStoredWeights_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task LotteryTicket_WithoutStoredWeights_ThrowsException()
     {
         // Arrange
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -174,8 +175,8 @@ public class PruningStrategyTests
             strategy.ResetToInitialWeights("nonexistent", weights, mask));
     }
 
-    [Fact]
-    public void StructuredPruning_PrunesEntireNeurons()
+    [Fact(Timeout = 60000)]
+    public async Task StructuredPruning_PrunesEntireNeurons()
     {
         // Arrange
         var weights = new Matrix<double>(3, 4); // 3 inputs, 4 neurons
@@ -220,8 +221,8 @@ public class PruningStrategyTests
         }
     }
 
-    [Fact]
-    public void StructuredPruning_IsStructured_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task StructuredPruning_IsStructured_ReturnsTrue()
     {
         // Arrange
         var strategy = new StructuredPruningStrategy<double>(
@@ -231,8 +232,8 @@ public class PruningStrategyTests
         Assert.True(strategy.IsStructured);
     }
 
-    [Fact]
-    public void PruningMask_GetSparsity_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task PruningMask_GetSparsity_CalculatesCorrectly()
     {
         // Arrange
         var mask = new PruningMask<double>(2, 2);
@@ -250,8 +251,8 @@ public class PruningStrategyTests
         Assert.Equal(0.75, sparsity);
     }
 
-    [Fact]
-    public void PruningMask_CombineWith_LogicalAND()
+    [Fact(Timeout = 60000)]
+    public async Task PruningMask_CombineWith_LogicalAND()
     {
         // Arrange
         var mask1 = new PruningMask<double>(2, 2);
@@ -279,8 +280,8 @@ public class PruningStrategyTests
         Assert.Equal(1.0, result[1, 1]); // true AND true
     }
 
-    [Fact]
-    public void PruningMask_Apply_EnforcesShapeMatching()
+    [Fact(Timeout = 60000)]
+    public async Task PruningMask_Apply_EnforcesShapeMatching()
     {
         // Arrange
         var mask = new PruningMask<double>(2, 2);
@@ -290,8 +291,8 @@ public class PruningStrategyTests
         Assert.Throws<ArgumentException>(() => mask.Apply(weights));
     }
 
-    [Fact]
-    public void MagnitudePruning_ApplyPruning_ModifiesWeightsInPlace()
+    [Fact(Timeout = 60000)]
+    public async Task MagnitudePruning_ApplyPruning_ModifiesWeightsInPlace()
     {
         // Arrange
         var weights = new Matrix<double>(2, 2);
@@ -314,8 +315,8 @@ public class PruningStrategyTests
         Assert.Equal(0.8, weights[1, 1]); // Kept
     }
 
-    [Fact]
-    public void PruningMask_InitializedWithAllOnes()
+    [Fact(Timeout = 60000)]
+    public async Task PruningMask_InitializedWithAllOnes()
     {
         // Arrange & Act
         var mask = new PruningMask<double>(3, 3);
@@ -324,8 +325,8 @@ public class PruningStrategyTests
         Assert.Equal(0.0, mask.GetSparsity());
     }
 
-    [Fact]
-    public void CreateMask_InvalidSparsity_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateMask_InvalidSparsity_ThrowsException()
     {
         // Arrange
         var strategy = new MagnitudePruningStrategy<double>();
@@ -336,8 +337,8 @@ public class PruningStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.CreateMask(scores, 1.5));
     }
 
-    [Fact]
-    public void LotteryTicket_IterativePruning_AchievesTargetSparsity()
+    [Fact(Timeout = 60000)]
+    public async Task LotteryTicket_IterativePruning_AchievesTargetSparsity()
     {
         // Arrange
         var weights = new Matrix<double>(5, 5);

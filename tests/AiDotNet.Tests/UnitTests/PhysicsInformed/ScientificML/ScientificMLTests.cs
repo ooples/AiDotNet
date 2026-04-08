@@ -8,13 +8,14 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.ScientificML;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.ScientificML;
 
 public class ScientificMLTests
 {
-    [Fact]
-    public void HamiltonianNeuralNetwork_ComputeTimeDerivative_UsesHamiltonianGradient()
+    [Fact(Timeout = 60000)]
+    public async Task HamiltonianNeuralNetwork_ComputeTimeDerivative_UsesHamiltonianGradient()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 1.0, 1.0, 0.0 }));
@@ -29,8 +30,8 @@ public class ScientificMLTests
         Assert.InRange(derivative[1], -1.001, -0.999);
     }
 
-    [Fact]
-    public void HamiltonianNeuralNetwork_TrainUpdatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task HamiltonianNeuralNetwork_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 0.4, -0.2, 0.1 }));
@@ -52,8 +53,8 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
-    public void LagrangianNeuralNetwork_ComputeAcceleration_ConstantLagrangianReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task LagrangianNeuralNetwork_ComputeAcceleration_ConstantLagrangianReturnsZero()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 0.0, 0.0, 1.0 }));
@@ -67,8 +68,8 @@ public class ScientificMLTests
         Assert.InRange(Math.Abs(acceleration[0]), 0.0, 1e-6);
     }
 
-    [Fact]
-    public void LagrangianNeuralNetwork_TrainUpdatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task LagrangianNeuralNetwork_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 0.3, -0.4, 0.2 }));
@@ -90,8 +91,8 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
-    public void UniversalDifferentialEquation_RungeKutta4ImprovesAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task UniversalDifferentialEquation_RungeKutta4ImprovesAccuracy()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 0.0, 0.0, 0.0 }));
@@ -112,8 +113,8 @@ public class ScientificMLTests
         Assert.True(rk4Error < eulerError);
     }
 
-    [Fact]
-    public void UniversalDifferentialEquation_TrainUpdatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task UniversalDifferentialEquation_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
         layer.SetParameters(new Vector<double>(new[] { 0.15, -0.05, 0.02 }));
@@ -138,8 +139,8 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
-    public void SymbolicPhysicsLearner_DiscoversSimpleLinearRelationship()
+    [Fact(Timeout = 60000)]
+    public async Task SymbolicPhysicsLearner_DiscoversSimpleLinearRelationship()
     {
         var learner = new SymbolicPhysicsLearner<double>();
         var inputs = new double[,]

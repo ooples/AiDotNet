@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
@@ -27,8 +28,8 @@ namespace AiDotNetTests.UnitTests.Helpers
         {
         }
 
-        [Fact]
-        public void GetEnumValues_WithNoIgnore_ReturnsAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithNoIgnore_ReturnsAllValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>();
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains(TestEnum.Value5, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithIgnoreName_ExcludesSpecifiedValue()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithIgnoreName_ExcludesSpecifiedValue()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("Value3");
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(TestEnum.Value3, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunction_ReturnsValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunction_ReturnsValues()
         {
             // Act - exclude "ReLU" to test the exclude functionality
             var result = EnumHelper.GetEnumValues<ActivationFunction>("ReLU");
@@ -65,8 +66,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(ActivationFunction.ReLU, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithPoolingType_ReturnsValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithPoolingType_ReturnsValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<PoolingType>();
@@ -75,8 +76,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithNullIgnoreName_ReturnsAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithNullIgnoreName_ReturnsAllValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>(null);
@@ -86,8 +87,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5, result.Count);
         }
 
-        [Fact]
-        public void GetEnumValues_WithEmptyStringIgnoreName_ReturnsAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithEmptyStringIgnoreName_ReturnsAllValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("");
@@ -97,8 +98,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5, result.Count);
         }
 
-        [Fact]
-        public void GetEnumValues_WithNonExistentIgnoreName_ReturnsAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithNonExistentIgnoreName_ReturnsAllValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("NonExistentValue");
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5, result.Count);
         }
 
-        [Fact]
-        public void GetEnumValues_WithSingleValueEnum_ReturnsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithSingleValueEnum_ReturnsCorrectly()
         {
             // Act
             var result = EnumHelper.GetEnumValues<SingleValueEnum>("OnlyValue");
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(SingleValueEnum.OnlyValue, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunctionIgnoreReLU_ExcludesReLU()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunctionIgnoreReLU_ExcludesReLU()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("ReLU");
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(ActivationFunction.ReLU, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunctionIgnoreSigmoid_ExcludesSigmoid()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunctionIgnoreSigmoid_ExcludesSigmoid()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("Sigmoid");
@@ -141,8 +142,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(ActivationFunction.Sigmoid, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunctionIgnoreTanh_ExcludesTanh()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunctionIgnoreTanh_ExcludesTanh()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("Tanh");
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(ActivationFunction.Tanh, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithPoolingTypeIgnoreMax_ExcludesMax()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithPoolingTypeIgnoreMax_ExcludesMax()
         {
             // Act
             var result = EnumHelper.GetEnumValues<PoolingType>("Max");
@@ -163,8 +164,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(PoolingType.Max, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithPoolingTypeIgnoreAverage_ExcludesAverage()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithPoolingTypeIgnoreAverage_ExcludesAverage()
         {
             // Act
             var result = EnumHelper.GetEnumValues<PoolingType>("Average");
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(PoolingType.Average, result);
         }
 
-        [Fact]
-        public void GetEnumValues_ReturnsListNotArray()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_ReturnsListNotArray()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("Value1");
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.IsAssignableFrom<System.Collections.Generic.List<TestEnum>>(result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithCaseSensitiveIgnore_IsCaseSensitive()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithCaseSensitiveIgnore_IsCaseSensitive()
         {
             // Act - trying with wrong case
             var result = EnumHelper.GetEnumValues<TestEnum>("value1");
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains(TestEnum.Value1, result);
         }
 
-        [Fact]
-        public void GetEnumValues_MultipleCallsWithSameEnum_ReturnsConsistentResults()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_MultipleCallsWithSameEnum_ReturnsConsistentResults()
         {
             // Act
             var result1 = EnumHelper.GetEnumValues<TestEnum>("Value2");
@@ -207,8 +208,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(result1.Count, result2.Count);
         }
 
-        [Fact]
-        public void GetEnumValues_WithDifferentIgnoreValues_ReturnsCorrectResults()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithDifferentIgnoreValues_ReturnsCorrectResults()
         {
             // Act
             var result1 = EnumHelper.GetEnumValues<TestEnum>("Value1");
@@ -221,8 +222,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(TestEnum.Value2, result2);
         }
 
-        [Fact]
-        public void GetEnumValues_WithTestEnum_DoesNotReturnIgnoredValue()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithTestEnum_DoesNotReturnIgnoredValue()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("Value4");
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(TestEnum.Value4, result);
         }
 
-        [Fact]
-        public void GetEnumValues_ResultCanBeEnumerated()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_ResultCanBeEnumerated()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("Value5");
@@ -246,8 +247,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             }
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunction_CanBeUsedInLinq()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunction_CanBeUsedInLinq()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("None");
@@ -257,8 +258,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(count >= 0);
         }
 
-        [Fact]
-        public void GetEnumValues_ReturnsOnlyEnumValues()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_ReturnsOnlyEnumValues()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("NonExistent");
@@ -268,8 +269,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, item => Assert.True(Enum.IsDefined(typeof(TestEnum), item)));
         }
 
-        [Fact]
-        public void GetEnumValues_WithWhitespaceIgnoreName_TreatsAsNonMatching()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithWhitespaceIgnoreName_TreatsAsNonMatching()
         {
             // Act
             var result = EnumHelper.GetEnumValues<TestEnum>("  Value1  ");
@@ -280,8 +281,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains(TestEnum.Value1, result);
         }
 
-        [Fact]
-        public void GetEnumValues_CalledTwiceWithSameParameters_ReturnsDifferentInstances()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_CalledTwiceWithSameParameters_ReturnsDifferentInstances()
         {
             // Act
             var result1 = EnumHelper.GetEnumValues<TestEnum>("Value1");
@@ -291,8 +292,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotSame(result1, result2);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunctionLeakyReLU_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunctionLeakyReLU_WorksCorrectly()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("LeakyReLU");
@@ -302,8 +303,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.DoesNotContain(ActivationFunction.LeakyReLU, result);
         }
 
-        [Fact]
-        public void GetEnumValues_WithActivationFunctionSoftmax_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GetEnumValues_WithActivationFunctionSoftmax_WorksCorrectly()
         {
             // Act
             var result = EnumHelper.GetEnumValues<ActivationFunction>("Softmax");

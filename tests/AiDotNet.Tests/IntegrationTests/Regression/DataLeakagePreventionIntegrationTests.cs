@@ -6,6 +6,7 @@ using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -24,7 +25,7 @@ public class DataLeakagePreventionIntegrationTests
 
     #region Data Leakage Prevention Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithPreprocessing_ScalerStatisticsReflectTrainingDataOnly()
     {
         // Arrange: Create a dataset where each sample has a distinct value to guarantee
@@ -93,7 +94,7 @@ public class DataLeakagePreventionIntegrationTests
             "confirming preprocessing is NOT fitted on the full dataset (data leakage prevention).");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithPreprocessing_TransformProducesCorrectShape()
     {
         // Arrange: Build a model with preprocessing and verify the fitted pipeline
@@ -155,7 +156,7 @@ public class DataLeakagePreventionIntegrationTests
             "StandardScaler should transform values (center and scale), not return input unchanged");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithPreprocessing_PipelineIsFittedAndStored()
     {
         // Arrange: Verify the preprocessing pipeline is fitted during build and stored in the result.
@@ -192,7 +193,7 @@ public class DataLeakagePreventionIntegrationTests
         Assert.Equal(4, transformed.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithoutPreprocessing_StillWorksCorrectly()
     {
         // Arrange: Ensure the fix doesn't break the path where no preprocessing is configured
@@ -217,7 +218,7 @@ public class DataLeakagePreventionIntegrationTests
         Assert.NotNull(result.Model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithPreprocessing_TransformIsNotIdentity()
     {
         // Arrange: Create data with known non-zero mean and non-unit variance.

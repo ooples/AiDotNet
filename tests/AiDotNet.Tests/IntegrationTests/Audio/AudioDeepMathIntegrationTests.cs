@@ -1,6 +1,7 @@
 using AiDotNet.Audio.Features;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Audio;
 
@@ -19,57 +20,57 @@ public class AudioDeepMathIntegrationTests
     // AudioFeatureOptions: Defaults
     // ============================
 
-    [Fact]
-    public void AudioFeatureOptions_Defaults_SampleRate16000()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_Defaults_SampleRate16000()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(16000, options.SampleRate);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_Defaults_FftSize512()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_Defaults_FftSize512()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(512, options.FftSize);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_Defaults_HopLength160()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_Defaults_HopLength160()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(160, options.HopLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_Defaults_WindowLengthNull()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_Defaults_WindowLengthNull()
     {
         var options = new AudioFeatureOptions();
         Assert.Null(options.WindowLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_Defaults_CenterPadTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_Defaults_CenterPadTrue()
     {
         var options = new AudioFeatureOptions();
         Assert.True(options.CenterPad);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_EffectiveWindowLength_DefaultsToFftSize()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_EffectiveWindowLength_DefaultsToFftSize()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(options.FftSize, options.EffectiveWindowLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_EffectiveWindowLength_UsesCustomWhenSet()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_EffectiveWindowLength_UsesCustomWhenSet()
     {
         var options = new AudioFeatureOptions { WindowLength = 256 };
         Assert.Equal(256, options.EffectiveWindowLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_SetProperties()
     {
         var options = new AudioFeatureOptions
         {
@@ -135,57 +136,57 @@ public class AudioDeepMathIntegrationTests
     // MfccOptions: Defaults
     // ============================
 
-    [Fact]
-    public void MfccOptions_Defaults_NumCoefficients13()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_NumCoefficients13()
     {
         var options = new MfccOptions();
         Assert.Equal(13, options.NumCoefficients);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_NumMels40()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_NumMels40()
     {
         var options = new MfccOptions();
         Assert.Equal(40, options.NumMels);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_IncludeEnergyTrue()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_IncludeEnergyTrue()
     {
         var options = new MfccOptions();
         Assert.True(options.IncludeEnergy);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_AppendDeltaFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_AppendDeltaFalse()
     {
         var options = new MfccOptions();
         Assert.False(options.AppendDelta);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_AppendDeltaDeltaFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_AppendDeltaDeltaFalse()
     {
         var options = new MfccOptions();
         Assert.False(options.AppendDeltaDelta);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_FMinZero()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_FMinZero()
     {
         var options = new MfccOptions();
         Assert.Equal(0.0, options.FMin);
     }
 
-    [Fact]
-    public void MfccOptions_Defaults_FMaxNull()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_Defaults_FMaxNull()
     {
         var options = new MfccOptions();
         Assert.Null(options.FMax);
     }
 
-    [Fact]
-    public void MfccOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_InheritsAudioFeatureOptions()
     {
         var options = new MfccOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
@@ -193,8 +194,8 @@ public class AudioDeepMathIntegrationTests
         Assert.Equal(512, options.FftSize);
     }
 
-    [Fact]
-    public void MfccOptions_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_SetProperties()
     {
         var options = new MfccOptions
         {
@@ -289,36 +290,36 @@ public class AudioDeepMathIntegrationTests
     // ChromaOptions: Defaults
     // ============================
 
-    [Fact]
-    public void ChromaOptions_Defaults_NormalizeTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_Defaults_NormalizeTrue()
     {
         var options = new ChromaOptions();
         Assert.True(options.Normalize);
     }
 
-    [Fact]
-    public void ChromaOptions_Defaults_TuningFrequency440()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_Defaults_TuningFrequency440()
     {
         var options = new ChromaOptions();
         Assert.Equal(440.0, options.TuningFrequency);
     }
 
-    [Fact]
-    public void ChromaOptions_Defaults_NumOctaves7()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_Defaults_NumOctaves7()
     {
         var options = new ChromaOptions();
         Assert.Equal(7, options.NumOctaves);
     }
 
-    [Fact]
-    public void ChromaOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_InheritsAudioFeatureOptions()
     {
         var options = new ChromaOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
     }
 
-    [Fact]
-    public void ChromaOptions_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_SetProperties()
     {
         var options = new ChromaOptions
         {
@@ -336,8 +337,8 @@ public class AudioDeepMathIntegrationTests
     // ChromaOptions: Musical Math
     // ============================
 
-    [Fact]
-    public void ChromaOptions_ChromaBins_Always12()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_ChromaBins_Always12()
     {
         // Chroma features always have 12 bins (one per semitone in Western music: C, C#, D, ...)
         int chromaBins = 12;
@@ -361,22 +362,22 @@ public class AudioDeepMathIntegrationTests
     // SpectralFeatureOptions: Defaults
     // ============================
 
-    [Fact]
-    public void SpectralFeatureOptions_Defaults_FeatureTypesBasic()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureOptions_Defaults_FeatureTypesBasic()
     {
         var options = new SpectralFeatureOptions();
         Assert.Equal(SpectralFeatureType.Basic, options.FeatureTypes);
     }
 
-    [Fact]
-    public void SpectralFeatureOptions_Defaults_RolloffPercentage085()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureOptions_Defaults_RolloffPercentage085()
     {
         var options = new SpectralFeatureOptions();
         Assert.Equal(0.85, options.RolloffPercentage, 1e-10);
     }
 
-    [Fact]
-    public void SpectralFeatureOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureOptions_InheritsAudioFeatureOptions()
     {
         var options = new SpectralFeatureOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
@@ -386,8 +387,8 @@ public class AudioDeepMathIntegrationTests
     // SpectralFeatureType: Flags Enum
     // ============================
 
-    [Fact]
-    public void SpectralFeatureType_None_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_None_IsZero()
     {
         Assert.Equal(0, (int)SpectralFeatureType.None);
     }
@@ -407,8 +408,8 @@ public class AudioDeepMathIntegrationTests
         Assert.True((expectedValue & (expectedValue - 1)) == 0, $"{type} should be a power of 2");
     }
 
-    [Fact]
-    public void SpectralFeatureType_Basic_IsExpectedCombination()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_Basic_IsExpectedCombination()
     {
         var expected = SpectralFeatureType.Centroid | SpectralFeatureType.Bandwidth |
                        SpectralFeatureType.Rolloff | SpectralFeatureType.Flux |
@@ -417,8 +418,8 @@ public class AudioDeepMathIntegrationTests
         Assert.Equal(1 + 2 + 4 + 8 + 16, (int)SpectralFeatureType.Basic);
     }
 
-    [Fact]
-    public void SpectralFeatureType_All_IncludesAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_All_IncludesAllValues()
     {
         var all = SpectralFeatureType.All;
         Assert.True(all.HasFlag(SpectralFeatureType.Centroid));
@@ -430,8 +431,8 @@ public class AudioDeepMathIntegrationTests
         Assert.True(all.HasFlag(SpectralFeatureType.ZeroCrossingRate));
     }
 
-    [Fact]
-    public void SpectralFeatureType_FlagsCombination_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_FlagsCombination_Works()
     {
         var combined = SpectralFeatureType.Centroid | SpectralFeatureType.Contrast;
         Assert.True(combined.HasFlag(SpectralFeatureType.Centroid));
@@ -443,8 +444,8 @@ public class AudioDeepMathIntegrationTests
     // WindowType Enum
     // ============================
 
-    [Fact]
-    public void WindowType_HasFourValues()
+    [Fact(Timeout = 120000)]
+    public async Task WindowType_HasFourValues()
     {
         var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
         Assert.Equal(4, values.Length);

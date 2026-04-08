@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.AutoML;
 using AiDotNet.AutoML.NAS;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class HardwareCostModelTests
     {
-        [Fact]
-        public void HardwareCostModel_Constructor_WithDefaultPlatform_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_Constructor_WithDefaultPlatform_InitializesCorrectly()
         {
             // Arrange & Act
             var model = new HardwareCostModel<double>();
@@ -62,8 +63,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateOperationCost_UnknownOperation_ReturnsConservativeEstimate()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateOperationCost_UnknownOperation_ReturnsConservativeEstimate()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -87,8 +88,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(conv3x3Cost.Memory, cost.Memory);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateOperationCost_ScalesWithChannels()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateOperationCost_ScalesWithChannels()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -103,8 +104,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costLarge.Energy > costSmall.Energy);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateOperationCost_ScalesWithSpatialSize()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateOperationCost_ScalesWithSpatialSize()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -120,8 +121,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costLarge.Energy > costSmall.Energy);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateOperationCost_GPUFasterThanMobile()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateOperationCost_GPUFasterThanMobile()
         {
             // Arrange
             var mobileModel = new HardwareCostModel<double>(HardwarePlatform.Mobile);
@@ -135,8 +136,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(gpuCost.Latency < mobileCost.Latency);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateArchitectureCost_EmptyArchitecture_ReturnsZeroCost()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateArchitectureCost_EmptyArchitecture_ReturnsZeroCost()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -151,8 +152,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.0, cost.Memory);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateArchitectureCost_SingleOperation_ReturnsValidCost()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateArchitectureCost_SingleOperation_ReturnsValidCost()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -167,8 +168,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Energy > 0.0);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateArchitectureCost_MultipleOperations_SumsCosts()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateArchitectureCost_MultipleOperations_SumsCosts()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -187,8 +188,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(costDouble.Latency > costSingle.Latency);
         }
 
-        [Fact]
-        public void HardwareCostModel_EstimateArchitectureCost_UsesNodeChannels()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EstimateArchitectureCost_UsesNodeChannels()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -204,8 +205,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Latency > 0.0);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_NullConstraints_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_NullConstraints_ReturnsTrue()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -220,8 +221,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_LooseLatencyConstraint_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_LooseLatencyConstraint_ReturnsTrue()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -239,8 +240,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_TightLatencyConstraint_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_TightLatencyConstraint_ReturnsFalse()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -262,8 +263,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_TightMemoryConstraint_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_TightMemoryConstraint_ReturnsFalse()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -284,8 +285,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_TightEnergyConstraint_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_TightEnergyConstraint_ReturnsFalse()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -306,8 +307,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_MeetsConstraints_MultipleConstraints_AllMustBeMet()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_MeetsConstraints_MultipleConstraints_AllMustBeMet()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -329,8 +330,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meets);
         }
 
-        [Fact]
-        public void HardwareCostModel_DifferentOperations_HaveDifferentCosts()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_DifferentOperations_HaveDifferentCosts()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -345,8 +346,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(conv3x3Cost.Latency < conv5x5Cost.Latency);
         }
 
-        [Fact]
-        public void HardwareCostModel_PoolingOperations_HaveSimilarCosts()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_PoolingOperations_HaveSimilarCosts()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -359,8 +360,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(maxPoolCost.Latency - avgPoolCost.Latency) < 0.01);
         }
 
-        [Fact]
-        public void HardwareCostModel_EdgeTPU_FasterThanCPU()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_EdgeTPU_FasterThanCPU()
         {
             // Arrange
             var cpuModel = new HardwareCostModel<double>(HardwarePlatform.CPU);
@@ -374,8 +375,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(edgeCost.Latency < cpuCost.Latency);
         }
 
-        [Fact]
-        public void HardwareCostModel_Float_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCostModel_Float_WorksCorrectly()
         {
             // Arrange & Act
             var model = new HardwareCostModel<float>();
@@ -385,8 +386,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Latency > 0.0f);
         }
 
-        [Fact]
-        public void HardwareCost_DefaultValues()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareCost_DefaultValues()
         {
             // Arrange & Act
             var cost = new HardwareCost<double> { Latency = default, Energy = default, Memory = default };
@@ -397,8 +398,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(default(double), cost.Memory);
         }
 
-        [Fact]
-        public void HardwareConstraints_DefaultValues()
+        [Fact(Timeout = 60000)]
+        public async Task HardwareConstraints_DefaultValues()
         {
             // Arrange & Act
             var constraints = new HardwareConstraints<double>();

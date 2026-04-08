@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery.Bayesian;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -27,8 +28,8 @@ public class BayesianCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void OrderMCMC_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task OrderMCMC_FindsCausalStructure()
     {
         var algo = new OrderMCMCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -36,8 +37,8 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void PartitionMCMC_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task PartitionMCMC_FindsCausalStructure()
     {
         var algo = new PartitionMCMCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -45,8 +46,8 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void IterativeMCMC_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task IterativeMCMC_FindsCausalStructure()
     {
         var algo = new IterativeMCMCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -54,8 +55,8 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void BayesDAG_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task BayesDAG_FindsCausalStructure()
     {
         var algo = new BayesDAGAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -63,8 +64,8 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void DiBS_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task DiBS_FindsCausalStructure()
     {
         var algo = new DiBSAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -72,8 +73,8 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void BCDNets_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task BCDNets_FindsCausalStructure()
     {
         var algo = new BCDNetsAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ActivationFunctions;
 
@@ -15,24 +16,24 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // BinarySpiking: f(x) = 1 if x >= threshold, 0 otherwise
     // ====================================================================
 
-    [Fact]
-    public void BinarySpiking_AboveThreshold_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task BinarySpiking_AboveThreshold_ReturnsOne()
     {
         var fn = new BinarySpikingActivation<double>(); // default threshold = 1.0
         Assert.Equal(1.0, fn.Activate(1.5), Tol);
         Assert.Equal(1.0, fn.Activate(1.0), Tol); // at threshold
     }
 
-    [Fact]
-    public void BinarySpiking_BelowThreshold_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BinarySpiking_BelowThreshold_ReturnsZero()
     {
         var fn = new BinarySpikingActivation<double>();
         Assert.Equal(0.0, fn.Activate(0.5), Tol);
         Assert.Equal(0.0, fn.Activate(-1.0), Tol);
     }
 
-    [Fact]
-    public void BinarySpiking_CustomThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task BinarySpiking_CustomThreshold()
     {
         var fn = new BinarySpikingActivation<double>(0.5, 1.0, 0.2);
         Assert.Equal(1.0, fn.Activate(0.5), Tol); // at threshold
@@ -44,15 +45,15 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // f'(x) = 1 / (1 + |x|)^2
     // ====================================================================
 
-    [Fact]
-    public void Squash_AtZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Squash_AtZero_ReturnsZero()
     {
         var fn = new SquashActivation<double>();
         Assert.Equal(0.0, fn.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void Squash_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Squash_HandCalculated()
     {
         // Scalar squash: f(x) = sign(x) * x² / (1 + x²) = x * |x| / (1 + x²)
         var fn = new SquashActivation<double>();
@@ -64,8 +65,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(0.5, fn.Activate(1.0), Tol);
     }
 
-    [Fact]
-    public void Squash_OddFunction()
+    [Fact(Timeout = 120000)]
+    public async Task Squash_OddFunction()
     {
         var fn = new SquashActivation<double>();
         double[] xs = [0.5, 1.0, 2.0, 10.0];
@@ -73,8 +74,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.Equal(-fn.Activate(x), fn.Activate(-x), Tol);
     }
 
-    [Fact]
-    public void Squash_BoundedBetweenMinusOneAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task Squash_BoundedBetweenMinusOneAndOne()
     {
         var fn = new SquashActivation<double>();
         double[] xs = [-100, -10, -1, 0, 1, 10, 100];
@@ -85,8 +86,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         }
     }
 
-    [Fact]
-    public void Squash_NumericalGradient()
+    [Fact(Timeout = 120000)]
+    public async Task Squash_NumericalGradient()
     {
         var fn = new SquashActivation<double>();
         double h = 1e-7;
@@ -105,8 +106,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // Properties: outputs sum to 1, some outputs are exactly 0 (sparse)
     // ====================================================================
 
-    [Fact]
-    public void Sparsemax_OutputsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Sparsemax_OutputsSumToOne()
     {
         var fn = new SparsemaxActivation<double>();
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -116,8 +117,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(1.0, sum, 1e-5);
     }
 
-    [Fact]
-    public void Sparsemax_AllEqual_ReturnsUniform()
+    [Fact(Timeout = 120000)]
+    public async Task Sparsemax_AllEqual_ReturnsUniform()
     {
         var fn = new SparsemaxActivation<double>();
         var input = new Vector<double>(new[] { 2.0, 2.0, 2.0 });
@@ -126,8 +127,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.Equal(1.0 / 3.0, output[i], 1e-5);
     }
 
-    [Fact]
-    public void Sparsemax_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Sparsemax_AllNonNegative()
     {
         var fn = new SparsemaxActivation<double>();
         var input = new Vector<double>(new[] { -5.0, 1.0, 3.0, -2.0 });
@@ -136,8 +137,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.True(output[i] >= -1e-10, $"Sparsemax output should be >= 0, got {output[i]}");
     }
 
-    [Fact]
-    public void Sparsemax_ProducesSparseOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Sparsemax_ProducesSparseOutput()
     {
         // With very different inputs, sparsemax should zero out the smallest ones
         var fn = new SparsemaxActivation<double>();
@@ -152,8 +153,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // SphericalSoftmax: normalizes to unit sphere, then softmax
     // ====================================================================
 
-    [Fact]
-    public void SphericalSoftmax_OutputsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmax_OutputsSumToOne()
     {
         var fn = new SphericalSoftmaxActivation<double>();
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -163,8 +164,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(1.0, sum, 1e-5);
     }
 
-    [Fact]
-    public void SphericalSoftmax_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmax_AllNonNegative()
     {
         var fn = new SphericalSoftmaxActivation<double>();
         var input = new Vector<double>(new[] { -5.0, 0.0, 5.0 });
@@ -173,8 +174,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.True(output[i] >= 0, $"SphericalSoftmax output should be >= 0, got {output[i]}");
     }
 
-    [Fact]
-    public void SphericalSoftmax_ScaleInvariance()
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmax_ScaleInvariance()
     {
         // SphericalSoftmax normalizes to unit sphere first, so scaling shouldn't change output
         var fn = new SphericalSoftmaxActivation<double>();
@@ -190,8 +191,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // TaylorSoftmax: softmax approximation using Taylor expansion of exp
     // ====================================================================
 
-    [Fact]
-    public void TaylorSoftmax_OutputsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task TaylorSoftmax_OutputsSumToOne()
     {
         var fn = new TaylorSoftmaxActivation<double>(order: 2);
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -201,8 +202,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(1.0, sum, 1e-5);
     }
 
-    [Fact]
-    public void TaylorSoftmax_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TaylorSoftmax_AllNonNegative()
     {
         var fn = new TaylorSoftmaxActivation<double>(order: 2);
         var input = new Vector<double>(new[] { 0.1, 0.2, 0.3 });
@@ -211,8 +212,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.True(output[i] >= 0, $"TaylorSoftmax output should be >= 0, got {output[i]}");
     }
 
-    [Fact]
-    public void TaylorSoftmax_AllEqual_ReturnsUniform()
+    [Fact(Timeout = 120000)]
+    public async Task TaylorSoftmax_AllEqual_ReturnsUniform()
     {
         var fn = new TaylorSoftmaxActivation<double>(order: 2);
         var input = new Vector<double>(new[] { 1.0, 1.0, 1.0 });
@@ -221,8 +222,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.Equal(1.0 / 3.0, output[i], 1e-5);
     }
 
-    [Fact]
-    public void TaylorSoftmax_ApproachesSoftmaxForSmallInputs()
+    [Fact(Timeout = 120000)]
+    public async Task TaylorSoftmax_ApproachesSoftmaxForSmallInputs()
     {
         // For small inputs, Taylor approximation should be close to exact softmax
         var taylor = new TaylorSoftmaxActivation<double>(order: 4);
@@ -238,8 +239,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // Maxout: f(x) = max over groups of inputs
     // ====================================================================
 
-    [Fact]
-    public void Maxout_SelectsMaxPerGroup()
+    [Fact(Timeout = 120000)]
+    public async Task Maxout_SelectsMaxPerGroup()
     {
         var fn = new MaxoutActivation<double>(2); // 2 pieces per group
         // Input [1, 3, 2, 4] with 2 pieces → groups: (1,3), (2,4) → max: [3, 4]
@@ -251,8 +252,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(4.0, output[1], Tol); // max(2, 4) = 4
     }
 
-    [Fact]
-    public void Maxout_AllSame_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task Maxout_AllSame_ReturnsSame()
     {
         var fn = new MaxoutActivation<double>(3);
         var input = new Vector<double>(new[] { 5.0, 5.0, 5.0 });
@@ -265,8 +266,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // GumbelSoftmax: temperature-dependent softmax with Gumbel noise
     // ====================================================================
 
-    [Fact]
-    public void GumbelSoftmax_OutputsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task GumbelSoftmax_OutputsSumToOne()
     {
         var fn = new GumbelSoftmaxActivation<double>(temperature: 1.0, seed: 42);
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -276,8 +277,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(1.0, sum, 1e-5);
     }
 
-    [Fact]
-    public void GumbelSoftmax_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task GumbelSoftmax_AllNonNegative()
     {
         var fn = new GumbelSoftmaxActivation<double>(temperature: 1.0, seed: 42);
         var input = new Vector<double>(new[] { -5.0, 0.0, 5.0 });
@@ -286,8 +287,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
             Assert.True(output[i] >= -1e-10, $"GumbelSoftmax should be >= 0, got {output[i]}");
     }
 
-    [Fact]
-    public void GumbelSoftmax_LowTemperature_ApproachesOneHot()
+    [Fact(Timeout = 120000)]
+    public async Task GumbelSoftmax_LowTemperature_ApproachesOneHot()
     {
         // With very low temperature, output should approach one-hot
         var fn = new GumbelSoftmaxActivation<double>(temperature: 0.01, seed: 42);
@@ -305,8 +306,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
     // HierarchicalSoftmax: binary tree decomposition of softmax
     // ====================================================================
 
-    [Fact]
-    public void HierarchicalSoftmax_OutputsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task HierarchicalSoftmax_OutputsSumToOne()
     {
         var fn = new HierarchicalSoftmaxActivation<double>(4);
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -316,8 +317,8 @@ public class ActivationFunctionDeepMathIntegrationTests4
         Assert.Equal(1.0, sum, 1e-4);
     }
 
-    [Fact]
-    public void HierarchicalSoftmax_AllNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task HierarchicalSoftmax_AllNonNegative()
     {
         var fn = new HierarchicalSoftmaxActivation<double>(3);
         var input = new Vector<double>(new[] { -1.0, 0.0, 1.0 });

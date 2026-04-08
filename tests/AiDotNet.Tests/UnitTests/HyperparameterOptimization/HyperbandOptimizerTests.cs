@@ -2,6 +2,7 @@ using AiDotNet.HyperparameterOptimization;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.HyperparameterOptimization;
 
@@ -12,8 +13,8 @@ public class HyperbandOptimizerTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultParameters_CreatesOptimizer()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultParameters_CreatesOptimizer()
     {
         // Act
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -23,8 +24,8 @@ public class HyperbandOptimizerTests
         Assert.True(optimizer.NumBrackets > 0);
     }
 
-    [Fact]
-    public void Constructor_WithMaximize_SetsMaximize()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMaximize_SetsMaximize()
     {
         // Act
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(maximize: true);
@@ -33,8 +34,8 @@ public class HyperbandOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
-    public void Constructor_WithMinimize_SetsMinimize()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMinimize_SetsMinimize()
     {
         // Act
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(maximize: false);
@@ -43,8 +44,8 @@ public class HyperbandOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
-    public void Constructor_WithSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithSeed_ProducesReproducibleResults()
     {
         // Arrange
         var searchSpace = CreateSimpleSearchSpace();
@@ -61,48 +62,48 @@ public class HyperbandOptimizerTests
         Assert.Equal(result1.BestObjectiveValue, result2.BestObjectiveValue);
     }
 
-    [Fact]
-    public void Constructor_WithZeroMaxResource_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroMaxResource_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HyperbandOptimizer<double, double[], double[]>(maxResource: 0));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeMaxResource_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeMaxResource_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HyperbandOptimizer<double, double[], double[]>(maxResource: -1));
     }
 
-    [Fact]
-    public void Constructor_WithReductionFactorLessThanTwo_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithReductionFactorLessThanTwo_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HyperbandOptimizer<double, double[], double[]>(reductionFactor: 1));
     }
 
-    [Fact]
-    public void Constructor_WithZeroMinResource_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroMinResource_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HyperbandOptimizer<double, double[], double[]>(minResource: 0));
     }
 
-    [Fact]
-    public void Constructor_WithMinResourceExceedingMax_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithMinResourceExceedingMax_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HyperbandOptimizer<double, double[], double[]>(maxResource: 10, minResource: 20));
     }
 
-    [Fact]
-    public void Constructor_WithValidResourceParameters_CalculatesNumBrackets()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidResourceParameters_CalculatesNumBrackets()
     {
         // Arrange & Act
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -117,8 +118,8 @@ public class HyperbandOptimizerTests
 
     #region Optimize Tests
 
-    [Fact]
-    public void Optimize_WithValidInputs_ReturnsResult()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithValidInputs_ReturnsResult()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -134,8 +135,8 @@ public class HyperbandOptimizerTests
         Assert.True(result.CompletedTrials > 0);
     }
 
-    [Fact]
-    public void Optimize_WithNullObjectiveFunction_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithNullObjectiveFunction_ThrowsArgumentNullException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -145,8 +146,8 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null!, searchSpace, 10));
     }
 
-    [Fact]
-    public void Optimize_WithNullSearchSpace_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithNullSearchSpace_ThrowsArgumentNullException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -155,8 +156,8 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(SimpleObjective, null!, 10));
     }
 
-    [Fact]
-    public void Optimize_WithZeroTrials_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithZeroTrials_ThrowsArgumentException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -166,8 +167,8 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentException>(() => optimizer.Optimize(SimpleObjective, searchSpace, 0));
     }
 
-    [Fact]
-    public void Optimize_WithNegativeTrials_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithNegativeTrials_ThrowsArgumentException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -177,8 +178,8 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentException>(() => optimizer.Optimize(SimpleObjective, searchSpace, -5));
     }
 
-    [Fact]
-    public void Optimize_ForMaximization_FindsHighValue()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_ForMaximization_FindsHighValue()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -192,8 +193,8 @@ public class HyperbandOptimizerTests
         Assert.True(result.BestObjectiveValue > 0);
     }
 
-    [Fact]
-    public void Optimize_ForMinimization_FindsLowValue()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_ForMinimization_FindsLowValue()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -207,8 +208,8 @@ public class HyperbandOptimizerTests
         Assert.True(result.BestObjectiveValue >= 0);
     }
 
-    [Fact]
-    public void Optimize_WithContinuousParameter_SamplesInRange()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithContinuousParameter_SamplesInRange()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -227,8 +228,8 @@ public class HyperbandOptimizerTests
         Assert.InRange(result.BestObjectiveValue, 0.001, 0.1);
     }
 
-    [Fact]
-    public void Optimize_WithIntegerParameter_SamplesIntegers()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithIntegerParameter_SamplesIntegers()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -249,8 +250,8 @@ public class HyperbandOptimizerTests
         Assert.Contains(bestBatchSize, new[] { 16, 32, 48, 64 });
     }
 
-    [Fact]
-    public void Optimize_WithCategoricalParameter_SelectsFromChoices()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithCategoricalParameter_SelectsFromChoices()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -278,8 +279,8 @@ public class HyperbandOptimizerTests
         Assert.Contains(bestOptimizer, new[] { "adam", "sgd", "rmsprop" });
     }
 
-    [Fact]
-    public void Optimize_WithLogScaleParameter_SamplesLogarithmically()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithLogScaleParameter_SamplesLogarithmically()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -300,8 +301,8 @@ public class HyperbandOptimizerTests
         Assert.InRange(bestLr, 0.0001, 0.1);
     }
 
-    [Fact]
-    public void Optimize_TracksResourceBudget()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_TracksResourceBudget()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -328,8 +329,8 @@ public class HyperbandOptimizerTests
 
     #region GetBestTrial Tests
 
-    [Fact]
-    public void GetBestTrial_AfterOptimization_ReturnsBestTrial()
+    [Fact(Timeout = 60000)]
+    public async Task GetBestTrial_AfterOptimization_ReturnsBestTrial()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -346,8 +347,8 @@ public class HyperbandOptimizerTests
         Assert.Equal(TrialStatus.Complete, bestTrial.Status);
     }
 
-    [Fact]
-    public void GetBestTrial_BeforeOptimization_ThrowsInvalidOperationException()
+    [Fact(Timeout = 60000)]
+    public async Task GetBestTrial_BeforeOptimization_ThrowsInvalidOperationException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -360,8 +361,8 @@ public class HyperbandOptimizerTests
 
     #region GetAllTrials Tests
 
-    [Fact]
-    public void GetAllTrials_AfterOptimization_ReturnsAllTrials()
+    [Fact(Timeout = 60000)]
+    public async Task GetAllTrials_AfterOptimization_ReturnsAllTrials()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -378,8 +379,8 @@ public class HyperbandOptimizerTests
         Assert.True(allTrials.Count > 0);
     }
 
-    [Fact]
-    public void GetAllTrials_BeforeOptimization_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task GetAllTrials_BeforeOptimization_ReturnsEmptyList()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -395,8 +396,8 @@ public class HyperbandOptimizerTests
 
     #region GetTrials Filter Tests
 
-    [Fact]
-    public void GetTrials_WithCompletedFilter_ReturnsOnlyCompleted()
+    [Fact(Timeout = 60000)]
+    public async Task GetTrials_WithCompletedFilter_ReturnsOnlyCompleted()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -412,8 +413,8 @@ public class HyperbandOptimizerTests
         Assert.All(completedTrials, t => Assert.Equal(TrialStatus.Complete, t.Status));
     }
 
-    [Fact]
-    public void GetTrials_WithNullFilter_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task GetTrials_WithNullFilter_ThrowsArgumentNullException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -426,8 +427,8 @@ public class HyperbandOptimizerTests
 
     #region SuggestNext Tests
 
-    [Fact]
-    public void SuggestNext_BeforeOptimization_ThrowsInvalidOperationException()
+    [Fact(Timeout = 60000)]
+    public async Task SuggestNext_BeforeOptimization_ThrowsInvalidOperationException()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
@@ -437,8 +438,8 @@ public class HyperbandOptimizerTests
         Assert.Throws<InvalidOperationException>(() => optimizer.SuggestNext(trial));
     }
 
-    [Fact]
-    public void SuggestNext_AfterOptimization_ReturnsSuggestedParameters()
+    [Fact(Timeout = 60000)]
+    public async Task SuggestNext_AfterOptimization_ReturnsSuggestedParameters()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -460,8 +461,8 @@ public class HyperbandOptimizerTests
 
     #region Bracket Info Tests
 
-    [Fact]
-    public void GetBracketInfo_ReturnsCorrectNumberOfBrackets()
+    [Fact(Timeout = 60000)]
+    public async Task GetBracketInfo_ReturnsCorrectNumberOfBrackets()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -474,8 +475,8 @@ public class HyperbandOptimizerTests
         Assert.Equal(optimizer.NumBrackets, brackets.Count);
     }
 
-    [Fact]
-    public void GetBracketInfo_BracketsHaveValidResources()
+    [Fact(Timeout = 60000)]
+    public async Task GetBracketInfo_BracketsHaveValidResources()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -490,8 +491,8 @@ public class HyperbandOptimizerTests
         Assert.All(brackets, b => Assert.True(b.InitialConfigurations > 0));
     }
 
-    [Fact]
-    public void GetBracketInfo_EachBracketHasRounds()
+    [Fact(Timeout = 60000)]
+    public async Task GetBracketInfo_EachBracketHasRounds()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -504,8 +505,8 @@ public class HyperbandOptimizerTests
         Assert.All(brackets, b => Assert.True(b.Rounds.Count > 0));
     }
 
-    [Fact]
-    public void GetTotalConfigurationCount_ReturnsPositiveNumber()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalConfigurationCount_ReturnsPositiveNumber()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -522,8 +523,8 @@ public class HyperbandOptimizerTests
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void Optimize_FromMultipleThreads_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -570,8 +571,8 @@ public class HyperbandOptimizerTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void Optimize_WithFailingObjective_HandlesGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task Optimize_WithFailingObjective_HandlesGracefully()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -598,8 +599,8 @@ public class HyperbandOptimizerTests
 
     #region Result Properties Tests
 
-    [Fact]
-    public void OptimizationResult_HasCorrectStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationResult_HasCorrectStatistics()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -617,8 +618,8 @@ public class HyperbandOptimizerTests
         Assert.NotEqual(default, result.EndTime);
     }
 
-    [Fact]
-    public void OptimizationResult_HasBestParameters()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationResult_HasBestParameters()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(
@@ -633,8 +634,8 @@ public class HyperbandOptimizerTests
         Assert.Contains("x", result.BestParameters.Keys);
     }
 
-    [Fact]
-    public void OptimizationResult_HasSearchSpace()
+    [Fact(Timeout = 60000)]
+    public async Task OptimizationResult_HasSearchSpace()
     {
         // Arrange
         var optimizer = new HyperbandOptimizer<double, double[], double[]>(

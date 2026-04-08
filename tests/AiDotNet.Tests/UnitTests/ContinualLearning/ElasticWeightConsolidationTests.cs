@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 
@@ -14,8 +15,8 @@ namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 /// </summary>
 public class ElasticWeightConsolidationTests
 {
-    [Fact]
-    public void Constructor_ValidInputs_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
         var lossFunction = new MeanSquaredErrorLoss<double>();
@@ -30,8 +31,8 @@ public class ElasticWeightConsolidationTests
         Assert.NotNull(ewc);
     }
 
-    [Fact]
-    public void Constructor_NullLossFunction_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullLossFunction_ThrowsArgumentNullException()
     {
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
@@ -42,8 +43,8 @@ public class ElasticWeightConsolidationTests
         Assert.Contains("lossFunction", exception.Message);
     }
 
-    [Fact]
-    public void ComputeRegularizationLoss_WithNoPreviousTask_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeRegularizationLoss_WithNoPreviousTask_ReturnsZero()
     {
         // Arrange
         var lossFunction = new MeanSquaredErrorLoss<double>();

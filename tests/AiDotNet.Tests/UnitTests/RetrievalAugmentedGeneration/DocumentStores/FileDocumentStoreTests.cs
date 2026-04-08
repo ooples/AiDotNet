@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 {
@@ -42,8 +43,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesStore()
         {
             // Arrange & Act
             using var store = new FileDocumentStore<float>(384, CreateOptions());
@@ -54,37 +55,37 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(_testDir, store.DirectoryPath);
         }
 
-        [Fact]
-        public void Constructor_WithZeroDimension_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroDimension_ThrowsArgumentOutOfRangeException()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new FileDocumentStore<float>(0, CreateOptions()));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeDimension_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeDimension_ThrowsArgumentOutOfRangeException()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new FileDocumentStore<float>(-1, CreateOptions()));
         }
 
-        [Fact]
-        public void Constructor_WithNullOptions_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new FileDocumentStore<float>(3, null));
         }
 
-        [Fact]
-        public void Constructor_WithEmptyDirectoryPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyDirectoryPath_ThrowsArgumentException()
         {
             var options = new FileDocumentStoreOptions { DirectoryPath = "" };
             Assert.Throws<ArgumentException>(() =>
                 new FileDocumentStore<float>(3, options));
         }
 
-        [Fact]
-        public void Constructor_CreatesDirectoryIfNotExists()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_CreatesDirectoryIfNotExists()
         {
             // Arrange
             string subDir = Path.Combine(_testDir, "subdir");
@@ -102,8 +103,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Add Tests
 
-        [Fact]
-        public void Add_WithValidDocument_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithValidDocument_IncreasesCount()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, store.DocumentCount);
         }
 
-        [Fact]
-        public void Add_WithMismatchedDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithMismatchedDimension_ThrowsArgumentException()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -131,8 +132,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains("dimension mismatch", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        [Fact]
-        public void Add_MultipleDocuments_AllAccessible()
+        [Fact(Timeout = 60000)]
+        public async Task Add_MultipleDocuments_AllAccessible()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -153,8 +154,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region AddBatch Tests
 
-        [Fact]
-        public void AddBatch_WithValidDocuments_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithValidDocuments_IncreasesCount()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, store.DocumentCount);
         }
 
-        [Fact]
-        public void AddBatch_WithEmptyList_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithEmptyList_ThrowsArgumentException()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilar Tests
 
-        [Fact]
-        public void GetSimilar_WithMatchingDocuments_ReturnsTopK()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithMatchingDocuments_ReturnsTopK()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -211,8 +212,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(results[0].RelevanceScore >= results[1].RelevanceScore);
         }
 
-        [Fact]
-        public void GetSimilar_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -225,8 +226,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void GetSimilarWithFilters_FiltersCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilters_FiltersCorrectly()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -258,8 +259,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetById Tests
 
-        [Fact]
-        public void GetById_WithExistingDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithExistingDocument_ReturnsDocument()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -275,8 +276,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Test content", result.Content);
         }
 
-        [Fact]
-        public void GetById_WithNonExistingDocument_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithNonExistingDocument_ReturnsNull()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -292,8 +293,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Remove Tests
 
-        [Fact]
-        public void Remove_WithExistingDocument_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithExistingDocument_ReturnsTrue()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -308,8 +309,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.DocumentCount);
         }
 
-        [Fact]
-        public void Remove_WithNonExistingDocument_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNonExistingDocument_ReturnsFalse()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -321,8 +322,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.False(result);
         }
 
-        [Fact]
-        public void Remove_CreatesTombstone()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_CreatesTombstone()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -340,8 +341,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllDocumentsAndFiles()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllDocumentsAndFiles()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -366,8 +367,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetAll Tests
 
-        [Fact]
-        public void GetAll_WithDocuments_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithDocuments_ReturnsAllDocuments()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -388,8 +389,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains(results, d => d.Id == "doc3");
         }
 
-        [Fact]
-        public void GetAll_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -405,8 +406,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Persistence Tests
 
-        [Fact]
-        public void Flush_WritesFilesToDisk()
+        [Fact(Timeout = 60000)]
+        public async Task Flush_WritesFilesToDisk()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -422,8 +423,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(File.Exists(Path.Combine(_testDir, "hnsw.bin")));
         }
 
-        [Fact]
-        public void Persistence_DataSurvivesReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_DataSurvivesReopen()
         {
             // Arrange - create store, add documents, flush, dispose
             var options = CreateOptions();
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Goodbye world", doc2.Content);
         }
 
-        [Fact]
-        public void Persistence_SearchWorksAfterReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_SearchWorksAfterReopen()
         {
             // Arrange
             var options = CreateOptions();
@@ -474,8 +475,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Persistence_MetadataSurvivesReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_MetadataSurvivesReopen()
         {
             // Arrange
             var options = CreateOptions();
@@ -502,8 +503,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region WAL Tests
 
-        [Fact]
-        public void Checkpoint_RecoversPendingAddsAfterReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Checkpoint_RecoversPendingAddsAfterReopen()
         {
             // Arrange - add without explicit flush; Dispose checkpoints to disk
             var options = CreateOptions();
@@ -523,8 +524,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("WAL test", doc.Content);
         }
 
-        [Fact]
-        public void Checkpoint_RecoversRemovesAfterReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Checkpoint_RecoversRemovesAfterReopen()
         {
             // Arrange - add documents and let Dispose checkpoint them
             var options = CreateOptions();
@@ -556,8 +557,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Compaction Tests
 
-        [Fact]
-        public void Compact_ClearsTombstones()
+        [Fact(Timeout = 60000)]
+        public async Task Compact_ClearsTombstones()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -574,8 +575,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, store.DocumentCount);
         }
 
-        [Fact]
-        public void Compact_DataIntactAfterReopen()
+        [Fact(Timeout = 60000)]
+        public async Task Compact_DataIntactAfterReopen()
         {
             // Arrange
             var options = CreateOptions();
@@ -602,8 +603,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Dispose Tests
 
-        [Fact]
-        public void Dispose_FlushesDataToDisk()
+        [Fact(Timeout = 60000)]
+        public async Task Dispose_FlushesDataToDisk()
         {
             // Arrange
             var options = CreateOptions();
@@ -619,8 +620,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(File.Exists(Path.Combine(_testDir, "documents.json")));
         }
 
-        [Fact]
-        public void Dispose_CalledTwice_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task Dispose_CalledTwice_DoesNotThrow()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -639,8 +640,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Edge Cases
 
-        [Fact]
-        public void ReAddDeletedDocument_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReAddDeletedDocument_WorksCorrectly()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -660,8 +661,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Updated", doc.Content);
         }
 
-        [Fact]
-        public void LargeDocument_HandledCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task LargeDocument_HandledCorrectly()
         {
             // Arrange
             using var store = new FileDocumentStore<float>(128, CreateOptions());
@@ -682,8 +683,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region ObjectDisposedException Tests
 
-        [Fact]
-        public void Add_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -694,8 +695,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 store.Add(CreateTestDocument("doc1", "Test", 3)));
         }
 
-        [Fact]
-        public void GetById_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -706,8 +707,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ObjectDisposedException>(() => store.GetById("doc1"));
         }
 
-        [Fact]
-        public void GetSimilar_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -718,8 +719,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 store.GetSimilar(new Vector<float>(new float[] { 1, 0, 0 }), 1).ToList());
         }
 
-        [Fact]
-        public void Clear_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -729,8 +730,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ObjectDisposedException>(() => store.Clear());
         }
 
-        [Fact]
-        public void Flush_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task Flush_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var store = new FileDocumentStore<float>(3, CreateOptions());
@@ -744,8 +745,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Double Type Tests
 
-        [Fact]
-        public void DoubleType_AddAndRetrieve_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DoubleType_AddAndRetrieve_WorksCorrectly()
         {
             // Arrange
             var dir = Path.Combine(_testDir, "double_test");
@@ -767,8 +768,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Double precision test", result.Content);
         }
 
-        [Fact]
-        public void DoubleType_PersistenceAndReload_PreservesPrecision()
+        [Fact(Timeout = 60000)]
+        public async Task DoubleType_PersistenceAndReload_PreservesPrecision()
         {
             // Arrange
             var dir = Path.Combine(_testDir, "double_persist");
@@ -795,8 +796,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void DoubleType_SimilaritySearch_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DoubleType_SimilaritySearch_WorksCorrectly()
         {
             // Arrange
             var dir = Path.Combine(_testDir, "double_search");
@@ -827,8 +828,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("cat", results[0].Id);
         }
 
-        [Fact]
-        public void Constructor_WithMismatchedDimensionOnReopen_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithMismatchedDimensionOnReopen_ThrowsInvalidOperationException()
         {
             // Arrange - create a store with dimension 3 and flush to disk
             var options = CreateOptions();
@@ -844,8 +845,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains("dimension mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        [Fact]
-        public void Persistence_TruncatedVectorsFile_GracefullyHandled()
+        [Fact(Timeout = 60000)]
+        public async Task Persistence_TruncatedVectorsFile_GracefullyHandled()
         {
             // Arrange - create a store, flush, then corrupt vectors.bin by truncating it
             var options = CreateOptions();
@@ -880,8 +881,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region FlushOnEveryWrite Tests
 
-        [Fact]
-        public void FlushOnEveryWrite_PersistsImmediately()
+        [Fact(Timeout = 60000)]
+        public async Task FlushOnEveryWrite_PersistsImmediately()
         {
             // Arrange
             var options = new FileDocumentStoreOptions

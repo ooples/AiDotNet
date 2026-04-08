@@ -1,14 +1,15 @@
 using System;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Helpers;
 
 [Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceDiagnosticsTests
 {
-    [Fact]
-    public void InferenceDiagnostics_Disabled_DoesNotRecord()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceDiagnostics_Disabled_DoesNotRecord()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
         try
@@ -27,8 +28,8 @@ public class InferenceDiagnosticsTests
         }
     }
 
-    [Fact]
-    public void InferenceDiagnostics_Enabled_Records()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceDiagnostics_Enabled_Records()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
         try

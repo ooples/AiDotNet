@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -47,8 +48,8 @@ public abstract class NeuralNetworkModelTestBase
     // gradient computation or parameter update is broken.
     // =====================================================
 
-    [Fact]
-    public void Training_ShouldReduceLoss()
+    [Fact(Timeout = 120000)]
+    public async Task Training_ShouldReduceLoss()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -81,8 +82,8 @@ public abstract class NeuralNetworkModelTestBase
     // the learning rate is zero — both are bugs.
     // =====================================================
 
-    [Fact]
-    public void Training_ShouldChangeParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Training_ShouldChangeParameters()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -119,8 +120,8 @@ public abstract class NeuralNetworkModelTestBase
     // zero weights, or broken forward pass).
     // =====================================================
 
-    [Fact]
-    public void DifferentInputs_ShouldProduceDifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentInputs_ShouldProduceDifferentOutputs()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -151,8 +152,8 @@ public abstract class NeuralNetworkModelTestBase
     // Numerical instability in forward pass produces NaN/Inf.
     // =====================================================
 
-    [Fact]
-    public void ForwardPass_ShouldProduceFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_ShouldProduceFiniteOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -173,8 +174,8 @@ public abstract class NeuralNetworkModelTestBase
     // Training should not destabilize the forward pass.
     // =====================================================
 
-    [Fact]
-    public void ForwardPass_ShouldBeFinite_AfterTraining()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_ShouldBeFinite_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -199,8 +200,8 @@ public abstract class NeuralNetworkModelTestBase
     // If f(x) ≈ f(10x) for all x, the network ignores input magnitude.
     // =====================================================
 
-    [Fact]
-    public void ScaledInput_ShouldChangeOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ScaledInput_ShouldChangeOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -231,8 +232,8 @@ public abstract class NeuralNetworkModelTestBase
     // BASIC CONTRACTS: Determinism, Parameters, Clone, Metadata, Architecture
     // =====================================================
 
-    [Fact]
-    public void Predict_ShouldBeDeterministic()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -247,16 +248,16 @@ public abstract class NeuralNetworkModelTestBase
                 $"Output[{i}] differs between runs: {out1[i]} vs {out2[i]}. Network may be non-deterministic.");
     }
 
-    [Fact]
-    public void Parameters_ShouldBeNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Parameters_ShouldBeNonEmpty()
     {
         var network = CreateNetwork();
         var parameters = network.GetParameters();
         Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
     }
 
-    [Fact]
-    public void Clone_ShouldProduceIdenticalOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ShouldProduceIdenticalOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -272,8 +273,8 @@ public abstract class NeuralNetworkModelTestBase
                 $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
     }
 
-    [Fact]
-    public void Metadata_ShouldExist()
+    [Fact(Timeout = 120000)]
+    public async Task Metadata_ShouldExist()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -283,15 +284,15 @@ public abstract class NeuralNetworkModelTestBase
         Assert.NotNull(network.GetModelMetadata());
     }
 
-    [Fact]
-    public void Architecture_ShouldBeNonNull()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ShouldBeNonNull()
     {
         var network = CreateNetwork();
         Assert.NotNull(network.GetArchitecture());
     }
 
-    [Fact]
-    public void NamedLayerActivations_ShouldBeNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task NamedLayerActivations_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -308,8 +309,8 @@ public abstract class NeuralNetworkModelTestBase
     // If it doesn't, the optimizer is diverging or oscillating.
     // =====================================================
 
-    [Fact]
-    public void MoreData_ShouldNotDegrade()
+    [Fact(Timeout = 120000)]
+    public async Task MoreData_ShouldNotDegrade()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -345,8 +346,8 @@ public abstract class NeuralNetworkModelTestBase
     // the error on a different random input (overfit check).
     // =====================================================
 
-    [Fact]
-    public void TrainingError_ShouldNotExceedTestError()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingError_ShouldNotExceedTestError()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -376,8 +377,8 @@ public abstract class NeuralNetworkModelTestBase
     // gradient computation.
     // =====================================================
 
-    [Fact]
-    public void GradientFlow_ShouldBeNonZeroAndFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GradientFlow_ShouldBeNonZeroAndFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -412,8 +413,8 @@ public abstract class NeuralNetworkModelTestBase
     // predicting that input within a sequence of predictions.
     // =====================================================
 
-    [Fact]
-    public void BatchConsistency_SingleMatchesBatch()
+    [Fact(Timeout = 120000)]
+    public async Task BatchConsistency_SingleMatchesBatch()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -438,8 +439,8 @@ public abstract class NeuralNetworkModelTestBase
     // The output tensor length should match the product of OutputShape.
     // =====================================================
 
-    [Fact]
-    public void OutputDimension_ShouldMatchExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task OutputDimension_ShouldMatchExpectedShape()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

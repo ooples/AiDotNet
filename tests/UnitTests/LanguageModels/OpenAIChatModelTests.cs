@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using Moq;
 using Moq.Protected;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LanguageModels;
 
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.LanguageModels;
 /// </summary>
 public class OpenAIChatModelTests
 {
-    [Fact]
-    public void Constructor_WithValidApiKey_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidApiKey_InitializesSuccessfully()
     {
         // Arrange & Act
         var model = new OpenAIChatModel<double>("test-api-key");
@@ -90,7 +91,7 @@ public class OpenAIChatModelTests
             new OpenAIChatModel<double>("test-api-key", presencePenalty: penalty));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -101,7 +102,7 @@ public class OpenAIChatModelTests
             model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -112,7 +113,7 @@ public class OpenAIChatModelTests
             model.GenerateAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithWhitespacePrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -123,7 +124,7 @@ public class OpenAIChatModelTests
             model.GenerateAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -165,7 +166,7 @@ public class OpenAIChatModelTests
         Assert.Equal("This is a test response.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithHttpError_ThrowsHttpRequestException()
     {
         // Arrange
@@ -190,7 +191,7 @@ public class OpenAIChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyChoices_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -218,8 +219,8 @@ public class OpenAIChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
-    public void Generate_SyncMethod_CallsAsyncAndReturnsResult()
+    [Fact(Timeout = 60000)]
+    public async Task Generate_SyncMethod_CallsAsyncAndReturnsResult()
     {
         // Arrange
         var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
@@ -255,7 +256,7 @@ public class OpenAIChatModelTests
         Assert.Equal("Sync response", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateResponseAsync_AliasMethod_CallsGenerateAsync()
     {
         // Arrange
@@ -289,8 +290,8 @@ public class OpenAIChatModelTests
         Assert.Equal("Alias response", result);
     }
 
-    [Fact]
-    public void Constructor_WithCustomParameters_SetsAllParameters()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomParameters_SetsAllParameters()
     {
         // Arrange & Act
         var model = new OpenAIChatModel<double>(
@@ -307,8 +308,8 @@ public class OpenAIChatModelTests
         Assert.Equal(1000, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void Constructor_WithCustomEndpoint_UsesCustomEndpoint()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomEndpoint_UsesCustomEndpoint()
     {
         // Arrange & Act
         var model = new OpenAIChatModel<double>(
@@ -320,7 +321,7 @@ public class OpenAIChatModelTests
         // The endpoint is internal, but we verify initialization doesn't fail
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_SetsAuthorizationHeader()
     {
         // Arrange

@@ -1,13 +1,14 @@
 using System;
 using AiDotNet.MetaLearning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
 public class MetaLearnerOptionsBaseIntegrationTests
 {
-    [Fact]
-    public void Defaults_AreValidAndStable()
+    [Fact(Timeout = 120000)]
+    public async Task Defaults_AreValidAndStable()
     {
         var options = new MetaLearnerOptionsBase<double>();
 
@@ -35,8 +36,8 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.False(options.IsValid());
     }
 
-    [Fact]
-    public void Clone_CopiesValues()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_CopiesValues()
     {
         var options = new MetaLearnerOptionsBase<double>
         {
@@ -72,8 +73,8 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.Equal(options.CheckpointFrequency, cloned.CheckpointFrequency);
     }
 
-    [Fact]
-    public void Builder_BuildsConfiguredOptions()
+    [Fact(Timeout = 120000)]
+    public async Task Builder_BuildsConfiguredOptions()
     {
         var options = MetaLearnerOptionsBase<double>.CreateBuilder()
             .WithInnerLearningRate(0.02)
@@ -102,8 +103,8 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.Equal(0, options.CheckpointFrequency);
     }
 
-    [Fact]
-    public void Builder_InvalidConfiguration_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Builder_InvalidConfiguration_Throws()
     {
         var builder = MetaLearnerOptionsBase<double>.CreateBuilder()
             .WithAdaptationSteps(0);

@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -70,8 +71,8 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region FeedForwardNeuralNetwork Tests
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_Predict_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -92,8 +93,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_Forward_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -123,8 +124,8 @@ public class NeuralNetworkModelsIntegrationTests
     }
 
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -143,8 +144,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -166,8 +167,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("LayerCount"));
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_Train_CompletesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -193,8 +194,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(4, output.Shape[0]);
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_MultipleTrainingIterations_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNeuralNetwork_MultipleTrainingIterations_DoesNotThrow()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -223,8 +224,8 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region ConvolutionalNeuralNetwork Tests
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_Predict_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -247,8 +248,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[^1]); // Last dim is output classes
     }
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_Train_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_Train_DoesNotThrow()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -272,8 +273,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_Forward_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_Forward_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -296,8 +297,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void ConvolutionalNeuralNetwork_GetMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalNeuralNetwork_GetMetadata_ReturnsValidData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -323,8 +324,8 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region RecurrentNeuralNetwork Tests
 
-    [Fact]
-    public void RecurrentNeuralNetwork_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -346,8 +347,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void RecurrentNeuralNetwork_Train_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentNeuralNetwork_Train_DoesNotThrow()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -370,8 +371,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void RecurrentNeuralNetwork_Predict_ProducesConsistentOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentNeuralNetwork_Predict_ProducesConsistentOutput()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -397,8 +398,8 @@ public class NeuralNetworkModelsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void ConvNet_TrainAndPredict_ConsistentBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task ConvNet_TrainAndPredict_ConsistentBehavior()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -429,8 +430,8 @@ public class NeuralNetworkModelsIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeedForwardNetwork_DifferentComplexities_ProduceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNetwork_DifferentComplexities_ProduceOutput()
     {
         // Test with different complexity settings
         var complexities = new[]
@@ -462,8 +463,8 @@ public class NeuralNetworkModelsIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeedForwardNetwork_DifferentTaskTypes_ProduceOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardNetwork_DifferentTaskTypes_ProduceOutput()
     {
         // Test with different task types
         var taskTypes = new[]

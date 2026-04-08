@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -56,7 +57,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateWithSpeculativeDecoding_WhenRequestInvalid_Returns400()
     {
         var response = await PostAsJsonAsync(
@@ -70,7 +71,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Equal("InputTokens array is required and cannot be empty", payload!.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateWithSpeculativeDecoding_WhenModelMissing_Returns404()
     {
         var response = await PostAsJsonAsync(
@@ -84,7 +85,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Contains("missing-model", payload!.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateWithSpeculativeDecoding_WhenModelExists_Returns501()
     {
         LoadSimpleModel("spec-decoding-model", enableBatching: true);
@@ -100,7 +101,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Equal("Speculative decoding is not available via the REST API in the current version.", payload!.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FineTuneWithLoRA_WhenRequestInvalid_Returns400()
     {
         var response = await PostAsJsonAsync(
@@ -115,7 +116,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Equal("ModelName is required", payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FineTuneWithLoRA_WhenModelMissing_Returns404()
     {
         var response = await PostAsJsonAsync(
@@ -135,7 +136,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Contains("missing-model", payload.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FineTuneWithLoRA_WhenModelExists_Returns501()
     {
         LoadSimpleModel("lora-model", enableBatching: true);
@@ -157,7 +158,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Equal("LoRA fine-tuning is not available via the REST API in the current version.", payload.Error);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Predict_WhenBatchingDisabledAndTooManyItems_Returns413()
     {
         LoadSimpleModel("unbatched-model", enableBatching: false);
@@ -180,8 +181,8 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         Assert.Contains("batching is disabled", error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void LoRAFineTuneRequest_Validate_CoversAllErrorBranches()
+    [Fact(Timeout = 60000)]
+    public async Task LoRAFineTuneRequest_Validate_CoversAllErrorBranches()
     {
         Assert.Equal("ModelName is required", Validate(new LoRAFineTuneRequest { ModelName = " " }));
 
@@ -253,8 +254,8 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
         }));
     }
 
-    [Fact]
-    public void SpeculativeDecodingRequest_Validate_CoversAllErrorBranches()
+    [Fact(Timeout = 60000)]
+    public async Task SpeculativeDecodingRequest_Validate_CoversAllErrorBranches()
     {
         Assert.Equal(
             "InputTokens array is required and cannot be empty",

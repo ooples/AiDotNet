@@ -1,5 +1,6 @@
 using AiDotNet.HyperparameterOptimization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.HyperparameterOptimization;
 
@@ -15,8 +16,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Best Mode (maximize)
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_BestMode_Maximize_FirstValueAlwaysImproves()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Maximize_FirstValueAlwaysImproves()
     {
         // First value always improves since bestValue starts at -Infinity
         var es = new EarlyStopping<double>(patience: 3, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
@@ -29,8 +30,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(0, es.EpochsSinceBest);
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Maximize_PatienceExhaustion()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Maximize_PatienceExhaustion()
     {
         // patience=3, maximize=true, minDelta=0
         // values: 10, 20, 15, 15, 15 → should stop at index 4 (3 non-improvements after best at index 1)
@@ -56,8 +57,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(3, es.EpochsSinceBest);
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Maximize_MinDelta_ExactBoundary()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Maximize_MinDelta_ExactBoundary()
     {
         // patience=2, maximize=true, minDelta=0.5
         // bestValue=10: need value > 10 + 0.5 = 10.5
@@ -76,8 +77,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.True(es.BestValue > 10.0); // best updated
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Maximize_ImprovementResetsCounter()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Maximize_ImprovementResetsCounter()
     {
         // After 2 non-improvements, an improvement should reset counter to 0
         var es = new EarlyStopping<double>(patience: 5, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
@@ -95,8 +96,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(3, es.BestEpoch);
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Maximize_StaysStoppedAfterTrigger()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Maximize_StaysStoppedAfterTrigger()
     {
         // Once stopped, subsequent checks should still return true
         var es = new EarlyStopping<double>(patience: 1, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
@@ -113,8 +114,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Best Mode (minimize)
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_BestMode_Minimize_FirstValueAlwaysImproves()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Minimize_FirstValueAlwaysImproves()
     {
         var es = new EarlyStopping<double>(patience: 3, minDelta: 0.0, maximize: false, mode: EarlyStoppingMode.Best);
 
@@ -124,8 +125,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(1000.0, es.BestValue);
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Minimize_PatienceExhaustion()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Minimize_PatienceExhaustion()
     {
         // minimize: lower is better
         // values: 10, 5, 8, 8 → patience=2, should stop at index 3
@@ -140,8 +141,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(1, es.BestEpoch);
     }
 
-    [Fact]
-    public void EarlyStopping_BestMode_Minimize_MinDelta()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_BestMode_Minimize_MinDelta()
     {
         // minimize=true, minDelta=0.1, bestValue=5.0
         // need value < 5.0 - 0.1 = 4.9 to count as improvement
@@ -161,8 +162,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - RelativeBest Mode
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_RelativeBest_Maximize_PositiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_RelativeBest_Maximize_PositiveValues()
     {
         // maximize=true, minDelta=0.1 (10%)
         // bestValue=100: threshold = 100 * (1 + 0.1) = 110
@@ -180,8 +181,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(111.0, es.BestValue);
     }
 
-    [Fact]
-    public void EarlyStopping_RelativeBest_Maximize_NegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_RelativeBest_Maximize_NegativeValues()
     {
         // With negative bestValue and maximize=true:
         // bestValue=-10, minDelta=0.1
@@ -201,8 +202,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(-8.5, es.BestValue);
     }
 
-    [Fact]
-    public void EarlyStopping_RelativeBest_Minimize_NegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_RelativeBest_Minimize_NegativeValues()
     {
         // With negative bestValue and minimize=true:
         // bestValue=-10, minDelta=0.1
@@ -222,8 +223,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(-11.5, es.BestValue);
     }
 
-    [Fact]
-    public void EarlyStopping_RelativeBest_Minimize_PositiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_RelativeBest_Minimize_PositiveValues()
     {
         // minimize=true, minDelta=0.2 (20%)
         // bestValue=100: threshold = 100 * (1 - 0.2) = 80
@@ -245,8 +246,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - MovingAverage Mode
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_MovingAverage_FirstTwoCallsAlwaysImprove()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MovingAverage_FirstTwoCallsAlwaysImprove()
     {
         // First call: history.Count=1 < 2 → always improves
         // Second call: history.Count=2 → computes average, but still might improve
@@ -261,8 +262,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(1, es.EpochsSinceBest);
     }
 
-    [Fact]
-    public void EarlyStopping_MovingAverage_HandComputedWindow()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MovingAverage_HandComputedWindow()
     {
         // patience=2, maximize=true, minDelta=0
         // Step-by-step trace of moving average window:
@@ -300,8 +301,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.True(es.ShouldStop);
     }
 
-    [Fact]
-    public void EarlyStopping_MovingAverage_WindowSizeCappedByPatience()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MovingAverage_WindowSizeCappedByPatience()
     {
         // patience=2, after many values the window should be at most patience-sized
         // values: 1, 2, 3, 4, 5, 6, 7, 8
@@ -317,8 +318,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(es.ShouldStop);
     }
 
-    [Fact]
-    public void EarlyStopping_MovingAverage_MinDelta()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MovingAverage_MinDelta()
     {
         // patience=3, maximize=true, minDelta=1.0
         // values: 10, 10.5
@@ -336,8 +337,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Reset and State
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_Reset_ClearsAllState()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Reset_ClearsAllState()
     {
         var es = new EarlyStopping<double>(patience: 2, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -358,8 +359,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(0, es.History.Count);
     }
 
-    [Fact]
-    public void EarlyStopping_GetState_ReturnsCorrectSnapshot()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_GetState_ReturnsCorrectSnapshot()
     {
         var es = new EarlyStopping<double>(patience: 5, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -377,8 +378,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(3, state.TotalChecks);
     }
 
-    [Fact]
-    public void EarlyStopping_History_RecordsAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_History_RecordsAllValues()
     {
         var es = new EarlyStopping<double>(patience: 10, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -391,8 +392,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
             Assert.Equal(values[i], es.History[i]);
     }
 
-    [Fact]
-    public void EarlyStopping_AutoEpoch_WhenEpochNotProvided()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_AutoEpoch_WhenEpochNotProvided()
     {
         // When epoch=-1 (default), it should use _history.Count as epoch
         var es = new EarlyStopping<double>(patience: 5, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
@@ -412,8 +413,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Builder
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_Builder_ProducesCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Builder_ProducesCorrectConfig()
     {
         var es = EarlyStoppingBuilder<double>.Create()
             .WithPatience(7)
@@ -437,15 +438,15 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.Equal(0, es.EpochsSinceBest);
     }
 
-    [Fact]
-    public void EarlyStopping_Builder_InvalidPatience_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Builder_InvalidPatience_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             EarlyStoppingBuilder<double>.Create().WithPatience(0));
     }
 
-    [Fact]
-    public void EarlyStopping_Builder_NegativeMinDelta_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Builder_NegativeMinDelta_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             EarlyStoppingBuilder<double>.Create().WithMinDelta(-0.1));
@@ -455,8 +456,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Patience=1 edge case
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_Patience1_StopsOnFirstNonImprovement()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Patience1_StopsOnFirstNonImprovement()
     {
         var es = new EarlyStopping<double>(patience: 1, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -468,8 +469,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Generic T parameter (float)
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_Float_TypeParameter()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_Float_TypeParameter()
     {
         var es = new EarlyStopping<float>(patience: 2, minDelta: 0.0, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -485,8 +486,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - GetPercentile correctness
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_MedianPruning_HandComputedMedian_OddCount()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MedianPruning_HandComputedMedian_OddCount()
     {
         // 3 other trials at step 5 with values: 10, 20, 30
         // Median (50th percentile): index = 0.5 * (3-1) = 1.0 → sorted[1] = 20
@@ -503,8 +504,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.True(shouldPrune); // 15 < median(10,20,30)=20 → prune
     }
 
-    [Fact]
-    public void TrialPruner_MedianPruning_HandComputedMedian_EvenCount()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MedianPruning_HandComputedMedian_EvenCount()
     {
         // 4 other trials with values: 10, 20, 30, 40
         // Median: index = 0.5 * (4-1) = 1.5 → interpolate sorted[1] and sorted[2]
@@ -521,8 +522,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(shouldPrune); // 26 > 25 → don't prune
     }
 
-    [Fact]
-    public void TrialPruner_MedianPruning_ExactlyAtMedian_ShouldNotPrune()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MedianPruning_ExactlyAtMedian_ShouldNotPrune()
     {
         // values: [10, 20, 30], median=20
         // Current value=20: 20 < 20 → false → should NOT prune
@@ -536,8 +537,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(shouldPrune); // exactly at median → not pruned
     }
 
-    [Fact]
-    public void TrialPruner_MedianPruning_Minimize()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MedianPruning_Minimize()
     {
         // minimize: prune if value > median
         // values: [10, 20, 30], median=20
@@ -552,8 +553,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.True(shouldPrune); // 25 > 20 → prune (minimize mode)
     }
 
-    [Fact]
-    public void TrialPruner_MedianPruning_SingleOtherTrial_NeverPrunes()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MedianPruning_SingleOtherTrial_NeverPrunes()
     {
         // Only 1 other trial → valuesAtStep.Count < 2 → never prune
         var pruner = new TrialPruner<double>(maximize: true, strategy: PruningStrategy.MedianPruning, warmupSteps: 0);
@@ -568,8 +569,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Warmup Steps
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_WarmupSteps_NoPruningDuringWarmup()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_WarmupSteps_NoPruningDuringWarmup()
     {
         // warmupSteps=5: steps 0-4 should never prune regardless of value
         var pruner = new TrialPruner<double>(maximize: true, strategy: PruningStrategy.MedianPruning, warmupSteps: 5);
@@ -598,8 +599,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Check Interval
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_CheckInterval_OnlyChecksOnMultiples()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_CheckInterval_OnlyChecksOnMultiples()
     {
         // checkInterval=3, warmupSteps=0
         // Should only prune at steps 0, 3, 6, 9, ...
@@ -636,8 +637,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - PercentilePruning
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_PercentilePruning_Maximize_KeepTop25()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_PercentilePruning_Maximize_KeepTop25()
     {
         // percentile=25 with maximize=true
         // threshold = GetPercentile(values, 100 - 25) = GetPercentile(values, 75)
@@ -660,8 +661,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(pruner.ReportAndCheckPrune("cur2", 1, 35.0)); // 35 > 32.5 → keep
     }
 
-    [Fact]
-    public void TrialPruner_PercentilePruning_Minimize_KeepBottom25()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_PercentilePruning_Minimize_KeepBottom25()
     {
         // percentile=25 with minimize=false
         // threshold = GetPercentile(values, 25)
@@ -688,8 +689,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - SuccessiveHalving
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_SuccessiveHalving_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_SuccessiveHalving_HandComputed()
     {
         // Need at least 4 other trials for successive halving
         // maximize=true, other values: [10, 20, 30, 40]
@@ -710,8 +711,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(pruner.ReportAndCheckPrune("cur2", 1, 25.0)); // 25 > 20 → keep
     }
 
-    [Fact]
-    public void TrialPruner_SuccessiveHalving_ExactlyAtThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_SuccessiveHalving_ExactlyAtThreshold()
     {
         // threshold = sorted[topHalfCount]
         // values: [10, 20, 30, 40], sorted desc: [40, 30, 20, 10], threshold=20
@@ -730,8 +731,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(shouldPrune); // exactly at threshold → not pruned
     }
 
-    [Fact]
-    public void TrialPruner_SuccessiveHalving_TooFewTrials_NeverPrunes()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_SuccessiveHalving_TooFewTrials_NeverPrunes()
     {
         // Need at least 4 other trials. With 3 → never prune
         var pruner = new TrialPruner<double>(
@@ -747,8 +748,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(shouldPrune); // only 3 other trials < 4
     }
 
-    [Fact]
-    public void TrialPruner_SuccessiveHalving_Minimize()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_SuccessiveHalving_Minimize()
     {
         // minimize=true, other values: [10, 20, 30, 40]
         // sorted asc: [10, 20, 30, 40]
@@ -772,8 +773,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - ThresholdPruning
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_ThresholdPruning_NeverAutoprunes()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_ThresholdPruning_NeverAutoprunes()
     {
         // ThresholdPruning always returns false from ShouldPrune
         // Must use CheckThreshold explicitly
@@ -789,8 +790,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(shouldPrune); // ThresholdPruning doesn't auto-prune
     }
 
-    [Fact]
-    public void TrialPruner_CheckThreshold_Maximize()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_CheckThreshold_Maximize()
     {
         var pruner = new TrialPruner<double>(maximize: true);
 
@@ -799,8 +800,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
         Assert.False(pruner.CheckThreshold(10.0, 10.0)); // 10 < 10? No → keep
     }
 
-    [Fact]
-    public void TrialPruner_CheckThreshold_Minimize()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_CheckThreshold_Minimize()
     {
         var pruner = new TrialPruner<double>(maximize: false);
 
@@ -813,8 +814,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - GetValuesAtStep uses latest value at or before step
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_GetValuesAtStep_UsesLatestValueAtOrBeforeStep()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_GetValuesAtStep_UsesLatestValueAtOrBeforeStep()
     {
         // Trial "other" reports at steps 1, 3, 5
         // When checking at step 4, should use value from step 3 (latest <= 4)
@@ -843,8 +844,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Statistics
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_Statistics_TracksTrials()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_Statistics_TracksTrials()
     {
         var pruner = new TrialPruner<double>(maximize: true, warmupSteps: 0);
 
@@ -868,8 +869,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Reset
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_Reset_ClearsHistory()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_Reset_ClearsHistory()
     {
         var pruner = new TrialPruner<double>(maximize: true, warmupSteps: 0);
 
@@ -890,8 +891,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Constructor validation
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_InvalidPercentile_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_InvalidPercentile_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new TrialPruner<double>(percentile: 0));
@@ -901,15 +902,15 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
             new TrialPruner<double>(percentile: -5));
     }
 
-    [Fact]
-    public void TrialPruner_InvalidWarmupSteps_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_InvalidWarmupSteps_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new TrialPruner<double>(warmupSteps: -1));
     }
 
-    [Fact]
-    public void TrialPruner_InvalidCheckInterval_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_InvalidCheckInterval_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new TrialPruner<double>(checkInterval: 0));
@@ -919,8 +920,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Percentile computation edge cases
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_Percentile_TwoValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_Percentile_TwoValues()
     {
         // 2 other trials: values [10, 30]
         // Median: index = 0.5 * (2-1) = 0.5
@@ -939,8 +940,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // Integration: EarlyStopping + TrialPruner working together
     // ========================================================================
 
-    [Fact]
-    public void Integration_EarlyStoppingAndPruning_SimulatedTraining()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_EarlyStoppingAndPruning_SimulatedTraining()
     {
         // Simulate a hyperparameter search with 3 trials
         // Trial 1: steady improvement (should complete)
@@ -1001,8 +1002,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - Multiple resets
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_MultipleResets_IndependentBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MultipleResets_IndependentBehavior()
     {
         var es = new EarlyStopping<double>(patience: 2, maximize: true, mode: EarlyStoppingMode.Best);
 
@@ -1027,8 +1028,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping - MovingAverage with minimize mode
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_MovingAverage_Minimize_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_MovingAverage_Minimize_HandComputed()
     {
         // patience=2, minimize=true, minDelta=0
         // v0=10: improved (first)
@@ -1067,8 +1068,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - Multiple steps with evolving history
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_MultiStep_TrialCanSurviveThenGetPruned()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_MultiStep_TrialCanSurviveThenGetPruned()
     {
         // A trial that starts OK but falls behind should eventually get pruned
         var pruner = new TrialPruner<double>(maximize: true, strategy: PruningStrategy.MedianPruning, warmupSteps: 0);
@@ -1104,15 +1105,15 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // EarlyStopping constructor validation
     // ========================================================================
 
-    [Fact]
-    public void EarlyStopping_InvalidPatience_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_InvalidPatience_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new EarlyStopping<double>(patience: 0));
     }
 
-    [Fact]
-    public void EarlyStopping_NegativeMinDelta_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task EarlyStopping_NegativeMinDelta_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new EarlyStopping<double>(minDelta: -0.1));
@@ -1122,8 +1123,8 @@ public class HyperparameterOptimizationDeepMathIntegrationTests
     // TrialPruner - ExcludesCurrentTrial from comparison
     // ========================================================================
 
-    [Fact]
-    public void TrialPruner_ExcludesCurrentTrialFromComparison()
+    [Fact(Timeout = 120000)]
+    public async Task TrialPruner_ExcludesCurrentTrialFromComparison()
     {
         // If the ONLY other trial is the current one, it shouldn't compare with itself
         var pruner = new TrialPruner<double>(maximize: true, strategy: PruningStrategy.MedianPruning, warmupSteps: 0);

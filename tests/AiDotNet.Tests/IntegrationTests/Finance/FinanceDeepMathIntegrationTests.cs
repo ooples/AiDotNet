@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Finance.AutoML;
 using AiDotNet.Finance.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Finance;
 
@@ -18,8 +19,8 @@ public class FinanceDeepMathIntegrationTests
     // FinancialDomain Enum
     // ============================
 
-    [Fact]
-    public void FinancialDomain_HasTwoValues()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialDomain_HasTwoValues()
     {
         var values = (((FinancialDomain[])Enum.GetValues(typeof(FinancialDomain))));
         Assert.Equal(2, values.Length);
@@ -37,8 +38,8 @@ public class FinanceDeepMathIntegrationTests
     // FinancialNLPTaskType Enum
     // ============================
 
-    [Fact]
-    public void FinancialNLPTaskType_HasSevenValues()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialNLPTaskType_HasSevenValues()
     {
         var values = (((FinancialNLPTaskType[])Enum.GetValues(typeof(FinancialNLPTaskType))));
         Assert.Equal(7, values.Length);
@@ -61,22 +62,22 @@ public class FinanceDeepMathIntegrationTests
     // FinancialSearchSpace: Construction
     // ============================
 
-    [Fact]
-    public void FinancialSearchSpace_Construction_Forecasting()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_Construction_Forecasting()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         Assert.NotNull(searchSpace);
     }
 
-    [Fact]
-    public void FinancialSearchSpace_Construction_Risk()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_Construction_Risk()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         Assert.NotNull(searchSpace);
     }
 
-    [Fact]
-    public void FinancialSearchSpace_GetSearchSpace_PatchTST()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_GetSearchSpace_PatchTST()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
@@ -84,8 +85,8 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact]
-    public void FinancialSearchSpace_GetSearchSpace_NeuralVaR()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_GetSearchSpace_NeuralVaR()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>));
@@ -93,8 +94,8 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact]
-    public void FinancialSearchSpace_GetSearchSpace_Default()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_GetSearchSpace_Default()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         // Unknown model type should return domain-aware default
@@ -103,8 +104,8 @@ public class FinanceDeepMathIntegrationTests
         Assert.NotEmpty(space);
     }
 
-    [Fact]
-    public void FinancialSearchSpace_SearchSpace_ContainsLearningRate()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialSearchSpace_SearchSpace_ContainsLearningRate()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
@@ -251,8 +252,8 @@ public class FinanceDeepMathIntegrationTests
         Assert.Equal(expectedLogReturn, logReturn, 1e-4);
     }
 
-    [Fact]
-    public void FinancialMath_LogReturns_Additive()
+    [Fact(Timeout = 120000)]
+    public async Task FinancialMath_LogReturns_Additive()
     {
         // Log returns are additive: ln(P2/P0) = ln(P1/P0) + ln(P2/P1)
         double p0 = 100, p1 = 110, p2 = 105;

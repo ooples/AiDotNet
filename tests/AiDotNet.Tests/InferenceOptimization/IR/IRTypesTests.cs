@@ -1,5 +1,6 @@
 using AiDotNet.InferenceOptimization.IR.Common;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization.IR;
 
@@ -71,8 +72,8 @@ public class IRTypesTests
 
     #region TensorType Tests
 
-    [Fact]
-    public void TensorType_DefaultValues_AreCorrect()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_DefaultValues_AreCorrect()
     {
         var tensorType = new TensorType();
 
@@ -93,15 +94,15 @@ public class IRTypesTests
         Assert.Equal(expected, tensorType.NumElements);
     }
 
-    [Fact]
-    public void TensorType_NumElements_ReturnsMinusOneForDynamicShape()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_NumElements_ReturnsMinusOneForDynamicShape()
     {
         var tensorType = new TensorType { Shape = new[] { 2, -1, 4 } };
         Assert.Equal(-1, tensorType.NumElements);
     }
 
-    [Fact]
-    public void TensorType_HasDynamicShape_DetectsDynamicDimensions()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_HasDynamicShape_DetectsDynamicDimensions()
     {
         var staticType = new TensorType { Shape = new[] { 2, 3, 4 } };
         var dynamicType = new TensorType { Shape = new[] { 2, -1, 4 } };
@@ -122,8 +123,8 @@ public class IRTypesTests
         Assert.Equal(expected, tensorType.ElementSize);
     }
 
-    [Fact]
-    public void TensorType_TotalBytes_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_TotalBytes_CalculatesCorrectly()
     {
         var tensorType = new TensorType
         {
@@ -148,8 +149,8 @@ public class IRTypesTests
         Assert.Equal(expected, type1.IsBroadcastCompatible(type2));
     }
 
-    [Fact]
-    public void TensorType_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_Clone_CreatesIndependentCopy()
     {
         var original = new TensorType
         {
@@ -171,8 +172,8 @@ public class IRTypesTests
         Assert.NotEqual(original.Shape[0], clone.Shape[0]);
     }
 
-    [Fact]
-    public void TensorType_ToString_ReturnsFormattedString()
+    [Fact(Timeout = 60000)]
+    public async Task TensorType_ToString_ReturnsFormattedString()
     {
         var tensorType = new TensorType
         {
@@ -191,8 +192,8 @@ public class IRTypesTests
 
     #region QuantizationParams Tests
 
-    [Fact]
-    public void QuantizationParams_DefaultValues_AreCorrect()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizationParams_DefaultValues_AreCorrect()
     {
         var qParams = new QuantizationParams();
 
@@ -202,8 +203,8 @@ public class IRTypesTests
         Assert.Equal(-1, qParams.QuantizationAxis);
     }
 
-    [Fact]
-    public void QuantizationParams_PerChannel_CanBeConfigured()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizationParams_PerChannel_CanBeConfigured()
     {
         var qParams = new QuantizationParams
         {
@@ -223,8 +224,8 @@ public class IRTypesTests
 
     #region MemoryLayout Tests
 
-    [Fact]
-    public void MemoryLayout_AllValuesAreDefined()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryLayout_AllValuesAreDefined()
     {
         Assert.True(Enum.IsDefined(typeof(MemoryLayout), MemoryLayout.RowMajor));
         Assert.True(Enum.IsDefined(typeof(MemoryLayout), MemoryLayout.ColumnMajor));
@@ -238,8 +239,8 @@ public class IRTypesTests
 
     #region DeviceType Tests
 
-    [Fact]
-    public void DeviceType_AllValuesAreDefined()
+    [Fact(Timeout = 60000)]
+    public async Task DeviceType_AllValuesAreDefined()
     {
         Assert.True(Enum.IsDefined(typeof(DeviceType), DeviceType.CPU));
         Assert.True(Enum.IsDefined(typeof(DeviceType), DeviceType.GPU));

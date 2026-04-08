@@ -9,6 +9,7 @@ using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 {
@@ -26,8 +27,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Multi-Scale PDE Tests
 
-        [Fact]
-        public void MultiScalePDE_TwoScaleHeatEquation_HasCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScalePDE_TwoScaleHeatEquation_HasCorrectProperties()
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
@@ -44,8 +45,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(scales[0] > scales[1], "Coarse scale should be larger than fine scale");
         }
 
-        [Fact]
-        public void MultiScalePDE_ComputeScaleResidual_ReturnsValueForEachScale()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScalePDE_ComputeScaleResidual_ReturnsValueForEachScale()
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
@@ -62,8 +63,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(!double.IsNaN(fineResidual) && !double.IsInfinity(fineResidual), "Fine scale residual should be finite");
         }
 
-        [Fact]
-        public void MultiScalePDE_ComputeScaleCoupling_ReturnsCouplingResidual()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScalePDE_ComputeScaleCoupling_ReturnsCouplingResidual()
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
@@ -81,8 +82,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(!double.IsNaN(couplingResidual) && !double.IsInfinity(couplingResidual), "Coupling residual should be finite");
         }
 
-        [Fact]
-        public void MultiScalePDE_GetScaleLossWeight_ReturnsPositiveWeights()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScalePDE_GetScaleLossWeight_ReturnsPositiveWeights()
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
@@ -95,8 +96,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             }
         }
 
-        [Fact]
-        public void MultiScaleTrainingOptions_DefaultValues_AreReasonable()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScaleTrainingOptions_DefaultValues_AreReasonable()
         {
             // Arrange & Act
             var options = new MultiScaleTrainingOptions<double>();
@@ -111,8 +112,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Inverse Problem Tests
 
-        [Fact]
-        public void InverseProblem_ParameterIdentification_HasCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblem_ParameterIdentification_HasCorrectProperties()
         {
             // Arrange
             var observations = new List<(double[] location, double[] value)>
@@ -136,8 +137,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.Equal(3, inverseProblem.Observations.Count);
         }
 
-        [Fact]
-        public void InverseProblem_ValidateParameters_ChecksBounds()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblem_ValidateParameters_ChecksBounds()
         {
             // Arrange
             var observations = new List<(double[] location, double[] value)>
@@ -159,8 +160,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.False(inverseProblem.ValidateParameters(new double[] { -1.0 })); // Negative
         }
 
-        [Fact]
-        public void InverseProblem_CreateParameterizedPDE_ReturnsValidPDE()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblem_CreateParameterizedPDE_ReturnsValidPDE()
         {
             // Arrange
             var observations = new List<(double[] location, double[] value)>
@@ -184,8 +185,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.Contains("2.5", pde.Name); // Name should contain the parameter value
         }
 
-        [Fact]
-        public void InverseProblemOptions_DefaultValues_AreReasonable()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemOptions_DefaultValues_AreReasonable()
         {
             // Arrange & Act
             var options = new InverseProblemOptions<double>();
@@ -198,8 +199,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.False(options.EstimateUncertainty);
         }
 
-        [Fact]
-        public void InverseProblemResult_CanStoreResults()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemResult_CanStoreResults()
         {
             // Arrange & Act
             var result = new InverseProblemResult<double>
@@ -225,8 +226,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Integration Tests
 
-        [Fact]
-        public void MultiScalePINN_CanBeCreated_WithValidConfiguration()
+        [Fact(Timeout = 60000)]
+        public async Task MultiScalePINN_CanBeCreated_WithValidConfiguration()
         {
             // Arrange
             var architecture = new NeuralNetworkArchitecture<double>(
@@ -255,8 +256,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(pinn.SupportsTraining);
         }
 
-        [Fact]
-        public void InverseProblemPINN_CanBeCreated_WithValidConfiguration()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemPINN_CanBeCreated_WithValidConfiguration()
         {
             // Arrange
             var architecture = new NeuralNetworkArchitecture<double>(
@@ -293,8 +294,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(pinn.SupportsTraining);
         }
 
-        [Fact]
-        public void InverseProblemPINN_Parameters_CanBeUpdatedDuringTraining()
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemPINN_Parameters_CanBeUpdatedDuringTraining()
         {
             // Arrange
             var architecture = new NeuralNetworkArchitecture<double>(

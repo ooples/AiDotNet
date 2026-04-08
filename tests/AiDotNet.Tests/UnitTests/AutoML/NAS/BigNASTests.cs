@@ -5,6 +5,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -13,8 +14,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class BigNASTests
     {
-        [Fact]
-        public void BigNAS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -24,8 +25,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(bignas);
         }
 
-        [Fact]
-        public void BigNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -41,8 +42,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(bignas);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_WithSandwichSampling_ReturnsFourConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_WithSandwichSampling_ReturnsFourConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -56,8 +57,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, samples.Count);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_FirstIsTeacher()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_FirstIsTeacher()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -70,8 +71,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(samples[0].IsTeacher);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_FirstIsLargest()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_FirstIsLargest()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -96,8 +97,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(256, largest.Resolution);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_SecondIsSmallest()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_SecondIsSmallest()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -122,8 +123,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(128, smallest.Resolution);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_WithoutSandwichSampling_ReturnsRandomConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_WithoutSandwichSampling_ReturnsRandomConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -141,8 +142,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_ReturnsValidLoss()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_ReturnsValidLoss()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -165,8 +166,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_SameLogits_ReturnsZeroish()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_SameLogits_ReturnsZeroish()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -182,8 +183,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(loss) < 0.1);
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_DifferentLengths_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_DifferentLengths_ThrowsException()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -196,8 +197,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
                 bignas.ComputeDistillationLoss(teacherLogits, studentLogits, 2.0));
         }
 
-        [Fact]
-        public void BigNAS_MultiObjectiveSearch_ReturnsConfigsForAllDevices()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_MultiObjectiveSearch_ReturnsConfigsForAllDevices()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -226,8 +227,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(results.ContainsKey("desktop"));
         }
 
-        [Fact]
-        public void BigNAS_MultiObjectiveSearch_ReturnsValidConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_MultiObjectiveSearch_ReturnsValidConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -255,8 +256,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Resolution > 0);
         }
 
-        [Fact]
-        public void BigNAS_BigNASConfig_HasCorrectDefaults()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_BigNASConfig_HasCorrectDefaults()
         {
             // Arrange & Act
             var config = new BigNASConfig();
@@ -270,8 +271,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(config.IsTeacher);
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_ProducesVariedConfigs()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_ProducesVariedConfigs()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -292,8 +293,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(allDepths.Count >= 2);
         }
 
-        [Fact]
-        public void BigNAS_WithDifferentDistillationWeights_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_WithDifferentDistillationWeights_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -307,8 +308,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
-        public void BigNAS_SingleElementElasticLists_SamplesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SingleElementElasticLists_SamplesCorrectly()
         {
             // Arrange - single element in each list means only one possible config
             var searchSpace = new SearchSpaceBase<double>();
@@ -335,8 +336,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_WithVeryLowTemperature_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_WithVeryLowTemperature_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -358,8 +359,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_WithHighTemperature_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_WithHighTemperature_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -381,8 +382,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_SingleElementLogits_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_SingleElementLogits_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -399,8 +400,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         }
 
-        [Fact]
-        public void BigNAS_MultiObjectiveSearch_EmptyDeviceList_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_MultiObjectiveSearch_EmptyDeviceList_ReturnsEmptyResults()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -420,8 +421,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void BigNAS_MultiObjectiveSearch_MinimalPopulationAndGenerations_Works()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_MultiObjectiveSearch_MinimalPopulationAndGenerations_Works()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -445,8 +446,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(results.ContainsKey("test"));
         }
 
-        [Fact]
-        public void BigNAS_SandwichSample_WithSingleElementLists_LargestEqualsSmallest()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_SandwichSample_WithSingleElementLists_LargestEqualsSmallest()
         {
             // Arrange - single element in each list
             var searchSpace = new SearchSpaceBase<double>();
@@ -470,8 +471,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(samples[0].Resolution, samples[1].Resolution);
         }
 
-        [Fact]
-        public void BigNAS_ComputeDistillationLoss_WithZeroLogits_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task BigNAS_ComputeDistillationLoss_WithZeroLogits_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

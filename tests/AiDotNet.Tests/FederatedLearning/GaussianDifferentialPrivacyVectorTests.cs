@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using AiDotNet.FederatedLearning.Privacy;
@@ -14,8 +15,8 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacyVector<double>(clipNorm));
     }
 
-    [Fact]
-    public void ApplyPrivacy_Throws_WhenModelNull()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_Throws_WhenModelNull()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 1);
 
@@ -35,8 +36,8 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: epsilon, delta: delta));
     }
 
-    [Fact]
-    public void ApplyPrivacy_IncrementsAndResetsPrivacyBudget()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_IncrementsAndResetsPrivacyBudget()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 123);
         var model = new Vector<double>(new[] { 1.0, 2.0 });
@@ -50,8 +51,8 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed(), precision: 10);
     }
 
-    [Fact]
-    public void ApplyPrivacy_WithSameSeed_ProducesSameNoise()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_WithSameSeed_ProducesSameNoise()
     {
         var dp1 = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 42);
         var dp2 = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 42);
@@ -63,8 +64,8 @@ public class GaussianDifferentialPrivacyVectorTests
         Assert.Equal(noisy1.ToArray(), noisy2.ToArray());
     }
 
-    [Fact]
-    public void ApplyPrivacy_ClipsByL2Norm_BeforeAddingNoise()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_ClipsByL2Norm_BeforeAddingNoise()
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 7);
         var model = new Vector<double>(new[] { 10.0, 10.0, 10.0 });

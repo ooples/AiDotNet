@@ -1,6 +1,7 @@
 using AiDotNet.Tools;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Tools;
 
@@ -15,8 +16,8 @@ public class ToolBaseTests
 
     #region PR #756 Bug Fix Tests - Type Conversion Robustness
 
-    [Fact]
-    public void Execute_InvalidIntType_UsesDefaultInsteadOfThrowing()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_InvalidIntType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - n_samples should be int but we pass a string
         var input = """{"problem_type": "regression", "n_samples": "not_a_number"}""";
@@ -29,8 +30,8 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact]
-    public void Execute_InvalidDoubleType_UsesDefaultInsteadOfThrowing()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_InvalidDoubleType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - Use RegularizationTool which uses TryGetDouble for training_score
         var regularizationTool = new RegularizationTool();
@@ -44,8 +45,8 @@ public class ToolBaseTests
         Assert.Contains("REGULARIZATION RECOMMENDATIONS", result);
     }
 
-    [Fact]
-    public void Execute_InvalidBoolType_UsesDefaultInsteadOfThrowing()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_InvalidBoolType_UsesDefaultInsteadOfThrowing()
     {
         // Arrange - is_linear should be bool but we pass a string
         var input = """{"problem_type": "regression", "is_linear": "not_a_bool"}""";
@@ -58,8 +59,8 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact]
-    public void Execute_MissingProperties_UsesDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_MissingProperties_UsesDefaults()
     {
         // Arrange - Only provide minimal JSON
         var input = """{"problem_type": "classification"}""";
@@ -72,8 +73,8 @@ public class ToolBaseTests
         Assert.Contains("MODEL SELECTION RECOMMENDATION", result);
     }
 
-    [Fact]
-    public void Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_EmptyInput_ReturnsError()
     {
         // Act
         var result = _tool.Execute("");
@@ -83,8 +84,8 @@ public class ToolBaseTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_InvalidJson_ReturnsJsonError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_InvalidJson_ReturnsJsonError()
     {
         // Act
         var result = _tool.Execute("not valid json");
@@ -94,8 +95,8 @@ public class ToolBaseTests
         Assert.Contains("JSON", result);
     }
 
-    [Fact]
-    public void Execute_NullPropertyValues_UsesDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_NullPropertyValues_UsesDefaults()
     {
         // Arrange - Explicit null values
         var input = """{"problem_type": null, "n_samples": null, "is_linear": null}""";

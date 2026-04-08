@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DecompositionMethods;
 
@@ -23,8 +24,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region NMF Decomposition
 
-    [Fact]
-    public void NMF_WH_ApproximatesA()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_WH_ApproximatesA()
     {
         // NMF: V ~= W * H for non-negative matrix
         // Use a rank-2 non-negative matrix (V = trueW * trueH) so 2-component NMF
@@ -51,8 +52,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.True(avgError < NmfTolerance, $"Average NMF reconstruction error {avgError} should be < {NmfTolerance}");
     }
 
-    [Fact]
-    public void NMF_W_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_W_IsNonNegative()
     {
         var V = new Matrix<double>(new double[,] {
             { 5, 3, 1 }, { 4, 2, 1 }, { 1, 1, 5 }
@@ -66,8 +67,8 @@ public class NMFAndNormalDeepMathIntegrationTests
                     $"W[{i},{j}] = {nmf.W[i, j]} should be non-negative");
     }
 
-    [Fact]
-    public void NMF_H_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_H_IsNonNegative()
     {
         var V = new Matrix<double>(new double[,] {
             { 5, 3, 1 }, { 4, 2, 1 }, { 1, 1, 5 }
@@ -81,8 +82,8 @@ public class NMFAndNormalDeepMathIntegrationTests
                     $"H[{i},{j}] = {nmf.H[i, j]} should be non-negative");
     }
 
-    [Fact]
-    public void NMF_Dimensions_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_Dimensions_AreCorrect()
     {
         // V is m x n, W is m x k, H is k x n
         int m = 5, n = 4, k = 2;
@@ -102,8 +103,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(n, nmf.H.Columns);
     }
 
-    [Fact]
-    public void NMF_MoreComponents_BetterApproximation()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_MoreComponents_BetterApproximation()
     {
         var V = new Matrix<double>(new double[,] {
             { 5, 3, 0, 1 },
@@ -131,8 +132,8 @@ public class NMFAndNormalDeepMathIntegrationTests
             $"3-component error ({error3}) should be <= 1-component error ({error1})");
     }
 
-    [Fact]
-    public void NMF_IdentityLikeMatrix_ReconstructsWell()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_IdentityLikeMatrix_ReconstructsWell()
     {
         // All-positive scaled identity should be reconstructed well
         var V = new Matrix<double>(new double[,] {
@@ -147,8 +148,8 @@ public class NMFAndNormalDeepMathIntegrationTests
                 Assert.Equal(V[i, j], WH[i, j], NmfTolerance);
     }
 
-    [Fact]
-    public void NMF_NegativeMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_NegativeMatrix_ThrowsException()
     {
         var V = new Matrix<double>(new double[,] {
             { 1, -1 }, { 2, 3 }
@@ -164,8 +165,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
 
 
-    [Fact]
-    public void Normal_Invert_TimesA_Equals_Identity()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Invert_TimesA_Equals_Identity()
     {
         var A = CreateSPD3x3();
         var normal = new NormalDecomposition<double>(A);
@@ -185,8 +186,8 @@ public class NMFAndNormalDeepMathIntegrationTests
     #region Deep Solve Tests - Hand-Calculated Solutions
 
 
-    [Fact]
-    public void Invert_HandCalculated_2x2_AllMethods()
+    [Fact(Timeout = 120000)]
+    public async Task Invert_HandCalculated_2x2_AllMethods()
     {
         // A = [[2,1],[1,3]], det = 5
         // A^-1 = (1/5)*[[3,-1],[-1,2]] = [[0.6,-0.2],[-0.2,0.4]]
@@ -215,8 +216,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Decomposition Properties on Larger Matrix
 
-    [Fact]
-    public void LU_4x4_PA_Equals_LU()
+    [Fact(Timeout = 120000)]
+    public async Task LU_4x4_PA_Equals_LU()
     {
         var A = new Matrix<double>(new double[,] {
             { 2, 1, 1, 0 },
@@ -238,8 +239,8 @@ public class NMFAndNormalDeepMathIntegrationTests
                 Assert.Equal(PA[i, j], LU[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void SVD_4x4_A_Equals_USVt()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_4x4_A_Equals_USVt()
     {
         var A = new Matrix<double>(new double[,] {
             { 1, 0, 0, 0 },
@@ -266,8 +267,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(1.0, svd.S[3], LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_4x4_Diagonal_ExactEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_4x4_Diagonal_ExactEigenvalues()
     {
         var A = new Matrix<double>(new double[,] {
             { 1, 0, 0, 0 },
@@ -288,8 +289,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(4.0, eigenvals[3], LooseTolerance);
     }
 
-    [Fact]
-    public void Cholesky_4x4_SPD_LLt_Equals_A()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_4x4_SPD_LLt_Equals_A()
     {
         // 4x4 SPD matrix
         var A = new Matrix<double>(new double[,] {
@@ -310,8 +311,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Determinant-Like Properties
 
-    [Fact]
-    public void Eigen_ProductOfEigenvalues_EqualsDetViaLU()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_ProductOfEigenvalues_EqualsDetViaLU()
     {
         // det(A) = product of eigenvalues
         var A = Create3x3();
@@ -335,8 +336,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(eigProduct, detLU, LooseTolerance);
     }
 
-    [Fact]
-    public void SVD_ProductOfSingularValues_EqualsAbsDet()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_ProductOfSingularValues_EqualsAbsDet()
     {
         // |det(A)| = product of singular values
         var A = Create3x3();
@@ -360,8 +361,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Condition Number
 
-    [Fact]
-    public void SVD_ConditionNumber_RatioOfExtremes()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_ConditionNumber_RatioOfExtremes()
     {
         // Condition number = max(S) / min(S)
         var A = CreateSPD3x3();
@@ -376,8 +377,8 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.True(!double.IsInfinity(conditionNumber), "Condition number should be finite for non-singular matrix");
     }
 
-    [Fact]
-    public void SVD_Identity_ConditionNumber_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_Identity_ConditionNumber_IsOne()
     {
         var I = Matrix<double>.CreateIdentity(3);
         var svd = new SvdDecomposition<double>(I);

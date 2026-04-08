@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -24,8 +25,8 @@ public class FeatureUnionIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_CreatesEmptyUnion()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_CreatesEmptyUnion()
     {
         // Act
         var union = new FeatureUnion<double>();
@@ -39,8 +40,8 @@ public class FeatureUnionIntegrationTests
 
     #region Add Tests
 
-    [Fact]
-    public void Add_WithName_AddsTransformerWithName()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithName_AddsTransformerWithName()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -55,8 +56,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("my_scaler", names[0]);
     }
 
-    [Fact]
-    public void Add_WithoutName_AddsWithAutomaticName()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithoutName_AddsWithAutomaticName()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -70,8 +71,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("transformer_0", names[0]);
     }
 
-    [Fact]
-    public void Add_NullTransformer_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_NullTransformer_ThrowsArgumentNullException()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -80,8 +81,8 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentNullException>(() => union.Add("test", null!));
     }
 
-    [Fact]
-    public void Add_EmptyName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_EmptyName_ThrowsArgumentException()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -91,8 +92,8 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentException>(() => union.Add("", scaler));
     }
 
-    [Fact]
-    public void Add_WhitespaceName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WhitespaceName_ThrowsArgumentException()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -102,8 +103,8 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<ArgumentException>(() => union.Add("   ", scaler));
     }
 
-    [Fact]
-    public void Add_ReturnsThisForChaining()
+    [Fact(Timeout = 120000)]
+    public async Task Add_ReturnsThisForChaining()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -116,8 +117,8 @@ public class FeatureUnionIntegrationTests
         Assert.Same(union, result);
     }
 
-    [Fact]
-    public void Add_MultipleTransformers_ChainsCalls()
+    [Fact(Timeout = 120000)]
+    public async Task Add_MultipleTransformers_ChainsCalls()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -135,8 +136,8 @@ public class FeatureUnionIntegrationTests
 
     #region Fit Tests
 
-    [Fact]
-    public void Fit_NoTransformers_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_NoTransformers_ThrowsInvalidOperationException()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -146,8 +147,8 @@ public class FeatureUnionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => union.Fit(data));
     }
 
-    [Fact]
-    public void Fit_SetsFittedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_SetsFittedToTrue()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -161,8 +162,8 @@ public class FeatureUnionIntegrationTests
         Assert.True(union.IsFitted);
     }
 
-    [Fact]
-    public void Fit_FitsAllTransformers()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_FitsAllTransformers()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -184,8 +185,8 @@ public class FeatureUnionIntegrationTests
 
     #region Transform Tests
 
-    [Fact]
-    public void Transform_SingleTransformer_ReturnsTransformedOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_SingleTransformer_ReturnsTransformedOutput()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -204,8 +205,8 @@ public class FeatureUnionIntegrationTests
         Assert.True(Math.Abs(col0Mean) < 1e-10);
     }
 
-    [Fact]
-    public void Transform_MultipleTransformers_ConcatenatesOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_MultipleTransformers_ConcatenatesOutputs()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -221,8 +222,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
-    public void Transform_AllTransformersReceiveSameInput()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_AllTransformersReceiveSameInput()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -248,8 +249,8 @@ public class FeatureUnionIntegrationTests
         Assert.True(Math.Abs(result[2, 1] - 1.0) < 1e-10, "MinMaxScaler max should be 1");
     }
 
-    [Fact]
-    public void Transform_WithoutFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_WithoutFit_ThrowsInvalidOperationException()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -264,8 +265,8 @@ public class FeatureUnionIntegrationTests
 
     #region GetTransformer Tests
 
-    [Fact]
-    public void GetTransformer_ExistingName_ReturnsTransformer()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformer_ExistingName_ReturnsTransformer()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -279,8 +280,8 @@ public class FeatureUnionIntegrationTests
         Assert.Same(scaler, retrieved);
     }
 
-    [Fact]
-    public void GetTransformer_NonExistingName_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformer_NonExistingName_ReturnsNull()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -297,8 +298,8 @@ public class FeatureUnionIntegrationTests
 
     #region GetTransformerOutputWidths Tests
 
-    [Fact]
-    public void GetTransformerOutputWidths_BeforeFit_ReturnsEmptyDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformerOutputWidths_BeforeFit_ReturnsEmptyDictionary()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -311,8 +312,8 @@ public class FeatureUnionIntegrationTests
         Assert.Empty(widths);
     }
 
-    [Fact]
-    public void GetTransformerOutputWidths_AfterFit_ReturnsCorrectWidths()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformerOutputWidths_AfterFit_ReturnsCorrectWidths()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -334,8 +335,8 @@ public class FeatureUnionIntegrationTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact]
-    public void GetFeatureNamesOut_PrefixesWithTransformerName()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_PrefixesWithTransformerName()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -357,8 +358,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal("minmax__col_b", outputNames[3]);
     }
 
-    [Fact]
-    public void GetFeatureNamesOut_BeforeFit_ReturnsEmptyArray()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_BeforeFit_ReturnsEmptyArray()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -375,8 +376,8 @@ public class FeatureUnionIntegrationTests
 
     #region SupportsInverseTransform Tests
 
-    [Fact]
-    public void SupportsInverseTransform_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsInverseTransform_ReturnsFalse()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -389,8 +390,8 @@ public class FeatureUnionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void FitTransform_SingleColumnInput_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_SingleColumnInput_WorksCorrectly()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -406,8 +407,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(2, result.Columns); // 1 + 1
     }
 
-    [Fact]
-    public void FitTransform_SingleRowInput_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_SingleRowInput_WorksCorrectly()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -422,8 +423,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void FitTransform_ManyTransformers_ConcatenatesAll()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_ManyTransformers_ConcatenatesAll()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -442,8 +443,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(20, result.Columns);
     }
 
-    [Fact]
-    public void Transform_DifferentRowCount_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_DifferentRowCount_WorksCorrectly()
     {
         // Arrange
         var union = new FeatureUnion<double>();
@@ -461,8 +462,8 @@ public class FeatureUnionIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void FitTransform_PreservesRowOrder()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_PreservesRowOrder()
     {
         // Arrange
         var union = new FeatureUnion<double>();

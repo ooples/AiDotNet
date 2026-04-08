@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Metrics.Classification;
 using AiDotNet.Evaluation.Metrics.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -17,8 +18,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region F1 Score
 
-    [Fact]
-    public void F1_PerfectPredictions_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task F1_PerfectPredictions_IsOne()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] preds = [1, 0, 1, 0, 1];
@@ -28,8 +29,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void F1_AllWrong_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task F1_AllWrong_IsZero()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] preds = [0, 0, 0, 0]; // Predict all negative
@@ -39,8 +40,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void F1_HandCalculated_ConfusionMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task F1_HandCalculated_ConfusionMatrix()
     {
         // TP=3, FP=1, FN=2, TN=4
         // Precision = 3/(3+1) = 0.75
@@ -55,8 +56,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, score, LooseTolerance);
     }
 
-    [Fact]
-    public void F1_Bounded_ZeroToOne()
+    [Fact(Timeout = 120000)]
+    public async Task F1_Bounded_ZeroToOne()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] preds = [1, 0, 1, 0, 1, 0];
@@ -67,8 +68,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
             $"F1 score {score} should be in [0, 1]");
     }
 
-    [Fact]
-    public void F1_HarmonicMean_LessThanArithmeticMean()
+    [Fact(Timeout = 120000)]
+    public async Task F1_HarmonicMean_LessThanArithmeticMean()
     {
         // F1 = harmonic mean(P, R) <= arithmetic mean(P, R)
         // This is a fundamental property of harmonic mean
@@ -88,8 +89,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
             $"F1 ({score}) should be <= arithmetic mean ({arithmeticMean})");
     }
 
-    [Fact]
-    public void F1_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task F1_EmptyInput_ReturnsZero()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] empty = [];
@@ -98,8 +99,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void F1_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task F1_MismatchedLengths_Throws()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] preds = [1, 0];
@@ -108,8 +109,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => f1.Compute(preds, actuals));
     }
 
-    [Fact]
-    public void F1_MacroAverage_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task F1_MacroAverage_HandCalculated()
     {
         // 3 classes: 0, 1, 2
         var f1 = new F1ScoreMetric<double>(averaging: AveragingMethod.Macro);
@@ -124,8 +125,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region Matthews Correlation Coefficient
 
-    [Fact]
-    public void MCC_PerfectPredictions_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_PerfectPredictions_IsOne()
     {
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
         double[] preds = [1, 0, 1, 0, 1, 0];
@@ -135,8 +136,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MCC_PerfectlyInverted_IsMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_PerfectlyInverted_IsMinusOne()
     {
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
         double[] preds = [0, 1, 0, 1, 0, 1];
@@ -146,8 +147,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MCC_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_HandCalculated()
     {
         // TP=5, TN=3, FP=2, FN=1
         // MCC = (5*3 - 2*1) / sqrt((5+2)(5+1)(3+2)(3+1))
@@ -163,8 +164,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, score, LooseTolerance);
     }
 
-    [Fact]
-    public void MCC_Bounded_Minus1To1()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_Bounded_Minus1To1()
     {
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
         double[] preds = [1, 0, 1, 1, 0, 0, 1, 0];
@@ -175,8 +176,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
             $"MCC {score} should be in [-1, 1]");
     }
 
-    [Fact]
-    public void MCC_RandomPredictions_NearZero()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_RandomPredictions_NearZero()
     {
         // With balanced random predictions, MCC should be near zero
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
@@ -189,8 +190,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MCC_AllSamePrediction_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_AllSamePrediction_IsZero()
     {
         // If model predicts all same class, MCC = 0 (degenerate)
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
@@ -201,8 +202,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MCC_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_EmptyInput_ReturnsZero()
     {
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
         double score = mcc.Compute(Array.Empty<double>(), Array.Empty<double>());
@@ -213,8 +214,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region Cohen's Kappa
 
-    [Fact]
-    public void Kappa_PerfectAgreement_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_PerfectAgreement_IsOne()
     {
         var kappa = new CohensKappaMetric<double>();
         double[] preds = [0, 1, 2, 0, 1, 2];
@@ -224,8 +225,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void Kappa_HandCalculated_Binary()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_HandCalculated_Binary()
     {
         // 2 classes, 10 samples
         // Confusion matrix: TP=4, TN=3, FP=1, FN=2
@@ -242,8 +243,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, score, LooseTolerance);
     }
 
-    [Fact]
-    public void Kappa_Bounded_Minus1To1()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_Bounded_Minus1To1()
     {
         var kappa = new CohensKappaMetric<double>();
         double[] preds = [1, 0, 1, 0, 1, 0, 1, 0];
@@ -254,16 +255,16 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
             $"Kappa {score} should be in [-1, 1]");
     }
 
-    [Fact]
-    public void Kappa_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_EmptyInput_ReturnsZero()
     {
         var kappa = new CohensKappaMetric<double>();
         double score = kappa.Compute(Array.Empty<double>(), Array.Empty<double>());
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void Kappa_MultiClass_PerfectAgreement_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_MultiClass_PerfectAgreement_IsOne()
     {
         var kappa = new CohensKappaMetric<double>();
         double[] preds = [0, 1, 2, 3, 0, 1, 2, 3];
@@ -273,8 +274,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void Kappa_LessThanOrEqualAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task Kappa_LessThanOrEqualAccuracy()
     {
         // Kappa penalizes chance agreement, so Kappa <= Accuracy always (conceptually)
         // Actually: Kappa = (p_o - p_e) / (1 - p_e), and since p_e > 0 usually,
@@ -296,8 +297,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region Accuracy
 
-    [Fact]
-    public void Accuracy_PerfectPredictions_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_PerfectPredictions_IsOne()
     {
         var acc = new AccuracyMetric<double>();
         double[] preds = [0, 1, 2, 0, 1];
@@ -307,8 +308,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void Accuracy_AllWrong_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_AllWrong_IsZero()
     {
         var acc = new AccuracyMetric<double>();
         double[] preds = [0, 0, 0];
@@ -318,8 +319,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void Accuracy_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_HandCalculated()
     {
         // 7 out of 10 correct
         var acc = new AccuracyMetric<double>();
@@ -330,8 +331,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.7, score, Tolerance);
     }
 
-    [Fact]
-    public void Accuracy_Bounded_ZeroToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_Bounded_ZeroToOne()
     {
         var acc = new AccuracyMetric<double>();
         double[] preds = [1, 0, 1, 1, 0];
@@ -341,8 +342,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.True(score >= 0.0 && score <= 1.0, $"Accuracy {score} should be in [0, 1]");
     }
 
-    [Fact]
-    public void Accuracy_PlusErrorRate_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_PlusErrorRate_IsOne()
     {
         var acc = new AccuracyMetric<double>();
         var err = new ErrorRateMetric<double>();
@@ -360,8 +361,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region R² Score
 
-    [Fact]
-    public void R2_PerfectPredictions_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task R2_PerfectPredictions_IsOne()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] preds = [1, 2, 3, 4, 5];
@@ -371,8 +372,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void R2_MeanPrediction_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task R2_MeanPrediction_IsZero()
     {
         // Predicting the mean gives R² = 0
         var r2 = new R2ScoreMetric<double>();
@@ -384,8 +385,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void R2_WorseThanMean_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task R2_WorseThanMean_IsNegative()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] preds = [10, 20, 30, 40, 50]; // Way off
@@ -395,8 +396,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.True(score < 0, $"R² {score} should be negative for worse-than-mean predictions");
     }
 
-    [Fact]
-    public void R2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task R2_HandCalculated()
     {
         // actuals = [1, 2, 3], mean = 2
         // preds = [1.5, 2.0, 2.5]
@@ -411,8 +412,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.75, score, Tolerance);
     }
 
-    [Fact]
-    public void R2_ConstantActuals_PerfectPred_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task R2_ConstantActuals_PerfectPred_IsOne()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] preds = [5, 5, 5, 5];
@@ -422,8 +423,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, score, Tolerance);
     }
 
-    [Fact]
-    public void R2_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task R2_EmptyInput_ReturnsZero()
     {
         var r2 = new R2ScoreMetric<double>();
         double score = r2.Compute(Array.Empty<double>(), Array.Empty<double>());
@@ -434,8 +435,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region MAE
 
-    [Fact]
-    public void MAE_PerfectPredictions_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_PerfectPredictions_IsZero()
     {
         var mae = new MAEMetric<double>();
         double[] preds = [1, 2, 3, 4, 5];
@@ -445,8 +446,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MAE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_HandCalculated()
     {
         // MAE = (|1-2| + |3-1| + |5-4|) / 3 = (1+2+1)/3 = 4/3
         var mae = new MAEMetric<double>();
@@ -457,8 +458,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(4.0 / 3.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MAE_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_NonNegative()
     {
         var mae = new MAEMetric<double>();
         double[] preds = [-5, 3, -1, 4];
@@ -468,8 +469,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.True(score >= 0, $"MAE {score} should be non-negative");
     }
 
-    [Fact]
-    public void MAE_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_Symmetric()
     {
         // MAE(a, b) = MAE(b, a)
         var mae = new MAEMetric<double>();
@@ -479,8 +480,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mae.Compute(a, b), mae.Compute(b, a), Tolerance);
     }
 
-    [Fact]
-    public void MAE_TriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_TriangleInequality()
     {
         // MAE(a, c) <= MAE(a, b) + MAE(b, c) (since it's an Lp norm divided by N)
         var mae = new MAEMetric<double>();
@@ -495,8 +496,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.True(dAC <= dAB + dBC + Tolerance);
     }
 
-    [Fact]
-    public void MAE_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_EmptyInput_ReturnsZero()
     {
         var mae = new MAEMetric<double>();
         double score = mae.Compute(Array.Empty<double>(), Array.Empty<double>());
@@ -507,8 +508,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region MSE
 
-    [Fact]
-    public void MSE_PerfectPredictions_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_PerfectPredictions_IsZero()
     {
         var mse = new MSEMetric<double>();
         double[] preds = [1, 2, 3];
@@ -518,8 +519,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MSE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_HandCalculated()
     {
         // MSE = ((1-2)^2 + (3-1)^2 + (5-4)^2) / 3 = (1+4+1)/3 = 2
         var mse = new MSEMetric<double>();
@@ -530,8 +531,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MSE_GreaterThanOrEqual_MAE_Squared()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_GreaterThanOrEqual_MAE_Squared()
     {
         // MSE >= MAE^2 (Jensen's inequality: E[X^2] >= E[X]^2)
         // Wait, that's reversed. Actually E[X^2] >= (E[X])^2 for abs errors
@@ -553,8 +554,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region RMSE
 
-    [Fact]
-    public void RMSE_PerfectPredictions_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_PerfectPredictions_IsZero()
     {
         var rmse = new RMSEMetric<double>();
         double[] preds = [1, 2, 3];
@@ -564,8 +565,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void RMSE_IsSqrtOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_IsSqrtOfMSE()
     {
         var rmse = new RMSEMetric<double>();
         var mse = new MSEMetric<double>();
@@ -578,8 +579,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(mseScore), rmseScore, LooseTolerance);
     }
 
-    [Fact]
-    public void RMSE_GreaterThanOrEqual_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_GreaterThanOrEqual_MAE()
     {
         // RMSE >= MAE always (by Cauchy-Schwarz/QM-AM inequality)
         var rmse = new RMSEMetric<double>();
@@ -598,8 +599,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region MAPE
 
-    [Fact]
-    public void MAPE_PerfectPredictions_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_PerfectPredictions_IsZero()
     {
         var mape = new MAPEMetric<double>();
         double[] preds = [1, 2, 3, 4];
@@ -609,8 +610,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
-    public void MAPE_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_HandCalculated()
     {
         // MAPE = (1/N) * sum(|actual - pred| / |actual|) * 100
         // For actuals=[2, 5, 10], preds=[1, 4, 12]
@@ -624,8 +625,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(30.0, score, LooseTolerance);
     }
 
-    [Fact]
-    public void MAPE_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_NonNegative()
     {
         var mape = new MAPEMetric<double>();
         double[] preds = [5, 10, 15];
@@ -639,8 +640,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region Cross-Metric Relationships
 
-    [Fact]
-    public void BetterPredictions_GiveHigherR2_LowerMAE()
+    [Fact(Timeout = 120000)]
+    public async Task BetterPredictions_GiveHigherR2_LowerMAE()
     {
         var r2 = new R2ScoreMetric<double>();
         var mae = new MAEMetric<double>();
@@ -658,8 +659,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.True(maeGood < maeBad, $"Good MAE ({maeGood}) should be < Bad MAE ({maeBad})");
     }
 
-    [Fact]
-    public void Classification_PerfectPredictions_AllMetricsOptimal()
+    [Fact(Timeout = 120000)]
+    public async Task Classification_PerfectPredictions_AllMetricsOptimal()
     {
         var f1 = new F1ScoreMetric<double>();
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
@@ -675,8 +676,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, acc.Compute(preds, actuals), Tolerance);
     }
 
-    [Fact]
-    public void Regression_PerfectPredictions_AllMetricsOptimal()
+    [Fact(Timeout = 120000)]
+    public async Task Regression_PerfectPredictions_AllMetricsOptimal()
     {
         var r2 = new R2ScoreMetric<double>();
         var mae = new MAEMetric<double>();
@@ -696,8 +697,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
 
     #region Confidence Intervals
 
-    [Fact]
-    public void F1_ConfidenceInterval_ContainsPointEstimate()
+    [Fact(Timeout = 120000)]
+    public async Task F1_ConfidenceInterval_ContainsPointEstimate()
     {
         var f1 = new F1ScoreMetric<double>();
         double[] preds = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
@@ -712,8 +713,8 @@ public class ClassificationAndRegressionMetricsDeepMathIntegrationTests
             $"Upper bound {result.UpperBound} should be >= point estimate {pointEstimate}");
     }
 
-    [Fact]
-    public void R2_ConfidenceInterval_LowerBoundLessThanUpper()
+    [Fact(Timeout = 120000)]
+    public async Task R2_ConfidenceInterval_LowerBoundLessThanUpper()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] preds = [1.5, 2.5, 3.5, 4.5, 5.5];

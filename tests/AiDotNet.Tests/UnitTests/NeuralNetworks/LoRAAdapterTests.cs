@@ -6,13 +6,14 @@ using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
     public class LoRAAdapterTests
     {
-        [Fact]
-        public void Constructor_WithValidBaseLayer_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithValidBaseLayer_InitializesCorrectly()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -28,15 +29,15 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(adapter.IsBaseLayerFrozen);
         }
 
-        [Fact]
-        public void Constructor_WithNullBaseLayer_ThrowsArgumentNullException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithNullBaseLayer_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new DenseLoRAAdapter<double>(null!, rank: 3));
         }
 
-        [Fact]
-        public void ParameterCount_WithFrozenBase_ReturnsOnlyLoRAParameters()
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_WithFrozenBase_ReturnsOnlyLoRAParameters()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -50,8 +51,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(45, paramCount);
         }
 
-        [Fact]
-        public void ParameterCount_WithUnfrozenBase_ReturnsAllParameters()
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_WithUnfrozenBase_ReturnsAllParameters()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -65,8 +66,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(100, paramCount);
         }
 
-        [Fact]
-        public void Forward_ProducesCorrectOutputShape()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_ProducesCorrectOutputShape()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]);
         }
 
-        [Fact]
-        public void Forward_CombinesBaseAndLoRAOutputs()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_CombinesBaseAndLoRAOutputs()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
 
 
-        [Fact]
-        public void GetParameters_ReturnsCorrectCount()
+        [Fact(Timeout = 120000)]
+        public async Task GetParameters_ReturnsCorrectCount()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -122,8 +123,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(45, parameters.Length);
         }
 
-        [Fact]
-        public void SetParameters_ThenGetParameters_ReturnsSetValues()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_ThenGetParameters_ReturnsSetValues()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -146,8 +147,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void SetParameters_WithWrongSize_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithWrongSize_ThrowsArgumentException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -159,8 +160,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Throws<ArgumentException>(() => adapter.SetParameters(wrongParams));
         }
 
-        [Fact]
-        public void MergeToSingleLayer_ProducesDenseLayer()
+        [Fact(Timeout = 120000)]
+        public async Task MergeToSingleLayer_ProducesDenseLayer()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -176,8 +177,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedLayer.GetOutputShape()[0]);
         }
 
-        [Fact]
-        public void MergedLayer_ProducesSameOutputAsAdapter()
+        [Fact(Timeout = 120000)]
+        public async Task MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
             // Use identity activation to ensure mathematical equivalence of merge:
@@ -213,8 +214,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void BaseLayer_Property_ReturnsOriginalLayer()
+        [Fact(Timeout = 120000)]
+        public async Task BaseLayer_Property_ReturnsOriginalLayer()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -227,8 +228,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Same(baseLayer, retrievedBase);
         }
 
-        [Fact]
-        public void LoRALayer_Property_ReturnsLoRALayer()
+        [Fact(Timeout = 120000)]
+        public async Task LoRALayer_Property_ReturnsLoRALayer()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -243,8 +244,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(3, loraLayer.Rank);
         }
 
-        [Fact]
-        public void IsBaseLayerFrozen_Property_ReflectsConstructorParameter()
+        [Fact(Timeout = 120000)]
+        public async Task IsBaseLayerFrozen_Property_ReflectsConstructorParameter()
         {
             // Arrange & Act
             var adapter1 = new DenseLoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: true);
@@ -255,8 +256,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.False(adapter2.IsBaseLayerFrozen);
         }
 
-        [Fact]
-        public void Alpha_Property_ReturnsCorrectValue()
+        [Fact(Timeout = 120000)]
+        public async Task Alpha_Property_ReturnsCorrectValue()
         {
             // Arrange & Act
             var adapter = new DenseLoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, alpha: 16);
@@ -265,8 +266,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(16.0, adapter.Alpha);
         }
 
-        [Fact]
-        public void SupportsTraining_ReturnsTrue()
+        [Fact(Timeout = 120000)]
+        public async Task SupportsTraining_ReturnsTrue()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -296,8 +297,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(freeze, adapter.IsBaseLayerFrozen);
         }
 
-        [Fact]
-        public void LoRAAdapter_WithFloat_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task LoRAAdapter_WithFloat_WorksCorrectly()
         {
             // Arrange
             var baseLayer = new DenseLayer<float>(10, 5, (IActivationFunction<float>?)null);

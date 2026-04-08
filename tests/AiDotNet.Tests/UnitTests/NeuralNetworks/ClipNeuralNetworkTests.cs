@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -14,8 +15,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class ClipNeuralNetworkTests
 {
-    [Fact]
-    public void Constructor_WithNullImageEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullImageEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -28,8 +29,8 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Image encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_WithEmptyImageEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithEmptyImageEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -42,8 +43,8 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Image encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_WithNullTextEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -56,8 +57,8 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_WithEmptyTextEncoderPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithEmptyTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -70,8 +71,8 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
-    public void Constructor_WithNonExistentImageEncoder_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNonExistentImageEncoder_ThrowsFileNotFoundException()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -83,8 +84,8 @@ public class ClipNeuralNetworkTests
             new ClipNeuralNetwork<float>(architecture, nonExistentPath, "text.onnx", tokenizer));
     }
 
-    [Fact]
-    public void Constructor_WithZeroEmbeddingDimension_PathValidationComesFirst()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithZeroEmbeddingDimension_PathValidationComesFirst()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -101,8 +102,8 @@ public class ClipNeuralNetworkTests
                 embeddingDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeMaxSequenceLength_PathValidationComesFirst()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNegativeMaxSequenceLength_PathValidationComesFirst()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -118,8 +119,8 @@ public class ClipNeuralNetworkTests
                 maxSequenceLength: -1));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeImageSize_PathValidationComesFirst()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNegativeImageSize_PathValidationComesFirst()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();

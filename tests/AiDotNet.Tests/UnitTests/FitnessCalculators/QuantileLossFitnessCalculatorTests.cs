@@ -5,13 +5,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class QuantileLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.5);
@@ -28,8 +29,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMedianQuantile_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMedianQuantile_WorksCorrectly()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.5);
@@ -46,8 +47,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithHighQuantile_PenalizesUnderPrediction()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithHighQuantile_PenalizesUnderPrediction()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.9);
@@ -64,8 +65,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithLowQuantile_PenalizesOverPrediction()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithLowQuantile_PenalizesOverPrediction()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.1);
@@ -82,8 +83,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithDefaultQuantile_UsesMedian()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithDefaultQuantile_UsesMedian()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -100,8 +101,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -110,8 +111,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -123,8 +124,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -136,8 +137,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<float, Vector<float>, Vector<float>>(quantile: 0.5f);
@@ -154,8 +155,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -164,8 +165,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Training);
@@ -175,8 +176,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Testing);
@@ -186,8 +187,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithValidQuantile_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidQuantile_DoesNotThrow()
     {
         // Arrange & Act
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.5);
@@ -196,8 +197,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultParameters_CreatesInstance()
     {
         // Arrange & Act
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -207,8 +208,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithQ75_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithQ75_WorksCorrectly()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.75);
@@ -225,8 +226,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithQ25_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithQ25_WorksCorrectly()
     {
         // Arrange
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.25);
@@ -243,8 +244,8 @@ public class QuantileLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_AsymmetricPenalty_DifferentQuantiles()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_AsymmetricPenalty_DifferentQuantiles()
     {
         // Arrange
         var calculatorLow = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.1);

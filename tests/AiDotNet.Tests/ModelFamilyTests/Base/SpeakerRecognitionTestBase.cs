@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
 {
-    [Fact]
-    public void SameInput_SameEmbedding()
+    [Fact(Timeout = 60000)]
+    public async Task SameInput_SameEmbedding()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -25,8 +26,8 @@ public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
             Assert.Equal(emb1[i], emb2[i]);
     }
 
-    [Fact]
-    public void SpeakerEmbedding_ShouldBeBounded()
+    [Fact(Timeout = 60000)]
+    public async Task SpeakerEmbedding_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

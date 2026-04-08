@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
 {
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class TransformerSearchSpaceTests
     {
-        [Fact]
-        public void TransformerSearchSpace_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new TransformerSearchSpace<double>();
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_ContainsTransformerOperations()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_ContainsTransformerOperations()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("glu", searchSpace.Operations);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_HasNineOperations()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_HasNineOperations()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -48,8 +49,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_MaxNodes_IsTwentyFour()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_MaxNodes_IsTwentyFour()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -58,8 +59,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(24, searchSpace.MaxNodes);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_InputChannels_IsSevenSixtyEight()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_InputChannels_IsSevenSixtyEight()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(768, searchSpace.InputChannels);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_OutputChannels_IsSevenSixtyEight()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_OutputChannels_IsSevenSixtyEight()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -78,8 +79,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(768, searchSpace.OutputChannels);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_AttentionHeads_ContainsExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_AttentionHeads_ContainsExpectedValues()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -93,8 +94,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(16, searchSpace.AttentionHeads);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_HiddenDimensions_ContainsExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_HiddenDimensions_ContainsExpectedValues()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -108,8 +109,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(3072, searchSpace.HiddenDimensions);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_FeedForwardMultipliers_ContainsTwoAndFour()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_FeedForwardMultipliers_ContainsTwoAndFour()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -121,8 +122,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(4, searchSpace.FeedForwardMultipliers);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_DropoutRates_ContainsExpectedValues()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_DropoutRates_ContainsExpectedValues()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -136,8 +137,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(0.3, searchSpace.DropoutRates);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_UsePreNorm_DefaultIsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_UsePreNorm_DefaultIsTrue()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -146,8 +147,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.True(searchSpace.UsePreNorm);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_AttentionHeads_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_AttentionHeads_CanBeModified()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -160,8 +161,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(2, searchSpace.AttentionHeads);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_HiddenDimensions_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_HiddenDimensions_CanBeModified()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -174,8 +175,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(256, searchSpace.HiddenDimensions);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_FeedForwardMultipliers_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_FeedForwardMultipliers_CanBeModified()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -188,8 +189,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(8, searchSpace.FeedForwardMultipliers);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_DropoutRates_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_DropoutRates_CanBeModified()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -202,8 +203,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(0.5, searchSpace.DropoutRates);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_UsePreNorm_CanBeModified()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_UsePreNorm_CanBeModified()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -215,8 +216,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.False(searchSpace.UsePreNorm);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Float_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Float_WorksCorrectly()
         {
             // Arrange & Act
             var searchSpace = new TransformerSearchSpace<float>();
@@ -227,8 +228,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_InheritsFromSearchSpaceBase()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_InheritsFromSearchSpaceBase()
         {
             // Arrange & Act
             var searchSpace = new TransformerSearchSpace<double>();
@@ -237,8 +238,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.IsAssignableFrom<SearchSpaceBase<double>>(searchSpace);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_IncludesAttentionMechanisms()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_IncludesAttentionMechanisms()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -248,8 +249,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(4, attentionOps.Count);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_IncludesFeedForwardNetworks()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_IncludesFeedForwardNetworks()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -259,8 +260,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(2, ffnOps.Count);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_IncludesLayerNorm()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_IncludesLayerNorm()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -269,8 +270,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("layer_norm", searchSpace.Operations);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_IncludesGatedLinearUnit()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_IncludesGatedLinearUnit()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();
@@ -279,8 +280,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("glu", searchSpace.Operations);
         }
 
-        [Fact]
-        public void TransformerSearchSpace_Operations_IncludesMultiHeadAttentionVariants()
+        [Fact(Timeout = 60000)]
+        public async Task TransformerSearchSpace_Operations_IncludesMultiHeadAttentionVariants()
         {
             // Arrange
             var searchSpace = new TransformerSearchSpace<double>();

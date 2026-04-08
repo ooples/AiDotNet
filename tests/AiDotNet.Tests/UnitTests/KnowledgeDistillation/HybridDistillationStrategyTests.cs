@@ -3,6 +3,7 @@ using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
@@ -21,8 +22,8 @@ public class HybridDistillationStrategyTests
         return matrix;
     }
 
-    [Fact]
-    public void Constructor_WithValidStrategies_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidStrategies_InitializesCorrectly()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
@@ -45,8 +46,8 @@ public class HybridDistillationStrategyTests
         Assert.Equal(0.3, hybridStrategy.Alpha);
     }
 
-    [Fact]
-    public void Constructor_WithNonNormalizedWeights_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNonNormalizedWeights_ThrowsArgumentException()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
@@ -62,8 +63,8 @@ public class HybridDistillationStrategyTests
             new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact]
-    public void Constructor_WithEmptyStrategies_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithEmptyStrategies_ThrowsArgumentException()
     {
         // Arrange
         var strategies = Array.Empty<(IDistillationStrategy<double>, double)>();
@@ -73,16 +74,16 @@ public class HybridDistillationStrategyTests
             new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact]
-    public void Constructor_WithNullStrategies_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullStrategies_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new HybridDistillationStrategy<double>(null!));
     }
 
-    [Fact]
-    public void ComputeLoss_WithIdenticalOutputs_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithIdenticalOutputs_ReturnsZero()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -101,8 +102,8 @@ public class HybridDistillationStrategyTests
         Assert.True(loss < 0.01); // Should be very close to zero
     }
 
-    [Fact]
-    public void ComputeLoss_WithDifferentOutputs_ReturnsPositiveLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithDifferentOutputs_ReturnsPositiveLoss()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -121,8 +122,8 @@ public class HybridDistillationStrategyTests
         Assert.True(loss > 0);
     }
 
-    [Fact]
-    public void ComputeLoss_CombinesMultipleStrategies_WeightsLossCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_CombinesMultipleStrategies_WeightsLossCorrectly()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -152,8 +153,8 @@ public class HybridDistillationStrategyTests
         Assert.True(hybridLoss <= expectedMax * 1.1);
     }
 
-    [Fact]
-    public void ComputeGradient_WithIdenticalOutputs_ReturnsZeroGradient()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_WithIdenticalOutputs_ReturnsZeroGradient()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -178,8 +179,8 @@ public class HybridDistillationStrategyTests
         }
     }
 
-    [Fact]
-    public void ComputeGradient_WithDifferentOutputs_ReturnsNonZeroGradient()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeGradient_WithDifferentOutputs_ReturnsNonZeroGradient()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -207,8 +208,8 @@ public class HybridDistillationStrategyTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
-    public void ComputeLoss_WithTrueLabels_IncorporatesHardLoss()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_WithTrueLabels_IncorporatesHardLoss()
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.5);

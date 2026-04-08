@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class DoublePrecisionInferenceTests
 {
-    [Fact]
-    public void RoPE_Double_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task RoPE_Double_ForwardProducesValidOutput()
     {
         int headDim = 8;
         var rope = new RotaryPositionalEncodingLayer<double>(64, headDim);
@@ -25,8 +26,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void RoPE_Double_ApplyRoPEProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task RoPE_Double_ApplyRoPEProducesValidOutput()
     {
         int headDim = 8;
         var rope = new RotaryPositionalEncodingLayer<double>(64, headDim);
@@ -42,8 +43,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(rotK));
     }
 
-    [Fact]
-    public void ALiBi_Double_ComputeBiasProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ALiBi_Double_ComputeBiasProducesValidOutput()
     {
         int numHeads = 4;
         var alibi = new ALiBiPositionalBiasLayer<double>(numHeads, 64);
@@ -57,8 +58,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(bias));
     }
 
-    [Fact]
-    public void MHA_Double_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task MHA_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -72,8 +73,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MHA_Double_WithRoPE_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task MHA_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -88,8 +89,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MHA_Double_WithALiBi_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task MHA_Double_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -104,8 +105,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_Double_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task GQA_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -120,8 +121,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_Double_WithRoPE_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task GQA_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -155,8 +156,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FlashAttention_Double_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -170,8 +171,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FlashAttention_Double_WithRoPE_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -186,8 +187,8 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FlashAttention_Double_WithALiBi_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_Double_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;

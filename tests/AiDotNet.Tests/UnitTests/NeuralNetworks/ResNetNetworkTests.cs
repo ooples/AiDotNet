@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -13,8 +14,8 @@ public class ResNetNetworkTests
 {
     #region ResNetConfiguration Tests
 
-    [Fact]
-    public void ResNetConfiguration_Constructor_ValidParameters_CreatesConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_Constructor_ValidParameters_CreatesConfiguration()
     {
         // Arrange & Act
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10);
@@ -29,8 +30,8 @@ public class ResNetNetworkTests
         Assert.True(config.ZeroInitResidual);
     }
 
-    [Fact]
-    public void ResNetConfiguration_BottleneckVariant_UsesBottleneck()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_BottleneckVariant_UsesBottleneck()
     {
         // Arrange & Act
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10);
@@ -40,8 +41,8 @@ public class ResNetNetworkTests
         Assert.Equal(4, config.Expansion);
     }
 
-    [Fact]
-    public void ResNetConfiguration_BasicBlockVariant_DoesNotUseBottleneck()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_BasicBlockVariant_DoesNotUseBottleneck()
     {
         // Arrange & Act
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
@@ -51,16 +52,16 @@ public class ResNetNetworkTests
         Assert.Equal(1, config.Expansion);
     }
 
-    [Fact]
-    public void ResNetConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 0));
     }
 
-    [Fact]
-    public void ResNetConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -82,8 +83,8 @@ public class ResNetNetworkTests
         Assert.Equal(expectedBlocks, config.BlockCounts);
     }
 
-    [Fact]
-    public void ResNetConfiguration_InputShape_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_InputShape_ReturnsCorrectShape()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
@@ -99,8 +100,8 @@ public class ResNetNetworkTests
         Assert.Equal(224, inputShape[2]); // width
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateResNet50_CreatesCorrectConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateResNet50_CreatesCorrectConfiguration()
     {
         // Act
         var config = ResNetConfiguration.CreateResNet50(numClasses: 1000);
@@ -111,8 +112,8 @@ public class ResNetNetworkTests
         Assert.True(config.UsesBottleneck);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateForCIFAR_Creates32x32Input()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateForCIFAR_Creates32x32Input()
     {
         // Act
         var config = ResNetConfiguration.CreateForCIFAR(ResNetVariant.ResNet18, numClasses: 10);
@@ -123,8 +124,8 @@ public class ResNetNetworkTests
         Assert.Equal(10, config.NumClasses);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateLightweight_CreatesResNet18()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateLightweight_CreatesResNet18()
     {
         // Act
         var config = ResNetConfiguration.CreateLightweight(numClasses: 10);
@@ -138,8 +139,8 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Construction Tests
 
-    [Fact]
-    public void ResNetNetwork_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -164,8 +165,8 @@ public class ResNetNetworkTests
         Assert.True(network.LayerCount > 0);
     }
 
-    [Fact]
-    public void ResNetNetwork_WithBottleneck_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_WithBottleneck_CreatesValidNetwork()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
@@ -186,8 +187,8 @@ public class ResNetNetworkTests
         Assert.True(network.UsesBottleneck);
     }
 
-    [Fact]
-    public void ResNetNetwork_NullConfiguration_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_NullConfiguration_ThrowsArgumentNullException()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -204,8 +205,8 @@ public class ResNetNetworkTests
             new ResNetNetwork<float>(architecture, null!));
     }
 
-    [Fact]
-    public void ResNetNetwork_MismatchedOutputSize_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_MismatchedOutputSize_ThrowsArgumentException()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -224,8 +225,8 @@ public class ResNetNetworkTests
             new ResNetNetwork<float>(architecture, config));
     }
 
-    [Fact]
-    public void ResNetNetwork_MismatchedInputShape_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_MismatchedInputShape_ThrowsArgumentException()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -248,8 +249,8 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Forward Pass Tests
 
-    [Fact]
-    public void ResNetNetwork_Forward_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -279,8 +280,8 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void ResNetNetwork_Predict_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -308,8 +309,8 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void ResNetNetwork_Predict_With4DInput_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Predict_With4DInput_ReturnsCorrectShape()
     {
         // Arrange - test with batch dimension [B, C, H, W]
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -339,8 +340,8 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[output.Shape.Length - 1]);
     }
 
-    [Fact]
-    public void ResNetNetwork_BasicBlock_Forward_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_BasicBlock_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BasicBlock architecture (ResNet18/34)
         var config = new ResNetConfiguration(ResNetVariant.ResNet34, numClasses: 10,
@@ -368,8 +369,8 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
-    public void ResNetNetwork_Bottleneck_Forward_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_Bottleneck_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BottleneckBlock architecture (ResNet50/101/152)
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
@@ -466,8 +467,8 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Metadata Tests
 
-    [Fact]
-    public void ResNetNetwork_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
@@ -494,8 +495,8 @@ public class ResNetNetworkTests
         Assert.Equal(true, metadata.AdditionalInfo["UsesBottleneck"]);
     }
 
-    [Fact]
-    public void ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
@@ -521,8 +522,8 @@ public class ResNetNetworkTests
 
     #region ResNetVariant Enum Tests
 
-    [Fact]
-    public void ResNetVariant_AllVariantsAreDefined()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetVariant_AllVariantsAreDefined()
     {
         // Act - use non-generic Enum.GetValues for .NET Framework compatibility
         var variants = Enum.GetValues(typeof(ResNetVariant)).Cast<ResNetVariant>().ToArray();
@@ -540,8 +541,8 @@ public class ResNetNetworkTests
 
     #region Block Layer Tests
 
-    [Fact]
-    public void BasicBlock_Construction_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_Construction_CreatesValidLayer()
     {
         // Arrange & Act
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
@@ -556,8 +557,8 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void BasicBlock_WithDownsample_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_WithDownsample_CreatesValidLayer()
     {
         // Arrange & Act - stride=2 triggers downsampling
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
@@ -573,8 +574,8 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void BottleneckBlock_Construction_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_Construction_CreatesValidLayer()
     {
         // Arrange & Act
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
@@ -590,8 +591,8 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void BottleneckBlock_WithDownsample_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_WithDownsample_CreatesValidLayer()
     {
         // Arrange & Act - stride=2 triggers downsampling
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
@@ -607,8 +608,8 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void AdaptiveAveragePoolingLayer_GlobalPool_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_GlobalPool_CreatesValidLayer()
     {
         // Arrange & Act
         var layer = AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>.GlobalPool(
@@ -622,8 +623,8 @@ public class ResNetNetworkTests
 
     }
 
-    [Fact]
-    public void AdaptiveAveragePoolingLayer_CustomOutput_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_CustomOutput_CreatesValidLayer()
     {
         // Arrange & Act
         var layer = new AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>(

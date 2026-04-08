@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using Moq;
 using Moq.Protected;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LanguageModels;
 
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.LanguageModels;
 /// </summary>
 public class AnthropicChatModelTests
 {
-    [Fact]
-    public void Constructor_WithValidApiKey_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidApiKey_InitializesSuccessfully()
     {
         // Arrange & Act
         var model = new AnthropicChatModel<double>("test-api-key");
@@ -80,7 +81,7 @@ public class AnthropicChatModelTests
             new AnthropicChatModel<double>("test-api-key", maxTokens: maxTokens));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -91,7 +92,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -102,7 +103,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithWhitespacePrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -113,7 +114,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -154,7 +155,7 @@ public class AnthropicChatModelTests
         Assert.Equal("This is a test response from Claude.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithHttpError_ThrowsHttpRequestException()
     {
         // Arrange
@@ -179,7 +180,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -210,7 +211,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -240,8 +241,8 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
-    public void Generate_WithSuccessfulResponse_ReturnsContent()
+    [Fact(Timeout = 60000)]
+    public async Task Generate_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
         var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
@@ -276,7 +277,7 @@ public class AnthropicChatModelTests
         Assert.Equal("Synchronous response from Claude.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateResponseAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -312,7 +313,7 @@ public class AnthropicChatModelTests
         Assert.Equal("Response via GenerateResponseAsync.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithRateLimitError_RetriesAndSucceeds()
     {
         // Arrange
@@ -367,8 +368,8 @@ public class AnthropicChatModelTests
         Assert.Equal(2, callCount); // Should have retried once
     }
 
-    [Fact]
-    public void ModelName_AfterConstruction_MatchesProvidedName()
+    [Fact(Timeout = 60000)]
+    public async Task ModelName_AfterConstruction_MatchesProvidedName()
     {
         // Arrange
         const string expectedModel = "claude-3-opus-20240229";
@@ -380,8 +381,8 @@ public class AnthropicChatModelTests
         Assert.Equal(expectedModel, model.ModelName);
     }
 
-    [Fact]
-    public void MaxContextTokens_ForAllClaudeModels_Is200000()
+    [Fact(Timeout = 60000)]
+    public async Task MaxContextTokens_ForAllClaudeModels_Is200000()
     {
         // Arrange & Act
         var sonnet = new AnthropicChatModel<double>("test-api-key", modelName: "claude-3-sonnet-20240229");

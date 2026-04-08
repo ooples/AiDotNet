@@ -1,12 +1,13 @@
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class SparseTensorTests
 {
-    [Fact]
-    public void FromDense_ToDense_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task FromDense_ToDense_RoundTrip()
     {
         var dense = new Tensor<double>(new[] { 2, 3 });
         dense[0, 1] = 2.0;
@@ -20,8 +21,8 @@ public class SparseTensorTests
         Assert.Equal(0.0, roundTrip[0, 0], precision: 12);
     }
 
-    [Fact]
-    public void Transpose_SwapsIndices()
+    [Fact(Timeout = 60000)]
+    public async Task Transpose_SwapsIndices()
     {
         var sparse = new SparseTensor<double>(
             2,
@@ -39,8 +40,8 @@ public class SparseTensorTests
         Assert.Equal(3.0, dense[2, 1], precision: 12);
     }
 
-    [Fact]
-    public void Coalesce_MergesDuplicates()
+    [Fact(Timeout = 60000)]
+    public async Task Coalesce_MergesDuplicates()
     {
         var sparse = new SparseTensor<double>(
             2,

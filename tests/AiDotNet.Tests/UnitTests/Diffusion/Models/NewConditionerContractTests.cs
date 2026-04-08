@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Diffusion.NoisePredictors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 
@@ -11,8 +12,8 @@ public class NewConditionerContractTests
 {
     #region Text Conditioner Constructor Tests
 
-    [Fact]
-    public void SigLIPTextConditioner_DefaultConstructor_CreatesValidConditioner()
+    [Fact(Timeout = 120000)]
+    public async Task SigLIPTextConditioner_DefaultConstructor_CreatesValidConditioner()
     {
         var conditioner = new SigLIPTextConditioner<double>();
 
@@ -21,8 +22,8 @@ public class NewConditionerContractTests
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
-    [Fact]
-    public void SigLIP2TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    [Fact(Timeout = 120000)]
+    public async Task SigLIP2TextConditioner_DefaultConstructor_CreatesValidConditioner()
     {
         var conditioner = new SigLIP2TextConditioner<double>();
 
@@ -31,8 +32,8 @@ public class NewConditionerContractTests
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
-    [Fact]
-    public void DistilledT5TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    [Fact(Timeout = 120000)]
+    public async Task DistilledT5TextConditioner_DefaultConstructor_CreatesValidConditioner()
     {
         var conditioner = new DistilledT5TextConditioner<double>();
 
@@ -40,8 +41,8 @@ public class NewConditionerContractTests
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
-    [Fact]
-    public void GemmaTextConditioner_DefaultConstructor_CreatesValidConditioner()
+    [Fact(Timeout = 120000)]
+    public async Task GemmaTextConditioner_DefaultConstructor_CreatesValidConditioner()
     {
         var conditioner = new GemmaTextConditioner<double>();
 
@@ -49,8 +50,8 @@ public class NewConditionerContractTests
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
-    [Fact]
-    public void Qwen2TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    [Fact(Timeout = 120000)]
+    public async Task Qwen2TextConditioner_DefaultConstructor_CreatesValidConditioner()
     {
         var conditioner = new Qwen2TextConditioner<double>();
 
@@ -62,8 +63,8 @@ public class NewConditionerContractTests
 
     #region Noise Predictor Constructor Tests
 
-    [Fact]
-    public void MMDiTXNoisePredictor_DefaultConstructor_CreatesValidPredictor()
+    [Fact(Timeout = 120000)]
+    public async Task MMDiTXNoisePredictor_DefaultConstructor_CreatesValidPredictor()
     {
         var predictor = new MMDiTXNoisePredictor<double>();
 
@@ -71,8 +72,8 @@ public class NewConditionerContractTests
         Assert.True(predictor.ParameterCount > 0);
     }
 
-    [Fact]
-    public void FluxDoubleStreamPredictor_DefaultConstructor_CreatesValidPredictor()
+    [Fact(Timeout = 120000)]
+    public async Task FluxDoubleStreamPredictor_DefaultConstructor_CreatesValidPredictor()
     {
         var predictor = new FluxDoubleStreamPredictor<double>();
 
@@ -80,8 +81,8 @@ public class NewConditionerContractTests
         Assert.True(predictor.ParameterCount > 0);
     }
 
-    [Fact]
-    public void SiTPredictor_DefaultConstructor_CreatesValidPredictor()
+    [Fact(Timeout = 120000)]
+    public async Task SiTPredictor_DefaultConstructor_CreatesValidPredictor()
     {
         var predictor = new SiTPredictor<double>();
 
@@ -89,8 +90,8 @@ public class NewConditionerContractTests
         Assert.True(predictor.ParameterCount > 0);
     }
 
-    [Fact]
-    public void EMMDiTPredictor_DefaultConstructor_CreatesValidPredictor()
+    [Fact(Timeout = 120000)]
+    public async Task EMMDiTPredictor_DefaultConstructor_CreatesValidPredictor()
     {
         var predictor = new EMMDiTPredictor<double>();
 
@@ -102,8 +103,8 @@ public class NewConditionerContractTests
 
     #region Parameterizable Contract Tests
 
-    [Fact]
-    public void MMDiTXNoisePredictor_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task MMDiTXNoisePredictor_GetSetParameters_RoundTrips()
     {
         var predictor = new MMDiTXNoisePredictor<double>();
 
@@ -115,8 +116,8 @@ public class NewConditionerContractTests
         Assert.Equal(parameters.Length, retrieved.Length);
     }
 
-    [Fact]
-    public void FluxDoubleStreamPredictor_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task FluxDoubleStreamPredictor_GetSetParameters_RoundTrips()
     {
         var predictor = new FluxDoubleStreamPredictor<double>();
 
@@ -128,8 +129,8 @@ public class NewConditionerContractTests
         Assert.Equal(parameters.Length, retrieved.Length);
     }
 
-    [Fact]
-    public void SiTPredictor_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task SiTPredictor_GetSetParameters_RoundTrips()
     {
         var predictor = new SiTPredictor<double>();
 

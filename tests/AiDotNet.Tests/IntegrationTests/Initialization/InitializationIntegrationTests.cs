@@ -1,6 +1,7 @@
 using AiDotNet.Initialization;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Initialization;
 
@@ -11,16 +12,16 @@ public class InitializationIntegrationTests
 {
     #region EagerInitializationStrategy Tests
 
-    [Fact]
-    public void Eager_IsNotLazy()
+    [Fact(Timeout = 120000)]
+    public async Task Eager_IsNotLazy()
     {
         var strategy = new EagerInitializationStrategy<double>();
         Assert.False(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Eager_InitializeWeights_ProducesNonZeroValues()
+    [Fact(Timeout = 120000)]
+    public async Task Eager_InitializeWeights_ProducesNonZeroValues()
     {
         var strategy = new EagerInitializationStrategy<double>();
         var weights = new Tensor<double>(new[] { 4, 3 });
@@ -39,8 +40,8 @@ public class InitializationIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
-    public void Eager_InitializeBiases_ProducesZeros()
+    [Fact(Timeout = 120000)]
+    public async Task Eager_InitializeBiases_ProducesZeros()
     {
         var strategy = new EagerInitializationStrategy<double>();
         var biases = new Tensor<double>(new[] { 5 });
@@ -58,16 +59,16 @@ public class InitializationIntegrationTests
 
     #region LazyInitializationStrategy Tests
 
-    [Fact]
-    public void Lazy_IsLazy()
+    [Fact(Timeout = 120000)]
+    public async Task Lazy_IsLazy()
     {
         var strategy = new LazyInitializationStrategy<double>();
         Assert.True(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Lazy_InitializeWeights_StillProducesValues()
+    [Fact(Timeout = 120000)]
+    public async Task Lazy_InitializeWeights_StillProducesValues()
     {
         var strategy = new LazyInitializationStrategy<double>();
         var weights = new Tensor<double>(new[] { 3, 3 });
@@ -85,8 +86,8 @@ public class InitializationIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
-    public void Lazy_InitializeBiases_ProducesZeros()
+    [Fact(Timeout = 120000)]
+    public async Task Lazy_InitializeBiases_ProducesZeros()
     {
         var strategy = new LazyInitializationStrategy<double>();
         var biases = new Tensor<double>(new[] { 5 });
@@ -103,16 +104,16 @@ public class InitializationIntegrationTests
 
     #region ZeroInitializationStrategy Tests
 
-    [Fact]
-    public void Zero_IsNotLazy()
+    [Fact(Timeout = 120000)]
+    public async Task Zero_IsNotLazy()
     {
         var strategy = new ZeroInitializationStrategy<double>();
         Assert.False(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Zero_InitializeWeights_AllZero()
+    [Fact(Timeout = 120000)]
+    public async Task Zero_InitializeWeights_AllZero()
     {
         var strategy = new ZeroInitializationStrategy<double>();
         var weights = new Tensor<double>(new[] { 4, 3 });
@@ -129,8 +130,8 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Zero_InitializeBiases_AllZero()
+    [Fact(Timeout = 120000)]
+    public async Task Zero_InitializeBiases_AllZero()
     {
         var strategy = new ZeroInitializationStrategy<double>();
         var biases = new Tensor<double>(new[] { 5 });
@@ -147,23 +148,23 @@ public class InitializationIntegrationTests
 
     #region FromFileInitializationStrategy Tests
 
-    [Fact]
-    public void FromFile_EmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_EmptyPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new FromFileInitializationStrategy<double>(""));
         Assert.Throws<ArgumentException>(() => new FromFileInitializationStrategy<double>("   "));
     }
 
-    [Fact]
-    public void FromFile_IsNotLazy()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_IsNotLazy()
     {
         var strategy = new FromFileInitializationStrategy<double>("test.json");
         Assert.False(strategy.IsLazy);
         Assert.True(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void FromFile_NonexistentFile_ThrowsOnInitialize()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_NonexistentFile_ThrowsOnInitialize()
     {
         var strategy = new FromFileInitializationStrategy<double>("nonexistent_weights.json");
         var weights = new Tensor<double>(new[] { 3, 3 });
@@ -171,8 +172,8 @@ public class InitializationIntegrationTests
         Assert.Throws<FileNotFoundException>(() => strategy.InitializeWeights(weights, 3, 3));
     }
 
-    [Fact]
-    public void FromFile_ValidJsonFile_LoadsWeights()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_ValidJsonFile_LoadsWeights()
     {
         var tempFile = Path.GetTempFileName() + ".json";
         try
@@ -207,8 +208,8 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FromFile_Reset_AllowsReinitialization()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_Reset_AllowsReinitialization()
     {
         var tempFile = Path.GetTempFileName() + ".json";
         try
@@ -240,8 +241,8 @@ public class InitializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FromFile_ValidJsonFile_LoadsBiases()
+    [Fact(Timeout = 120000)]
+    public async Task FromFile_ValidJsonFile_LoadsBiases()
     {
         var tempFile = Path.GetTempFileName() + ".json";
         try
@@ -281,8 +282,8 @@ public class InitializationIntegrationTests
 
     #region InitializationStrategies Factory Tests
 
-    [Fact]
-    public void Strategies_Lazy_ReturnsLazyStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task Strategies_Lazy_ReturnsLazyStrategy()
     {
         var strategy = InitializationStrategies<double>.Lazy;
         Assert.NotNull(strategy);
@@ -290,8 +291,8 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Strategies_Eager_ReturnsEagerStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task Strategies_Eager_ReturnsEagerStrategy()
     {
         var strategy = InitializationStrategies<double>.Eager;
         Assert.NotNull(strategy);
@@ -299,8 +300,8 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Strategies_Zero_ReturnsZeroStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task Strategies_Zero_ReturnsZeroStrategy()
     {
         var strategy = InitializationStrategies<double>.Zero;
         Assert.NotNull(strategy);
@@ -308,8 +309,8 @@ public class InitializationIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
-    public void Strategies_Singletons_AreSameInstance()
+    [Fact(Timeout = 120000)]
+    public async Task Strategies_Singletons_AreSameInstance()
     {
         var lazy1 = InitializationStrategies<double>.Lazy;
         var lazy2 = InitializationStrategies<double>.Lazy;
@@ -324,8 +325,8 @@ public class InitializationIntegrationTests
         Assert.Same(zero1, zero2);
     }
 
-    [Fact]
-    public void Strategies_FromFile_CreatesNewInstance()
+    [Fact(Timeout = 120000)]
+    public async Task Strategies_FromFile_CreatesNewInstance()
     {
         var s1 = InitializationStrategies<double>.FromFile("a.json");
         var s2 = InitializationStrategies<double>.FromFile("b.json");

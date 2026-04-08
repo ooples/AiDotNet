@@ -1,5 +1,6 @@
 using AiDotNet.LossFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LossFunctions;
 
@@ -17,8 +18,8 @@ public class LossFunctionDeepMathIntegrationTests3
     // L = (1/n) * Σ(d²) - (λ/n²) * (Σd)²  where d = log(pred) - log(actual)
     // ====================================================================
 
-    [Fact]
-    public void ScaleInvariantDepth_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ScaleInvariantDepth_PerfectPrediction_ReturnsZero()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
         var pred = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -27,8 +28,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void ScaleInvariantDepth_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ScaleInvariantDepth_HandCalculated()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
         var pred = new Vector<double>(new[] { 2.0, 4.0 });
@@ -45,8 +46,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(expected, result, 1e-4);
     }
 
-    [Fact]
-    public void ScaleInvariantDepth_ScaleInvariant_WithLambda1()
+    [Fact(Timeout = 120000)]
+    public async Task ScaleInvariantDepth_ScaleInvariant_WithLambda1()
     {
         // With lambda=1.0, uniform scaling should not affect the loss
         var loss = new ScaleInvariantDepthLoss<double>(1.0);
@@ -60,8 +61,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(loss1, loss2, 1e-4);
     }
 
-    [Fact]
-    public void ScaleInvariantDepth_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ScaleInvariantDepth_NonNegative()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
         var pred = new Vector<double>(new[] { 1.0, 3.0, 0.5 });
@@ -70,8 +71,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.True(result >= -Tol, $"ScaleInvariantDepth loss should be >= 0, got {result}");
     }
 
-    [Fact]
-    public void ScaleInvariantDepth_NumericalGradient()
+    [Fact(Timeout = 120000)]
+    public async Task ScaleInvariantDepth_NumericalGradient()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
         var pred = new Vector<double>(new[] { 1.5, 2.5, 3.5 });
@@ -100,8 +101,8 @@ public class LossFunctionDeepMathIntegrationTests3
     // QuantumLoss
     // ====================================================================
 
-    [Fact]
-    public void Quantum_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Quantum_PerfectPrediction_ReturnsZero()
     {
         var loss = new QuantumLoss<double>();
         // Quantum state: pairs of (real, imag) for each complex amplitude
@@ -111,8 +112,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact]
-    public void Quantum_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task Quantum_NonNegative()
     {
         var loss = new QuantumLoss<double>();
         // Even-length vectors for complex number pairs
@@ -126,8 +127,8 @@ public class LossFunctionDeepMathIntegrationTests3
     // RealESRGANLoss: combination of L1 + perceptual + adversarial
     // ====================================================================
 
-    [Fact]
-    public void RealESRGAN_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task RealESRGAN_PerfectPrediction_ReturnsZero()
     {
         var loss = new RealESRGANLoss<double>();
         var pred = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -136,8 +137,8 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact]
-    public void RealESRGAN_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task RealESRGAN_NonNegative()
     {
         var loss = new RealESRGANLoss<double>();
         var pred = new Vector<double>(new[] { 0.5, 1.5, 2.5 });

@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -62,36 +63,36 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // DAG Validation Tests
     // ============================
 
-    [Fact]
-    public void ChainGraph_IsDAG()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_IsDAG()
     {
         var graph = CreateChainGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact]
-    public void ForkGraph_IsDAG()
+    [Fact(Timeout = 120000)]
+    public async Task ForkGraph_IsDAG()
     {
         var graph = CreateForkGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact]
-    public void ColliderGraph_IsDAG()
+    [Fact(Timeout = 120000)]
+    public async Task ColliderGraph_IsDAG()
     {
         var graph = CreateColliderGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact]
-    public void DiamondGraph_IsDAG()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_IsDAG()
     {
         var graph = CreateDiamondGraph();
         Assert.True(graph.IsDAG());
     }
 
-    [Fact]
-    public void EmptyGraph_IsDAG()
+    [Fact(Timeout = 120000)]
+    public async Task EmptyGraph_IsDAG()
     {
         var adj = new Matrix<double>(3, 3); // all zeros
         var graph = new CausalGraph<double>(adj, new[] { "A", "B", "C" });
@@ -102,8 +103,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Parent/Child Relationship Tests
     // ============================
 
-    [Fact]
-    public void ChainGraph_Parents_BHasParentA()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Parents_BHasParentA()
     {
         var graph = CreateChainGraph();
         var parents = graph.GetParents(1); // B's parents
@@ -111,16 +112,16 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(0, parents[0]); // A
     }
 
-    [Fact]
-    public void ChainGraph_Parents_AHasNoParents()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Parents_AHasNoParents()
     {
         var graph = CreateChainGraph();
         var parents = graph.GetParents(0); // A's parents
         Assert.Empty(parents);
     }
 
-    [Fact]
-    public void ChainGraph_Children_AHasChildB()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Children_AHasChildB()
     {
         var graph = CreateChainGraph();
         var children = graph.GetChildren(0); // A's children
@@ -128,16 +129,16 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, children[0]); // B
     }
 
-    [Fact]
-    public void ChainGraph_Children_CIsLeaf()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Children_CIsLeaf()
     {
         var graph = CreateChainGraph();
         var children = graph.GetChildren(2); // C's children
         Assert.Empty(children);
     }
 
-    [Fact]
-    public void ForkGraph_Children_AHasTwoChildren()
+    [Fact(Timeout = 120000)]
+    public async Task ForkGraph_Children_AHasTwoChildren()
     {
         var graph = CreateForkGraph();
         var children = graph.GetChildren(0); // A's children
@@ -146,8 +147,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, children); // C
     }
 
-    [Fact]
-    public void ColliderGraph_Parents_CHasTwoParents()
+    [Fact(Timeout = 120000)]
+    public async Task ColliderGraph_Parents_CHasTwoParents()
     {
         var graph = CreateColliderGraph();
         var parents = graph.GetParents(2); // C's parents
@@ -156,8 +157,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, parents); // B
     }
 
-    [Fact]
-    public void ParentsByName_ReturnsCorrectNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParentsByName_ReturnsCorrectNames()
     {
         var graph = CreateColliderGraph();
         var parents = graph.GetParents("C");
@@ -166,8 +167,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains("B", parents);
     }
 
-    [Fact]
-    public void ChildrenByName_ReturnsCorrectNames()
+    [Fact(Timeout = 120000)]
+    public async Task ChildrenByName_ReturnsCorrectNames()
     {
         var graph = CreateForkGraph();
         var children = graph.GetChildren("A");
@@ -180,8 +181,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Ancestor/Descendant Tests
     // ============================
 
-    [Fact]
-    public void ChainGraph_Ancestors_CDescendsFromAAndB()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Ancestors_CDescendsFromAAndB()
     {
         var graph = CreateChainGraph();
         var ancestors = graph.GetAncestors(2); // C's ancestors
@@ -190,16 +191,16 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, ancestors); // B
     }
 
-    [Fact]
-    public void ChainGraph_Ancestors_RootHasNoAncestors()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Ancestors_RootHasNoAncestors()
     {
         var graph = CreateChainGraph();
         var ancestors = graph.GetAncestors(0); // A's ancestors
         Assert.Empty(ancestors);
     }
 
-    [Fact]
-    public void ChainGraph_Descendants_ADescendsToAllOthers()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_Descendants_ADescendsToAllOthers()
     {
         var graph = CreateChainGraph();
         var descendants = graph.GetDescendants(0); // A's descendants
@@ -208,8 +209,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, descendants); // C
     }
 
-    [Fact]
-    public void DiamondGraph_Ancestors_DDescendsFromAll()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_Ancestors_DDescendsFromAll()
     {
         var graph = CreateDiamondGraph();
         var ancestors = graph.GetAncestors(3); // D's ancestors
@@ -219,8 +220,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, ancestors); // C
     }
 
-    [Fact]
-    public void DiamondGraph_Descendants_ADescendsToAll()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_Descendants_ADescendsToAll()
     {
         var graph = CreateDiamondGraph();
         var descendants = graph.GetDescendants(0); // A's descendants
@@ -234,8 +235,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Markov Blanket Tests
     // ============================
 
-    [Fact]
-    public void ChainGraph_MarkovBlanket_MiddleNode()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_MarkovBlanket_MiddleNode()
     {
         // B's Markov blanket: parents={A}, children={C}, co-parents of children={}
         // MB(B) = {A, C}
@@ -246,8 +247,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(2, mb); // C
     }
 
-    [Fact]
-    public void ChainGraph_MarkovBlanket_Root()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_MarkovBlanket_Root()
     {
         // A's Markov blanket: parents={}, children={B}, co-parents of B={}
         // MB(A) = {B}
@@ -257,8 +258,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, mb[0]); // B
     }
 
-    [Fact]
-    public void ChainGraph_MarkovBlanket_Leaf()
+    [Fact(Timeout = 120000)]
+    public async Task ChainGraph_MarkovBlanket_Leaf()
     {
         // C's Markov blanket: parents={B}, children={}, co-parents={}
         // MB(C) = {B}
@@ -268,8 +269,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1, mb[0]); // B
     }
 
-    [Fact]
-    public void ColliderGraph_MarkovBlanket_IncludesCoParents()
+    [Fact(Timeout = 120000)]
+    public async Task ColliderGraph_MarkovBlanket_IncludesCoParents()
     {
         // A's Markov blanket: parents={}, children={C}, co-parents of C = {B}
         // MB(A) = {C, B}
@@ -280,8 +281,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, mb); // B (co-parent of C)
     }
 
-    [Fact]
-    public void ColliderGraph_MarkovBlanket_Collider()
+    [Fact(Timeout = 120000)]
+    public async Task ColliderGraph_MarkovBlanket_Collider()
     {
         // C's Markov blanket: parents={A,B}, children={}, co-parents={}
         // MB(C) = {A, B}
@@ -292,8 +293,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Contains(1, mb); // B
     }
 
-    [Fact]
-    public void DiamondGraph_MarkovBlanket_MiddleNode()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_MarkovBlanket_MiddleNode()
     {
         // B's Markov blanket: parents={A}, children={D}, co-parents of D={C}
         // MB(B) = {A, D, C}
@@ -309,8 +310,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Edge Weight Tests
     // ============================
 
-    [Fact]
-    public void DiamondGraph_EdgeWeights_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_EdgeWeights_HandComputed()
     {
         var graph = CreateDiamondGraph();
 
@@ -320,16 +321,16 @@ public class CausalDiscoveryDeepMathIntegrationTests
         Assert.Equal(1.2, graph.GetEdgeWeight(2, 3), Tolerance); // C -> D = 1.2
     }
 
-    [Fact]
-    public void DiamondGraph_NoEdge_WeightIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DiamondGraph_NoEdge_WeightIsZero()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(0.0, graph.GetEdgeWeight(0, 3), Tolerance); // A -> D (no direct edge)
         Assert.Equal(0.0, graph.GetEdgeWeight(1, 2), Tolerance); // B -> C (no edge)
     }
 
-    [Fact]
-    public void EdgeWeightByName_MatchesIndexedWeight()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeWeightByName_MatchesIndexedWeight()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(
@@ -338,16 +339,16 @@ public class CausalDiscoveryDeepMathIntegrationTests
             Tolerance);
     }
 
-    [Fact]
-    public void HasEdge_ExistingEdge_True()
+    [Fact(Timeout = 120000)]
+    public async Task HasEdge_ExistingEdge_True()
     {
         var graph = CreateChainGraph();
         Assert.True(graph.HasEdge(0, 1)); // A -> B
         Assert.True(graph.HasEdge(1, 2)); // B -> C
     }
 
-    [Fact]
-    public void HasEdge_NonExistingEdge_False()
+    [Fact(Timeout = 120000)]
+    public async Task HasEdge_NonExistingEdge_False()
     {
         var graph = CreateChainGraph();
         Assert.False(graph.HasEdge(0, 2)); // A -> C (no direct)
@@ -358,38 +359,38 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Graph Properties Tests
     // ============================
 
-    [Fact]
-    public void NumVariables_MatchesMatrixDimension()
+    [Fact(Timeout = 120000)]
+    public async Task NumVariables_MatchesMatrixDimension()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(4, graph.NumVariables);
     }
 
-    [Fact]
-    public void FeatureNames_MatchesConstructorNames()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNames_MatchesConstructorNames()
     {
         var graph = CreateDiamondGraph();
         Assert.Equal(new[] { "A", "B", "C", "D" }, graph.FeatureNames);
     }
 
-    [Fact]
-    public void Constructor_NonSquareMatrix_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NonSquareMatrix_Throws()
     {
         var adj = new Matrix<double>(2, 3);
         Assert.Throws<ArgumentException>(() =>
             new CausalGraph<double>(adj, new[] { "A", "B" }));
     }
 
-    [Fact]
-    public void Constructor_NameLengthMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NameLengthMismatch_Throws()
     {
         var adj = new Matrix<double>(3, 3);
         Assert.Throws<ArgumentException>(() =>
             new CausalGraph<double>(adj, new[] { "A", "B" }));
     }
 
-    [Fact]
-    public void Constructor_DuplicateNames_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DuplicateNames_Throws()
     {
         var adj = new Matrix<double>(2, 2);
         Assert.Throws<ArgumentException>(() =>
@@ -400,8 +401,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
     // Topological Properties
     // ============================
 
-    [Fact]
-    public void ParentsAndChildren_AreInverse()
+    [Fact(Timeout = 120000)]
+    public async Task ParentsAndChildren_AreInverse()
     {
         // For every edge i -> j:
         // i is in parents(j) AND j is in children(i)
@@ -421,8 +422,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Ancestors_ContainAllParentsTransitively()
+    [Fact(Timeout = 120000)]
+    public async Task Ancestors_ContainAllParentsTransitively()
     {
         var graph = CreateDiamondGraph();
 
@@ -439,8 +440,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Descendants_ContainAllChildrenTransitively()
+    [Fact(Timeout = 120000)]
+    public async Task Descendants_ContainAllChildrenTransitively()
     {
         var graph = CreateDiamondGraph();
 
@@ -457,8 +458,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MarkovBlanket_AlwaysContainsParentsAndChildren()
+    [Fact(Timeout = 120000)]
+    public async Task MarkovBlanket_AlwaysContainsParentsAndChildren()
     {
         var graph = CreateDiamondGraph();
 
@@ -476,8 +477,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MarkovBlanket_NeverContainsSelf()
+    [Fact(Timeout = 120000)]
+    public async Task MarkovBlanket_NeverContainsSelf()
     {
         var graph = CreateDiamondGraph();
 
@@ -488,8 +489,8 @@ public class CausalDiscoveryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SingleNode_Graph_AllEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SingleNode_Graph_AllEmpty()
     {
         var adj = new Matrix<double>(1, 1);
         var graph = new CausalGraph<double>(adj, new[] { "X" });

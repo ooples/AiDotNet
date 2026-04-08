@@ -1,12 +1,13 @@
 using AiDotNet.Tensors.Topology;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Topology;
 
 public class SimplicialComplexTests
 {
-    [Fact]
-    public void AddSimplex_IncludesFaces()
+    [Fact(Timeout = 60000)]
+    public async Task AddSimplex_IncludesFaces()
     {
         var complex = new SimplicialComplex();
         complex.AddSimplex(new Simplex(new[] { 0, 1, 2 }));
@@ -16,8 +17,8 @@ public class SimplicialComplexTests
         Assert.Single(complex.GetSimplices(2));
     }
 
-    [Fact]
-    public void BoundaryOfBoundary_IsZero()
+    [Fact(Timeout = 60000)]
+    public async Task BoundaryOfBoundary_IsZero()
     {
         var complex = new SimplicialComplex();
         complex.AddSimplex(new Simplex(new[] { 0, 1, 2 }));
@@ -35,8 +36,8 @@ public class SimplicialComplexTests
         }
     }
 
-    [Fact]
-    public void HodgeLaplacian_HasExpectedShape()
+    [Fact(Timeout = 60000)]
+    public async Task HodgeLaplacian_HasExpectedShape()
     {
         var complex = new SimplicialComplex();
         complex.AddSimplex(new Simplex(new[] { 0, 1, 2 }));

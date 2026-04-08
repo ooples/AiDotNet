@@ -3,6 +3,7 @@ using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Interpretability
 {
@@ -11,8 +12,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
     /// </summary>
     public class BiasDetectorTests
     {
-        [Fact]
-        public void DetectBias_WithMismatchedLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithMismatchedLengths_ThrowsArgumentException()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("must match", exception.Message);
         }
 
-        [Fact]
-        public void DetectBias_WithSingleGroup_ReturnsNoBias()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithSingleGroup_ReturnsNoBias()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -40,8 +41,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("Insufficient groups", result.Message);
         }
 
-        [Fact]
-        public void DetectBias_WithBalancedGroups_ReturnsNoBias()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithBalancedGroups_ReturnsNoBias()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference, 3);
         }
 
-        [Fact]
-        public void DetectBias_WithUnbalancedGroups_DetectsBias()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithUnbalancedGroups_DetectsBias()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Contains("Bias detected", result.Message);
         }
 
-        [Fact]
-        public void DetectBias_WithModerateDisparity_DetectsBias()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithModerateDisparity_DetectsBias()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.25, result.StatisticalParityDifference, 3);
         }
 
-        [Fact]
-        public void DetectBias_WithActualLabels_ComputesAdditionalMetrics()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithActualLabels_ComputesAdditionalMetrics()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -120,8 +121,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(2, result.GroupPrecisions.Count);
         }
 
-        [Fact]
-        public void DetectBias_WithActualLabels_ComputesEqualOpportunity()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithActualLabels_ComputesEqualOpportunity()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -139,8 +140,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.HasBias);
         }
 
-        [Fact]
-        public void DetectBias_WithThreeGroups_HandlesMultipleGroups()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -155,8 +156,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(3, result.GroupSizes.Count);
         }
 
-        [Fact]
-        public void DetectBias_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<float>();
@@ -171,8 +172,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(1.0f, result.DisparateImpactRatio, 3);
         }
 
-        [Fact]
-        public void DetectBias_WithAllZeroPredictions_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_WithAllZeroPredictions_HandlesGracefully()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();
@@ -189,8 +190,8 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.False(result.HasBias);
         }
 
-        [Fact]
-        public void DetectBias_GroupStatistics_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task DetectBias_GroupStatistics_AreCorrect()
         {
             // Arrange
             var detector = new DisparateImpactBiasDetector<double>();

@@ -2,6 +2,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.MixedPrecision;
 
@@ -10,8 +11,8 @@ namespace AiDotNetTests.UnitTests.MixedPrecision;
 /// </summary>
 public class LossScalerTests
 {
-    [Fact]
-    public void Constructor_WithDefaults_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaults_InitializesCorrectly()
     {
         // Arrange & Act
         var scaler = new LossScaler<float>();
@@ -24,8 +25,8 @@ public class LossScalerTests
         Assert.Equal(0.5, scaler.BackoffFactor);
     }
 
-    [Fact]
-    public void Constructor_WithCustomValues_UsesProvidedValues()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomValues_UsesProvidedValues()
     {
         // Arrange & Act
         var scaler = new LossScaler<float>(
@@ -44,8 +45,8 @@ public class LossScalerTests
         Assert.Equal(0.25, scaler.BackoffFactor);
     }
 
-    [Fact]
-    public void ScaleLoss_MultipliesLossByScale()
+    [Fact(Timeout = 60000)]
+    public async Task ScaleLoss_MultipliesLossByScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -58,8 +59,8 @@ public class LossScalerTests
         Assert.Equal(50.0f, scaledLoss);
     }
 
-    [Fact]
-    public void UnscaleGradient_DividesGradientByScale()
+    [Fact(Timeout = 60000)]
+    public async Task UnscaleGradient_DividesGradientByScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -72,8 +73,8 @@ public class LossScalerTests
         Assert.Equal(0.5f, unscaledGradient, precision: 5);
     }
 
-    [Fact]
-    public void UnscaleGradients_Vector_CorrectlyUnscalesAllElements()
+    [Fact(Timeout = 60000)]
+    public async Task UnscaleGradients_Vector_CorrectlyUnscalesAllElements()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 10.0);
@@ -88,8 +89,8 @@ public class LossScalerTests
         Assert.Equal(3.0f, gradients[2], precision: 5);
     }
 
-    [Fact]
-    public void UnscaleGradients_Tensor_CorrectlyUnscalesAllElements()
+    [Fact(Timeout = 60000)]
+    public async Task UnscaleGradients_Tensor_CorrectlyUnscalesAllElements()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 10.0);
@@ -105,8 +106,8 @@ public class LossScalerTests
         Assert.Equal(4.0f, gradients.GetFlatIndexValue(3), precision: 5);
     }
 
-    [Fact]
-    public void HasOverflow_WithNaN_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task HasOverflow_WithNaN_ReturnsTrue()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -119,8 +120,8 @@ public class LossScalerTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void HasOverflow_WithInfinity_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task HasOverflow_WithInfinity_ReturnsTrue()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -133,8 +134,8 @@ public class LossScalerTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void HasOverflow_WithNormalValue_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task HasOverflow_WithNormalValue_ReturnsFalse()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -147,8 +148,8 @@ public class LossScalerTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void DetectOverflow_Vector_WithNaN_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task DetectOverflow_Vector_WithNaN_ReturnsTrue()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -161,8 +162,8 @@ public class LossScalerTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void DetectOverflow_Vector_WithAllNormal_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task DetectOverflow_Vector_WithAllNormal_ReturnsFalse()
     {
         // Arrange
         var scaler = new LossScaler<float>();
@@ -175,8 +176,8 @@ public class LossScalerTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void UnscaleGradientsAndCheck_WithOverflow_ReducesScaleAndReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UnscaleGradientsAndCheck_WithOverflow_ReducesScaleAndReturnsFalse()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 1000.0, dynamicScaling: true, backoffFactor: 0.5);
@@ -191,8 +192,8 @@ public class LossScalerTests
         Assert.Equal(1, scaler.SkippedUpdates);
     }
 
-    [Fact]
-    public void UnscaleGradientsAndCheck_WithoutOverflow_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task UnscaleGradientsAndCheck_WithoutOverflow_ReturnsTrue()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0, dynamicScaling: true);
@@ -208,8 +209,8 @@ public class LossScalerTests
         Assert.Equal(3.0f, gradients[2], precision: 5);
     }
 
-    [Fact]
-    public void DynamicScaling_AfterGrowthInterval_IncreasesScale()
+    [Fact(Timeout = 60000)]
+    public async Task DynamicScaling_AfterGrowthInterval_IncreasesScale()
     {
         // Arrange
         var growthInterval = 5;
@@ -230,8 +231,8 @@ public class LossScalerTests
         Assert.Equal(200.0, scaler.Scale); // Should be doubled after growth interval
     }
 
-    [Fact]
-    public void DynamicScaling_Disabled_DoesNotChangeScale()
+    [Fact(Timeout = 60000)]
+    public async Task DynamicScaling_Disabled_DoesNotChangeScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0, dynamicScaling: false);
@@ -246,8 +247,8 @@ public class LossScalerTests
         Assert.Equal(100.0, scaler.Scale); // Scale should not change
     }
 
-    [Fact]
-    public void OverflowRate_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OverflowRate_CalculatesCorrectly()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -263,8 +264,8 @@ public class LossScalerTests
         Assert.Equal(1.0 / 3.0, scaler.OverflowRate, precision: 5);
     }
 
-    [Fact]
-    public void Reset_ClearsStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ClearsStatistics()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -280,8 +281,8 @@ public class LossScalerTests
         Assert.Equal(0.0, scaler.OverflowRate);
     }
 
-    [Fact]
-    public void Reset_WithNewScale_UpdatesScale()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_WithNewScale_UpdatesScale()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0);
@@ -293,8 +294,8 @@ public class LossScalerTests
         Assert.Equal(500.0, scaler.Scale);
     }
 
-    [Fact]
-    public void ToString_ReturnsFormattedString()
+    [Fact(Timeout = 60000)]
+    public async Task ToString_ReturnsFormattedString()
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 1000.0);
@@ -310,8 +311,8 @@ public class LossScalerTests
         Assert.Contains("Skipped=0", result);
     }
 
-    [Fact]
-    public void MinScale_PreventScaleFromGoingBelowMinimum()
+    [Fact(Timeout = 60000)]
+    public async Task MinScale_PreventScaleFromGoingBelowMinimum()
     {
         // Arrange
         var scaler = new LossScaler<float>(
@@ -330,8 +331,8 @@ public class LossScalerTests
         Assert.Equal(5.0, scaler.Scale); // Should not go below min
     }
 
-    [Fact]
-    public void MaxScale_PreventScaleFromGoingAboveMaximum()
+    [Fact(Timeout = 60000)]
+    public async Task MaxScale_PreventScaleFromGoingAboveMaximum()
     {
         // Arrange
         var scaler = new LossScaler<float>(

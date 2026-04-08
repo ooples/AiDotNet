@@ -1,6 +1,7 @@
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Helpers;
 
@@ -86,8 +87,8 @@ public class ModelPersistenceGuardTests : IDisposable
         manager.Reset();
     }
 
-    [Fact]
-    public void EnforceBeforeSave_WithLicenseKey_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSave_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
@@ -95,32 +96,32 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeSave();
     }
 
-    [Fact]
-    public void EnforceBeforeLoad_WithLicenseKey_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeLoad_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeLoad();
     }
 
-    [Fact]
-    public void EnforceBeforeSerialize_WithLicenseKey_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSerialize_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeSerialize();
     }
 
-    [Fact]
-    public void EnforceBeforeDeserialize_WithLicenseKey_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeDeserialize_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeDeserialize();
     }
 
-    [Fact]
-    public void EnforceBeforeSave_WithoutLicense_CountsTrialOperation()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSave_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -134,8 +135,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Equal(1, status.OperationsUsed);
     }
 
-    [Fact]
-    public void EnforceBeforeLoad_WithoutLicense_CountsTrialOperation()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeLoad_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -147,8 +148,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Equal(1, status.OperationsUsed);
     }
 
-    [Fact]
-    public void EnforceBeforeSave_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSave_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -164,8 +165,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
     }
 
-    [Fact]
-    public void EnforceBeforeLoad_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeLoad_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -179,8 +180,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
     }
 
-    [Fact]
-    public void EnforceBeforeSerialize_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSerialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -194,8 +195,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
     }
 
-    [Fact]
-    public void EnforceBeforeDeserialize_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeDeserialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -209,8 +210,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeDeserialize());
     }
 
-    [Fact]
-    public void InternalOperation_SuppressesSerializeEnforcement()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_SuppressesSerializeEnforcement()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -230,8 +231,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void InternalOperation_SuppressesDeserializeEnforcement()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_SuppressesDeserializeEnforcement()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -248,8 +249,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void InternalOperation_DoesNotSuppressSaveEnforcement()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_DoesNotSuppressSaveEnforcement()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -267,8 +268,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void InternalOperation_DoesNotSuppressLoadEnforcement()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_DoesNotSuppressLoadEnforcement()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -285,8 +286,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void InternalOperation_ScopeResetsOnDispose()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_ScopeResetsOnDispose()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -308,8 +309,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
     }
 
-    [Fact]
-    public void InternalOperation_ThreadIsolation()
+    [Fact(Timeout = 60000)]
+    public async Task InternalOperation_ThreadIsolation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -347,8 +348,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.True(otherThreadThrew, "InternalOperation flag leaked to another thread");
     }
 
-    [Fact]
-    public void LicenseKey_BypassesTrial_NoOperationCounted()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKey_BypassesTrial_NoOperationCounted()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -373,8 +374,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.False(status.IsExpired);
     }
 
-    [Fact]
-    public void EnforceBeforeSave_AlwaysEnforces_EvenInInternalScope()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSave_AlwaysEnforces_EvenInInternalScope()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -399,8 +400,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void EnforceBeforeSerialize_OutsideScope_CountsOperation()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSerialize_OutsideScope_CountsOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -421,8 +422,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void EnforceBeforeSerialize_InsideScope_DoesNotCountOperation()
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSerialize_InsideScope_DoesNotCountOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -449,8 +450,8 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
-    public void WhitespaceOnlyLicenseKey_TreatedAsNoKey()
+    [Fact(Timeout = 60000)]
+    public async Task WhitespaceOnlyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -468,8 +469,8 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
     }
 
-    [Fact]
-    public void EmptyLicenseKey_TreatedAsNoKey()
+    [Fact(Timeout = 60000)]
+    public async Task EmptyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();

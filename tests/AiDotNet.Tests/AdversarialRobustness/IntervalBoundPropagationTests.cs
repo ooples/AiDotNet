@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.AdversarialRobustness;
 
@@ -19,8 +20,8 @@ public class IntervalBoundPropagationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_Default_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_Default_CreatesInstance()
     {
         // Act
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -32,8 +33,8 @@ public class IntervalBoundPropagationTests
         Assert.Equal("IBP", options.CertificationMethod);
     }
 
-    [Fact]
-    public void Constructor_WithOptions_UsesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithOptions_UsesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -55,8 +56,8 @@ public class IntervalBoundPropagationTests
         Assert.Equal("IBP", returnedOptions.CertificationMethod);
     }
 
-    [Fact]
-    public void Constructor_WithNullOptions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(null!));
@@ -66,8 +67,8 @@ public class IntervalBoundPropagationTests
 
     #region CertifyPrediction Tests
 
-    [Fact]
-    public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -77,8 +78,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(null!, mockModel));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -88,8 +89,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(input, null!));
     }
 
-    [Fact]
-    public void CertifyPrediction_WithValidInput_ReturnsCertification()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithValidInput_ReturnsCertification()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -111,8 +112,8 @@ public class IntervalBoundPropagationTests
         Assert.True(result.Confidence >= 0.0 && result.Confidence <= 1.0);
     }
 
-    [Fact]
-    public void CertifyPrediction_WithSmallEpsilon_MayCertify()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_WithSmallEpsilon_MayCertify()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -133,8 +134,8 @@ public class IntervalBoundPropagationTests
         Assert.True(result.IsCertified);
     }
 
-    [Fact]
-    public void CertifyPrediction_ReturnsBoundsForPredictedClass()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_ReturnsBoundsForPredictedClass()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -158,8 +159,8 @@ public class IntervalBoundPropagationTests
 
     #region CertifyBatch Tests
 
-    [Fact]
-    public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -169,8 +170,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(null!, mockModel));
     }
 
-    [Fact]
-    public void CertifyBatch_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -180,8 +181,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(inputs, null!));
     }
 
-    [Fact]
-    public void CertifyBatch_ReturnsCorrectNumberOfResults()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyBatch_ReturnsCorrectNumberOfResults()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -215,8 +216,8 @@ public class IntervalBoundPropagationTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact]
-    public void ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -226,8 +227,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(null!, mockModel));
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -237,8 +238,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(input, null!));
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_ReturnsNonNegativeRadius()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -257,8 +258,8 @@ public class IntervalBoundPropagationTests
         Assert.True(radius >= 0.0);
     }
 
-    [Fact]
-    public void ComputeCertifiedRadius_WithLargeMarginModel_ReturnsLargerRadius()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeCertifiedRadius_WithLargeMarginModel_ReturnsLargerRadius()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -288,8 +289,8 @@ public class IntervalBoundPropagationTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -301,8 +302,8 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -314,8 +315,8 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -327,8 +328,8 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -345,8 +346,8 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, labels, mockModel, 0.1));
     }
 
-    [Fact]
-    public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -386,8 +387,8 @@ public class IntervalBoundPropagationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_ReturnsNonEmptyBytes()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_ReturnsNonEmptyBytes()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -406,8 +407,8 @@ public class IntervalBoundPropagationTests
         Assert.True(bytes.Length > 0);
     }
 
-    [Fact]
-    public void Deserialize_WithNullData_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -416,8 +417,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.Deserialize(null!));
     }
 
-    [Fact]
-    public void SerializeDeserialize_PreservesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task SerializeDeserialize_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -452,8 +453,8 @@ public class IntervalBoundPropagationTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact]
-    public void SaveModel_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -462,8 +463,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(null!));
     }
 
-    [Fact]
-    public void SaveModel_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_WithEmptyPath_ThrowsArgumentException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -472,8 +473,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(string.Empty));
     }
 
-    [Fact]
-    public void LoadModel_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -482,8 +483,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.LoadModel(null!));
     }
 
-    [Fact]
-    public void LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -492,8 +493,8 @@ public class IntervalBoundPropagationTests
         Assert.Throws<FileNotFoundException>(() => ibp.LoadModel("nonexistent_ibp_model_12345.json"));
     }
 
-    [Fact]
-    public void SaveAndLoadModel_RoundTrip_PreservesOptions()
+    [Fact(Timeout = 60000)]
+    public async Task SaveAndLoadModel_RoundTrip_PreservesOptions()
     {
         // Arrange
         var tempPath = Path.Combine(Path.GetTempPath(), $"ibp_test_{Guid.NewGuid()}.json");
@@ -531,8 +532,8 @@ public class IntervalBoundPropagationTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_ResetsToDefaultOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_ResetsToDefaultOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -554,8 +555,8 @@ public class IntervalBoundPropagationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void CertifyPrediction_FloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CertifyPrediction_FloatType_WorksCorrectly()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<float>

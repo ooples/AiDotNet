@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -26,8 +27,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
             var detector = new FeatureImportanceFitDetector<double, Matrix<double>, Vector<double>>();
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var options = new FeatureImportanceFitDetectorOptions
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithoutModel_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithoutModel_ThrowsException()
         {
             // Arrange
             // FeatureImportanceFitDetector requires a Model to calculate feature importances
@@ -68,8 +69,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains("Model is null", exception.Message);
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_WithoutModel_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_WithoutModel_ThrowsException()
         {
             // Arrange
             var options = new FeatureImportanceFitDetectorOptions

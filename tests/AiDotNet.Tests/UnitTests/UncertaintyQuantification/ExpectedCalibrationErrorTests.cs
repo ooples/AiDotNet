@@ -1,13 +1,14 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.UncertaintyQuantification.Calibration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class ExpectedCalibrationErrorTests
 {
-    [Fact]
-    public void Constructor_WithDefaultBins_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultBins_CreatesInstance()
     {
         // Arrange & Act
         var ece = new ExpectedCalibrationError<double>();
@@ -16,8 +17,8 @@ public class ExpectedCalibrationErrorTests
         Assert.NotNull(ece);
     }
 
-    [Fact]
-    public void Constructor_WithCustomBins_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomBins_CreatesInstance()
     {
         // Arrange & Act
         var ece = new ExpectedCalibrationError<double>(numBins: 20);
@@ -26,22 +27,22 @@ public class ExpectedCalibrationErrorTests
         Assert.NotNull(ece);
     }
 
-    [Fact]
-    public void Constructor_WithZeroBins_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroBins_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: 0));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeBins_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeBins_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new ExpectedCalibrationError<double>(numBins: -5));
     }
 
-    [Fact]
-    public void Compute_WithPerfectCalibration_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task Compute_WithPerfectCalibration_ReturnsZero()
     {
         // Arrange
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -58,8 +59,8 @@ public class ExpectedCalibrationErrorTests
         Assert.Equal(0.0, eceValue, precision: 2);
     }
 
-    [Fact]
-    public void Compute_WithIncorrectPredictions_ReturnsPositiveECE()
+    [Fact(Timeout = 60000)]
+    public async Task Compute_WithIncorrectPredictions_ReturnsPositiveECE()
     {
         // Arrange
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -76,8 +77,8 @@ public class ExpectedCalibrationErrorTests
         Assert.True(eceValue > 0.5);
     }
 
-    [Fact]
-    public void Compute_WithMismatchedLengths_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Compute_WithMismatchedLengths_ThrowsException()
     {
         // Arrange
         var ece = new ExpectedCalibrationError<double>();
@@ -89,8 +90,8 @@ public class ExpectedCalibrationErrorTests
         Assert.Throws<ArgumentException>(() => { ece.Compute(probabilities, predictions, trueLabels); });
     }
 
-    [Fact]
-    public void GetReliabilityDiagram_ReturnsNonEmptyData()
+    [Fact(Timeout = 60000)]
+    public async Task GetReliabilityDiagram_ReturnsNonEmptyData()
     {
         // Arrange
         var ece = new ExpectedCalibrationError<double>(numBins: 5);

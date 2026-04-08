@@ -1,6 +1,7 @@
 using AiDotNet.CausalInference;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalInference;
 
@@ -61,16 +62,16 @@ public class CausalInferenceIntegrationTests
 
     #region SLearner Tests
 
-    [Fact]
-    public void SLearner_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_Construction_WithDefaults()
     {
         var learner = new SLearner<double>();
         Assert.NotNull(learner);
         Assert.False(learner.IsTrained);
     }
 
-    [Fact]
-    public void SLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -94,8 +95,8 @@ public class CausalInferenceIntegrationTests
         }
     }
 
-    [Fact]
-    public void SLearner_EstimateATE_ReturnsPositiveWithStandardError()
+    [Fact(Timeout = 120000)]
+    public async Task SLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -116,8 +117,8 @@ public class CausalInferenceIntegrationTests
 
     #region TLearner Tests
 
-    [Fact]
-    public void TLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task TLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -133,8 +134,8 @@ public class CausalInferenceIntegrationTests
         Assert.True(avgEffect > 1.0, $"T-Learner average effect should be > 1.0, got {avgEffect}");
     }
 
-    [Fact]
-    public void TLearner_EstimateATE_ReturnsPositiveWithStandardError()
+    [Fact(Timeout = 120000)]
+    public async Task TLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -152,8 +153,8 @@ public class CausalInferenceIntegrationTests
 
     #region XLearner Tests
 
-    [Fact]
-    public void XLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task XLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -169,8 +170,8 @@ public class CausalInferenceIntegrationTests
         Assert.True(avgEffect > 0, $"X-Learner average effect should be positive, got {avgEffect}");
     }
 
-    [Fact]
-    public void XLearner_EstimateATE_ReturnsPositiveWithStandardError()
+    [Fact(Timeout = 120000)]
+    public async Task XLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -188,8 +189,8 @@ public class CausalInferenceIntegrationTests
 
     #region DoublyRobustEstimator Tests
 
-    [Fact]
-    public void DoublyRobust_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task DoublyRobust_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var dr = new DoublyRobustEstimator<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -207,8 +208,8 @@ public class CausalInferenceIntegrationTests
             $"Doubly Robust average effect should be > 1.0 (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact]
-    public void DoublyRobust_EstimateATE_ReturnsPositiveWithStandardError()
+    [Fact(Timeout = 120000)]
+    public async Task DoublyRobust_EstimateATE_ReturnsPositiveWithStandardError()
     {
         var dr = new DoublyRobustEstimator<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -223,8 +224,8 @@ public class CausalInferenceIntegrationTests
         Assert.False(double.IsInfinity(ate), "ATE is Infinity");
     }
 
-    [Fact]
-    public void DoublyRobust_PredictTreatedVsControl_TreatedIsHigher()
+    [Fact(Timeout = 120000)]
+    public async Task DoublyRobust_PredictTreatedVsControl_TreatedIsHigher()
     {
         var dr = new DoublyRobustEstimator<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -254,8 +255,8 @@ public class CausalInferenceIntegrationTests
 
     #region InverseProbabilityWeighting Tests
 
-    [Fact]
-    public void IPW_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var ipw = new InverseProbabilityWeighting<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -274,8 +275,8 @@ public class CausalInferenceIntegrationTests
             $"IPW average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact]
-    public void IPW_EstimateATE_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task IPW_EstimateATE_ReturnsPositiveValue()
     {
         var ipw = new InverseProbabilityWeighting<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -293,8 +294,8 @@ public class CausalInferenceIntegrationTests
 
     #region PropensityScoreMatching Tests
 
-    [Fact]
-    public void PropensityScoreMatching_EstimateTreatmentEffect_DetectsPositiveEffect()
+    [Fact(Timeout = 120000)]
+    public async Task PropensityScoreMatching_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
         var psm = new PropensityScoreMatching<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -313,8 +314,8 @@ public class CausalInferenceIntegrationTests
             $"PSM average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact]
-    public void PropensityScoreMatching_EstimateATE_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task PropensityScoreMatching_EstimateATE_ReturnsPositiveValue()
     {
         var psm = new PropensityScoreMatching<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -332,8 +333,8 @@ public class CausalInferenceIntegrationTests
 
     #region CausalForest Tests
 
-    [Fact]
-    public void CausalForest_FitAndEstimate_ReturnsPositiveEffects()
+    [Fact(Timeout = 120000)]
+    public async Task CausalForest_FitAndEstimate_ReturnsPositiveEffects()
     {
         var forest = new CausalForest<double>(numTrees: 5, maxDepth: 3);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -352,8 +353,8 @@ public class CausalInferenceIntegrationTests
             $"CausalForest average effect should be positive (true effect is {KnownTreatmentEffect}), got {avgEffect}");
     }
 
-    [Fact]
-    public void CausalForest_EstimateATE_ReturnsPositiveValue()
+    [Fact(Timeout = 120000)]
+    public async Task CausalForest_EstimateATE_ReturnsPositiveValue()
     {
         var forest = new CausalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
         var (features, treatment, outcome) = CreateSyntheticData();
@@ -371,8 +372,8 @@ public class CausalInferenceIntegrationTests
 
     #region Cross-Estimator Consistency Tests
 
-    [Fact]
-    public void AllEstimators_AgreeTreatmentIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task AllEstimators_AgreeTreatmentIsPositive()
     {
         var (features, treatment, outcome) = CreateSyntheticData();
         var treatmentInt = ToIntTreatment(treatment);
@@ -408,8 +409,8 @@ public class CausalInferenceIntegrationTests
         Assert.True(drAvg > 0, $"DR estimator should find positive effect, got {drAvg}");
     }
 
-    [Fact]
-    public void AllEstimators_ThrowWhenNotFitted()
+    [Fact(Timeout = 120000)]
+    public async Task AllEstimators_ThrowWhenNotFitted()
     {
         var features = new Matrix<double>(1, 2);
 

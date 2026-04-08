@@ -10,6 +10,7 @@ using Xunit.Abstractions;
 #if !NET462
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Threading.Tasks;
 #endif
 
 namespace AiDotNet.Tests;
@@ -27,8 +28,8 @@ public class DirectGpuTests
     }
 
 #if !NET462
-    [Fact]
-    public void DirectGpuEngine_CanInitialize()
+    [Fact(Timeout = 60000)]
+    public async Task DirectGpuEngine_CanInitialize()
     {
         // Arrange & Act
         using var engine = new DirectGpuEngine();
@@ -46,8 +47,8 @@ public class DirectGpuTests
         Assert.NotNull(engine.BackendName);
     }
 
-    [Fact]
-    public void DirectGpuEngine_MatMul_SmallMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task DirectGpuEngine_MatMul_SmallMatrix()
     {
         // Arrange
         using var engine = new DirectGpuEngine();
@@ -104,7 +105,7 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_MatMul_Benchmark()
     {
@@ -152,7 +153,7 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_MatMul_Benchmark_KernelOnly()
     {
@@ -230,7 +231,7 @@ public class DirectGpuTests
         _output.WriteLine("Target: ~2500 GFLOPS (48% utilization, CLBlast level)");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_MatMul_Benchmark_KernelComparison()
     {
@@ -317,7 +318,7 @@ public class DirectGpuTests
         _output.WriteLine("If similar speed, issue is in memory coalescing or fundamental approach.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_MatMul_Benchmark_AllKernelVariations()
     {
@@ -496,7 +497,7 @@ public class DirectGpuTests
         _output.WriteLine("- If medium_tile wins: 2x2 register blocking is the sweet spot");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_Relu_Activation()
     {
@@ -528,7 +529,7 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_Softmax()
     {
@@ -570,8 +571,8 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
-    public void Engine_DirectGpu_Property()
+    [Fact(Timeout = 60000)]
+    public async Task Engine_DirectGpu_Property()
     {
         // Arrange & Act
         var directGpu = Engine.DirectGpu;
@@ -586,8 +587,8 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
-    public void HardwareCapabilities_IncludesDirectGpu()
+    [Fact(Timeout = 60000)]
+    public async Task HardwareCapabilities_IncludesDirectGpu()
     {
         // Arrange & Act
         var caps = Engine.Capabilities;
@@ -600,7 +601,7 @@ public class DirectGpuTests
         _output.WriteLine($"DirectGpuComputeUnits: {caps.DirectGpuComputeUnits}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_NewKernels_Correctness()
     {
@@ -695,7 +696,7 @@ public class DirectGpuTests
         _output.WriteLine("Correctness validation complete.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_NewKernels_Benchmark()
     {
@@ -793,12 +794,12 @@ public class DirectGpuTests
 
     // TODO: This test uses APIs that don't exist yet (Rdna1ConfigCount, TuneWithBayesianOptimization)
     // Uncomment and implement when the Bayesian optimization API is finalized
-    // [Fact]
+    // [Fact(Timeout = 60000)]
     // [Trait("Category", "GPU")]
     // public void DirectGpuEngine_BayesianOptimization_FindsOptimalGemmConfig()
     // { ... }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_DynamicKernelGeneration_CompilesAndBenchmarks()
     {
@@ -867,7 +868,7 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_DynamicKernelGeneration_LargeMatrices()
     {
@@ -925,7 +926,7 @@ public class DirectGpuTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_StaticVsDynamic_DiagnosticBenchmark()
     {
@@ -1270,7 +1271,7 @@ public class DirectGpuTests
         _output.WriteLine("- Bayesian optimization can find even better configurations");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_ABTestKernelVariants_OptimizationComparison()
     {
@@ -1325,7 +1326,7 @@ public class DirectGpuTests
         _output.WriteLine("=============================================================");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_ComprehensiveAbTest_AllSizes()
     {
@@ -1365,7 +1366,7 @@ public class DirectGpuTests
         Assert.Contains("RECOMMENDATIONS", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_GemmProfiler_RooflineAnalysis()
     {
@@ -1427,8 +1428,8 @@ public class DirectGpuTests
         Assert.True(result.BestGflops > 0, "Should have measured GFLOPS");
     }
 #else
-    [Fact]
-    public void DirectGpu_NotAvailableOnNet462()
+    [Fact(Timeout = 60000)]
+    public async Task DirectGpu_NotAvailableOnNet462()
     {
         // DirectGpu requires .NET 5.0+ or .NET Framework 4.7.1+
         _output.WriteLine("DirectGpu tests not available on .NET Framework 4.6.2");

@@ -5,13 +5,14 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class OpenAIEmbeddingModelTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(8191, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(8191, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithNullApiKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithEmptyApiKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -52,8 +53,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -61,8 +62,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNullModelName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullModelName_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -70,8 +71,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model name cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithEmptyModelName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyModelName_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model name cannot be empty", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithZeroDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -97,8 +98,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -115,8 +116,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
-        public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1536, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -148,8 +149,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
-        public void Embed_ReturnsNormalizedVector()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_ReturnsNormalizedVector()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -193,8 +194,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithNullText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
-        public void Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -213,8 +214,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
-        public void Embed_WithWhitespaceText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
-        public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -239,8 +240,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1536, embeddings.Columns);
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -249,8 +250,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
@@ -260,8 +261,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -281,8 +282,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<float>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -305,8 +306,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithCustomDimension_ReturnsCorrectSize()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             // Arrange
             var customDimension = 512;
@@ -320,8 +321,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(customDimension, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_Deterministic_MultipleInstances()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_Deterministic_MultipleInstances()
         {
             // Arrange
             var model1 = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -339,8 +340,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithLongText_ReturnsEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithLongText_ReturnsEmbedding()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1536, embedding.Length);
         }
 
-        [Fact]
-        public void Constructor_WithDifferentModelNames_CreatesInstances()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDifferentModelNames_CreatesInstances()
         {
             // Arrange & Act
             var adaModel = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
@@ -369,8 +370,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(3072, largeModel.EmbeddingDimension);
         }
 
-        [Fact]
-        public void EmbedBatch_AllRowsAreNormalized()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_AllRowsAreNormalized()
         {
             // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);

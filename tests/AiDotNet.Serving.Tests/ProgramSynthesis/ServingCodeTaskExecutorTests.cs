@@ -5,12 +5,13 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingCodeTaskExecutorTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_Summarization_ReturnsSuccessfulResult()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);
@@ -53,7 +54,7 @@ public sealed class ServingCodeTaskExecutorTests
         Assert.Equal(ProgramLanguage.CSharp, result.Language);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_Canceled_Throws()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);
@@ -67,7 +68,7 @@ public sealed class ServingCodeTaskExecutorTests
                 cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_NullRequest_Throws()
     {
         var executor = new ServingCodeTaskExecutor(NullLogger<ServingCodeTaskExecutor>.Instance);

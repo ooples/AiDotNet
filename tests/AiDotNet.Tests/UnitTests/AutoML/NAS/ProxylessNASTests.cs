@@ -4,6 +4,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class ProxylessNASTests
     {
-        [Fact]
-        public void ProxylessNAS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -23,8 +24,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(proxyless);
         }
 
-        [Fact]
-        public void ProxylessNAS_GetArchitectureParameters_ReturnsValidList()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact]
-        public void ProxylessNAS_GetArchitectureParameters_HasCorrectShape()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_GetArchitectureParameters_HasCorrectShape()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -54,8 +55,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(3, params_[2].Rows); // Third node connects to 3 previous nodes
         }
 
-        [Fact]
-        public void ProxylessNAS_GetArchitectureGradients_MatchesParameterCount()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_GetArchitectureGradients_MatchesParameterCount()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -74,8 +75,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void ProxylessNAS_BinarizePaths_WithBinarization_ReturnsOneHotVectors()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_BinarizePaths_WithBinarization_ReturnsOneHotVectors()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -109,8 +110,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void ProxylessNAS_BinarizePaths_WithoutBinarization_ReturnsSoftmax()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_BinarizePaths_WithoutBinarization_ReturnsSoftmax()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -140,8 +141,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
-        public void ProxylessNAS_ComputeExpectedLatency_ReturnsNonNegativeValue()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_ComputeExpectedLatency_ReturnsNonNegativeValue()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -154,8 +155,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(latency >= 0.0);
         }
 
-        [Fact]
-        public void ProxylessNAS_ComputeTotalLoss_IncludesLatencyPenalty()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_ComputeTotalLoss_IncludesLatencyPenalty()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -169,8 +170,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss >= taskLoss - 0.01); // Should include latency term
         }
 
-        [Fact]
-        public void ProxylessNAS_DeriveArchitecture_ReturnsValidArchitecture()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -184,8 +185,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
-        public void ProxylessNAS_DeriveArchitecture_SelectsTopTwoEdges()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_DeriveArchitecture_SelectsTopTwoEdges()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -198,8 +199,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count <= 8); // 4 nodes * 2 edges max
         }
 
-        [Fact]
-        public void ProxylessNAS_EstimateArchitectureCost_ReturnsValidCost()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_EstimateArchitectureCost_ReturnsValidCost()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -214,8 +215,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact]
-        public void ProxylessNAS_SetBinarizationTemperature_UpdatesTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_SetBinarizationTemperature_UpdatesTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -237,8 +238,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(resultHigh);
         }
 
-        [Fact]
-        public void ProxylessNAS_WithDifferentPlatforms_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_WithDifferentPlatforms_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -252,8 +253,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(proxylessEdge);
         }
 
-        [Fact]
-        public void ProxylessNAS_WithDifferentLatencyWeights_AffectsTotalLoss()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_WithDifferentLatencyWeights_AffectsTotalLoss()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -269,8 +270,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLossHigh >= totalLossLow);
         }
 
-        [Fact]
-        public void ProxylessNAS_MultipleDeriveArchitecture_ProducesConsistentResults()
+        [Fact(Timeout = 60000)]
+        public async Task ProxylessNAS_MultipleDeriveArchitecture_ProducesConsistentResults()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

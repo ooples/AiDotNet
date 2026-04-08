@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.KnowledgeGraph;
 
@@ -19,8 +20,8 @@ public class KnowledgeGraphIntegrationTests
 {
     #region Facade Integration Tests
 
-    [Fact]
-    public void ConfigureKnowledgeGraph_ViaAiModelBuilder_FluentChainingWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ConfigureKnowledgeGraph_ViaAiModelBuilder_FluentChainingWorks()
     {
         var graph = BuildSmallGraph();
         var builder = new AiModelBuilder<double, double[], double[]>();
@@ -39,8 +40,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Same(builder, result);
     }
 
-    [Fact]
-    public void KnowledgeGraph_EndToEndPipeline_MatchesFacadeWiring()
+    [Fact(Timeout = 120000)]
+    public async Task KnowledgeGraph_EndToEndPipeline_MatchesFacadeWiring()
     {
         // Exercises the same component pipeline that AiModelBuilder.ProcessKnowledgeGraph
         // wires internally: train embeddings → link prediction → evaluation.
@@ -145,8 +146,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region TransE Embedding Tests
 
-    [Fact]
-    public void TransE_TrainAndScore_ProducesValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task TransE_TrainAndScore_ProducesValidResults()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -175,8 +176,8 @@ public class KnowledgeGraphIntegrationTests
             $"Known triple should score lower (better) than random: known={knownScore}, random={randomScore}");
     }
 
-    [Fact]
-    public void TransE_GetEntityEmbedding_ReturnsCorrectDimension()
+    [Fact(Timeout = 120000)]
+    public async Task TransE_GetEntityEmbedding_ReturnsCorrectDimension()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -190,8 +191,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Null(model.GetEntityEmbedding("unknown_entity"));
     }
 
-    [Fact]
-    public void TransE_GetRelationEmbedding_ReturnsCorrectDimension()
+    [Fact(Timeout = 120000)]
+    public async Task TransE_GetRelationEmbedding_ReturnsCorrectDimension()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -204,8 +205,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Null(model.GetRelationEmbedding("UNKNOWN_RELATION"));
     }
 
-    [Fact]
-    public void TransE_ScoreTriple_UnknownEntitiesReturnMaxValue()
+    [Fact(Timeout = 120000)]
+    public async Task TransE_ScoreTriple_UnknownEntitiesReturnMaxValue()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -219,8 +220,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region RotatE Embedding Tests
 
-    [Fact]
-    public void RotatE_TrainAndScore_ProducesValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task RotatE_TrainAndScore_ProducesValidResults()
     {
         var graph = BuildSmallGraph();
         var model = new RotatEEmbedding<double>();
@@ -232,8 +233,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(8, result.TripleCount);
     }
 
-    [Fact]
-    public void RotatE_EntityEmbeddings_HaveComplexDimension()
+    [Fact(Timeout = 120000)]
+    public async Task RotatE_EntityEmbeddings_HaveComplexDimension()
     {
         var graph = BuildSmallGraph();
         var model = new RotatEEmbedding<double>();
@@ -254,8 +255,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region ComplEx Embedding Tests
 
-    [Fact]
-    public void ComplEx_TrainAndScore_ProducesValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task ComplEx_TrainAndScore_ProducesValidResults()
     {
         var graph = BuildSmallGraph();
         var model = new ComplExEmbedding<double>();
@@ -266,8 +267,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(8, result.TripleCount);
     }
 
-    [Fact]
-    public void ComplEx_SemanticScoring_HigherIsBetter()
+    [Fact(Timeout = 120000)]
+    public async Task ComplEx_SemanticScoring_HigherIsBetter()
     {
         var graph = BuildSmallGraph();
         var model = new ComplExEmbedding<double>();
@@ -280,8 +281,8 @@ public class KnowledgeGraphIntegrationTests
             $"Known triple should score higher than random for ComplEx: known={knownScore}, random={randomScore}");
     }
 
-    [Fact]
-    public void ComplEx_EntityEmbeddings_HaveComplexDimension()
+    [Fact(Timeout = 120000)]
+    public async Task ComplEx_EntityEmbeddings_HaveComplexDimension()
     {
         var graph = BuildSmallGraph();
         var model = new ComplExEmbedding<double>();
@@ -297,8 +298,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(40, relEmb.Length); // 2 * 20
     }
 
-    [Fact]
-    public void ComplEx_ScoreTriple_UnknownEntitiesReturnMinValue()
+    [Fact(Timeout = 120000)]
+    public async Task ComplEx_ScoreTriple_UnknownEntitiesReturnMinValue()
     {
         var graph = BuildSmallGraph();
         var model = new ComplExEmbedding<double>();
@@ -313,8 +314,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region DistMult Embedding Tests
 
-    [Fact]
-    public void DistMult_TrainAndScore_ProducesValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task DistMult_TrainAndScore_ProducesValidResults()
     {
         var graph = BuildSmallGraph();
         var model = new DistMultEmbedding<double>();
@@ -334,8 +335,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region TemporalTransE Tests
 
-    [Fact]
-    public void TemporalTransE_TrainAndScoreAtTime_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalTransE_TrainAndScoreAtTime_Works()
     {
         var graph = BuildTemporalGraph();
         var model = new TemporalTransEEmbedding<double>();
@@ -353,8 +354,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.True(!double.IsNaN(trumpScore2019) && !double.IsInfinity(trumpScore2019), "Score should be finite");
     }
 
-    [Fact]
-    public void TemporalTransE_NumTimeBins_ConfigurableViaOptions()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalTransE_NumTimeBins_ConfigurableViaOptions()
     {
         var graph = BuildTemporalGraph();
         var model = new TemporalTransEEmbedding<double>();
@@ -366,8 +367,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(12, model.ResolvedNumTimeBins);
     }
 
-    [Fact]
-    public void TemporalTransE_TrainedViaInterface_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalTransE_TrainedViaInterface_Works()
     {
         var graph = BuildTemporalGraph();
         // Create via interface to verify override chain works (not 'new' keyword)
@@ -382,8 +383,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Temporal Graph Query Tests
 
-    [Fact]
-    public void TemporalGraph_GetEdgesAt_FiltersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalGraph_GetEdgesAt_FiltersCorrectly()
     {
         var graph = BuildTemporalGraph();
 
@@ -398,8 +399,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal("trump", edges2019[0].SourceId);
     }
 
-    [Fact]
-    public void TemporalGraph_GetNeighborsAt_ReturnsCorrectNeighbors()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalGraph_GetNeighborsAt_ReturnsCorrectNeighbors()
     {
         var graph = BuildTemporalGraph();
 
@@ -417,8 +418,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains(neighborsTrump2019, n => n.Id == "usa");
     }
 
-    [Fact]
-    public void GraphEdge_IsValidAt_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GraphEdge_IsValidAt_WorksCorrectly()
     {
         var edge = new GraphEdge<double>("a", "b", "REL")
         {
@@ -440,8 +441,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Link Prediction Tests
 
-    [Fact]
-    public void LinkPredictor_PredictTails_ReturnsRankedResults()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_PredictTails_ReturnsRankedResults()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -468,8 +469,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinkPredictor_PredictHeads_ReturnsRankedResults()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_PredictHeads_ReturnsRankedResults()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -493,8 +494,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinkPredictor_PredictTails_FilterExisting_ExcludesKnownTriples()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_PredictTails_FilterExisting_ExcludesKnownTriples()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -507,8 +508,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.DoesNotContain(predictions, p => p.TailId == "germany");
     }
 
-    [Fact]
-    public void LinkPredictor_EvaluateModel_ReturnsValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_EvaluateModel_ReturnsValidMetrics()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -532,8 +533,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.InRange(eval.HitsAtK[10], 0.0, 1.0);
     }
 
-    [Fact]
-    public void LinkPredictor_EvaluateModel_EmptyTestSet_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_EvaluateModel_EmptyTestSet_ReturnsZero()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();
@@ -547,8 +548,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(0.0, eval.MeanRank);
     }
 
-    [Fact]
-    public void LinkPredictor_WorksWithSemanticModel()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_WorksWithSemanticModel()
     {
         var graph = BuildSmallGraph();
         var model = new DistMultEmbedding<double>();
@@ -570,8 +571,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Leiden Community Detection Tests
 
-    [Fact]
-    public void Leiden_DetectCommunities_FindsStructure()
+    [Fact(Timeout = 120000)]
+    public async Task Leiden_DetectCommunities_FindsStructure()
     {
         var graph = BuildSmallGraph();
         var detector = new LeidenCommunityDetector<double>();
@@ -588,8 +589,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains("germany", result.Communities.Keys);
     }
 
-    [Fact]
-    public void Leiden_HierarchicalPartitions_UseOriginalNodeIds()
+    [Fact(Timeout = 120000)]
+    public async Task Leiden_HierarchicalPartitions_UseOriginalNodeIds()
     {
         var graph = BuildSmallGraph();
         var detector = new LeidenCommunityDetector<double>();
@@ -605,8 +606,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void Leiden_EmptyGraph_ReturnsEmptyResult()
+    [Fact(Timeout = 120000)]
+    public async Task Leiden_EmptyGraph_ReturnsEmptyResult()
     {
         var graph = new KnowledgeGraph<double>();
         var detector = new LeidenCommunityDetector<double>();
@@ -620,8 +621,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Community Summarizer Tests
 
-    [Fact]
-    public void CommunitySummarizer_Summarize_ProducesSummaries()
+    [Fact(Timeout = 120000)]
+    public async Task CommunitySummarizer_Summarize_ProducesSummaries()
     {
         var graph = BuildSmallGraph();
         var detector = new LeidenCommunityDetector<double>();
@@ -639,8 +640,8 @@ public class KnowledgeGraphIntegrationTests
         });
     }
 
-    [Fact]
-    public void CommunitySummarizer_SummarizePartition_SetsCorrectLevel()
+    [Fact(Timeout = 120000)]
+    public async Task CommunitySummarizer_SummarizePartition_SetsCorrectLevel()
     {
         var graph = BuildSmallGraph();
         var partition = new Dictionary<string, int>
@@ -661,8 +662,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region CommunityIndex Tests
 
-    [Fact]
-    public void CommunityIndex_Build_PopulatesAllLevels()
+    [Fact(Timeout = 120000)]
+    public async Task CommunityIndex_Build_PopulatesAllLevels()
     {
         var graph = BuildSmallGraph();
         var detector = new LeidenCommunityDetector<double>();
@@ -683,8 +684,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunityIndex_SearchCommunities_FindsRelevant()
+    [Fact(Timeout = 120000)]
+    public async Task CommunityIndex_SearchCommunities_FindsRelevant()
     {
         var graph = BuildSmallGraph();
         // Set name properties for better search
@@ -707,8 +708,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region EnhancedGraphRAG Tests
 
-    [Fact]
-    public void EnhancedGraphRAG_LocalSearch_ReturnsContext()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_LocalSearch_ReturnsContext()
     {
         var graph = BuildSmallGraph();
         graph.GetNode("einstein")?.SetProperty("name", "Albert Einstein");
@@ -720,8 +721,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.NotEmpty(context);
     }
 
-    [Fact]
-    public void EnhancedGraphRAG_GlobalSearch_RequiresCommunityIndex()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_GlobalSearch_RequiresCommunityIndex()
     {
         var graph = BuildSmallGraph();
         var rag = new EnhancedGraphRAG<double>(graph, new GraphRAGOptions { Mode = GraphRAGMode.Global });
@@ -729,8 +730,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Throws<InvalidOperationException>(() => rag.Retrieve("physics"));
     }
 
-    [Fact]
-    public void EnhancedGraphRAG_GlobalSearch_WithCommunityIndex_Works()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_GlobalSearch_WithCommunityIndex_Works()
     {
         var graph = BuildSmallGraph();
         graph.GetNode("physics")?.SetProperty("name", "Physics");
@@ -745,8 +746,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.NotNull(rag.CommunityStructure);
     }
 
-    [Fact]
-    public void EnhancedGraphRAG_DriftSearch_Works()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_DriftSearch_Works()
     {
         var graph = BuildSmallGraph();
         graph.GetNode("einstein")?.SetProperty("name", "Albert Einstein");
@@ -766,8 +767,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains(context, c => c.StartsWith("[Primer]"));
     }
 
-    [Fact]
-    public void EnhancedGraphRAG_RetrieveNodes_ReturnsNodes()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_RetrieveNodes_ReturnsNodes()
     {
         var graph = BuildSmallGraph();
         graph.GetNode("einstein")?.SetProperty("name", "Albert Einstein");
@@ -781,8 +782,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.All(nodes, n => Assert.NotNull(n.Id));
     }
 
-    [Fact]
-    public void EnhancedGraphRAG_EmptyQuery_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task EnhancedGraphRAG_EmptyQuery_ReturnsEmpty()
     {
         var graph = BuildSmallGraph();
         var rag = new EnhancedGraphRAG<double>(graph);
@@ -796,8 +797,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region KG Construction from Text Tests
 
-    [Fact]
-    public void KGConstructor_ConstructFromText_ExtractsEntities()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_ConstructFromText_ExtractsEntities()
     {
         var constructor = new KGConstructor<double>();
         var graph = constructor.ConstructFromText(
@@ -811,8 +812,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains(nodeIds, id => id.Contains("einstein") || id.Contains("albert"));
     }
 
-    [Fact]
-    public void KGConstructor_ConstructFromText_ExtractsRelations()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_ConstructFromText_ExtractsRelations()
     {
         var constructor = new KGConstructor<double>();
         var graph = constructor.ConstructFromText(
@@ -823,8 +824,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.NotEmpty(edges);
     }
 
-    [Fact]
-    public void KGConstructor_ExtractEntities_HandlesAbbreviations()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_ExtractEntities_HandlesAbbreviations()
     {
         var constructor = new KGConstructor<double>();
         var entities = constructor.ExtractEntities("The NASA and IBM partnership with the U.N. was announced.", 0.3);
@@ -834,8 +835,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains(names, n => n == "NASA" || n == "IBM");
     }
 
-    [Fact]
-    public void KGConstructor_ExtractEntities_HandlesHyphenatedNames()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_ExtractEntities_HandlesHyphenatedNames()
     {
         var constructor = new KGConstructor<double>();
         var entities = constructor.ExtractEntities("Jean-Pierre Serre studied at the Ecole Normale.", 0.3);
@@ -844,8 +845,8 @@ public class KnowledgeGraphIntegrationTests
         Assert.Contains(names, n => n.Contains("Jean-Pierre") || n.Contains("Serre"));
     }
 
-    [Fact]
-    public void KGConstructor_MultipleTexts_AugmentsGraph()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_MultipleTexts_AugmentsGraph()
     {
         var constructor = new KGConstructor<double>();
         var graph = new KnowledgeGraph<double>();
@@ -860,8 +861,8 @@ public class KnowledgeGraphIntegrationTests
             "Second text should add more entities to the graph");
     }
 
-    [Fact]
-    public void KGConstructor_WithEntityResolution_MergesSimilarNames()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_WithEntityResolution_MergesSimilarNames()
     {
         var constructor = new KGConstructor<double>();
         var opts = new KGConstructionOptions
@@ -898,8 +899,8 @@ public class KnowledgeGraphIntegrationTests
             $"With resolution: {einsteinNodes.Count} nodes, without: {einsteinNodesNoRes.Count} nodes");
     }
 
-    [Fact]
-    public void KGConstructor_EmptyText_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task KGConstructor_EmptyText_Throws()
     {
         var constructor = new KGConstructor<double>();
         Assert.Throws<ArgumentException>(() => constructor.ConstructFromText(""));
@@ -910,8 +911,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Embedding Model Consistency Tests
 
-    [Fact]
-    public void AllModels_SameGraph_ProduceConsistentEmbeddingSizes()
+    [Fact(Timeout = 120000)]
+    public async Task AllModels_SameGraph_ProduceConsistentEmbeddingSizes()
     {
         var graph = BuildSmallGraph();
         var opts = SmallTrainingOptions();
@@ -936,8 +937,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllModels_UntrainedModel_ThrowsOnScore()
+    [Fact(Timeout = 120000)]
+    public async Task AllModels_UntrainedModel_ThrowsOnScore()
     {
         var models = new IKnowledgeGraphEmbedding<double>[]
         {
@@ -955,8 +956,8 @@ public class KnowledgeGraphIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllModels_Reproducible_WithSameSeed()
+    [Fact(Timeout = 120000)]
+    public async Task AllModels_Reproducible_WithSameSeed()
     {
         var graph = BuildSmallGraph();
         var opts = SmallTrainingOptions(seed: 123);
@@ -976,8 +977,8 @@ public class KnowledgeGraphIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void Embedding_GraphWithNoEdges_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Embedding_GraphWithNoEdges_Throws()
     {
         var graph = new KnowledgeGraph<double>();
         graph.AddNode(new GraphNode<double>("lonely", "NODE"));
@@ -986,15 +987,15 @@ public class KnowledgeGraphIntegrationTests
         Assert.Throws<InvalidOperationException>(() => model.Train(graph, SmallTrainingOptions()));
     }
 
-    [Fact]
-    public void LinkPredictor_UntrainedModel_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_UntrainedModel_Throws()
     {
         var model = new TransEEmbedding<double>();
         Assert.Throws<InvalidOperationException>(() => new LinkPredictor<double>(model));
     }
 
-    [Fact]
-    public void LinkPredictor_NullGraph_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictor_NullGraph_Throws()
     {
         var graph = BuildSmallGraph();
         var model = new TransEEmbedding<double>();

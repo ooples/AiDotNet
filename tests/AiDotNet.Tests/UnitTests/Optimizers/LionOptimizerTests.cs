@@ -4,13 +4,14 @@ using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Optimizers
 {
     public class LionOptimizerTests
     {
-        [Fact]
-        public void Constructor_WithDefaultOptions_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_InitializesCorrectly()
         {
             // Arrange & Act
             var optimizer = new LionOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -29,8 +30,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.0, options.WeightDecay);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_UsesProvidedOptions()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_UsesProvidedOptions()
         {
             // Arrange
             var customOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -58,8 +59,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, options.WeightDecay);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] > parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithMixedGradients_UpdatesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithMixedGradients_UpdatesCorrectly()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -132,8 +133,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]); // Positive gradient -> decrease
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithWeightDecay_AppliesRegularization()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithWeightDecay_AppliesRegularization()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Matrix_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Matrix_WorksCorrectly()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]); // Negative gradient
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_ConsecutiveCalls_BuildsMomentum()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_ConsecutiveCalls_BuildsMomentum()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -218,8 +219,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotEqual(updated1, updated2);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_SignBasedUpdates_IgnoreGradientMagnitude()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_SignBasedUpdates_IgnoreGradientMagnitude()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -248,8 +249,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact]
-        public void Reset_ClearsMomentumState()
+        [Fact(Timeout = 60000)]
+        public async Task Reset_ClearsMomentumState()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -276,8 +277,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(updatedAfterReset);
         }
 
-        [Fact]
-        public void Serialize_Deserialize_PreservesState()
+        [Fact(Timeout = 60000)]
+        public async Task Serialize_Deserialize_PreservesState()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -318,8 +319,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
-        [Fact]
-        public void UpdateOptions_WithValidOptions_UpdatesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateOptions_WithValidOptions_UpdatesSuccessfully()
         {
             // Arrange
             var initialOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -350,8 +351,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, currentOptions.InitialLearningRate);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
@@ -374,8 +375,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Matrix_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Matrix_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
@@ -408,8 +409,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_DifferentBeta1Values_ProducesDifferentResults()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
             var optionsLowBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -443,8 +444,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedLow[0] > updatedHigh[0]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_DifferentBeta2Values_ProducesDifferentMomentum()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_DifferentBeta2Values_ProducesDifferentMomentum()
         {
             // Arrange
             var optionsLowBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -477,8 +478,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotEqual(updatedLow, updatedHigh);
             Assert.True(updatedLow[0] < updatedHigh[0]);
         }
-        [Fact]
-        public void GetOptions_ReturnsCurrentOptions()
+        [Fact(Timeout = 60000)]
+        public async Task GetOptions_ReturnsCurrentOptions()
         {
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>

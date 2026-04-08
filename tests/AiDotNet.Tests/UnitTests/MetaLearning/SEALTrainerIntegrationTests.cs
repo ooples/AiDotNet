@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
@@ -94,8 +95,8 @@ public class SEALTrainerIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void SEAL_CompletesTraining_WithoutErrors()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_CompletesTraining_WithoutErrors()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -116,8 +117,8 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
-    public void SEAL_MetaTrain_UpdatesParametersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_MetaTrain_UpdatesParametersCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -150,8 +151,8 @@ public class SEALTrainerIntegrationTests
         Assert.True(paramsChanged, "Meta-training should update model parameters");
     }
 
-    [Fact]
-    public void SEAL_WithEntropyRegularization_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_WithEntropyRegularization_CompletesSuccessfully()
     {
         // Arrange - SEAL with entropy regularization for better generalization
         var mockModel = CreateMockModel();
@@ -180,8 +181,8 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsPositiveInfinity(loss), "Loss should not be infinite"));
     }
 
-    [Fact]
-    public void SEAL_WithTemperatureScaling_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_WithTemperatureScaling_CompletesSuccessfully()
     {
         // Arrange - SEAL with temperature scaling
         var mockModel = CreateMockModel();
@@ -210,8 +211,8 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    [Fact]
-    public void SEAL_WithWeightDecay_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_WithWeightDecay_CompletesSuccessfully()
     {
         // Arrange - SEAL with weight decay for regularization
         var mockModel = CreateMockModel();
@@ -239,8 +240,8 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
-    public void SEAL_WithAdaptiveLearningRate_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_WithAdaptiveLearningRate_CompletesSuccessfully()
     {
         // Arrange - SEAL with adaptive inner learning rates
         var mockModel = CreateMockModel();
@@ -269,8 +270,8 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
-    public void SEAL_Adapt_ProducesTaskSpecificModel()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_Adapt_ProducesTaskSpecificModel()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -308,8 +309,8 @@ public class SEALTrainerIntegrationTests
         Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    [Fact]
-    public void SEAL_Evaluate_ProducesValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_Evaluate_ProducesValidMetrics()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -332,8 +333,8 @@ public class SEALTrainerIntegrationTests
         Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
-    [Fact]
-    public void SEAL_LongTraining_TracksLossCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_LongTraining_TracksLossCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -361,8 +362,8 @@ public class SEALTrainerIntegrationTests
         Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void SEAL_WithFirstOrderApproximation_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_WithFirstOrderApproximation_CompletesSuccessfully()
     {
         // Arrange - SEAL with first-order approximation (FOMAML-style)
         var mockModel = CreateMockModel();
@@ -476,8 +477,8 @@ public class SEALTrainerIntegrationTests
         Assert.False(double.IsNaN(loss), $"Loss should not be NaN for mode={mode}");
     }
 
-    [Fact]
-    public void Algorithm_HasCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task Algorithm_HasCorrectName()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -487,8 +488,8 @@ public class SEALTrainerIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.SEAL, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void Algorithm_ExposesCorrectHyperparameters()
+    [Fact(Timeout = 120000)]
+    public async Task Algorithm_ExposesCorrectHyperparameters()
     {
         // Arrange
         var mockModel = CreateMockModel();
@@ -508,8 +509,8 @@ public class SEALTrainerIntegrationTests
         Assert.Equal(8, algorithm.AdaptationSteps);
     }
 
-    [Fact]
-    public void Options_IsValid_ReturnsTrueForValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -518,8 +519,8 @@ public class SEALTrainerIntegrationTests
         Assert.True(options.IsValid());
     }
 
-    [Fact]
-    public void Options_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Options_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var options = CreateDefaultOptions();

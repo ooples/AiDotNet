@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Statistics;
 
@@ -38,8 +39,8 @@ public class ClopperPearsonTests
             $"BetaCDF({x}, {alpha}, {beta}) = {result}, expected {expected}");
     }
 
-    [Fact]
-    public void CalculateBetaCDF_InvalidAlpha_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateBetaCDF_InvalidAlpha_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -48,8 +49,8 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateBetaCDF(0.5, -1.0, 1.0));
     }
 
-    [Fact]
-    public void CalculateBetaCDF_InvalidBeta_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateBetaCDF_InvalidBeta_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -69,8 +70,8 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateBetaCDF(x, alpha, beta));
     }
 
-    [Fact]
-    public void CalculateBetaCDF_ResultAlwaysBetween0And1()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateBetaCDF_ResultAlwaysBetween0And1()
     {
         // Arrange - test various valid inputs
         var testCases = new[]
@@ -132,8 +133,8 @@ public class ClopperPearsonTests
             $"Round-trip failed: p={p} -> x={x} -> p'={pBack}");
     }
 
-    [Fact]
-    public void CalculateInverseBetaCDF_InvalidProbability_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateInverseBetaCDF_InvalidProbability_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -240,8 +241,8 @@ public class ClopperPearsonTests
             $"Lower bound for ({successes}/{trials}) = {lower}, expected {expectedLower}");
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_BoundsContainPointEstimate()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonInterval_BoundsContainPointEstimate()
     {
         // Arrange
         var testCases = new[]
@@ -290,24 +291,24 @@ public class ClopperPearsonTests
             $"Higher confidence ({confidence}) upper bound {upperWide} should be >= {upperNarrow}");
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_NegativeSuccesses_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonInterval_NegativeSuccesses_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             StatisticsHelper<double>.CalculateClopperPearsonInterval(-1, 100, 0.95));
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_SuccessesGreaterThanTrials_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonInterval_SuccessesGreaterThanTrials_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             StatisticsHelper<double>.CalculateClopperPearsonInterval(101, 100, 0.95));
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_ZeroTrials_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonInterval_ZeroTrials_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -350,8 +351,8 @@ public class ClopperPearsonTests
             $"Lower bound for ({successes}/{trials}) = {result}, expected {expected}");
     }
 
-    [Fact]
-    public void CalculateClopperPearsonLowerBound_MatchesIntervalLowerBound()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonLowerBound_MatchesIntervalLowerBound()
     {
         // Two-sided 95% interval uses alpha/2 = 0.025 for lower bound
         // One-sided bound at 97.5% confidence uses alpha = 0.025
@@ -386,8 +387,8 @@ public class ClopperPearsonTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void CalculateBetaCDF_FloatType_ReturnsCorrectResult()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateBetaCDF_FloatType_ReturnsCorrectResult()
     {
         // Act
         var result = StatisticsHelper<float>.CalculateBetaCDF(0.5f, 2.0f, 2.0f);
@@ -396,8 +397,8 @@ public class ClopperPearsonTests
         Assert.True(Math.Abs(result - 0.5f) < 0.001f);
     }
 
-    [Fact]
-    public void CalculateClopperPearsonInterval_FloatType_ReturnsCorrectResult()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateClopperPearsonInterval_FloatType_ReturnsCorrectResult()
     {
         // Act
         var (lower, upper) = StatisticsHelper<float>.CalculateClopperPearsonInterval(50, 100, 0.95f);

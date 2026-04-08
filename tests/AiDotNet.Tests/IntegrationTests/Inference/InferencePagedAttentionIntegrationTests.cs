@@ -4,6 +4,7 @@ using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
@@ -16,8 +17,8 @@ public class InferencePagedAttentionIntegrationTests
 {
     #region BlockManager Basic Allocation Tests
 
-    [Fact]
-    public void BlockManager_InitialState_AllBlocksFree()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_InitialState_AllBlocksFree()
     {
         var config = new BlockManagerConfig { NumBlocks = 10, BlockSize = 16 };
         var manager = new BlockManager<double>(config);
@@ -28,8 +29,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(0.0, manager.MemoryUtilization);
     }
 
-    [Fact]
-    public void BlockManager_AllocateSingle_ReducesFreeCount()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllocateSingle_ReducesFreeCount()
     {
         var config = new BlockManagerConfig { NumBlocks = 5 };
         var manager = new BlockManager<double>(config);
@@ -41,8 +42,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(1, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_AllocateAll_NoMoreFree()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllocateAll_NoMoreFree()
     {
         var config = new BlockManagerConfig { NumBlocks = 3 };
         var manager = new BlockManager<double>(config);
@@ -60,8 +61,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(-1, overflow);
     }
 
-    [Fact]
-    public void BlockManager_AllocateMultiple_AllocatesCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllocateMultiple_AllocatesCorrectCount()
     {
         var config = new BlockManagerConfig { NumBlocks = 10 };
         var manager = new BlockManager<double>(config);
@@ -77,8 +78,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(blocks.Length, blocks.Distinct().Count());
     }
 
-    [Fact]
-    public void BlockManager_AllocateMultiple_InsufficientBlocks_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllocateMultiple_InsufficientBlocks_ReturnsNull()
     {
         var config = new BlockManagerConfig { NumBlocks = 3 };
         var manager = new BlockManager<double>(config);
@@ -93,8 +94,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region BlockManager Free Tests
 
-    [Fact]
-    public void BlockManager_FreeSingle_RestoresFreeCount()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_FreeSingle_RestoresFreeCount()
     {
         var config = new BlockManagerConfig { NumBlocks = 5 };
         var manager = new BlockManager<double>(config);
@@ -107,8 +108,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(0, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_FreeMultiple_RestoresAll()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_FreeMultiple_RestoresAll()
     {
         var config = new BlockManagerConfig { NumBlocks = 10 };
         var manager = new BlockManager<double>(config);
@@ -122,8 +123,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(0, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_FreeUnallocated_NoEffect()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_FreeUnallocated_NoEffect()
     {
         var config = new BlockManagerConfig { NumBlocks = 5 };
         var manager = new BlockManager<double>(config);
@@ -133,8 +134,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(5, manager.FreeBlockCount); // No change
     }
 
-    [Fact]
-    public void BlockManager_AllocateFreeCycle_ReusesBlocks()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllocateFreeCycle_ReusesBlocks()
     {
         var config = new BlockManagerConfig { NumBlocks = 2 };
         var manager = new BlockManager<double>(config);
@@ -158,8 +159,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region BlockManager Memory Utilization Tests
 
-    [Fact]
-    public void BlockManager_MemoryUtilization_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_MemoryUtilization_CalculatesCorrectly()
     {
         var config = new BlockManagerConfig { NumBlocks = 10 };
         var manager = new BlockManager<double>(config);
@@ -173,8 +174,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(1.0, manager.MemoryUtilization, 1e-6);
     }
 
-    [Fact]
-    public void BlockManager_Config_BytesPerBlock_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_Config_BytesPerBlock_GoldenReference()
     {
         var config = new BlockManagerConfig
         {
@@ -189,8 +190,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(8192, config.BytesPerBlock);
     }
 
-    [Fact]
-    public void BlockManagerConfig_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManagerConfig_DefaultValues()
     {
         var config = new BlockManagerConfig();
 
@@ -206,8 +207,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region SpeculativeDecodingConfig Tests
 
-    [Fact]
-    public void SpeculativeDecodingConfig_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingConfig_DefaultValues()
     {
         var config = new SpeculativeDecodingConfig<double>();
 
@@ -219,8 +220,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.False(config.AdaptiveDraftLength);
     }
 
-    [Fact]
-    public void SpeculativeDecodingConfig_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingConfig_SetProperties()
     {
         var config = new SpeculativeDecodingConfig<double>
         {
@@ -240,8 +241,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.True(config.AdaptiveDraftLength);
     }
 
-    [Fact]
-    public void SpeculativeDecodingConfig_Float_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingConfig_Float_DefaultValues()
     {
         var config = new SpeculativeDecodingConfig<float>();
 
@@ -253,8 +254,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region SpeculativeDecodingStats Tests
 
-    [Fact]
-    public void SpeculativeDecodingStats_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingStats_DefaultValues()
     {
         var stats = new SpeculativeDecodingStats();
 
@@ -267,8 +268,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(0.0, stats.SpeedupEstimate);
     }
 
-    [Fact]
-    public void SpeculativeDecodingStats_SetAndVerify()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingStats_SetAndVerify()
     {
         var stats = new SpeculativeDecodingStats
         {
@@ -290,8 +291,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(2.5, stats.SpeedupEstimate);
     }
 
-    [Fact]
-    public void SpeculativeDecodingStats_AcceptanceRate_Consistency()
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecodingStats_AcceptanceRate_Consistency()
     {
         var stats = new SpeculativeDecodingStats
         {
@@ -309,8 +310,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region NGramDraftModel Tests
 
-    [Fact]
-    public void NGramDraftModel_Constructs_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_Constructs_WithDefaults()
     {
         var model = new NGramDraftModel<double>();
 
@@ -318,8 +319,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(50000, model.VocabSize);
     }
 
-    [Fact]
-    public void NGramDraftModel_Constructs_WithCustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_Constructs_WithCustomParams()
     {
         var model = new NGramDraftModel<double>(ngramSize: 4, vocabSize: 1000, seed: 42);
 
@@ -327,8 +328,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(1000, model.VocabSize);
     }
 
-    [Fact]
-    public void NGramDraftModel_Train_LearnsCounts()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_Train_LearnsCounts()
     {
         var model = new NGramDraftModel<double>(ngramSize: 2, vocabSize: 10, seed: 42);
 
@@ -351,8 +352,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(3, result.Tokens.Length);
     }
 
-    [Fact]
-    public void NGramDraftModel_GenerateDraft_UntainedModel_StillGenerates()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_GenerateDraft_UntainedModel_StillGenerates()
     {
         var model = new NGramDraftModel<double>(ngramSize: 2, vocabSize: 5, seed: 42);
         // Don't train - should still produce tokens (random fallback)
@@ -364,8 +365,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(3, result.NumTokens);
     }
 
-    [Fact]
-    public void NGramDraftModel_Deterministic_SameSeedSameOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_Deterministic_SameSeedSameOutput()
     {
         var corpus = new[]
         {
@@ -388,8 +389,8 @@ public class InferencePagedAttentionIntegrationTests
         }
     }
 
-    [Fact]
-    public void NGramDraftModel_DraftResult_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task NGramDraftModel_DraftResult_Properties()
     {
         var result = new DraftResult<double>();
 
@@ -401,8 +402,8 @@ public class InferencePagedAttentionIntegrationTests
 
     #region End-to-End BlockManager Tests
 
-    [Fact]
-    public void BlockManager_SimulateMultipleSequences()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_SimulateMultipleSequences()
     {
         var config = new BlockManagerConfig { NumBlocks = 20, BlockSize = 16 };
         var manager = new BlockManager<double>(config);
@@ -435,8 +436,8 @@ public class InferencePagedAttentionIntegrationTests
         Assert.Equal(0, manager.AllocatedBlockCount);
     }
 
-    [Fact]
-    public void BlockManager_AllBlockIdsUnique()
+    [Fact(Timeout = 120000)]
+    public async Task BlockManager_AllBlockIdsUnique()
     {
         var config = new BlockManagerConfig { NumBlocks = 100 };
         var manager = new BlockManager<double>(config);

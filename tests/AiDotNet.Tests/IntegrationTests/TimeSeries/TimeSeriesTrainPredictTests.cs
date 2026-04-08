@@ -3,6 +3,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 
@@ -127,8 +128,8 @@ public class TimeSeriesTrainPredictTests
 
     #region ARModel Tests
 
-    [Fact]
-    public void ARModel_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_TrainAndPredict_ProducesFinitePredictions()
     {
         // AR requires stationary data — use mean-reverting sinusoidal
         var (x, y) = CreateStationaryData(100);
@@ -141,8 +142,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARModel.Predict");
     }
 
-    [Fact]
-    public void ARModel_TrainAndPredict_NotAllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_TrainAndPredict_NotAllZeros()
     {
         // Regression test: before fix, Predict(Matrix) used input column (time indices)
         // instead of training data, producing NaN or all-zero predictions
@@ -165,8 +166,8 @@ public class TimeSeriesTrainPredictTests
         Assert.True(hasNonZero, "ARModel predictions are all zero after training on non-zero data");
     }
 
-    [Fact]
-    public void ARModel_Forecast_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARModel<double>(new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 });
@@ -183,8 +184,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(forecasts, "ARModel.Forecast");
     }
 
-    [Fact]
-    public void ARModel_EvaluateModel_ProducesFiniteMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARModel<double>(new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 });
@@ -196,8 +197,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteMetrics(metrics);
     }
 
-    [Fact]
-    public void ARModel_PredictSingle_ProducesFiniteResult()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_PredictSingle_ProducesFiniteResult()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARModel<double>(new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 });
@@ -213,8 +214,8 @@ public class TimeSeriesTrainPredictTests
         Assert.False(double.IsInfinity(prediction), "PredictSingle returned Infinity");
     }
 
-    [Fact]
-    public void ARModel_Clone_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Clone_PreservesTrainedState()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARModel<double>(new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 });
@@ -235,8 +236,8 @@ public class TimeSeriesTrainPredictTests
 
     #region MAModel Tests
 
-    [Fact]
-    public void MAModel_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
@@ -248,8 +249,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "MAModel.Predict");
     }
 
-    [Fact]
-    public void MAModel_Forecast_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
@@ -268,8 +269,8 @@ public class TimeSeriesTrainPredictTests
 
     #region ARMAModel Tests
 
-    [Fact]
-    public void ARMAModel_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARMAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARMAModel<double>(new ARMAOptions<double> { AROrder = 2, MAOrder = 1 });
@@ -281,8 +282,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARMAModel.Predict");
     }
 
-    [Fact]
-    public void ARMAModel_Forecast_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task ARMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new ARMAModel<double>(new ARMAOptions<double> { AROrder = 2, MAOrder = 1 });
@@ -301,8 +302,8 @@ public class TimeSeriesTrainPredictTests
 
     #region ARIMAModel Tests
 
-    [Fact]
-    public void ARIMAModel_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
         var model = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0, MaxIterations = 50 });
@@ -314,8 +315,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARIMAModel.Predict");
     }
 
-    [Fact]
-    public void ARIMAModel_TrainAndPredict_UsesStoredState()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_TrainAndPredict_UsesStoredState()
     {
         // Regression test: before fix, ARIMA Predict(Matrix) started from zeros.
         // ARIMA Predict(Matrix) works in the differenced domain where predictions
@@ -342,8 +343,8 @@ public class TimeSeriesTrainPredictTests
             $"converged={convergedValue:F6}). This suggests stored training state is not being used.");
     }
 
-    [Fact]
-    public void ARIMAModel_Forecast_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
         var model = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0, MaxIterations = 50 });
@@ -358,8 +359,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(forecasts, "ARIMAModel.Forecast");
     }
 
-    [Fact]
-    public void ARIMAModel_EvaluateModel_ProducesFiniteMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
         var model = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0, MaxIterations = 50 });
@@ -381,8 +382,8 @@ public class TimeSeriesTrainPredictTests
     /// This is distinct from SARIMAModel_PureARNoMA_DoesNotCrash which tests
     /// both Q=0 AND seasonal Q=0 with AR order 2.
     /// </summary>
-    [Fact]
-    public void SARIMAModel_TrainAndPredict_PureAR_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_TrainAndPredict_PureAR_ProducesFinitePredictions()
     {
         // Test SARIMA with Q=0 (no MA components) — previously crashed
         // with ArgumentOutOfRangeException because lastErrors had length 0
@@ -402,8 +403,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "SARIMAModel.Predict(Q=0)");
     }
 
-    [Fact]
-    public void SARIMAModel_TrainAndPredict_WithMA_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_TrainAndPredict_WithMA_ProducesFinitePredictions()
     {
         // Test SARIMA with MA components (Q > 0)
         var (x, y) = CreateSeasonalData(120, period: 12);
@@ -422,8 +423,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "SARIMAModel.Predict(Q=1)");
     }
 
-    [Fact]
-    public void SARIMAModel_TrainAndPredict_UsesStoredState()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_TrainAndPredict_UsesStoredState()
     {
         // SARIMA Predict(Matrix) works in the differenced domain where predictions
         // converge. Verify stored training state via transient behavior.
@@ -450,8 +451,8 @@ public class TimeSeriesTrainPredictTests
             $"converged={convergedValue:F6}). This suggests stored training state is not being used.");
     }
 
-    [Fact]
-    public void SARIMAModel_Forecast_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateSeasonalData(120, period: 12);
         var model = new SARIMAModel<double>(new SARIMAOptions<double>
@@ -476,8 +477,8 @@ public class TimeSeriesTrainPredictTests
 
     #region ExponentialSmoothingModel Tests
 
-    [Fact]
-    public void ExponentialSmoothing_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateLinearTrendData(100, slope: 2.0);
         var model = new ExponentialSmoothingModel<double>(new ExponentialSmoothingOptions<double>
@@ -495,8 +496,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ExponentialSmoothing.Predict");
     }
 
-    [Fact]
-    public void ExponentialSmoothing_Forecast_MonotonicallyIncreasingForUpwardTrend()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_Forecast_MonotonicallyIncreasingForUpwardTrend()
     {
         var (x, y) = CreateLinearTrendData(100, slope: 2.0, intercept: 10.0);
         var model = new ExponentialSmoothingModel<double>(new ExponentialSmoothingOptions<double>
@@ -525,8 +526,8 @@ public class TimeSeriesTrainPredictTests
 
     #region StateSpaceModel Tests
 
-    [Fact]
-    public void StateSpaceModel_TrainAndPredict_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task StateSpaceModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(60);
         var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>());
@@ -542,8 +543,8 @@ public class TimeSeriesTrainPredictTests
 
     #region Serialization Round-trip Tests
 
-    [Fact]
-    public void ARModel_SerializeAndDeserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_SerializeAndDeserialize_PreservesPredictions()
     {
         // Use stationary data to avoid coefficient instability
         var (x, y) = CreateStationaryData(100);
@@ -575,8 +576,8 @@ public class TimeSeriesTrainPredictTests
 
     #region Cross-Model Consistency Tests
 
-    [Fact]
-    public void ARIMA_And_ExponentialSmoothing_ForecastProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMA_And_ExponentialSmoothing_ForecastProducesFiniteResults()
     {
         // Verify that ARIMA and ExponentialSmoothing both produce finite forecasts
         // on trend data without asserting specific value thresholds
@@ -609,8 +610,8 @@ public class TimeSeriesTrainPredictTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void ARModel_DummyFeatureMatrix_StillProducesValidPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_DummyFeatureMatrix_StillProducesValidPredictions()
     {
         // This is the exact scenario that caused #878: training data has meaningful y values
         // but the feature matrix x is just zeros (dummy features).
@@ -645,8 +646,8 @@ public class TimeSeriesTrainPredictTests
             "This indicates Predict is using the dummy feature matrix instead of stored training data.");
     }
 
-    [Fact]
-    public void ARModel_Forecast_AfterPredictMatrix_StillWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Forecast_AfterPredictMatrix_StillWorks()
     {
         // Uses stationary data
         var (x, y) = CreateStationaryData(100);
@@ -671,8 +672,8 @@ public class TimeSeriesTrainPredictTests
     /// This is distinct from SARIMAModel_TrainAndPredict_PureAR which tests
     /// Q=0 with AR order 1 and seasonal AR order 1.
     /// </summary>
-    [Fact]
-    public void SARIMAModel_PureARNoMA_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_PureARNoMA_DoesNotCrash()
     {
         // Regression test: SARIMA with Q=0 and seasonal Q=0 crashed
         // because lastErrors vector had length 0 and code tried to access index 0
@@ -697,8 +698,8 @@ public class TimeSeriesTrainPredictTests
 
     #region Additional Coverage Tests
 
-    [Fact]
-    public void MAModel_EvaluateModel_ProducesFiniteMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_EvaluateModel_ProducesFiniteMetrics()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
@@ -710,8 +711,8 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteMetrics(metrics);
     }
 
-    [Fact]
-    public void MAModel_Clone_PreservesTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_Clone_PreservesTrainedState()
     {
         var (x, y) = CreateStationaryData(100);
         var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
@@ -728,8 +729,8 @@ public class TimeSeriesTrainPredictTests
         }
     }
 
-    [Fact]
-    public void ARIMAModel_SerializeAndDeserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_SerializeAndDeserialize_PreservesPredictions()
     {
         var (x, y) = CreateTrendPlusNoiseData(100);
         var model = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0, MaxIterations = 50 });

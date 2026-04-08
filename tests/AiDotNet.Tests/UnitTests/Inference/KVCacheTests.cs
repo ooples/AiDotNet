@@ -1,13 +1,14 @@
 using AiDotNet.Inference;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
 public class KVCacheTests
 {
-    [Fact]
-    public void KVCache_AppendAcrossLayers_MaintainsIndependentLengths()
+    [Fact(Timeout = 60000)]
+    public async Task KVCache_AppendAcrossLayers_MaintainsIndependentLengths()
     {
         var config = new KVCacheConfig
         {
@@ -57,8 +58,8 @@ public class KVCacheTests
         Assert.Equal(4f, layer0KeysAfter[new[] { 0, 0, 1, 1 }]);
     }
 
-    [Fact]
-    public void KVCache_Float16Storage_RoundTripsValues()
+    [Fact(Timeout = 60000)]
+    public async Task KVCache_Float16Storage_RoundTripsValues()
     {
         var config = new KVCacheConfig
         {
@@ -92,8 +93,8 @@ public class KVCacheTests
         Assert.Equal(8f, cachedValues[new[] { 0, 0, 1, 1 }]);
     }
 
-    [Fact]
-    public void KVCache_Int8Storage_RoundTripsApproximately()
+    [Fact(Timeout = 60000)]
+    public async Task KVCache_Int8Storage_RoundTripsApproximately()
     {
         var config = new KVCacheConfig
         {

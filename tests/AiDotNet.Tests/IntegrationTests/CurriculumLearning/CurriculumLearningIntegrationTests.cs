@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.CurriculumLearning;
 
@@ -95,8 +96,8 @@ public class CurriculumLearningIntegrationTests
 
     #region LinearScheduler Tests
 
-    [Fact]
-    public void LinearScheduler_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_Constructor_InitializesCorrectly()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 100);
 
@@ -106,8 +107,8 @@ public class CurriculumLearningIntegrationTests
         Assert.False(scheduler.IsComplete);
     }
 
-    [Fact]
-    public void LinearScheduler_GetDataFraction_IncreasesLinearly()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_GetDataFraction_IncreasesLinearly()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 10);
 
@@ -126,8 +127,8 @@ public class CurriculumLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearScheduler_GetCurrentIndices_ReturnsCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_GetCurrentIndices_ReturnsCorrectCount()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 10, minFraction: 0.1, maxFraction: 1.0);
         var sortedIndices = Enumerable.Range(0, 100).ToArray();
@@ -139,8 +140,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(indices.Length <= 100);
     }
 
-    [Fact]
-    public void LinearScheduler_Reset_ResetsToInitialState()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_Reset_ResetsToInitialState()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 10);
 
@@ -156,8 +157,8 @@ public class CurriculumLearningIntegrationTests
         Assert.False(scheduler.IsComplete);
     }
 
-    [Fact]
-    public void LinearScheduler_GetStatistics_ReturnsValidDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_GetStatistics_ReturnsValidDictionary()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 10);
 
@@ -171,8 +172,8 @@ public class CurriculumLearningIntegrationTests
 
     #region SelfPacedScheduler Tests
 
-    [Fact]
-    public void SelfPacedScheduler_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedScheduler_Constructor_InitializesCorrectly()
     {
         var scheduler = new SelfPacedScheduler<double>(totalEpochs: 100, initialLambda: 0.1, lambdaGrowthRate: 1.1);
 
@@ -181,8 +182,8 @@ public class CurriculumLearningIntegrationTests
         Assert.Equal("SelfPaced_Hard", scheduler.Name);
     }
 
-    [Fact]
-    public void SelfPacedScheduler_ComputeSampleWeights_ReturnsValidWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedScheduler_ComputeSampleWeights_ReturnsValidWeights()
     {
         var scheduler = new SelfPacedScheduler<double>(totalEpochs: 100, initialLambda: 0.5);
         var losses = new Vector<double>(10);
@@ -203,8 +204,8 @@ public class CurriculumLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void SelfPacedScheduler_EasySamplesGetHigherWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedScheduler_EasySamplesGetHigherWeights()
     {
         var scheduler = new SelfPacedScheduler<double>(totalEpochs: 100, initialLambda: 0.3);
         var losses = new Vector<double>(10);
@@ -221,8 +222,8 @@ public class CurriculumLearningIntegrationTests
             $"Easy sample weight {weights[0]} should be >= hard sample weight {weights[9]}");
     }
 
-    [Fact]
-    public void SelfPacedScheduler_PaceParameterCanBeModified()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedScheduler_PaceParameterCanBeModified()
     {
         var scheduler = new SelfPacedScheduler<double>(totalEpochs: 100, initialLambda: 0.1);
 
@@ -235,8 +236,8 @@ public class CurriculumLearningIntegrationTests
 
     #region CompetenceBasedScheduler Tests
 
-    [Fact]
-    public void CompetenceBasedScheduler_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedScheduler_Constructor_InitializesCorrectly()
     {
         var scheduler = new CompetenceBasedScheduler<double>(totalEpochs: 100, competenceThreshold: 0.9);
 
@@ -245,8 +246,8 @@ public class CurriculumLearningIntegrationTests
         Assert.Equal("CompetenceBased_Combined", scheduler.Name);
     }
 
-    [Fact]
-    public void CompetenceBasedScheduler_UpdateCompetence_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedScheduler_UpdateCompetence_UpdatesCorrectly()
     {
         // Note: Must provide explicit competenceThreshold since generic T? default is 0.0 for value types
         var scheduler = new CompetenceBasedScheduler<double>(totalEpochs: 100, competenceThreshold: 0.9);
@@ -259,16 +260,16 @@ public class CurriculumLearningIntegrationTests
         Assert.True(scheduler.CurrentCompetence >= 0);
     }
 
-    [Fact]
-    public void CompetenceBasedScheduler_HasMasteredCurrentContent_ReturnsFalseInitially()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedScheduler_HasMasteredCurrentContent_ReturnsFalseInitially()
     {
         var scheduler = new CompetenceBasedScheduler<double>(totalEpochs: 100, competenceThreshold: 0.9);
 
         Assert.False(scheduler.HasMasteredCurrentContent());
     }
 
-    [Fact]
-    public void CompetenceBasedScheduler_CompetenceThreshold_CanBeModified()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedScheduler_CompetenceThreshold_CanBeModified()
     {
         // Note: Must provide explicit competenceThreshold since generic T? default is 0.0 for value types
         var scheduler = new CompetenceBasedScheduler<double>(totalEpochs: 100, competenceThreshold: 0.9);
@@ -282,8 +283,8 @@ public class CurriculumLearningIntegrationTests
 
     #region LossBasedDifficultyEstimator Tests
 
-    [Fact]
-    public void LossBasedDifficultyEstimator_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossBasedDifficultyEstimator_Constructor_InitializesCorrectly()
     {
         var estimator = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
 
@@ -292,8 +293,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(estimator.RequiresModel);
     }
 
-    [Fact]
-    public void LossBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LossBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
     {
         var estimator = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var model = CreateMockModel();
@@ -305,8 +306,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(difficulty >= 0, $"Difficulty {difficulty} should be non-negative");
     }
 
-    [Fact]
-    public void LossBasedDifficultyEstimator_GetSortedIndices_ReturnsSortedArray()
+    [Fact(Timeout = 120000)]
+    public async Task LossBasedDifficultyEstimator_GetSortedIndices_ReturnsSortedArray()
     {
         var estimator = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var difficulties = CreateDifficultyScores(50);
@@ -322,8 +323,8 @@ public class CurriculumLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void LossBasedDifficultyEstimator_Reset_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task LossBasedDifficultyEstimator_Reset_DoesNotThrow()
     {
         var estimator = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
 
@@ -336,8 +337,8 @@ public class CurriculumLearningIntegrationTests
 
     #region ConfidenceBasedDifficultyEstimator Tests
 
-    [Fact]
-    public void ConfidenceBasedDifficultyEstimator_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ConfidenceBasedDifficultyEstimator_Constructor_InitializesCorrectly()
     {
         var estimator = new ConfidenceBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
 
@@ -347,8 +348,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(estimator.RequiresModel);
     }
 
-    [Fact]
-    public void ConfidenceBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ConfidenceBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
     {
         var estimator = new ConfidenceBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var model = CreateMockModel();
@@ -360,8 +361,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(difficulty >= 0, $"Difficulty {difficulty} should be non-negative");
     }
 
-    [Fact]
-    public void ConfidenceBasedDifficultyEstimator_HighConfidence_LowDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task ConfidenceBasedDifficultyEstimator_HighConfidence_LowDifficulty()
     {
         // Confidence-based: low confidence = high difficulty
         // High confidence = low difficulty
@@ -375,8 +376,8 @@ public class CurriculumLearningIntegrationTests
 
     #region TransferBasedDifficultyEstimator Tests
 
-    [Fact]
-    public void TransferBasedDifficultyEstimator_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TransferBasedDifficultyEstimator_Constructor_InitializesCorrectly()
     {
         var teacherModel = CreateMockModel();
         var estimator = new TransferBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>(
@@ -388,8 +389,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(estimator.RequiresModel);
     }
 
-    [Fact]
-    public void TransferBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TransferBasedDifficultyEstimator_EstimateDifficulty_ReturnsNonNegative()
     {
         var teacherModel = CreateMockModel();
         var estimator = new TransferBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>(
@@ -408,8 +409,8 @@ public class CurriculumLearningIntegrationTests
 
     #region ExpertDefinedDifficultyEstimator Tests
 
-    [Fact]
-    public void ExpertDefinedDifficultyEstimator_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ExpertDefinedDifficultyEstimator_Constructor_InitializesCorrectly()
     {
         // ExpertDefinedDifficultyEstimator takes a Vector<T> of pre-computed difficulties
         var difficulties = new Vector<double>(new[] { 0.1, 0.5, 0.9 });
@@ -420,8 +421,8 @@ public class CurriculumLearningIntegrationTests
         Assert.False(estimator.RequiresModel); // Expert-defined doesn't need model
     }
 
-    [Fact]
-    public void ExpertDefinedDifficultyEstimator_ReturnsDefinedDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task ExpertDefinedDifficultyEstimator_ReturnsDefinedDifficulty()
     {
         // Vector of pre-computed difficulties: [0.2, 0.7, 0.5]
         var difficulties = new Vector<double>(new[] { 0.2, 0.7, 0.5 });
@@ -440,8 +441,8 @@ public class CurriculumLearningIntegrationTests
 
     #region EnsembleDifficultyEstimator Tests
 
-    [Fact]
-    public void EnsembleDifficultyEstimator_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleDifficultyEstimator_Constructor_InitializesCorrectly()
     {
         var estimator1 = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var estimator2 = new ConfidenceBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
@@ -457,8 +458,8 @@ public class CurriculumLearningIntegrationTests
         Assert.Equal(2, ensemble.Estimators.Count);
     }
 
-    [Fact]
-    public void EnsembleDifficultyEstimator_EstimateDifficulty_CombinesEstimates()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleDifficultyEstimator_EstimateDifficulty_CombinesEstimates()
     {
         var estimator1 = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var estimator2 = new ConfidenceBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
@@ -476,8 +477,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(difficulty >= 0, "Combined difficulty should be non-negative");
     }
 
-    [Fact]
-    public void EnsembleDifficultyEstimator_AddEstimator_IncreasesCount()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleDifficultyEstimator_AddEstimator_IncreasesCount()
     {
         var estimator1 = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
 
@@ -495,8 +496,8 @@ public class CurriculumLearningIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void CurriculumLearning_LinearScheduler_With_LossEstimator_Integration()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearning_LinearScheduler_With_LossEstimator_Integration()
     {
         // Test complete curriculum learning workflow
         var scheduler = new LinearScheduler<double>(totalEpochs: 10, minFraction: 0.2, maxFraction: 1.0);
@@ -527,8 +528,8 @@ public class CurriculumLearningIntegrationTests
         Assert.True(totalSamplesUsed >= 80, $"Should use most samples by end, used {totalSamplesUsed}");
     }
 
-    [Fact]
-    public void CurriculumLearning_SelfPacedScheduler_AdaptsBasedOnLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearning_SelfPacedScheduler_AdaptsBasedOnLoss()
     {
         // Note: Must provide explicit maxLambda since generic T? default is 0.0 for value types
         // Without it, lambda gets capped to 0.0 after the first StepEpoch
@@ -564,8 +565,8 @@ public class CurriculumLearningIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void LinearScheduler_ZeroTotalEpochs_ThrowsOrHandles()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_ZeroTotalEpochs_ThrowsOrHandles()
     {
         // Zero epochs should either throw or handle gracefully
         var exception = Record.Exception(() => new LinearScheduler<double>(totalEpochs: 0));
@@ -578,8 +579,8 @@ public class CurriculumLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearScheduler_NegativeTotalEpochs_ThrowsOrHandles()
+    [Fact(Timeout = 120000)]
+    public async Task LinearScheduler_NegativeTotalEpochs_ThrowsOrHandles()
     {
         var exception = Record.Exception(() => new LinearScheduler<double>(totalEpochs: -1));
 
@@ -591,8 +592,8 @@ public class CurriculumLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void Scheduler_EmptySortedIndices_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Scheduler_EmptySortedIndices_HandlesGracefully()
     {
         var scheduler = new LinearScheduler<double>(totalEpochs: 10);
         var emptyIndices = Array.Empty<int>();
@@ -603,8 +604,8 @@ public class CurriculumLearningIntegrationTests
         Assert.Empty(indices);
     }
 
-    [Fact]
-    public void DifficultyEstimator_EmptyDifficulties_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task DifficultyEstimator_EmptyDifficulties_HandlesGracefully()
     {
         var estimator = new LossBasedDifficultyEstimator<double, Tensor<double>, Tensor<double>>();
         var emptyDifficulties = new Vector<double>(0);
@@ -615,8 +616,8 @@ public class CurriculumLearningIntegrationTests
         Assert.Empty(sortedIndices);
     }
 
-    [Fact]
-    public void AllSchedulers_Reset_WorksMultipleTimes()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_Reset_WorksMultipleTimes()
     {
         // Note: Must provide explicit values for optional T? parameters since generic defaults are 0.0 for value types
         var schedulers = new ICurriculumScheduler<double>[]

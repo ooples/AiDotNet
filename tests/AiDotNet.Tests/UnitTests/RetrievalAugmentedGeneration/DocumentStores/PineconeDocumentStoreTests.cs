@@ -6,6 +6,7 @@ using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 {
@@ -13,8 +14,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidIndexName_CreatesStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidIndexName_CreatesStore()
         {
             // Arrange & Act
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithCustomCapacity_CreatesStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomCapacity_CreatesStore()
         {
             // Arrange & Act
             var store = new PineconeDocumentStore<float>("TestIndex", initialCapacity: 5000);
@@ -35,40 +36,40 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithEmptyIndexName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyIndexName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new PineconeDocumentStore<float>(""));
         }
 
-        [Fact]
-        public void Constructor_WithNullIndexName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullIndexName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new PineconeDocumentStore<float>(null!));
         }
 
-        [Fact]
-        public void Constructor_WithWhitespaceIndexName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithWhitespaceIndexName_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new PineconeDocumentStore<float>("   "));
         }
 
-        [Fact]
-        public void Constructor_WithZeroCapacity_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroCapacity_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new PineconeDocumentStore<float>("TestIndex", initialCapacity: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeCapacity_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeCapacity_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Add Tests
 
-        [Fact]
-        public void Add_FirstDocument_SetsDimension()
+        [Fact(Timeout = 60000)]
+        public async Task Add_FirstDocument_SetsDimension()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -94,8 +95,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(384, store.VectorDimension);
         }
 
-        [Fact]
-        public void Add_WithValidDocument_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithValidDocument_IncreasesCount()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, store.DocumentCount);
         }
 
-        [Fact]
-        public void Add_WithNullDocument_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNullDocument_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -118,8 +119,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.Add(null!));
         }
 
-        [Fact]
-        public void Add_WithMismatchedDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithMismatchedDimension_ThrowsArgumentException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -133,8 +134,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains("dimension mismatch", exception.Message.ToLower());
         }
 
-        [Fact]
-        public void Add_WithDuplicateId_UpdatesDocument()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithDuplicateId_UpdatesDocument()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -156,8 +157,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region AddBatch Tests
 
-        [Fact]
-        public void AddBatch_WithValidDocuments_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithValidDocuments_IncreasesCount()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -175,8 +176,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, store.DocumentCount);
         }
 
-        [Fact]
-        public void AddBatch_FirstBatch_SetsDimension()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_FirstBatch_SetsDimension()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -194,8 +195,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(384, store.VectorDimension);
         }
 
-        [Fact]
-        public void AddBatch_WithNullCollection_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithNullCollection_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.AddBatch(null!));
         }
 
-        [Fact]
-        public void AddBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -214,8 +215,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.AddBatch(new List<VectorDocument<float>>()));
         }
 
-        [Fact]
-        public void AddBatch_WithMismatchedDimensionsInBatch_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithMismatchedDimensionsInBatch_ThrowsArgumentException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => store.AddBatch(docs));
         }
 
-        [Fact]
-        public void AddBatch_WithLargeNumberOfDocuments_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithLargeNumberOfDocuments_Succeeds()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex", initialCapacity: 10000);
@@ -249,8 +250,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilar Tests
 
-        [Fact]
-        public void GetSimilar_WithMatchingDocuments_ReturnsTopK()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithMatchingDocuments_ReturnsTopK()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void GetSimilar_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -286,8 +287,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -296,8 +297,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => store.GetSimilar(null!, topK: 5));
         }
 
-        [Fact]
-        public void GetSimilar_OrdersByRelevanceDescending()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_OrdersByRelevanceDescending()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -327,8 +328,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilarWithFilters Tests
 
-        [Fact]
-        public void GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -352,8 +353,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void GetSimilarWithFilters_WithNoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilters_WithNoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -375,8 +376,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetById Tests
 
-        [Fact]
-        public void GetById_WithExistingDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithExistingDocument_ReturnsDocument()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -392,8 +393,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Test content", result.Content);
         }
 
-        [Fact]
-        public void GetById_WithNonExistingDocument_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithNonExistingDocument_ReturnsNull()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -409,8 +410,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Remove Tests
 
-        [Fact]
-        public void Remove_WithExistingDocument_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithExistingDocument_ReturnsTrue()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -425,8 +426,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.DocumentCount);
         }
 
-        [Fact]
-        public void Remove_LastDocument_ResetsDimension()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_LastDocument_ResetsDimension()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllDocuments()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -468,8 +469,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, store.VectorDimension);
         }
 
-        [Fact]
-        public void Clear_AllowsNewDimensionAfterClear()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_AllowsNewDimensionAfterClear()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -488,8 +489,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetAll Tests
 
-        [Fact]
-        public void GetAll_WithDocuments_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithDocuments_ReturnsAllDocuments()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");
@@ -510,8 +511,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains(results, d => d.Id == "doc3");
         }
 
-        [Fact]
-        public void GetAll_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             var store = new PineconeDocumentStore<float>("TestIndex");

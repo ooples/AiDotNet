@@ -1,5 +1,6 @@
 using AiDotNet.Serving.ContinuousBatching;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Serving;
 
@@ -17,57 +18,57 @@ public class ServingDeepMathIntegrationTests
     // BatchSchedulerConfig: Defaults
     // ============================
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_MaxBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_MaxBatchSize()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(8, config.MaxBatchSize);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_MaxCacheSlots()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_MaxCacheSlots()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(256, config.MaxCacheSlots);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_MaxMemoryBytes()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_MaxMemoryBytes()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(8L * 1024 * 1024 * 1024, config.MaxMemoryBytes); // 8GB
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_AllowPreemption()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_AllowPreemption()
     {
         var config = new BatchSchedulerConfig();
         Assert.True(config.AllowPreemption);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_PolicyPriority()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_PolicyPriority()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(SchedulingPolicy.Priority, config.Policy);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_NumHeads()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_NumHeads()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(32, config.NumHeads);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_HeadDimension()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_HeadDimension()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(128, config.HeadDimension);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_Defaults_NumLayers()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_Defaults_NumLayers()
     {
         var config = new BatchSchedulerConfig();
         Assert.Equal(32, config.NumLayers);
@@ -77,8 +78,8 @@ public class ServingDeepMathIntegrationTests
     // BatchSchedulerConfig: ForModel Factory
     // ============================
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_Llama7B()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_Llama7B()
     {
         var config = BatchSchedulerConfig.ForModel("llama-7b");
         Assert.Equal(8, config.MaxBatchSize);
@@ -88,8 +89,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(4L * 1024 * 1024 * 1024, config.MaxMemoryBytes);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_Llama13B()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_Llama13B()
     {
         var config = BatchSchedulerConfig.ForModel("llama-13b");
         Assert.Equal(8, config.MaxBatchSize);
@@ -99,8 +100,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(8L * 1024 * 1024 * 1024, config.MaxMemoryBytes);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_Llama70B()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_Llama70B()
     {
         var config = BatchSchedulerConfig.ForModel("llama-70b");
         Assert.Equal(4, config.MaxBatchSize); // Capped to min(8, 4) = 4
@@ -110,22 +111,22 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(16L * 1024 * 1024 * 1024, config.MaxMemoryBytes);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_Llama70B_CustomBatch()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_Llama70B_CustomBatch()
     {
         var config = BatchSchedulerConfig.ForModel("llama-70b", maxBatchSize: 2);
         Assert.Equal(2, config.MaxBatchSize); // min(2, 4) = 2
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_Unknown_UsesDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_Unknown_UsesDefaults()
     {
         var config = BatchSchedulerConfig.ForModel("unknown-model");
         Assert.Equal(8, config.MaxBatchSize);
     }
 
-    [Fact]
-    public void BatchSchedulerConfig_ForModel_CaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task BatchSchedulerConfig_ForModel_CaseInsensitive()
     {
         var config = BatchSchedulerConfig.ForModel("LLAMA-7B");
         Assert.Equal(32, config.NumHeads);
@@ -135,36 +136,36 @@ public class ServingDeepMathIntegrationTests
     // ContinuousBatcherConfig: Defaults
     // ============================
 
-    [Fact]
-    public void ContinuousBatcherConfig_Defaults_EosTokenId()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_Defaults_EosTokenId()
     {
         var config = new ContinuousBatcherConfig();
         Assert.Equal(2, config.EosTokenId);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_Defaults_IdleSleepMs()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_Defaults_IdleSleepMs()
     {
         var config = new ContinuousBatcherConfig();
         Assert.Equal(10, config.IdleSleepMs);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_Defaults_AutoStart()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_Defaults_AutoStart()
     {
         var config = new ContinuousBatcherConfig();
         Assert.True(config.AutoStart);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_Defaults_MaxContextLength()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_Defaults_MaxContextLength()
     {
         var config = new ContinuousBatcherConfig();
         Assert.Equal(4096, config.MaxContextLength);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_Defaults_SpeculativeDecoding()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_Defaults_SpeculativeDecoding()
     {
         var config = new ContinuousBatcherConfig();
         Assert.False(config.EnableSpeculativeDecoding);
@@ -176,22 +177,22 @@ public class ServingDeepMathIntegrationTests
     // ContinuousBatcherConfig: ForModel Factory
     // ============================
 
-    [Fact]
-    public void ContinuousBatcherConfig_ForModel_Llama7B_ContextLength()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_ForModel_Llama7B_ContextLength()
     {
         var config = ContinuousBatcherConfig.ForModel("llama-7b");
         Assert.Equal(4096, config.MaxContextLength);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_ForModel_GPT2_ContextLength()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_ForModel_GPT2_ContextLength()
     {
         var config = ContinuousBatcherConfig.ForModel("gpt2");
         Assert.Equal(1024, config.MaxContextLength);
     }
 
-    [Fact]
-    public void ContinuousBatcherConfig_ForModel_Unknown_DefaultContext()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatcherConfig_ForModel_Unknown_DefaultContext()
     {
         var config = ContinuousBatcherConfig.ForModel("custom-model");
         Assert.Equal(2048, config.MaxContextLength);
@@ -201,8 +202,8 @@ public class ServingDeepMathIntegrationTests
     // BatcherStatistics: Defaults
     // ============================
 
-    [Fact]
-    public void BatcherStatistics_Defaults_AllZero()
+    [Fact(Timeout = 120000)]
+    public async Task BatcherStatistics_Defaults_AllZero()
     {
         var stats = new BatcherStatistics();
         Assert.Equal(0, stats.TotalTokensGenerated);
@@ -217,8 +218,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0.0, stats.RuntimeSeconds);
     }
 
-    [Fact]
-    public void BatcherStatistics_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task BatcherStatistics_SetProperties()
     {
         var stats = new BatcherStatistics
         {
@@ -250,8 +251,8 @@ public class ServingDeepMathIntegrationTests
     // SchedulerStatistics: Defaults and Computed
     // ============================
 
-    [Fact]
-    public void SchedulerStatistics_Defaults_AllZero()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerStatistics_Defaults_AllZero()
     {
         var stats = new SchedulerStatistics();
         Assert.Equal(0, stats.WaitingSequences);
@@ -264,8 +265,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0.0, stats.MemoryUtilization);
     }
 
-    [Fact]
-    public void SchedulerStatistics_TotalSequences_Computed()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerStatistics_TotalSequences_Computed()
     {
         var stats = new SchedulerStatistics
         {
@@ -276,8 +277,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(10, stats.TotalSequences);
     }
 
-    [Fact]
-    public void SchedulerStatistics_SlotUtilization_Computed()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerStatistics_SlotUtilization_Computed()
     {
         var stats = new SchedulerStatistics
         {
@@ -287,8 +288,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0.25, stats.SlotUtilization, 1e-10);
     }
 
-    [Fact]
-    public void SchedulerStatistics_SlotUtilization_MaxZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerStatistics_SlotUtilization_MaxZero_ReturnsZero()
     {
         var stats = new SchedulerStatistics
         {
@@ -298,8 +299,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0.0, stats.SlotUtilization);
     }
 
-    [Fact]
-    public void SchedulerStatistics_SlotUtilization_Full()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerStatistics_SlotUtilization_Full()
     {
         var stats = new SchedulerStatistics
         {
@@ -313,8 +314,8 @@ public class ServingDeepMathIntegrationTests
     // SchedulingPolicy Enum
     // ============================
 
-    [Fact]
-    public void SchedulingPolicy_HasFourValues()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulingPolicy_HasFourValues()
     {
         var values = (((SchedulingPolicy[])Enum.GetValues(typeof(SchedulingPolicy))));
         Assert.Equal(4, values.Length);
@@ -334,8 +335,8 @@ public class ServingDeepMathIntegrationTests
     // BatchScheduler: Construction and Initial State
     // ============================
 
-    [Fact]
-    public void BatchScheduler_DefaultConstruction_EmptyQueues()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_DefaultConstruction_EmptyQueues()
     {
         var scheduler = new BatchScheduler<double>();
         Assert.Equal(0, scheduler.WaitingCount);
@@ -343,8 +344,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0, scheduler.PreemptedCount);
     }
 
-    [Fact]
-    public void BatchScheduler_CustomConfig_StoresConfig()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_CustomConfig_StoresConfig()
     {
         var config = new BatchSchedulerConfig { MaxBatchSize = 16, NumHeads = 64 };
         var scheduler = new BatchScheduler<double>(config);
@@ -352,8 +353,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(64, scheduler.Config.NumHeads);
     }
 
-    [Fact]
-    public void BatchScheduler_InitialStatistics_AllZero()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_InitialStatistics_AllZero()
     {
         var scheduler = new BatchScheduler<double>();
         var stats = scheduler.GetStatistics();
@@ -364,24 +365,24 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0, stats.TotalSequences);
     }
 
-    [Fact]
-    public void BatchScheduler_ScheduleEmpty_ReturnsEmptyBatch()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_ScheduleEmpty_ReturnsEmptyBatch()
     {
         var scheduler = new BatchScheduler<double>();
         var batch = scheduler.ScheduleNextBatch();
         Assert.Empty(batch);
     }
 
-    [Fact]
-    public void BatchScheduler_GetRunningSequences_InitiallyEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_GetRunningSequences_InitiallyEmpty()
     {
         var scheduler = new BatchScheduler<double>();
         var running = scheduler.GetRunningSequences();
         Assert.Empty(running);
     }
 
-    [Fact]
-    public void BatchScheduler_CancelNonExistent_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_CancelNonExistent_ReturnsFalse()
     {
         var scheduler = new BatchScheduler<double>();
         bool cancelled = scheduler.CancelSequence(999);
@@ -392,8 +393,8 @@ public class ServingDeepMathIntegrationTests
     // BatchScheduler: AddSequence and Scheduling
     // ============================
 
-    [Fact]
-    public void BatchScheduler_AddSequence_IncreasesWaitingCount()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_AddSequence_IncreasesWaitingCount()
     {
         var scheduler = new BatchScheduler<double>();
         var request = new GenerationRequest<double> { PromptTokenIds = new List<int> { 1, 2, 3 }, MaxNewTokens = 10 };
@@ -402,8 +403,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(1, scheduler.WaitingCount);
     }
 
-    [Fact]
-    public void BatchScheduler_AddMultipleSequences_CountsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_AddMultipleSequences_CountsCorrectly()
     {
         var scheduler = new BatchScheduler<double>();
         for (int i = 0; i < 5; i++)
@@ -415,15 +416,15 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(5, scheduler.WaitingCount);
     }
 
-    [Fact]
-    public void BatchScheduler_AddNull_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_AddNull_Throws()
     {
         var scheduler = new BatchScheduler<double>();
         Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(null!));
     }
 
-    [Fact]
-    public void BatchScheduler_ScheduleOneBatch_MovesToRunning()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_ScheduleOneBatch_MovesToRunning()
     {
         var config = new BatchSchedulerConfig { MaxBatchSize = 4 };
         var scheduler = new BatchScheduler<double>(config);
@@ -440,8 +441,8 @@ public class ServingDeepMathIntegrationTests
         Assert.True(scheduler.RunningCount <= 4);
     }
 
-    [Fact]
-    public void BatchScheduler_ReorderByPriority_NoExceptions()
+    [Fact(Timeout = 120000)]
+    public async Task BatchScheduler_ReorderByPriority_NoExceptions()
     {
         var scheduler = new BatchScheduler<double>();
         // Should not throw even with empty running list
@@ -452,8 +453,8 @@ public class ServingDeepMathIntegrationTests
     // SequenceState: Construction and Properties
     // ============================
 
-    [Fact]
-    public void SequenceState_Construction_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_Construction_InitializesCorrectly()
     {
         var request = new GenerationRequest<double>
         {
@@ -476,8 +477,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(0.0, seq.CumulativeLogProb);
     }
 
-    [Fact]
-    public void SequenceState_AppendToken_IncreasesGeneratedLength()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_AppendToken_IncreasesGeneratedLength()
     {
         var request = new GenerationRequest<double>
         {
@@ -497,8 +498,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(-0.8, seq.CumulativeLogProb, 1e-10);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_MaxLength()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_ShouldStop_MaxLength()
     {
         var request = new GenerationRequest<double>
         {
@@ -515,8 +516,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(StopReason.MaxLength, seq.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_EosToken()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_ShouldStop_EosToken()
     {
         var request = new GenerationRequest<double>
         {
@@ -530,8 +531,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(StopReason.EndOfSequence, seq.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_ShouldStop_StopToken()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_ShouldStop_StopToken()
     {
         var request = new GenerationRequest<double>
         {
@@ -545,8 +546,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(StopReason.StopToken, seq.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_Complete_SetsStatusAndReason()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_Complete_SetsStatusAndReason()
     {
         var request = new GenerationRequest<double>
         {
@@ -561,8 +562,8 @@ public class ServingDeepMathIntegrationTests
         Assert.NotNull(seq.CompletedAt);
     }
 
-    [Fact]
-    public void SequenceState_Cancel_SetsStatusAndReason()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_Cancel_SetsStatusAndReason()
     {
         var request = new GenerationRequest<double>
         {
@@ -576,8 +577,8 @@ public class ServingDeepMathIntegrationTests
         Assert.Equal(StopReason.Cancelled, seq.FinishReason);
     }
 
-    [Fact]
-    public void SequenceState_Fail_SetsStatusAndReason()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_Fail_SetsStatusAndReason()
     {
         var request = new GenerationRequest<double>
         {
@@ -595,8 +596,8 @@ public class ServingDeepMathIntegrationTests
     // SequenceState: Unique IDs
     // ============================
 
-    [Fact]
-    public void SequenceState_UniqueIds()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceState_UniqueIds()
     {
         var request = new GenerationRequest<double>
         {
@@ -613,8 +614,8 @@ public class ServingDeepMathIntegrationTests
     // GenerationRequest: Defaults
     // ============================
 
-    [Fact]
-    public void GenerationRequest_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task GenerationRequest_Defaults()
     {
         var request = new GenerationRequest<double>();
         Assert.Empty(request.PromptTokenIds);
@@ -635,15 +636,15 @@ public class ServingDeepMathIntegrationTests
     // SequenceStatus/StopReason Enums
     // ============================
 
-    [Fact]
-    public void SequenceStatus_HasSevenValues()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceStatus_HasSevenValues()
     {
         var values = (((SequenceStatus[])Enum.GetValues(typeof(SequenceStatus))));
         Assert.Equal(7, values.Length);
     }
 
-    [Fact]
-    public void StopReason_HasFiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task StopReason_HasFiveValues()
     {
         var values = (((StopReason[])Enum.GetValues(typeof(StopReason))));
         Assert.Equal(5, values.Length);

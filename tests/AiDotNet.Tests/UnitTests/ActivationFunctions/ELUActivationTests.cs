@@ -3,13 +3,14 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ActivationFunctions
 {
     public class ELUActivationTests
     {
-        [Fact]
-        public void Constructor_WithDefaultAlpha_UsesOneAsDefault()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultAlpha_UsesOneAsDefault()
         {
             // Arrange & Act
             var activation = new ELUActivation<double>();
@@ -20,8 +21,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < 0.0);
         }
 
-        [Fact]
-        public void Constructor_WithCustomAlpha_UsesSpecifiedValue()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomAlpha_UsesSpecifiedValue()
         {
             // Arrange & Act
             var activation = new ELUActivation<double>(2.0);
@@ -32,8 +33,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < 0.0);
         }
 
-        [Fact]
-        public void Activate_WithPositiveValue_ReturnsInputUnchanged()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithPositiveValue_ReturnsInputUnchanged()
         {
             // Arrange
             var activation = new ELUActivation<double>();
@@ -49,8 +50,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(100.0, result3, 10);
         }
 
-        [Fact]
-        public void Activate_WithZero_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithZero_ReturnsZero()
         {
             // Arrange
             var activation = new ELUActivation<double>();
@@ -62,8 +63,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void Activate_WithNegativeValue_ReturnsExponentialCurve()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithNegativeValue_ReturnsExponentialCurve()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(-0.8646647167633873, result2, 10);
         }
 
-        [Fact]
-        public void Activate_WithLargeNegativeValue_ApproachesNegativeAlpha()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithLargeNegativeValue_ApproachesNegativeAlpha()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -94,8 +95,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result < -0.999);
         }
 
-        [Fact]
-        public void Activate_Vector_AppliesActivationToAllElements()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_Vector_AppliesActivationToAllElements()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -113,8 +114,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(2.0, result[4], 10);  // Positive input
         }
 
-        [Fact]
-        public void Derivative_WithPositiveValue_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task Derivative_WithPositiveValue_ReturnsOne()
         {
             // Arrange
             var activation = new ELUActivation<double>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(1.0, result3, 10);
         }
 
-        [Fact]
-        public void Derivative_WithZero_ReturnsAlpha()
+        [Fact(Timeout = 60000)]
+        public async Task Derivative_WithZero_ReturnsAlpha()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void Derivative_WithNegativeValue_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task Derivative_WithNegativeValue_ReturnsCorrectValue()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -163,8 +164,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < result1);
         }
 
-        [Fact]
-        public void Derivative_Vector_ReturnsJacobianMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task Derivative_Vector_ReturnsJacobianMatrix()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -186,8 +187,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.Equal(0.0, result[1, 0], 10);
         }
 
-        [Fact]
-        public void Activate_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var activation = new ELUActivation<float>(1.0f);
@@ -201,8 +202,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < 0.0f);
         }
 
-        [Fact]
-        public void Derivative_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Derivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var activation = new ELUActivation<float>(1.0f);
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 > 0.0f && result2 < 1.0f);
         }
 
-        [Fact]
-        public void Activate_WithDifferentAlpha_AffectsNegativeValues()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_WithDifferentAlpha_AffectsNegativeValues()
         {
             // Arrange
             var activation1 = new ELUActivation<double>(1.0);
@@ -233,8 +234,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(result2 < result1);
         }
 
-        [Fact]
-        public void Activate_PreventsDyingNeurons_UnlikeReLU()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_PreventsDyingNeurons_UnlikeReLU()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);
@@ -251,8 +252,8 @@ namespace AiDotNetTests.UnitTests.ActivationFunctions
             Assert.True(derivative > 0.0);  // Gradient exists for backpropagation
         }
 
-        [Fact]
-        public void Activate_IsContinuous_AtZero()
+        [Fact(Timeout = 60000)]
+        public async Task Activate_IsContinuous_AtZero()
         {
             // Arrange
             var activation = new ELUActivation<double>(1.0);

@@ -10,13 +10,14 @@ using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisCoverageSmokeTests
 {
-    [Fact]
-    public void ProgramSynthesisOptions_HasSensibleDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task ProgramSynthesisOptions_HasSensibleDefaults()
     {
         var options = new ProgramSynthesisOptions();
 
@@ -30,8 +31,8 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(options.NumDecoderLayers > 0);
     }
 
-    [Fact]
-    public void CodeT5_GetModelMetadata_ProducesTransformerMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task CodeT5_GetModelMetadata_ProducesTransformerMetadata()
     {
         var tokenizer = new SimpleTestTokenizer(vocabularySize: 16);
         var architecture = CreateSmallArchitecture(CodeTask.Generation, useDataFlow: false, numDecoderLayers: 1, vocabularySize: 32);
@@ -44,8 +45,8 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(metadata.ModelData.Length > 0);
     }
 
-    [Fact]
-    public void GraphCodeBERT_GetModelMetadata_IncludesUseDataFlow()
+    [Fact(Timeout = 60000)]
+    public async Task GraphCodeBERT_GetModelMetadata_IncludesUseDataFlow()
     {
         var tokenizer = new SimpleTestTokenizer(vocabularySize: 16);
         var architecture = CreateSmallArchitecture(CodeTask.BugDetection, useDataFlow: true, numDecoderLayers: 0, vocabularySize: 32);
@@ -59,8 +60,8 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.True(metadata.ModelData.Length > 0);
     }
 
-    [Fact]
-    public void ServingProgramExecutionEngine_ReturnsTrue_OnSuccessfulExecution()
+    [Fact(Timeout = 60000)]
+    public async Task ServingProgramExecutionEngine_ReturnsTrue_OnSuccessfulExecution()
     {
         var engine = new ServingProgramExecutionEngine(new FakeServingClient(success: true));
 
@@ -77,8 +78,8 @@ public sealed class ProgramSynthesisCoverageSmokeTests
         Assert.Null(error);
     }
 
-    [Fact]
-    public void ServingProgramExecutionEngine_ReturnsFalse_OnFailedExecution()
+    [Fact(Timeout = 60000)]
+    public async Task ServingProgramExecutionEngine_ReturnsFalse_OnFailedExecution()
     {
         var engine = new ServingProgramExecutionEngine(new FakeServingClient(success: false));
 

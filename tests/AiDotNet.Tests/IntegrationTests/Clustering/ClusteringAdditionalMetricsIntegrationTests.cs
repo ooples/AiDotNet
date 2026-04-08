@@ -3,13 +3,14 @@ using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringAdditionalMetricsIntegrationTests
 {
-    [Fact]
-    public void WcssAndBcss_ComputeExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task WcssAndBcss_ComputeExpectedValues()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 2, spacing: 10.0);
         var wcss = new WCSS<double>();
@@ -28,8 +29,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(200.0, bcssValue, 1e-6);
     }
 
-    [Fact]
-    public void PurityAndFMeasure_ReturnPerfectForIdenticalLabels()
+    [Fact(Timeout = 120000)]
+    public async Task PurityAndFMeasure_ReturnPerfectForIdenticalLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
         var purity = new Purity<double>();
@@ -51,8 +52,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(1.0, fmeasure.ComputeBCubed(dataset.Labels, dataset.Labels), 1e-6);
     }
 
-    [Fact]
-    public void EntropyAndVariationOfInformation_ReportExpectedRanges()
+    [Fact(Timeout = 120000)]
+    public async Task EntropyAndVariationOfInformation_ReportExpectedRanges()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
 
@@ -104,8 +105,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.True(viNormalizedValue >= 0.0 && viNormalizedValue <= 1.0 + 1e-6);
     }
 
-    [Fact]
-    public void ClusterMetrics_EvaluateAndToString_ReturnsValues()
+    [Fact(Timeout = 120000)]
+    public async Task ClusterMetrics_EvaluateAndToString_ReturnsValues()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 4);
         var kmeans = new KMeans<double>(new KMeansOptions<double>
@@ -131,8 +132,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Contains("Clustering Evaluation Metrics", summary);
     }
 
-    [Fact]
-    public void ClusterMetrics_EvaluateExternal_ReturnsExternalMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ClusterMetrics_EvaluateExternal_ReturnsExternalMetrics()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
         var metrics = new ClusterMetrics<double>();
@@ -143,8 +144,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(1.0, scores.NormalizedMutualInformation.GetValueOrDefault(), 1e-6);
     }
 
-    [Fact]
-    public void ExternalClusterMetricBase_UtilityMethods_ReturnExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ExternalClusterMetricBase_UtilityMethods_ReturnExpectedValues()
     {
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
         var predictedLabels = new Vector<double>(new[] { 0.0, 1.0, 1.0, 1.0 });

@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class OCRTextRecognitionTests
 
     #region CRNN Tests
 
-    [Fact]
-    public void CRNN_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new CRNN<double>(arch, imageWidth: 128);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CRNN_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new CRNN<double>(arch, imageWidth: 128);
@@ -55,8 +56,8 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void CRNN_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new CRNN<double>(arch, imageWidth: 128);
@@ -68,16 +69,16 @@ public class OCRTextRecognitionTests
 
     #region TrOCR Tests
 
-    [Fact]
-    public void TrOCR_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TrOCR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void TrOCR_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TrOCR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
@@ -88,8 +89,8 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void TrOCR_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task TrOCR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
@@ -101,16 +102,16 @@ public class OCRTextRecognitionTests
 
     #region SVTR Tests
 
-    [Fact]
-    public void SVTR_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SVTR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void SVTR_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SVTR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
@@ -121,8 +122,8 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void SVTR_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task SVTR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
@@ -134,16 +135,16 @@ public class OCRTextRecognitionTests
 
     #region ABINet Tests
 
-    [Fact]
-    public void ABINet_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ABINet_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
@@ -154,8 +155,8 @@ public class OCRTextRecognitionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void ABINet_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
@@ -167,8 +168,8 @@ public class OCRTextRecognitionTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllTextRecognizers_RequiresOCR_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task AllTextRecognizers_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]

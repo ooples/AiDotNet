@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.Fixtures;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Performance;
 
@@ -26,8 +27,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
     /// DenseNet mini variant should construct quickly.
     /// Current baseline: ~10ms, Target: &lt;500ms, Stretch goal: &lt;50ms
     /// </summary>
-    [Fact]
-    public void MiniDenseNet_Constructs_UnderThreshold()
+    [Fact(Timeout = 60000)]
+    public async Task MiniDenseNet_Constructs_UnderThreshold()
     {
         var sw = Stopwatch.StartNew();
         var network = DenseNetNetwork<float>.ForTesting(numClasses: 10);
@@ -42,8 +43,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
     /// EfficientNet mini variant construction time.
     /// Current baseline: ~5000ms (needs optimization), Target: &lt;1000ms
     /// </summary>
-    [Fact]
-    public void MiniEfficientNet_Constructs_UnderThreshold()
+    [Fact(Timeout = 60000)]
+    public async Task MiniEfficientNet_Constructs_UnderThreshold()
     {
         var sw = Stopwatch.StartNew();
         var network = EfficientNetNetwork<float>.ForTesting(numClasses: 10);
@@ -59,8 +60,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
     /// ResNet mini variant construction time.
     /// Current baseline: ~800ms, Target: &lt;500ms
     /// </summary>
-    [Fact]
-    public void MiniResNet_Constructs_UnderThreshold()
+    [Fact(Timeout = 60000)]
+    public async Task MiniResNet_Constructs_UnderThreshold()
     {
         var sw = Stopwatch.StartNew();
         var network = ResNetNetwork<float>.ForTesting(numClasses: 10);
@@ -72,8 +73,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.True(sw.ElapsedMilliseconds < 2000, $"Construction took {sw.ElapsedMilliseconds}ms, expected < 2000ms");
     }
 
-    [Fact]
-    public void DenseNetConfig_GetExpectedLayerCount_NoConstruction()
+    [Fact(Timeout = 60000)]
+    public async Task DenseNetConfig_GetExpectedLayerCount_NoConstruction()
     {
         var sw = Stopwatch.StartNew();
         var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 1000);
@@ -85,8 +86,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.True(count121 > 50, $"Expected layer count > 50, got {count121}");
     }
 
-    [Fact]
-    public void DenseNet_VariantComparison_UsingConfig_IsFast()
+    [Fact(Timeout = 60000)]
+    public async Task DenseNet_VariantComparison_UsingConfig_IsFast()
     {
         var sw = Stopwatch.StartNew();
 
@@ -111,8 +112,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.True(count264 >= count201, $"DenseNet264 ({count264}) should have >= layers than DenseNet201 ({count201})");
     }
 
-    [Fact]
-    public void NetworkFixture_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task NetworkFixture_IsThreadSafe()
     {
         var exceptions = new List<Exception>();
 
@@ -141,8 +142,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.Empty(exceptions);
     }
 
-    [Fact]
-    public void NetworkFixture_ReusesNetworks()
+    [Fact(Timeout = 60000)]
+    public async Task NetworkFixture_ReusesNetworks()
     {
         // Access networks multiple times
         var denseNet1 = _fixture.MiniDenseNet;
@@ -160,8 +161,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.Same(resNet1, resNet2);
     }
 
-    [Fact]
-    public void CustomDenseNet_HasCorrectBlockLayers()
+    [Fact(Timeout = 60000)]
+    public async Task CustomDenseNet_HasCorrectBlockLayers()
     {
         var customBlockLayers = new[] { 2, 2, 2, 2 };
         var config = new DenseNetConfiguration(
@@ -177,8 +178,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.Equal(customBlockLayers, blockLayers);
     }
 
-    [Fact]
-    public void CustomEfficientNet_HasCorrectParameters()
+    [Fact(Timeout = 60000)]
+    public async Task CustomEfficientNet_HasCorrectParameters()
     {
         var config = new EfficientNetConfiguration(
             variant: EfficientNetVariant.Custom,
@@ -192,8 +193,8 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
         Assert.Equal(0.5, config.GetDepthMultiplier());
     }
 
-    [Fact]
-    public void MiniNetworks_AreMuchSmallerThanFullVariants()
+    [Fact(Timeout = 60000)]
+    public async Task MiniNetworks_AreMuchSmallerThanFullVariants()
     {
         // Compare mini DenseNet to full DenseNet121
         var miniConfig = DenseNetConfiguration.CreateForTesting(10);

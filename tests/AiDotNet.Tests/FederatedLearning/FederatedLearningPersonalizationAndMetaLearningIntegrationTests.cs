@@ -3,12 +3,13 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithFedPerPersonalization_MasksPersonalizedParametersFromGlobalAggregation()
     {
         var (x, y) = CreateToyData();
@@ -64,7 +65,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithReptileMetaLearning_AppliesServerStepSize()
     {
         var (x, y) = CreateToyData();

@@ -2,13 +2,14 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Preprocessing.Scalers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Preprocessing
 {
     public class StandardScalerTests
     {
-        [Fact]
-        public void StandardScaler_FitTransform_CentersAndScalesData()
+        [Fact(Timeout = 60000)]
+        public async Task StandardScaler_FitTransform_CentersAndScalesData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -29,8 +30,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(col1Sum) < 0.0001, "Column 1 sum should be close to 0");
         }
 
-        [Fact]
-        public void StandardScaler_InverseTransform_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task StandardScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -51,8 +52,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 0] - 3.0) < 0.0001);
         }
 
-        [Fact]
-        public void StandardScaler_WithoutCentering_OnlyScales()
+        [Fact(Timeout = 60000)]
+        public async Task StandardScaler_WithoutCentering_OnlyScales()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(mean) > 0.1, "Mean should not be zero when centering is disabled");
         }
 
-        [Fact]
-        public void StandardScaler_WithSpecificColumns_OnlyScalesSelectedColumns()
+        [Fact(Timeout = 60000)]
+        public async Task StandardScaler_WithSpecificColumns_OnlyScalesSelectedColumns()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -93,8 +94,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(300.0, result[2, 1]);
         }
 
-        [Fact]
-        public void StandardScaler_ThrowsWhenTransformCalledBeforeFit()
+        [Fact(Timeout = 60000)]
+        public async Task StandardScaler_ThrowsWhenTransformCalledBeforeFit()
         {
             // Arrange
             var data = new Matrix<double>(new double[,] { { 1.0 } });
@@ -107,8 +108,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class MinMaxScalerTests
     {
-        [Fact]
-        public void MinMaxScaler_FitTransform_ScalesToDefaultRange()
+        [Fact(Timeout = 60000)]
+        public async Task MinMaxScaler_FitTransform_ScalesToDefaultRange()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001, "Max should be 1");
         }
 
-        [Fact]
-        public void MinMaxScaler_CustomRange_ScalesToSpecifiedRange()
+        [Fact(Timeout = 60000)]
+        public async Task MinMaxScaler_CustomRange_ScalesToSpecifiedRange()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -149,8 +150,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001, "Max should be 1");
         }
 
-        [Fact]
-        public void MinMaxScaler_InverseTransform_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task MinMaxScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - 60.0) < 0.0001);
         }
 
-        [Fact]
-        public void MinMaxScaler_ConstantColumn_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task MinMaxScaler_ConstantColumn_HandlesGracefully()
         {
             // Arrange - all values are the same (constant column)
             var data = new Matrix<double>(new double[,]
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 0.5) < 0.0001);
         }
 
-        [Fact]
-        public void MinMaxScaler_InvalidRange_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task MinMaxScaler_InvalidRange_ThrowsException()
         {
             // Act & Assert - min >= max should throw
             Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(1.0, 0.0));
@@ -202,8 +203,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class RobustScalerTests
     {
-        [Fact]
-        public void RobustScaler_FitTransform_UsesMedianAndIQR()
+        [Fact(Timeout = 60000)]
+        public async Task RobustScaler_FitTransform_UsesMedianAndIQR()
         {
             // Arrange - data with outliers
             var data = new Matrix<double>(new double[,]
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(median[0] < 10.0, "Median should be robust to outlier");
         }
 
-        [Fact]
-        public void RobustScaler_InverseTransform_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task RobustScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - 6.0) < 0.0001);
         }
 
-        [Fact]
-        public void RobustScaler_CustomQuantileRange_UsesSpecifiedRange()
+        [Fact(Timeout = 60000)]
+        public async Task RobustScaler_CustomQuantileRange_UsesSpecifiedRange()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -276,8 +277,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(iqr[0] > 0);
         }
 
-        [Fact]
-        public void RobustScaler_WithoutScaling_OnlyCenters()
+        [Fact(Timeout = 60000)]
+        public async Task RobustScaler_WithoutScaling_OnlyCenters()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 2.0) < 0.0001);    // 5 - 3 = 2
         }
 
-        [Fact]
-        public void RobustScaler_InvalidQuantileRange_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task RobustScaler_InvalidQuantileRange_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new RobustScaler<double>(75.0, 25.0)); // min >= max
@@ -309,8 +310,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class MaxAbsScalerTests
     {
-        [Fact]
-        public void MaxAbsScaler_FitTransform_ScalesByMaxAbsoluteValue()
+        [Fact(Timeout = 60000)]
+        public async Task MaxAbsScaler_FitTransform_ScalesByMaxAbsoluteValue()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -330,8 +331,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001);    // 20 / 20
         }
 
-        [Fact]
-        public void MaxAbsScaler_NegativeMaxAbs_ScalesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task MaxAbsScaler_NegativeMaxAbs_ScalesCorrectly()
         {
             // Arrange - largest absolute value is negative
             var data = new Matrix<double>(new double[,]
@@ -350,8 +351,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[1, 0] - 0.05) < 0.0001);  // 5 / 100
         }
 
-        [Fact]
-        public void MaxAbsScaler_InverseTransform_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task MaxAbsScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -371,8 +372,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - (-60.0)) < 0.0001);
         }
 
-        [Fact]
-        public void MaxAbsScaler_PreservesZeros()
+        [Fact(Timeout = 60000)]
+        public async Task MaxAbsScaler_PreservesZeros()
         {
             // Arrange - sparse-like data with zeros
             var data = new Matrix<double>(new double[,]
@@ -393,8 +394,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(0.0, result[2, 1]);
         }
 
-        [Fact]
-        public void MaxAbsScaler_AllZerosColumn_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task MaxAbsScaler_AllZerosColumn_HandlesGracefully()
         {
             // Arrange - column with all zeros
             var data = new Matrix<double>(new double[,]
@@ -417,8 +418,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class ScalerCommonBehaviorTests
     {
-        [Fact]
-        public void AllScalers_SupportsInverseTransform()
+        [Fact(Timeout = 60000)]
+        public async Task AllScalers_SupportsInverseTransform()
         {
             // Assert - all scalers should support inverse transform
             Assert.True(new StandardScaler<double>().SupportsInverseTransform);
@@ -427,8 +428,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(new MaxAbsScaler<double>().SupportsInverseTransform);
         }
 
-        [Fact]
-        public void AllScalers_IsFittedProperty_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task AllScalers_IsFittedProperty_WorksCorrectly()
         {
             // Arrange
             var data = new Matrix<double>(new double[,] { { 1.0 }, { 2.0 } });
@@ -456,8 +457,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(maxAbsScaler.IsFitted);
         }
 
-        [Fact]
-        public void AllScalers_GetFeatureNamesOut_ReturnsInputNames()
+        [Fact(Timeout = 60000)]
+        public async Task AllScalers_GetFeatureNamesOut_ReturnsInputNames()
         {
             // Arrange
             var featureNames = new[] { "feature1", "feature2", "feature3" };

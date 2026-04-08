@@ -7,13 +7,14 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.NeuralOperators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class NeuralOperatorTrainingTests
 {
-    [Fact]
-    public void FourierNeuralOperator_TrainUpdatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task FourierNeuralOperator_TrainUpdatesParameters()
     {
         var architecture = CreateLinearArchitecture(inputSize: 2, outputSize: 2);
         var model = new FourierNeuralOperator<double>(
@@ -43,8 +44,8 @@ public class NeuralOperatorTrainingTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
-    public void DeepOperatorNetwork_TrainUpdatesParameters()
+    [Fact(Timeout = 60000)]
+    public async Task DeepOperatorNetwork_TrainUpdatesParameters()
     {
         var branchArchitecture = CreateLinearArchitecture(inputSize: 2, outputSize: 2);
         var trunkArchitecture = CreateLinearArchitecture(inputSize: 1, outputSize: 2);

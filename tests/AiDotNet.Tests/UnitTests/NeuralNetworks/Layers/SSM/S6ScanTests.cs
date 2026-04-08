@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class S6ScanTests
 {
-    [Fact]
-    public void SequentialScanForward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScanForward_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int seqLen = 4;
@@ -31,8 +32,8 @@ public class S6ScanTests
         Assert.Equal(new[] { batchSize, seqLen + 1, innerDim, stateDim }, hiddenStates.Shape.ToArray());
     }
 
-    [Fact]
-    public void SequentialScanForward_ProducesNoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScanForward_ProducesNoNaN()
     {
         int batchSize = 1;
         int seqLen = 4;
@@ -52,8 +53,8 @@ public class S6ScanTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SequentialScanForward_HiddenStateZeroAtT0()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScanForward_HiddenStateZeroAtT0()
     {
         int batchSize = 1;
         int seqLen = 2;
@@ -78,8 +79,8 @@ public class S6ScanTests
         }
     }
 
-    [Fact]
-    public void SequentialScanBackward_ProducesCorrectGradientShapes()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScanBackward_ProducesCorrectGradientShapes()
     {
         int batchSize = 1;
         int seqLen = 4;
@@ -109,8 +110,8 @@ public class S6ScanTests
         Assert.Equal(new[] { innerDim }, dD.Shape.ToArray());
     }
 
-    [Fact]
-    public void SequentialScanBackward_ProducesNoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScanBackward_ProducesNoNaN()
     {
         int batchSize = 1;
         int seqLen = 4;
@@ -140,8 +141,8 @@ public class S6ScanTests
         Assert.False(ContainsNaN(dD));
     }
 
-    [Fact]
-    public void ParallelScan_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task ParallelScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int seqLen = 8;
@@ -161,8 +162,8 @@ public class S6ScanTests
         Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ParallelScan_ProducesNoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task ParallelScan_ProducesNoNaN()
     {
         int batchSize = 1;
         int seqLen = 4;
@@ -182,8 +183,8 @@ public class S6ScanTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void ParallelScan_MatchesSequentialScan()
+    [Fact(Timeout = 120000)]
+    public async Task ParallelScan_MatchesSequentialScan()
     {
         int batchSize = 1;
         int seqLen = 4;
@@ -214,8 +215,8 @@ public class S6ScanTests
         }
     }
 
-    [Fact]
-    public void SequentialScan_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SequentialScan_Double_ProducesValidOutput()
     {
         int batchSize = 1;
         int seqLen = 4;

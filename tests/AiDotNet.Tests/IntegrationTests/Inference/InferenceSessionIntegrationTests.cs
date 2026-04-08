@@ -23,8 +23,8 @@ public class InferenceSessionIntegrationTests
     private const int HeadCount = 2;
     private const int FlatSize = SequenceLength * EmbeddingDimension;
 
-    [Fact]
-    public void AiModelResult_Predict_IsStateless_WhenInferenceOptimizationsConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task AiModelResult_Predict_IsStateless_WhenInferenceOptimizationsConfigured()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -43,8 +43,8 @@ public class InferenceSessionIntegrationTests
         AssertTensorsEqual(y1, y2, Tolerance);
     }
 
-    [Fact]
-    public void AiModelResult_SerializeDeserialize_PreservesInferenceOptimizationConfig()
+    [Fact(Timeout = 120000)]
+    public async Task AiModelResult_SerializeDeserialize_PreservesInferenceOptimizationConfig()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -76,8 +76,8 @@ public class InferenceSessionIntegrationTests
         Assert.Equal(config.AttentionMasking, loadedConfig.AttentionMasking);
     }
 
-    [Fact]
-    public void BeginInferenceSession_SequencesAreIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_SequencesAreIndependent()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -129,8 +129,8 @@ public class InferenceSessionIntegrationTests
             $"Expected fresh KV-cache length to grow, but got {freshLenAfterFirst} -> {freshLengthsAfterSecond[0]}");
     }
 
-    [Fact]
-    public void BeginInferenceSession_ResetRestoresInitialSequenceState()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_ResetRestoresInitialSequenceState()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -156,7 +156,7 @@ public class InferenceSessionIntegrationTests
         AssertTensorsEqual(y1, y1AfterReset, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeginInferenceSession_ConcurrentPredict_MultipleSequences_DoesNotThrow()
     {
         var result = CreateDeterministicResult(
@@ -188,8 +188,8 @@ public class InferenceSessionIntegrationTests
         Assert.True((int)statsB["PagedAttentionLayerCount"] > 0);
     }
 
-    [Fact]
-    public void BeginInferenceSession_KVCacheQuantization_Int8_UsesQuantizedStorage()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_KVCacheQuantization_Int8_UsesQuantizedStorage()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -213,8 +213,8 @@ public class InferenceSessionIntegrationTests
         Assert.True((bool)useInt8);
     }
 
-    [Fact]
-    public void BeginInferenceSession_KVCachePrecision_Auto_UsesFloat16Storage_ForFloatModel()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_KVCachePrecision_Auto_UsesFloat16Storage_ForFloatModel()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -241,8 +241,8 @@ public class InferenceSessionIntegrationTests
         Assert.False((bool)useInt8);
     }
 
-    [Fact]
-    public void BeginInferenceSession_SpeculativeDecoding_Configured_DoesNotRunDuringPredict()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_SpeculativeDecoding_Configured_DoesNotRunDuringPredict()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -267,8 +267,8 @@ public class InferenceSessionIntegrationTests
         Assert.False(stats.ContainsKey("SpeculationDepth"));
     }
 
-    [Fact]
-    public void BeginInferenceSession_PagedKVCache_IsInitialized_WhenEnabled()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_PagedKVCache_IsInitialized_WhenEnabled()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -291,8 +291,8 @@ public class InferenceSessionIntegrationTests
         Assert.True((int)count > 0);
     }
 
-    [Fact]
-    public void BeginInferenceSession_PagedAttention_WOQ_IsEnabled_WhenConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_PagedAttention_WOQ_IsEnabled_WhenConfigured()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -314,8 +314,8 @@ public class InferenceSessionIntegrationTests
         Assert.True((bool)enabled);
     }
 
-    [Fact]
-    public void BeginInferenceSession_MultiLoRA_TaskSelection_IsIsolatedPerSequence()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_MultiLoRA_TaskSelection_IsIsolatedPerSequence()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -351,8 +351,8 @@ public class InferenceSessionIntegrationTests
         TryAssertTensorsNotEqual(yA, yA2, minAbsDiff: 1e-3f);
     }
 
-    [Fact]
-    public void BeginInferenceSession_MultiLoRA_TaskSwitch_ResetsKVCacheState_ForSameSequence()
+    [Fact(Timeout = 120000)]
+    public async Task BeginInferenceSession_MultiLoRA_TaskSwitch_ResetsKVCacheState_ForSameSequence()
     {
         var originalDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
 
@@ -422,8 +422,8 @@ public class InferenceSessionIntegrationTests
         }
     }
 
-    [Fact]
-    public void NeuralNetworkBase_Clone_DoesNotShareParameters()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkBase_Clone_DoesNotShareParameters()
     {
         var model = CreateDeterministicAttentionOnlyModel();
         var clone = (NeuralNetworkBase<float>)model.Clone();

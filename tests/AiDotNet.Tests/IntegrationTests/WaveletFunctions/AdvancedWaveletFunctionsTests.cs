@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.WaveletFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.WaveletFunctions;
 
@@ -17,8 +18,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region BSpline Wavelet Tests
 
-    [Fact]
-    public void BSplineWavelet_Calculate_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task BSplineWavelet_Calculate_NoNaN()
     {
         var bspline = new BSplineWavelet<double>(3);
         var values = new[] { -2.0, -1.0, 0.0, 0.5, 1.0, 2.0 };
@@ -29,16 +30,16 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void BSplineWavelet_GetScalingCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BSplineWavelet_GetScalingCoefficients_NonEmpty()
     {
         var bspline = new BSplineWavelet<double>(3);
         var coeffs = bspline.GetScalingCoefficients();
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact]
-    public void BSplineWavelet_Decompose_EvenInput()
+    [Fact(Timeout = 120000)]
+    public async Task BSplineWavelet_Decompose_EvenInput()
     {
         var bspline = new BSplineWavelet<double>(2);
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -51,8 +52,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region BattleLemarie Wavelet Tests
 
-    [Fact]
-    public void BattleLemarieWavelet_Calculate_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task BattleLemarieWavelet_Calculate_NoNaN()
     {
         var bl = new BattleLemarieWavelet<double>(2);
         var values = new[] { -2.0, 0.0, 1.0, 2.0 };
@@ -63,8 +64,8 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void BattleLemarieWavelet_GetScalingCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BattleLemarieWavelet_GetScalingCoefficients_NonEmpty()
     {
         var bl = new BattleLemarieWavelet<double>(2);
         var coeffs = bl.GetScalingCoefficients();
@@ -78,8 +79,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region FejérKorovkin Wavelet Tests
 
-    [Fact]
-    public void FejérKorovkinWavelet_Calculate_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task FejérKorovkinWavelet_Calculate_NoNaN()
     {
         var fk = new FejérKorovkinWavelet<double>(4);
         var values = new[] { -2.0, 0.0, 1.0, 2.0 };
@@ -90,8 +91,8 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void FejérKorovkinWavelet_GetScalingCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task FejérKorovkinWavelet_GetScalingCoefficients_NonEmpty()
     {
         var fk = new FejérKorovkinWavelet<double>(4);
         var coeffs = fk.GetScalingCoefficients();
@@ -102,16 +103,16 @@ public class AdvancedWaveletFunctionsTests
 
     #region Gabor Wavelet Tests
 
-    [Fact]
-    public void GaborWavelet_Calculate_AtZero()
+    [Fact(Timeout = 120000)]
+    public async Task GaborWavelet_Calculate_AtZero()
     {
         var gabor = new GaborWavelet<double>();
         var result = gabor.Calculate(0.0);
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
-    public void GaborWavelet_Calculate_DecaysFromCenter()
+    [Fact(Timeout = 120000)]
+    public async Task GaborWavelet_Calculate_DecaysFromCenter()
     {
         var gabor = new GaborWavelet<double>();
         var atZero = Math.Abs(gabor.Calculate(0.0));
@@ -123,8 +124,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region ReverseBiorthogonal Wavelet Tests
 
-    [Fact]
-    public void ReverseBiorthogonalWavelet_Calculate_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task ReverseBiorthogonalWavelet_Calculate_NoNaN()
     {
         var rbio = new ReverseBiorthogonalWavelet<double>();
         var values = new[] { -2.0, 0.0, 1.0, 2.0 };
@@ -135,8 +136,8 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void ReverseBiorthogonalWavelet_Decompose_EvenInput()
+    [Fact(Timeout = 120000)]
+    public async Task ReverseBiorthogonalWavelet_Decompose_EvenInput()
     {
         var rbio = new ReverseBiorthogonalWavelet<double>();
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
@@ -149,8 +150,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region ContinuousMexicanHat Wavelet Tests
 
-    [Fact]
-    public void ContinuousMexicanHatWavelet_Calculate_PeaksAtZero()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousMexicanHatWavelet_Calculate_PeaksAtZero()
     {
         var cmh = new ContinuousMexicanHatWavelet<double>();
         var atZero = cmh.Calculate(0.0);
@@ -158,8 +159,8 @@ public class AdvancedWaveletFunctionsTests
         Assert.True(atZero > atOne);
     }
 
-    [Fact]
-    public void ContinuousMexicanHatWavelet_Calculate_IsEvenFunction()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousMexicanHatWavelet_Calculate_IsEvenFunction()
     {
         var cmh = new ContinuousMexicanHatWavelet<double>();
         var pos = cmh.Calculate(1.0);
@@ -171,8 +172,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region Haar Perfect Reconstruction Stress Test
 
-    [Fact]
-    public void HaarWavelet_DecomposeReconstruct_LargerInput_PerfectReconstruction()
+    [Fact(Timeout = 120000)]
+    public async Task HaarWavelet_DecomposeReconstruct_LargerInput_PerfectReconstruction()
     {
         var haar = new HaarWavelet<double>();
         var input = new Vector<double>(new double[] { 1, 4, -3, 0, 2, 7, -1, 5 });
@@ -184,8 +185,8 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void HaarWavelet_Decompose_ConstantSignal_DetailIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task HaarWavelet_Decompose_ConstantSignal_DetailIsZero()
     {
         var haar = new HaarWavelet<double>();
         var input = new Vector<double>(new double[] { 5.0, 5.0, 5.0, 5.0 });
@@ -200,8 +201,8 @@ public class AdvancedWaveletFunctionsTests
 
     #region All Wavelets GetScalingCoefficients Test
 
-    [Fact]
-    public void AllDiscreteWavelets_GetScalingCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task AllDiscreteWavelets_GetScalingCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]
         {
@@ -224,8 +225,8 @@ public class AdvancedWaveletFunctionsTests
         }
     }
 
-    [Fact]
-    public void AllDiscreteWavelets_GetWaveletCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task AllDiscreteWavelets_GetWaveletCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]
         {

@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -37,8 +38,8 @@ public class VisionMambaModelTests
             outputSize: numClasses);
     }
 
-    [Fact]
-    public void Constructor_ValidParameters_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesModel()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(),
@@ -55,22 +56,22 @@ public class VisionMambaModelTests
         Assert.Equal(VisionScanPattern.Bidirectional, model.ScanPattern);
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenImageNotDivisibleByPatch()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenImageNotDivisibleByPatch()
     {
         Assert.Throws<ArgumentException>(() =>
             new VisionMambaModel<float>(CreateArch(30, 32), imageHeight: 30, imageWidth: 32, patchSize: 8));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenImageHeightNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenImageHeightNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new VisionMambaModel<float>(CreateArch(1, 32), imageHeight: 0, imageWidth: 32, patchSize: 8));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenNumClassesNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenNumClassesNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new VisionMambaModel<float>(CreateArch(16, 16, numClasses: 1),
@@ -103,8 +104,8 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Predict_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_3D_ProducesValidOutput()
     {
         int height = 16;
         int width = 16;
@@ -127,8 +128,8 @@ public class VisionMambaModelTests
 
 
 
-    [Fact]
-    public void Train_ForwardBackwardUpdate_NoErrors()
+    [Fact(Timeout = 120000)]
+    public async Task Train_ForwardBackwardUpdate_NoErrors()
     {
         int height = 16;
         int width = 16;
@@ -154,8 +155,8 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output2));
     }
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(16, 16, 1, 3),
@@ -174,8 +175,8 @@ public class VisionMambaModelTests
         }
     }
 
-    [Fact]
-    public void SetParameters_ThrowsOnWrongLength()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(16, 16, 1, 3),
@@ -184,8 +185,8 @@ public class VisionMambaModelTests
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrue()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(16, 16, 1, 3),
@@ -193,8 +194,8 @@ public class VisionMambaModelTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void GetModelMetadata_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ContainsExpectedKeys()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(32, 32, 3, 10),
@@ -213,8 +214,8 @@ public class VisionMambaModelTests
         Assert.Equal("CrossScan", metadata.AdditionalInfo["ScanPattern"]);
     }
 
-    [Fact]
-    public void ResetState_AllowsReuse()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_AllowsReuse()
     {
         var model = new VisionMambaModel<float>(
             CreateArch(16, 16, 1, 3),
@@ -238,8 +239,8 @@ public class VisionMambaModelTests
         }
     }
 
-    [Fact]
-    public void DifferentImageSizes_Work()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentImageSizes_Work()
     {
         // Rectangular image
         var model = new VisionMambaModel<float>(
@@ -257,8 +258,8 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Predict_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_Double_ProducesValidOutput()
     {
         var model = new VisionMambaModel<double>(
             CreateDoubleArch(),

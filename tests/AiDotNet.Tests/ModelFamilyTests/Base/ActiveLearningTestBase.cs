@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -42,8 +43,8 @@ public abstract class ActiveLearningTestBase
     // =========================================================================
 
     // INVARIANT 1: Selected count matches requested batch size
-    [Fact]
-    public void SelectSamples_ReturnsRequestedCount()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ReturnsRequestedCount()
     {
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
@@ -51,8 +52,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 2: All selected indices are unique
-    [Fact]
-    public void SelectSamples_IndicesAreUnique()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_IndicesAreUnique()
     {
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
@@ -60,8 +61,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 3: All selected indices are within valid range
-    [Fact]
-    public void SelectSamples_IndicesInRange()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_IndicesInRange()
     {
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
@@ -80,8 +81,8 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 4: Selected samples have higher-than-average informativeness scores
     // The whole point of active learning: selected samples should be MORE informative.
-    [Fact]
-    public void SelectSamples_SelectedHaveHigherThanAverageScores()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_SelectedHaveHigherThanAverageScores()
     {
         var strategy = CreateStrategy();
         var model = CreateMockModel();
@@ -109,8 +110,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 5: Scores are non-negative (informativeness is a non-negative measure)
-    [Fact]
-    public void ComputeScores_AreNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeScores_AreNonNegative()
     {
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
@@ -124,8 +125,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 6: Scores are finite
-    [Fact]
-    public void ComputeScores_AreFinite()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeScores_AreFinite()
     {
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
@@ -139,8 +140,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 7: Score count matches pool size
-    [Fact]
-    public void ComputeScores_CountMatchesPoolSize()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeScores_CountMatchesPoolSize()
     {
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
@@ -153,8 +154,8 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 8: Selected samples are spread across the input space
     // Pairwise distances between selected samples should be non-trivial (not all identical).
-    [Fact]
-    public void SelectSamples_AreSpreadAcrossInputSpace()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_AreSpreadAcrossInputSpace()
     {
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
@@ -186,8 +187,8 @@ public abstract class ActiveLearningTestBase
 
     // INVARIANT 9: Selecting k<n from pool is a SUBSET of selecting k+1<n
     // If you select 3 samples, the top-1 sample should also appear in the top-5.
-    [Fact]
-    public void SelectSamples_TopKContainsTopOne()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_TopKContainsTopOne()
     {
         var strategy = CreateStrategy();
         var model = CreateMockModel();
@@ -208,8 +209,8 @@ public abstract class ActiveLearningTestBase
     // =========================================================================
 
     // INVARIANT 10: Requesting more than pool size is handled gracefully
-    [Fact]
-    public void SelectSamples_RequestMoreThanPool_HandlesGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_RequestMoreThanPool_HandlesGracefully()
     {
         var strategy = CreateStrategy();
         int[] selected;
@@ -227,8 +228,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 11: Batch size of 1 returns exactly 1
-    [Fact]
-    public void SelectSamples_BatchSizeOne_ReturnsSingle()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_BatchSizeOne_ReturnsSingle()
     {
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), 1);
@@ -237,8 +238,8 @@ public abstract class ActiveLearningTestBase
     }
 
     // INVARIANT 12: Does not mutate input pool
-    [Fact]
-    public void SelectSamples_DoesNotMutatePool()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_DoesNotMutatePool()
     {
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();

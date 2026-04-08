@@ -1,4 +1,5 @@
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -15,8 +16,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // LU Decomposition Properties
     // ============================
 
-    [Fact]
-    public void LUMath_Factorization_LU_EqualA()
+    [Fact(Timeout = 120000)]
+    public async Task LUMath_Factorization_LU_EqualA()
     {
         // A = L * U where L is lower triangular with 1s on diagonal, U is upper triangular
         // A = [[2, 1, 1], [4, 3, 3], [8, 7, 9]]
@@ -37,8 +38,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
                 Assert.Equal(a[i, j], lu[i, j], 1e-10);
     }
 
-    [Fact]
-    public void LUMath_LowerTriangular_OnesOnDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task LUMath_LowerTriangular_OnesOnDiagonal()
     {
         // L in LU decomposition has 1s on the diagonal
         double[,] l = { { 1, 0, 0 }, { 0.5, 1, 0 }, { 0.25, 0.5, 1 } };
@@ -57,8 +58,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // QR Decomposition Properties
     // ============================
 
-    [Fact]
-    public void QRMath_Q_Orthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task QRMath_Q_Orthogonal()
     {
         // Q^T * Q = I for orthogonal Q
         // Simple 2x2 case: A = QR where Q is rotation matrix
@@ -74,8 +75,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(1.0, qtq[1, 1], 1e-10);
     }
 
-    [Fact]
-    public void QRMath_Q_PreservesNorm()
+    [Fact(Timeout = 120000)]
+    public async Task QRMath_Q_PreservesNorm()
     {
         // ||Qx|| = ||x|| for orthogonal Q
         double theta = Math.PI / 4;
@@ -90,8 +91,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(normX, normQx, 1e-10);
     }
 
-    [Fact]
-    public void QRMath_R_UpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task QRMath_R_UpperTriangular()
     {
         // R should be upper triangular with positive diagonal
         double[,] r = { { 5.0, 3.0 }, { 0.0, 2.0 } };
@@ -108,8 +109,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // SVD Properties
     // ============================
 
-    [Fact]
-    public void SVDMath_SingularValues_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SVDMath_SingularValues_NonNegative()
     {
         // Singular values are always non-negative
         double[] singularValues = { 5.0, 3.0, 1.0, 0.5 };
@@ -119,8 +120,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SVDMath_SingularValues_Descending()
+    [Fact(Timeout = 120000)]
+    public async Task SVDMath_SingularValues_Descending()
     {
         // By convention, singular values are in descending order
         double[] singularValues = { 5.0, 3.0, 1.0, 0.5 };
@@ -141,8 +142,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(expectedCount, count);
     }
 
-    [Fact]
-    public void SVDMath_FrobeniusNorm_FromSingularValues()
+    [Fact(Timeout = 120000)]
+    public async Task SVDMath_FrobeniusNorm_FromSingularValues()
     {
         // ||A||_F = sqrt(sum(sigma_i^2))
         double[] singularValues = { 5.0, 3.0, 1.0 };
@@ -164,8 +165,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Cholesky Decomposition Properties
     // ============================
 
-    [Fact]
-    public void CholeskyMath_LLT_EqualsA()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyMath_LLT_EqualsA()
     {
         // A = L * L^T for symmetric positive definite A
         // A = [[4, 2], [2, 5]]
@@ -180,8 +181,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(5.0, result[1, 1], 1e-10);
     }
 
-    [Fact]
-    public void CholeskyMath_RequiresPositiveDefinite()
+    [Fact(Timeout = 120000)]
+    public async Task CholeskyMath_RequiresPositiveDefinite()
     {
         // A matrix is positive definite if all eigenvalues > 0
         // Equivalently: x^T A x > 0 for all x != 0
@@ -198,8 +199,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Eigenvalue Decomposition Properties
     // ============================
 
-    [Fact]
-    public void EigenMath_CharacteristicPolynomial_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task EigenMath_CharacteristicPolynomial_2x2()
     {
         // For A = [[a, b], [c, d]], eigenvalues solve: lambda^2 - (a+d)*lambda + (ad-bc) = 0
         double a = 3, b = 1, c = 1, d = 3;
@@ -219,8 +220,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(det, lambda1 * lambda2, 1e-10);
     }
 
-    [Fact]
-    public void EigenMath_SymmetricMatrix_RealEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenMath_SymmetricMatrix_RealEigenvalues()
     {
         // Symmetric matrices always have real eigenvalues
         // A = [[2, 1], [1, 2]]
@@ -231,16 +232,16 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
             "Symmetric matrix should have non-negative discriminant (real eigenvalues)");
     }
 
-    [Fact]
-    public void EigenMath_Trace_IsSumOfEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenMath_Trace_IsSumOfEigenvalues()
     {
         double[] eigenvalues = { 5.0, 3.0, 1.0 };
         double trace = eigenvalues.Sum();
         Assert.Equal(9.0, trace, 1e-10);
     }
 
-    [Fact]
-    public void EigenMath_Determinant_IsProductOfEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task EigenMath_Determinant_IsProductOfEigenvalues()
     {
         double[] eigenvalues = { 5.0, 3.0, 2.0 };
         double det = eigenvalues.Aggregate(1.0, (acc, e) => acc * e);
@@ -251,8 +252,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Matrix Norms
     // ============================
 
-    [Fact]
-    public void NormMath_FrobeniusNorm()
+    [Fact(Timeout = 120000)]
+    public async Task NormMath_FrobeniusNorm()
     {
         // ||A||_F = sqrt(sum(a_ij^2))
         double[,] a = { { 1, 2 }, { 3, 4 } };
@@ -260,8 +261,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(30), frobNorm, 1e-10);
     }
 
-    [Fact]
-    public void NormMath_InfinityNorm()
+    [Fact(Timeout = 120000)]
+    public async Task NormMath_InfinityNorm()
     {
         // ||A||_inf = max row sum of absolute values
         double[,] a = { { 1, -2 }, { 3, -4 } };
@@ -271,8 +272,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(7.0, infNorm, 1e-10);
     }
 
-    [Fact]
-    public void NormMath_OneNorm()
+    [Fact(Timeout = 120000)]
+    public async Task NormMath_OneNorm()
     {
         // ||A||_1 = max column sum of absolute values
         double[,] a = { { 1, -2 }, { 3, -4 } };
@@ -286,8 +287,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Sparse Matrix Math: COO Format
     // ============================
 
-    [Fact]
-    public void SparseMath_COO_NonZeroCount()
+    [Fact(Timeout = 120000)]
+    public async Task SparseMath_COO_NonZeroCount()
     {
         // COO format stores (row, col, value) triples
         (int row, int col, double val)[] entries =
@@ -334,8 +335,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Sparse Matrix Math: SpMV (Sparse Matrix-Vector Multiply)
     // ============================
 
-    [Fact]
-    public void SparseMath_SpMV_CorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task SparseMath_SpMV_CorrectResult()
     {
         // Sparse matrix:
         // [1 0 3]   [1]   [1*1 + 0*2 + 3*3]   [10]
@@ -378,8 +379,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(expectedCategory, category);
     }
 
-    [Fact]
-    public void StabilityMath_ConditionNumber_IdentityMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task StabilityMath_ConditionNumber_IdentityMatrix()
     {
         // Identity matrix has condition number = 1 (best possible)
         double sigmaMax = 1.0;
@@ -392,8 +393,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Determinant Properties
     // ============================
 
-    [Fact]
-    public void DeterminantMath_2x2_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task DeterminantMath_2x2_Formula()
     {
         // det([[a, b], [c, d]]) = ad - bc
         double a = 3, b = 8, c = 4, d = 6;
@@ -401,8 +402,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(-14.0, det, 1e-10);
     }
 
-    [Fact]
-    public void DeterminantMath_3x3_SarrusRule()
+    [Fact(Timeout = 120000)]
+    public async Task DeterminantMath_3x3_SarrusRule()
     {
         // det of 3x3 matrix using Sarrus' rule
         // A = [[1,2,3],[4,5,6],[7,8,0]]
@@ -412,8 +413,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(27.0, det, 1e-10);
     }
 
-    [Fact]
-    public void DeterminantMath_ProductRule()
+    [Fact(Timeout = 120000)]
+    public async Task DeterminantMath_ProductRule()
     {
         // det(A * B) = det(A) * det(B)
         double detA = 3.0;
@@ -422,8 +423,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(15.0, detAB, 1e-10);
     }
 
-    [Fact]
-    public void DeterminantMath_InverseRule()
+    [Fact(Timeout = 120000)]
+    public async Task DeterminantMath_InverseRule()
     {
         // det(A^-1) = 1 / det(A)
         double detA = 4.0;
@@ -431,8 +432,8 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(0.25, detAInv, 1e-10);
     }
 
-    [Fact]
-    public void DeterminantMath_TransposeRule()
+    [Fact(Timeout = 120000)]
+    public async Task DeterminantMath_TransposeRule()
     {
         // det(A^T) = det(A)
         // Both compute the same value

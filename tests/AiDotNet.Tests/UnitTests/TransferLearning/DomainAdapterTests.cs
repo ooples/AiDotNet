@@ -2,13 +2,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TransferLearning.DomainAdaptation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TransferLearning;
 
 public class DomainAdapterTests
 {
-    [Fact]
-    public void MMDDomainAdapter_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task MMDDomainAdapter_InitializesCorrectly()
     {
         // Arrange & Act
         var adapter = new MMDDomainAdapter<double>();
@@ -18,8 +19,8 @@ public class DomainAdapterTests
         Assert.False(adapter.RequiresTraining);
     }
 
-    [Fact]
-    public void MMDDomainAdapter_ComputesDomainDiscrepancy()
+    [Fact(Timeout = 60000)]
+    public async Task MMDDomainAdapter_ComputesDomainDiscrepancy()
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>();
@@ -43,8 +44,8 @@ public class DomainAdapterTests
         Assert.True(discrepancy >= 0.0); // MMD is always non-negative
     }
 
-    [Fact]
-    public void CORALDomainAdapter_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CORALDomainAdapter_InitializesCorrectly()
     {
         // Arrange & Act
         var adapter = new CORALDomainAdapter<double>();
@@ -54,8 +55,8 @@ public class DomainAdapterTests
         Assert.True(adapter.RequiresTraining);
     }
 
-    [Fact]
-    public void CORALDomainAdapter_AdaptsSourceData()
+    [Fact(Timeout = 60000)]
+    public async Task CORALDomainAdapter_AdaptsSourceData()
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();

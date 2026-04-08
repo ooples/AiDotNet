@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -220,8 +221,8 @@ public class PolarDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void PolarDecomposition_IdentityMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -237,8 +238,8 @@ public class PolarDecompositionIntegrationTests
             $"Identity matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void PolarDecomposition_OrthogonalMatrix_UEqualsInput()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_OrthogonalMatrix_UEqualsInput()
     {
         // Arrange - Create an orthogonal matrix via QR decomposition
         var B = CreateTestMatrix(4, seed: 123);
@@ -253,8 +254,8 @@ public class PolarDecompositionIntegrationTests
             "U of orthogonal matrix should be orthogonal");
     }
 
-    [Fact]
-    public void PolarDecomposition_PositiveDefiniteMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_PositiveDefiniteMatrix_ValidDecomposition()
     {
         // Arrange - Create symmetric positive definite matrix
         var A = CreateSpdMatrix(4, seed: 456);
@@ -270,8 +271,8 @@ public class PolarDecompositionIntegrationTests
             $"SPD matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void PolarDecomposition_DiagonalMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
         var D = new Matrix<double>(4, 4);
@@ -329,8 +330,8 @@ public class PolarDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void PolarDecomposition_LargeMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(10, seed: 999);
@@ -350,8 +351,8 @@ public class PolarDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void PolarDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task PolarDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4); // Non-square

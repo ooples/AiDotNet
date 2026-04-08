@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.KnowledgeDistillation;
 
@@ -63,8 +64,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region DistillationLoss Tests
 
-    [Fact]
-    public void DistillationLoss_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Constructor_DefaultValues()
     {
         var loss = new DistillationLoss<double>();
 
@@ -72,8 +73,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(0.3, loss.Alpha);
     }
 
-    [Fact]
-    public void DistillationLoss_Constructor_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Constructor_CustomValues()
     {
         var loss = new DistillationLoss<double>(temperature: 5.0, alpha: 0.5);
 
@@ -81,8 +82,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(0.5, loss.Alpha);
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_SoftLossOnly()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_SoftLossOnly()
     {
         var loss = new DistillationLoss<double>(DefaultTemperature, DefaultAlpha);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -97,8 +98,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(lossValue >= -1e-8, $"Loss should be non-negative (or near zero due to precision). Got: {lossValue}");
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_WithTrueLabels()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_WithTrueLabels()
     {
         var loss = new DistillationLoss<double>(DefaultTemperature, DefaultAlpha);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -112,8 +113,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(lossValue >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_IdenticalOutputs_ZeroSoftLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_IdenticalOutputs_ZeroSoftLoss()
     {
         var loss = new DistillationLoss<double>(DefaultTemperature, alpha: 0.0);
         var logits = CreateLogits(BatchSize, NumClasses);
@@ -123,8 +124,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(lossValue < 0.001, "Loss should be near zero for identical outputs");
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeGradient_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeGradient_ReturnsCorrectShape()
     {
         var loss = new DistillationLoss<double>(DefaultTemperature, DefaultAlpha);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -137,8 +138,8 @@ public class KnowledgeDistillationIntegrationTests
         AssertMatrixFinite(gradient, "Gradient");
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeGradient_WithTrueLabels()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeGradient_WithTrueLabels()
     {
         var loss = new DistillationLoss<double>(DefaultTemperature, DefaultAlpha);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -152,8 +153,8 @@ public class KnowledgeDistillationIntegrationTests
         AssertMatrixFinite(gradient, "Gradient with labels");
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_NullStudent_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_NullStudent_Throws()
     {
         var loss = new DistillationLoss<double>();
         var teacherLogits = CreateLogits(BatchSize, NumClasses);
@@ -161,8 +162,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(null!, teacherLogits));
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_NullTeacher_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_NullTeacher_Throws()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -170,8 +171,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(studentLogits, null!));
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_DimensionMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_DimensionMismatch_Throws()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -180,8 +181,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Throws<ArgumentException>(() => loss.ComputeLoss(studentLogits, teacherLogits));
     }
 
-    [Fact]
-    public void DistillationLoss_ComputeLoss_BatchSizeMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ComputeLoss_BatchSizeMismatch_Throws()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -194,22 +195,22 @@ public class KnowledgeDistillationIntegrationTests
 
     #region DistillationStrategyBase Tests
 
-    [Fact]
-    public void DistillationStrategy_InvalidTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategy_InvalidTemperature_Throws()
     {
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: 0));
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(temperature: -1));
     }
 
-    [Fact]
-    public void DistillationStrategy_InvalidAlpha_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategy_InvalidAlpha_Throws()
     {
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(alpha: -0.1));
         Assert.Throws<ArgumentException>(() => new DistillationLoss<double>(alpha: 1.5));
     }
 
-    [Fact]
-    public void DistillationStrategy_AlphaBoundaryValues_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategy_AlphaBoundaryValues_Valid()
     {
         var lossAlpha0 = new DistillationLoss<double>(alpha: 0.0);
         var lossAlpha1 = new DistillationLoss<double>(alpha: 1.0);
@@ -218,8 +219,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(1.0, lossAlpha1.Alpha);
     }
 
-    [Fact]
-    public void DistillationStrategy_TemperaturePropertySet()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategy_TemperaturePropertySet()
     {
         var loss = new DistillationLoss<double>();
         loss.Temperature = 5.0;
@@ -227,8 +228,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(5.0, loss.Temperature);
     }
 
-    [Fact]
-    public void DistillationStrategy_AlphaPropertySet()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategy_AlphaPropertySet()
     {
         var loss = new DistillationLoss<double>();
         loss.Alpha = 0.7;
@@ -240,8 +241,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region FeatureDistillationStrategy Tests
 
-    [Fact]
-    public void FeatureDistillation_Constructor_ValidLayerPairs()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_Constructor_ValidLayerPairs()
     {
         var layerPairs = new[] { "layer1:layer1", "layer2:layer2" };
         var strategy = new FeatureDistillationStrategy<double>(layerPairs, featureWeight: 0.5);
@@ -250,34 +251,34 @@ public class KnowledgeDistillationIntegrationTests
         Assert.NotNull(strategy);
     }
 
-    [Fact]
-    public void FeatureDistillation_Constructor_NullLayerPairs_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_Constructor_NullLayerPairs_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new FeatureDistillationStrategy<double>(null!));
     }
 
-    [Fact]
-    public void FeatureDistillation_Constructor_EmptyLayerPairs_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_Constructor_EmptyLayerPairs_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FeatureDistillationStrategy<double>(Array.Empty<string>()));
     }
 
-    [Fact]
-    public void FeatureDistillation_Constructor_InvalidLayerPairFormat_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_Constructor_InvalidLayerPairFormat_Throws()
     {
         // Missing colon separator
         Assert.Throws<ArgumentException>(() => new FeatureDistillationStrategy<double>(new[] { "invalid" }));
     }
 
-    [Fact]
-    public void FeatureDistillation_Constructor_InvalidFeatureWeight_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_Constructor_InvalidFeatureWeight_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FeatureDistillationStrategy<double>(new[] { "a:b" }, featureWeight: -0.1));
         Assert.Throws<ArgumentException>(() => new FeatureDistillationStrategy<double>(new[] { "a:b" }, featureWeight: 1.5));
     }
 
-    [Fact]
-    public void FeatureDistillation_ComputeFeatureLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_ComputeFeatureLoss_ValidOutput()
     {
         var layerPairs = new[] { "layer1:layer1" };
         var strategy = new FeatureDistillationStrategy<double>(layerPairs, featureWeight: 0.5);
@@ -296,8 +297,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(lossValue >= 0);
     }
 
-    [Fact]
-    public void FeatureDistillation_ComputeFeatureGradient_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDistillation_ComputeFeatureGradient_ValidOutput()
     {
         var layerPairs = new[] { "layer1:layer1" };
         var strategy = new FeatureDistillationStrategy<double>(layerPairs, featureWeight: 0.5);
@@ -319,8 +320,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region AttentionDistillationStrategy Tests
 
-    [Fact]
-    public void AttentionDistillation_Constructor_ValidLayers()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_Constructor_ValidLayers()
     {
         var layers = new[] { "layer.0.attention", "layer.1.attention" };
         var strategy = new AttentionDistillationStrategy<double>(layers, attentionWeight: 0.3);
@@ -328,27 +329,27 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void AttentionDistillation_Constructor_NullLayers_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_Constructor_NullLayers_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new AttentionDistillationStrategy<double>(null!));
     }
 
-    [Fact]
-    public void AttentionDistillation_Constructor_EmptyLayers_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_Constructor_EmptyLayers_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AttentionDistillationStrategy<double>(Array.Empty<string>()));
     }
 
-    [Fact]
-    public void AttentionDistillation_Constructor_InvalidWeight_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_Constructor_InvalidWeight_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AttentionDistillationStrategy<double>(new[] { "layer" }, attentionWeight: -0.1));
         Assert.Throws<ArgumentException>(() => new AttentionDistillationStrategy<double>(new[] { "layer" }, attentionWeight: 1.5));
     }
 
-    [Fact]
-    public void AttentionDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_ComputeLoss_ValidOutput()
     {
         var layers = new[] { "layer.0.attention" };
         var strategy = new AttentionDistillationStrategy<double>(layers);
@@ -361,8 +362,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(lossValue >= 0);
     }
 
-    [Fact]
-    public void AttentionDistillation_ComputeAttentionLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionDistillation_ComputeAttentionLoss_ValidOutput()
     {
         var layers = new[] { "layer1" };
         var strategy = new AttentionDistillationStrategy<double>(layers, attentionWeight: 0.3);
@@ -380,8 +381,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region ContrastiveDistillationStrategy Tests
 
-    [Fact]
-    public void ContrastiveDistillation_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ContrastiveDistillation_Constructor_DefaultValues()
     {
         var strategy = new ContrastiveDistillationStrategy<double>();
 
@@ -389,8 +390,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(0.07, strategy.Temperature, precision: 4);
     }
 
-    [Fact]
-    public void ContrastiveDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ContrastiveDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new ContrastiveDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -405,16 +406,16 @@ public class KnowledgeDistillationIntegrationTests
 
     #region ProbabilisticDistillationStrategy Tests
 
-    [Fact]
-    public void ProbabilisticDistillation_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProbabilisticDistillation_Constructor_DefaultValues()
     {
         var strategy = new ProbabilisticDistillationStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void ProbabilisticDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task ProbabilisticDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new ProbabilisticDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -429,8 +430,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region HybridDistillationStrategy Tests
 
-    [Fact]
-    public void HybridDistillation_Constructor_ValidStrategies()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_Constructor_ValidStrategies()
     {
         var strategies = new (IDistillationStrategy<double>, double)[]
         {
@@ -442,21 +443,21 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void HybridDistillation_Constructor_NullStrategies_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_Constructor_NullStrategies_Throws()
     {
         Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(null!));
     }
 
-    [Fact]
-    public void HybridDistillation_Constructor_EmptyStrategies_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_Constructor_EmptyStrategies_Throws()
     {
         Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(
             Array.Empty<(IDistillationStrategy<double>, double)>()));
     }
 
-    [Fact]
-    public void HybridDistillation_Constructor_WeightsDontSumToOne_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_Constructor_WeightsDontSumToOne_Throws()
     {
         var strategies = new (IDistillationStrategy<double>, double)[]
         {
@@ -467,8 +468,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact]
-    public void HybridDistillation_Constructor_NegativeWeight_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_Constructor_NegativeWeight_Throws()
     {
         var strategies = new (IDistillationStrategy<double>, double)[]
         {
@@ -479,8 +480,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(strategies));
     }
 
-    [Fact]
-    public void HybridDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_ComputeLoss_ValidOutput()
     {
         var strategies = new (IDistillationStrategy<double>, double)[]
         {
@@ -496,8 +497,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void HybridDistillation_GetStrategies_ReturnsConfiguredStrategies()
+    [Fact(Timeout = 120000)]
+    public async Task HybridDistillation_GetStrategies_ReturnsConfiguredStrategies()
     {
         var loss = new DistillationLoss<double>();
         var contrastive = new ContrastiveDistillationStrategy<double>();
@@ -517,16 +518,16 @@ public class KnowledgeDistillationIntegrationTests
 
     #region CurriculumDistillationStrategy Tests
 
-    [Fact]
-    public void EasyToHardCurriculum_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task EasyToHardCurriculum_Constructor_DefaultValues()
     {
         var strategy = new EasyToHardCurriculumStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void EasyToHardCurriculum_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EasyToHardCurriculum_ComputeLoss_ValidOutput()
     {
         var strategy = new EasyToHardCurriculumStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -537,16 +538,16 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void HardToEasyCurriculum_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task HardToEasyCurriculum_Constructor_DefaultValues()
     {
         var strategy = new HardToEasyCurriculumStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void HardToEasyCurriculum_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task HardToEasyCurriculum_ComputeLoss_ValidOutput()
     {
         var strategy = new HardToEasyCurriculumStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -561,16 +562,16 @@ public class KnowledgeDistillationIntegrationTests
 
     #region AdaptiveDistillationStrategy Tests
 
-    [Fact]
-    public void AccuracyBasedAdaptive_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task AccuracyBasedAdaptive_Constructor_DefaultValues()
     {
         var strategy = new AccuracyBasedAdaptiveStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void AccuracyBasedAdaptive_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AccuracyBasedAdaptive_ComputeLoss_ValidOutput()
     {
         var strategy = new AccuracyBasedAdaptiveStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -581,16 +582,16 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void ConfidenceBasedAdaptive_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ConfidenceBasedAdaptive_Constructor_DefaultValues()
     {
         var strategy = new ConfidenceBasedAdaptiveStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void EntropyBasedAdaptive_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task EntropyBasedAdaptive_Constructor_DefaultValues()
     {
         var strategy = new EntropyBasedAdaptiveStrategy<double>();
 
@@ -601,16 +602,16 @@ public class KnowledgeDistillationIntegrationTests
 
     #region VariationalDistillationStrategy Tests
 
-    [Fact]
-    public void VariationalDistillation_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalDistillation_Constructor_DefaultValues()
     {
         var strategy = new VariationalDistillationStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void VariationalDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new VariationalDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -625,16 +626,16 @@ public class KnowledgeDistillationIntegrationTests
 
     #region NeuronSelectivityDistillationStrategy Tests
 
-    [Fact]
-    public void NeuronSelectivityDistillation_Constructor_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task NeuronSelectivityDistillation_Constructor_DefaultValues()
     {
         var strategy = new NeuronSelectivityDistillationStrategy<double>();
 
         Assert.Equal(3.0, strategy.Temperature);
     }
 
-    [Fact]
-    public void NeuronSelectivityDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NeuronSelectivityDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new NeuronSelectivityDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -649,8 +650,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region RelationalDistillationStrategy Tests
 
-    [Fact]
-    public void RelationalDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task RelationalDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new RelationalDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -665,8 +666,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region SimilarityPreservingStrategy Tests
 
-    [Fact]
-    public void SimilarityPreserving_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SimilarityPreserving_ComputeLoss_ValidOutput()
     {
         var strategy = new SimilarityPreservingStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -681,8 +682,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region FlowBasedDistillationStrategy Tests
 
-    [Fact]
-    public void FlowBasedDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FlowBasedDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new FlowBasedDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -697,8 +698,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region FactorTransferDistillationStrategy Tests
 
-    [Fact]
-    public void FactorTransferDistillation_ComputeLoss_ValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FactorTransferDistillation_ComputeLoss_ValidOutput()
     {
         var strategy = new FactorTransferDistillationStrategy<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -713,8 +714,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region DistillationStrategyFactory Tests
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_ResponseBased()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_ResponseBased()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.ResponseBased, DefaultTemperature, DefaultAlpha);
@@ -723,8 +724,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<DistillationLoss<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_ContrastiveBased()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_ContrastiveBased()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.ContrastiveBased, DefaultTemperature, DefaultAlpha);
@@ -733,8 +734,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<ContrastiveDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_RelationBased()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_RelationBased()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.RelationBased, DefaultTemperature, DefaultAlpha);
@@ -743,8 +744,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<RelationalDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_SimilarityPreserving()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_SimilarityPreserving()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.SimilarityPreserving, DefaultTemperature, DefaultAlpha);
@@ -753,8 +754,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<SimilarityPreservingStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_FlowBased()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_FlowBased()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.FlowBased, DefaultTemperature, DefaultAlpha);
@@ -763,8 +764,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<FlowBasedDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_ProbabilisticTransfer()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_ProbabilisticTransfer()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.ProbabilisticTransfer, DefaultTemperature, DefaultAlpha);
@@ -773,8 +774,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<ProbabilisticDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_VariationalInformation()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_VariationalInformation()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.VariationalInformation, DefaultTemperature, DefaultAlpha);
@@ -783,8 +784,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<VariationalDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_FactorTransfer()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_FactorTransfer()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.FactorTransfer, DefaultTemperature, DefaultAlpha);
@@ -793,8 +794,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<FactorTransferDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_NeuronSelectivity()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_NeuronSelectivity()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.NeuronSelectivity, DefaultTemperature, DefaultAlpha);
@@ -803,8 +804,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<NeuronSelectivityDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_CreateStrategy_Hybrid()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_CreateStrategy_Hybrid()
     {
         var strategy = DistillationStrategyFactory<double>.CreateStrategy(
             DistillationStrategyType.Hybrid, DefaultTemperature, DefaultAlpha);
@@ -813,8 +814,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.IsType<HybridDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void DistillationStrategyFactory_Configure_FluentBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationStrategyFactory_Configure_FluentBuilder()
     {
         var strategy = DistillationStrategyFactory<double>
             .Configure(DistillationStrategyType.ResponseBased)
@@ -830,8 +831,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region DistillationForwardResult Tests
 
-    [Fact]
-    public void DistillationForwardResult_Constructor_SetsProperties()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationForwardResult_Constructor_SetsProperties()
     {
         var output = CreateLogits(BatchSize, NumClasses);
 
@@ -841,8 +842,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(result.HasIntermediateActivations);
     }
 
-    [Fact]
-    public void DistillationForwardResult_Constructor_WithIntermediateActivations()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationForwardResult_Constructor_WithIntermediateActivations()
     {
         var output = CreateLogits(BatchSize, NumClasses);
         var activations = new IntermediateActivations<double>();
@@ -854,8 +855,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(result.HasIntermediateActivations);
     }
 
-    [Fact]
-    public void DistillationForwardResult_NullOutput_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationForwardResult_NullOutput_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new DistillationForwardResult<double>(null!));
     }
@@ -864,8 +865,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region DistillationCheckpointConfig Tests
 
-    [Fact]
-    public void DistillationCheckpointConfig_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationCheckpointConfig_DefaultValues()
     {
         var config = new DistillationCheckpointConfig();
 
@@ -877,8 +878,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.True(config.SaveStudent);
     }
 
-    [Fact]
-    public void DistillationCheckpointConfig_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationCheckpointConfig_CustomValues()
     {
         var config = new DistillationCheckpointConfig
         {
@@ -898,8 +899,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(config.SaveStudent);
     }
 
-    [Fact]
-    public void DistillationCheckpointConfig_BestMetricSettings()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationCheckpointConfig_BestMetricSettings()
     {
         var config = new DistillationCheckpointConfig
         {
@@ -915,8 +916,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region IntermediateActivations Tests
 
-    [Fact]
-    public void IntermediateActivations_AddAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task IntermediateActivations_AddAndGet()
     {
         var activations = new IntermediateActivations<double>();
         var matrix = CreateLogits(BatchSize, NumClasses);
@@ -937,8 +938,8 @@ public class KnowledgeDistillationIntegrationTests
         }
     }
 
-    [Fact]
-    public void IntermediateActivations_Get_NonExistent_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task IntermediateActivations_Get_NonExistent_ReturnsNull()
     {
         var activations = new IntermediateActivations<double>();
 
@@ -947,8 +948,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public void IntermediateActivations_LayerCount()
+    [Fact(Timeout = 120000)]
+    public async Task IntermediateActivations_LayerCount()
     {
         var activations = new IntermediateActivations<double>();
         activations.Add("layer1", CreateLogits(1, 1));
@@ -961,8 +962,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
-    public void DistillationLoss_SingleSample_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_SingleSample_Works()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(1, NumClasses);
@@ -973,8 +974,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_LargeBatch_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_LargeBatch_Works()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(128, NumClasses);
@@ -985,8 +986,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_HighTemperature_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_HighTemperature_Works()
     {
         var loss = new DistillationLoss<double>(temperature: 20.0);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -997,8 +998,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_LowTemperature_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_LowTemperature_Works()
     {
         var loss = new DistillationLoss<double>(temperature: 0.5);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -1009,8 +1010,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_PureHardLoss_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_PureHardLoss_Works()
     {
         var loss = new DistillationLoss<double>(alpha: 1.0);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -1022,8 +1023,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_PureSoftLoss_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_PureSoftLoss_Works()
     {
         var loss = new DistillationLoss<double>(alpha: 0.0);
         var studentLogits = CreateLogits(BatchSize, NumClasses);
@@ -1035,8 +1036,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_BinaryClassification_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_BinaryClassification_Works()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, 2);
@@ -1047,8 +1048,8 @@ public class KnowledgeDistillationIntegrationTests
         Assert.False(double.IsNaN(lossValue));
     }
 
-    [Fact]
-    public void DistillationLoss_ManyClasses_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_ManyClasses_Works()
     {
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, 1000);
@@ -1063,8 +1064,8 @@ public class KnowledgeDistillationIntegrationTests
 
     #region Cross-Strategy Consistency Tests
 
-    [Fact]
-    public void AllIDistillationStrategies_SupportSameInterface()
+    [Fact(Timeout = 120000)]
+    public async Task AllIDistillationStrategies_SupportSameInterface()
     {
         // Strategies that implement IDistillationStrategy<T>
         var strategies = new IDistillationStrategy<double>[]

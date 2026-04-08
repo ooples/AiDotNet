@@ -5,20 +5,21 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
     public class LSHIndexTests
     {
-        [Fact]
-        public void Constructor_WithNullMetric_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new LSHIndex<double>(null!));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeNumHashTables_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeNumHashTables_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -27,8 +28,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new LSHIndex<double>(metric, numHashTables: -1));
         }
 
-        [Fact]
-        public void Constructor_WithZeroNumHashTables_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroNumHashTables_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -37,8 +38,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new LSHIndex<double>(metric, numHashTables: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeNumHashFunctions_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeNumHashFunctions_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -47,8 +48,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new LSHIndex<double>(metric, numHashFunctions: -1));
         }
 
-        [Fact]
-        public void Add_WithValidVector_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithValidVector_IncreasesCount()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -62,8 +63,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
-        public void Add_WithNullId_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNullId_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -74,8 +75,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Add(null!, vector));
         }
 
-        [Fact]
-        public void Add_WithNullVector_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNullVector_ThrowsArgumentNullException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -85,8 +86,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Add("vec1", null!));
         }
 
-        [Fact]
-        public void Add_WithInconsistentDimension_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithInconsistentDimension_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Add("vec2", vector2));
         }
 
-        [Fact]
-        public void AddBatch_WithValidVectors_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithValidVectors_IncreasesCount()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -120,8 +121,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(3, index.Count);
         }
 
-        [Fact]
-        public void Search_WithCosineSimilarity_ReturnsApproximateResults()
+        [Fact(Timeout = 60000)]
+        public async Task Search_WithCosineSimilarity_ReturnsApproximateResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -142,8 +143,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(results.Count <= 2);
         }
 
-        [Fact]
-        public void Search_OnEmptyIndex_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task Search_OnEmptyIndex_ReturnsEmptyList()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Search_WithNullQuery_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Search_WithNullQuery_ThrowsArgumentNullException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Search(null!, 5));
         }
 
-        [Fact]
-        public void Search_WithNegativeK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Search_WithNegativeK_ThrowsArgumentException()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -180,8 +181,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Search(query, -1));
         }
 
-        [Fact]
-        public void Remove_WithExistingId_RemovesVectorAndReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithExistingId_RemovesVectorAndReturnsTrue()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
-        public void Remove_WithNonExistingId_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNonExistingId_ReturnsFalse()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -212,8 +213,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
-        public void Clear_RemovesAllVectors()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllVectors()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -230,8 +231,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
-        public void Search_WithDifferentHashParameters_AffectsResults()
+        [Fact(Timeout = 60000)]
+        public async Task Search_WithDifferentHashParameters_AffectsResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(resultsMany);
         }
 
-        [Fact]
-        public void HashingIsConsistent_SameVectorGetsSameHash()
+        [Fact(Timeout = 60000)]
+        public async Task HashingIsConsistent_SameVectorGetsSameHash()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -283,8 +284,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results);
         }
 
-        [Fact]
-        public void Search_WithEuclideanDistance_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Search_WithEuclideanDistance_WorksCorrectly()
         {
             // Arrange
             var metric = new EuclideanDistanceMetric<double>();
@@ -303,8 +304,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results);
         }
 
-        [Fact]
-        public void Search_FallbackToFullSearch_WhenNoCandidatesFound()
+        [Fact(Timeout = 60000)]
+        public async Task Search_FallbackToFullSearch_WhenNoCandidatesFound()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -324,8 +325,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results);
         }
 
-        [Fact]
-        public void Index_WithHighDimensionalVectors_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Index_WithHighDimensionalVectors_WorksCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -353,8 +354,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(results.Count <= 10);
         }
 
-        [Fact]
-        public void LSH_WithDeterministicSeed_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task LSH_WithDeterministicSeed_ProducesSameResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -380,8 +381,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             }
         }
 
-        [Fact]
-        public void Index_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Index_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<float>();

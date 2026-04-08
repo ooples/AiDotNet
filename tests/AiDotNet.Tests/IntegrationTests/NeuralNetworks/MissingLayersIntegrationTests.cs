@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -113,8 +114,8 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
-    public void DiffusionConvLayer_Forward_BatchedInputProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionConvLayer_Forward_BatchedInputProducesExpectedShape()
     {
         int batchSize = 2;
         int numVertices = 5;
@@ -145,8 +146,8 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
-    public void MeshPoolLayer_Forward_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task MeshPoolLayer_Forward_ProducesExpectedShape()
     {
         int numEdges = 6;
         int inputChannels = 4;
@@ -172,8 +173,8 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
-    public void SpatialPoolerLayer_Forward_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task SpatialPoolerLayer_Forward_ProducesExpectedShape()
     {
         int inputSize = 8;
         int columnCount = 5;
@@ -185,8 +186,8 @@ public class MissingLayersIntegrationTests
         Assert.Equal(new[] { columnCount }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void SpiralConvLayer_Forward_BatchedInputProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task SpiralConvLayer_Forward_BatchedInputProducesExpectedShape()
     {
         int batchSize = 2;
         int numVertices = 5;
@@ -210,8 +211,8 @@ public class MissingLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void TemporalMemoryLayer_Forward_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalMemoryLayer_Forward_ProducesExpectedShape()
     {
         int columns = 4;
         int cellsPerColumn = 3;

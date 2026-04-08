@@ -1,6 +1,7 @@
 using AiDotNet.Extensions;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Extensions;
 
@@ -14,8 +15,8 @@ public class ExtensionsIntegrationTests
 
     #region VectorExtensions - Slice
 
-    [Fact]
-    public void VectorExtensions_Slice_ReturnsCorrectSubset()
+    [Fact(Timeout = 120000)]
+    public async Task VectorExtensions_Slice_ReturnsCorrectSubset()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
         var sliced = v.Slice(1, 3);
@@ -25,8 +26,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(4.0, sliced[2], Tolerance);
     }
 
-    [Fact]
-    public void VectorExtensions_Slice_FullVector()
+    [Fact(Timeout = 120000)]
+    public async Task VectorExtensions_Slice_FullVector()
     {
         var v = new Vector<double>(new double[] { 10.0, 20.0, 30.0 });
         var sliced = v.Slice(0, 3);
@@ -35,8 +36,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(30.0, sliced[2], Tolerance);
     }
 
-    [Fact]
-    public void VectorExtensions_Slice_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task VectorExtensions_Slice_SingleElement()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var sliced = v.Slice(2, 1);
@@ -48,8 +49,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - ConvertToMatrix
 
-    [Fact]
-    public void TensorExtensions_ConvertToMatrix_2D()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_ConvertToMatrix_2D()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var matrix = tensor.ConvertToMatrix();
@@ -59,8 +60,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(6.0, matrix[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void TensorExtensions_ConvertToMatrix_1D()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_ConvertToMatrix_1D()
     {
         var tensor = new Tensor<double>(new[] { 4 }, new Vector<double>(new double[] { 1, 2, 3, 4 }));
         var matrix = tensor.ConvertToMatrix();
@@ -68,8 +69,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(1, matrix.Columns);
     }
 
-    [Fact]
-    public void TensorExtensions_ConvertToMatrix_3D_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_ConvertToMatrix_3D_Throws()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
         Assert.Throws<ArgumentException>(() => tensor.ConvertToMatrix());
@@ -79,8 +80,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - Unflatten
 
-    [Fact]
-    public void TensorExtensions_Unflatten_PreservesShape()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_Unflatten_PreservesShape()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         var flat = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 });
@@ -90,8 +91,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(6.0, result[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void TensorExtensions_Unflatten_WrongSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_Unflatten_WrongSize_Throws()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         var flat = new Vector<double>(new double[] { 1, 2, 3 }); // Size 3, but tensor needs 6
@@ -102,24 +103,24 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - TensorEquals
 
-    [Fact]
-    public void TensorExtensions_TensorEquals_SameTensors_True()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_TensorEquals_SameTensors_True()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var b = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         Assert.True(a.TensorEquals(b));
     }
 
-    [Fact]
-    public void TensorExtensions_TensorEquals_DifferentValues_False()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_TensorEquals_DifferentValues_False()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var b = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 4 }));
         Assert.False(a.TensorEquals(b));
     }
 
-    [Fact]
-    public void TensorExtensions_TensorEquals_DifferentShapes_False()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_TensorEquals_DifferentShapes_False()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var b = new Tensor<double>(new[] { 2 }, new Vector<double>(new double[] { 1, 2 }));
@@ -130,8 +131,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - ConcatenateTensors
 
-    [Fact]
-    public void TensorExtensions_Concatenate_2D()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_Concatenate_2D()
     {
         var a = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1, 2, 3, 4 }));
         var b = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 5, 6, 7, 8, 9, 10 }));
@@ -139,8 +140,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(new[] { 2, 5 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void TensorExtensions_Concatenate_DifferentRanks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_Concatenate_DifferentRanks_Throws()
     {
         var a = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1, 2, 3 }));
         var b = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 4, 5, 6 }));
@@ -151,8 +152,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - ForEachPosition
 
-    [Fact]
-    public void TensorExtensions_ForEachPosition_VisitsAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_ForEachPosition_VisitsAllElements()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         int count = 0;
@@ -160,8 +161,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(6, count);
     }
 
-    [Fact]
-    public void TensorExtensions_ForEachPosition_CanStopEarly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_ForEachPosition_CanStopEarly()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         int count = 0;
@@ -177,8 +178,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - CreateOnesTensor
 
-    [Fact]
-    public void TensorExtensions_CreateOnesTensor()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_CreateOnesTensor()
     {
         var tensor = TensorExtensions.CreateOnesTensor<double>(5);
         Assert.Equal(5, tensor.Length);
@@ -192,24 +193,24 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - HeStddev and XavierStddev
 
-    [Fact]
-    public void TensorExtensions_HeStddev_KnownValue()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_HeStddev_KnownValue()
     {
         // He stddev = sqrt(2/fanIn)
         double result = TensorExtensions.HeStddev(100);
         Assert.Equal(Math.Sqrt(2.0 / 100), result, Tolerance);
     }
 
-    [Fact]
-    public void TensorExtensions_XavierStddev_KnownValue()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_XavierStddev_KnownValue()
     {
         // Xavier stddev = sqrt(2/(fanIn+fanOut))
         double result = TensorExtensions.XavierStddev(100, 200);
         Assert.Equal(Math.Sqrt(2.0 / 300), result, Tolerance);
     }
 
-    [Fact]
-    public void TensorExtensions_HeStddev_SymmetricInputOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_HeStddev_SymmetricInputOutput()
     {
         // For equal input and output, He and Xavier should differ
         double he = TensorExtensions.HeStddev(100);
@@ -221,8 +222,8 @@ public class ExtensionsIntegrationTests
 
     #region TensorExtensions - CreateXavierInitializedTensor
 
-    [Fact]
-    public void TensorExtensions_CreateXavierInitializedTensor_CorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_CreateXavierInitializedTensor_CorrectShape()
     {
         var random = RandomHelper.CreateSeededRandom(42);
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(new[] { 3, 4 }, 0.1, random);
@@ -230,8 +231,8 @@ public class ExtensionsIntegrationTests
         Assert.Equal(12, tensor.Length);
     }
 
-    [Fact]
-    public void TensorExtensions_CreateXavierInitializedTensor_NotAllZero()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_CreateXavierInitializedTensor_NotAllZero()
     {
         var random = RandomHelper.CreateSeededRandom(42);
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(new[] { 10 }, 1.0, random);
@@ -247,8 +248,8 @@ public class ExtensionsIntegrationTests
         Assert.True(anyNonZero, "Xavier initialized tensor should have non-zero values");
     }
 
-    [Fact]
-    public void TensorExtensions_CreateXavierInitializedTensor_BoundedByStddev()
+    [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_CreateXavierInitializedTensor_BoundedByStddev()
     {
         var random = RandomHelper.CreateSeededRandom(42);
         double stddev = 0.5;
@@ -264,38 +265,38 @@ public class ExtensionsIntegrationTests
 
     #region NumericTypeExtensions - IsRealType
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_Double()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_Double()
     {
         Assert.True(NumericTypeExtensions.IsRealType<double>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_Float()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_Float()
     {
         Assert.True(NumericTypeExtensions.IsRealType<float>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_Int()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_Int()
     {
         Assert.True(NumericTypeExtensions.IsRealType<int>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_Long()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_Long()
     {
         Assert.True(NumericTypeExtensions.IsRealType<long>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_Decimal()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_Decimal()
     {
         Assert.True(NumericTypeExtensions.IsRealType<decimal>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsRealType_String_False()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsRealType_String_False()
     {
         Assert.False(NumericTypeExtensions.IsRealType<string>());
     }
@@ -304,14 +305,14 @@ public class ExtensionsIntegrationTests
 
     #region NumericTypeExtensions - IsComplexType
 
-    [Fact]
-    public void NumericTypeExtensions_IsComplexType_Complex()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsComplexType_Complex()
     {
         Assert.True(NumericTypeExtensions.IsComplexType<Complex<double>>());
     }
 
-    [Fact]
-    public void NumericTypeExtensions_IsComplexType_Double_False()
+    [Fact(Timeout = 120000)]
+    public async Task NumericTypeExtensions_IsComplexType_Double_False()
     {
         Assert.False(NumericTypeExtensions.IsComplexType<double>());
     }
@@ -320,24 +321,24 @@ public class ExtensionsIntegrationTests
 
     #region EnumerableExtensions - RandomElement
 
-    [Fact]
-    public void EnumerableExtensions_RandomElement_ReturnsElementFromCollection()
+    [Fact(Timeout = 120000)]
+    public async Task EnumerableExtensions_RandomElement_ReturnsElementFromCollection()
     {
         var source = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
         var element = source.RandomElement();
         Assert.Contains(element, source);
     }
 
-    [Fact]
-    public void EnumerableExtensions_RandomElement_EmptyCollection_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EnumerableExtensions_RandomElement_EmptyCollection_ReturnsZero()
     {
         var empty = Array.Empty<double>();
         var result = empty.RandomElement();
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void EnumerableExtensions_RandomElement_SingleElement()
+    [Fact(Timeout = 120000)]
+    public async Task EnumerableExtensions_RandomElement_SingleElement()
     {
         var single = new double[] { 42.0 };
         var result = single.RandomElement();

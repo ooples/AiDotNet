@@ -10,8 +10,8 @@ namespace AiDotNetTests.UnitTests.Training
 {
     public class DatasetFactoryTests
     {
-        [Fact]
-        public void Create_WithNullConfig_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithNullConfig_ReturnsNull()
         {
             // Act
             var loader = DatasetFactory<double>.Create(null);
@@ -20,8 +20,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.Null(loader);
         }
 
-        [Fact]
-        public void Create_WithEmptyPath_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithEmptyPath_ReturnsNull()
         {
             // Arrange
             var config = new DatasetConfig { Path = "" };
@@ -33,8 +33,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.Null(loader);
         }
 
-        [Fact]
-        public void Create_WithValidPath_ReturnsCsvDataLoader()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithValidPath_ReturnsCsvDataLoader()
         {
             // Arrange
             var config = new DatasetConfig
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.Equal("CsvDataLoader", csvLoader.Name);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task CsvDataLoader_LoadsValidCsv_CorrectDimensions()
         {
             // Arrange - create a temporary CSV file
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.Training
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task CsvDataLoader_LoadsCorrectValues()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.Training
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task CsvDataLoader_WithNoHeader_LoadsCorrectly()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.Training
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task CsvDataLoader_WithFirstColumnLabel_LoadsCorrectly()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.Training
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task CsvDataLoader_WithMissingFile_ThrowsFileNotFoundException()
         {
             // Arrange
@@ -169,8 +169,8 @@ namespace AiDotNetTests.UnitTests.Training
             await Assert.ThrowsAsync<FileNotFoundException>(() => loader.LoadAsync());
         }
 
-        [Fact]
-        public void CsvDataLoader_WithEmptyPath_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CsvDataLoader_WithEmptyPath_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new CsvDataLoader<double>(""));

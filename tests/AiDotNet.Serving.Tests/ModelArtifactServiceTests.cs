@@ -3,21 +3,22 @@ using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public class ModelArtifactServiceTests
 {
-    [Fact]
-    public void CreateKeyResponse_Throws_WhenArtifactNull()
+    [Fact(Timeout = 60000)]
+    public async Task CreateKeyResponse_Throws_WhenArtifactNull()
     {
         var service = CreateService(modelDirectory: "models");
 
         Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: null!));
     }
 
-    [Fact]
-    public void CreateKeyResponse_ReturnsBase64KeyMaterial()
+    [Fact(Timeout = 60000)]
+    public async Task CreateKeyResponse_ReturnsBase64KeyMaterial()
     {
         var service = CreateService(modelDirectory: "models");
         var key = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
@@ -51,16 +52,16 @@ public class ModelArtifactServiceTests
         Assert.Equal("modelName", ex.ParamName);
     }
 
-    [Fact]
-    public void GetPlainArtifactPath_Throws_WhenModelNotFound()
+    [Fact(Timeout = 60000)]
+    public async Task GetPlainArtifactPath_Throws_WhenModelNotFound()
     {
         var service = CreateService(modelDirectory: "models");
 
         Assert.Throws<FileNotFoundException>(() => service.GetPlainArtifactPath("missing"));
     }
 
-    [Fact]
-    public void GetPlainArtifactPath_Throws_WhenModelHasNoSourcePath()
+    [Fact(Timeout = 60000)]
+    public async Task GetPlainArtifactPath_Throws_WhenModelHasNoSourcePath()
     {
         var repo = new TestModelRepository();
         repo.SetModelInfo("m", new ModelInfo { Name = "m", SourcePath = null });
@@ -70,8 +71,8 @@ public class ModelArtifactServiceTests
         Assert.Throws<InvalidOperationException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact]
-    public void GetPlainArtifactPath_Throws_WhenSourcePathOutsideConfiguredDirectory()
+    [Fact(Timeout = 60000)]
+    public async Task GetPlainArtifactPath_Throws_WhenSourcePathOutsideConfiguredDirectory()
     {
         var workDir = CreateWorkDir();
         var modelsDir = Path.Combine(workDir, "models");
@@ -90,8 +91,8 @@ public class ModelArtifactServiceTests
         Assert.Throws<InvalidOperationException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact]
-    public void GetPlainArtifactPath_Throws_WhenSourceFileMissing()
+    [Fact(Timeout = 60000)]
+    public async Task GetPlainArtifactPath_Throws_WhenSourceFileMissing()
     {
         var workDir = CreateWorkDir();
         var modelsDir = Path.Combine(workDir, "models");
@@ -107,8 +108,8 @@ public class ModelArtifactServiceTests
         Assert.Throws<FileNotFoundException>(() => service.GetPlainArtifactPath("m"));
     }
 
-    [Fact]
-    public void GetPlainArtifactPath_ReturnsFullPath_WhenSourceFileValid()
+    [Fact(Timeout = 60000)]
+    public async Task GetPlainArtifactPath_ReturnsFullPath_WhenSourceFileValid()
     {
         var workDir = CreateWorkDir();
         var modelsDir = Path.Combine(workDir, "models");
@@ -127,8 +128,8 @@ public class ModelArtifactServiceTests
         Assert.Equal(Path.GetFullPath(file), result);
     }
 
-    [Fact]
-    public void GetOrCreateEncryptedArtifact_UsesStoreAndCachesPerModelName()
+    [Fact(Timeout = 60000)]
+    public async Task GetOrCreateEncryptedArtifact_UsesStoreAndCachesPerModelName()
     {
         var workDir = CreateWorkDir();
         var modelsDir = Path.Combine(workDir, "models") + Path.DirectorySeparatorChar;
@@ -155,8 +156,8 @@ public class ModelArtifactServiceTests
         Assert.EndsWith(Path.Combine(".protected"), protector.LastOutputDirectory!, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void RemoveProtectedArtifact_NoOps_WhenNameBlank()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveProtectedArtifact_NoOps_WhenNameBlank()
     {
         var store = new InMemoryModelArtifactStore();
         var artifact = new ProtectedModelArtifact(
@@ -176,8 +177,8 @@ public class ModelArtifactServiceTests
         Assert.True(store.TryGet("m", out _));
     }
 
-    [Fact]
-    public void RemoveProtectedArtifact_RemovesArtifact_WhenNameProvided()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveProtectedArtifact_RemovesArtifact_WhenNameProvided()
     {
         var store = new InMemoryModelArtifactStore();
         var artifact = new ProtectedModelArtifact(

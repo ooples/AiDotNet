@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 #if !NET471
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -5,7 +6,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using AiDotNet.Helpers;
 using AiDotNet.Serving.Persistence;
 using AiDotNet.Serving.Security;
@@ -45,7 +45,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         _db.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CreateAsync_GeneratesValidKeyFormat()
     {
         var response = await _svc.CreateAsync(new LicenseCreateRequest
@@ -66,7 +66,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(parts[2]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CreateAsync_StoresHashNotPlaintext()
     {
         var response = await _svc.CreateAsync(new LicenseCreateRequest
@@ -89,7 +89,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.NotEqual(secretBytes, entity.Hash);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ValidateAsync_ActiveKey_ReturnsActive()
     {
         var createResponse = await _svc.CreateAsync(new LicenseCreateRequest
@@ -111,7 +111,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(3, validateResponse.SeatsMax);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ValidateAsync_RevokedKey_ReturnsRevoked()
     {
         var createResponse = await _svc.CreateAsync(new LicenseCreateRequest
@@ -129,7 +129,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(LicenseKeyStatus.Revoked, validateResponse.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ValidateAsync_ExpiredKey_ReturnsExpired()
     {
         var createResponse = await _svc.CreateAsync(new LicenseCreateRequest
@@ -151,7 +151,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(LicenseKeyStatus.Expired, validateResponse.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ValidateAsync_InvalidKey_ReturnsInvalid()
     {
         var validateResponse = await _svc.ValidateAsync(new LicenseValidateRequest
@@ -162,7 +162,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(LicenseKeyStatus.Invalid, validateResponse.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ValidateAsync_ReturnsDecryptionToken()
     {
         var createResponse = await _svc.CreateAsync(new LicenseCreateRequest
@@ -185,7 +185,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(32, tokenBytes.Length); // HMAC-SHA256 output
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SeatEnforcement_ExceedsMaxSeats_ReturnsSeatLimitReached()
     {
         var createResponse = await _svc.CreateAsync(new LicenseCreateRequest
@@ -211,7 +211,7 @@ public class LicenseServiceIntegrationTests : IDisposable
         Assert.Equal(LicenseKeyStatus.SeatLimitReached, result2.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_EncryptWithServerToken_DecryptSucceeds()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));

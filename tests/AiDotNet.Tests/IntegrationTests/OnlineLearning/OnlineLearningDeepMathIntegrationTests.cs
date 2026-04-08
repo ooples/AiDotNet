@@ -2,6 +2,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.OnlineLearning;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.OnlineLearning;
 
@@ -18,8 +19,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region SGD Regressor - Hand-Computed Update Tests
 
-    [Fact]
-    public void SGDRegressor_OneStep_SquaredError_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_OneStep_SquaredError_HandComputed()
     {
         // Hand-computed single SGD step with squared error loss:
         // x=[1.0], y=2.0, lr=0.1, init w=[0], b=0
@@ -52,8 +53,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.8, pred, MediumTolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_OneStep_WithL2Regularization_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_OneStep_WithL2Regularization_HandComputed()
     {
         // Same as above but with L2=0.1:
         // w gradient = -4 + 0.1*0 = -4 (still -4 since w=0 initially)
@@ -86,8 +87,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.64, bias, MediumTolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_HuberLoss_SmallError_EqualsSquaredLoss()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_HuberLoss_SmallError_EqualsSquaredLoss()
     {
         // For small errors (|residual| <= epsilon), Huber gradient = squared loss gradient
         // With epsilon=0.5 and small initial error, should behave like squared loss
@@ -109,8 +110,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(sgdSquared.GetBias(), sgdHuber.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_HuberLoss_LargeError_LinearGradient()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_HuberLoss_LargeError_LinearGradient()
     {
         // For large errors (|residual| > epsilon), Huber gradient = 2*epsilon*sign(residual)
         // epsilon=0.1, x=[1], y=100 (huge error)
@@ -129,8 +130,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.02, sgd.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_EpsilonInsensitive_SmallError_NoUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_EpsilonInsensitive_SmallError_NoUpdate()
     {
         // With epsilon-insensitive loss, errors within epsilon produce zero gradient
         // epsilon=1.0, x=[1], y=0.5 (error < epsilon)
@@ -147,8 +148,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.0, sgd.GetBias(), Tolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_EpsilonInsensitive_LargeError_SignGradient()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_EpsilonInsensitive_LargeError_SignGradient()
     {
         // Error > epsilon: gradient = sign(residual)
         // epsilon=0.1, x=[1], y=5 (error >> epsilon)
@@ -167,8 +168,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.1, sgd.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_L1Regularization_SoftThresholding()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_L1Regularization_SoftThresholding()
     {
         // L1 regularization applies soft thresholding: shrinks weights toward zero
         // With large L1 penalty and small weights, weights should be driven to exactly 0
@@ -191,8 +192,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region SGD Regressor - Convergence Tests
 
-    [Fact]
-    public void SGDRegressor_ConvergesOnSimpleLinearData()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_ConvergesOnSimpleLinearData()
     {
         // y = 2*x + 3
         var sgd = new OnlineSGDRegressor<double>(
@@ -220,8 +221,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"Bias should be ~3.0, got {bias:F4}");
     }
 
-    [Fact]
-    public void SGDRegressor_Score_R2_ReasonableOnLinearData()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_Score_R2_ReasonableOnLinearData()
     {
         // After training on linear data, R² should be high
         var sgd = new OnlineSGDRegressor<double>(
@@ -252,8 +253,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region PA Regressor - Hand-Computed Update Tests
 
-    [Fact]
-    public void PARegressor_PA_OneStep_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_PA_OneStep_HandComputed()
     {
         // PA update: tau = loss / ||x||²
         // x=[2], y=5, epsilon=0.1, init w=[0], b=0, fitIntercept=true
@@ -284,8 +285,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"After PA update, error should be <= epsilon. Pred={pred:F4}, expected ~5.0");
     }
 
-    [Fact]
-    public void PARegressor_PAI_BoundsUpdateByC()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_PAI_BoundsUpdateByC()
     {
         // PA-I: tau = min(C, loss/||x||²)
         // x=[1], y=100, epsilon=0, C=0.5
@@ -305,8 +306,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.5, pa.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void PARegressor_PAII_SmoothUpdate_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_PAII_SmoothUpdate_HandComputed()
     {
         // PA-II: tau = loss / (||x||² + 1/(2C))
         // x=[1], y=5, epsilon=0, C=1.0
@@ -326,8 +327,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(2.0, pa.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void PARegressor_Passive_WhenErrorWithinEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_Passive_WhenErrorWithinEpsilon()
     {
         // When |error| <= epsilon, loss = 0 → no update (passive)
         var pa = new OnlinePassiveAggressiveRegressor<double>(
@@ -351,8 +352,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(biasBefore, pa.GetBias(), Tolerance);
     }
 
-    [Fact]
-    public void PARegressor_EpsilonInsensitiveLoss_ComputedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_EpsilonInsensitiveLoss_ComputedCorrectly()
     {
         // Train a model and verify epsilon-insensitive loss computation
         var pa = new OnlinePassiveAggressiveRegressor<double>(epsilon: 0.5);
@@ -377,8 +378,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region PA Classifier - Hand-Computed Update Tests
 
-    [Fact]
-    public void PAClassifier_PA_OneStep_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_PA_OneStep_HandComputed()
     {
         // PA classifier update:
         // x=[1], y=1 (label +1), init w=[0], b=0
@@ -403,8 +404,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(1.0, score, MediumTolerance);
     }
 
-    [Fact]
-    public void PAClassifier_Passive_WhenMarginSufficient()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_Passive_WhenMarginSufficient()
     {
         // When margin >= 1, hinge loss = 0 → no update
         var pac = new OnlinePassiveAggressiveClassifier<double>(
@@ -425,8 +426,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(biasBefore, pac.GetBias(), Tolerance);
     }
 
-    [Fact]
-    public void PAClassifier_PAI_BoundsStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_PAI_BoundsStepSize()
     {
         // PA-I: tau = min(C, loss/normSq)
         // With small C, step should be bounded
@@ -443,8 +444,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"PA-I weight should be ~0.01, got {pac.GetWeights()[0]:F6}");
     }
 
-    [Fact]
-    public void PAClassifier_HingeLoss_ComputedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_HingeLoss_ComputedCorrectly()
     {
         // Verify hinge loss computation
         var pac = new OnlinePassiveAggressiveClassifier<double>();
@@ -469,8 +470,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region SGD Classifier - Tests
 
-    [Fact]
-    public void SGDClassifier_Sigmoid_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_Sigmoid_Properties()
     {
         // After training, PredictProbability should return values in (0, 1)
         var sgd = new OnlineSGDClassifier<double>(
@@ -498,8 +499,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"P(y=1|x=1) = {prob1:F4} should be > P(y=1|x=-1) = {prob0:F4}");
     }
 
-    [Fact]
-    public void SGDClassifier_OneStep_LogisticGradient_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_OneStep_LogisticGradient_HandComputed()
     {
         // One-step logistic regression update:
         // x=[1], y=1, lr=0.1, init w=[0], b=0
@@ -520,8 +521,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.05, sgd.GetBias(), MediumTolerance);
     }
 
-    [Fact]
-    public void SGDClassifier_ConvergesOnSeparableData()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_ConvergesOnSeparableData()
     {
         // Linearly separable data: class 1 has positive features, class 0 has negative
         var sgd = new OnlineSGDClassifier<double>(
@@ -542,8 +543,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.0, pred0, Tolerance);
     }
 
-    [Fact]
-    public void SGDClassifier_DecisionFunction_PositiveForClass1()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_DecisionFunction_PositiveForClass1()
     {
         // Decision function should be positive for class 1 features after training
         var sgd = new OnlineSGDClassifier<double>(
@@ -562,8 +563,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.True(df0 < 0, $"Decision function for class 0 feature should be negative, got {df0:F4}");
     }
 
-    [Fact]
-    public void SGDClassifier_L1Regularization_ProducesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_L1Regularization_ProducesSparsity()
     {
         // With strong L1 and irrelevant features, some weights should be exactly zero
         var sgd = new OnlineSGDClassifier<double>(
@@ -586,8 +587,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region PA Classifier - Convergence Tests
 
-    [Fact]
-    public void PAClassifier_ConvergesOnSeparableData()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_ConvergesOnSeparableData()
     {
         // PA should perfectly classify linearly separable data
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
@@ -605,8 +606,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.0, pred0, Tolerance);
     }
 
-    [Fact]
-    public void PAClassifier_MultiFeature_LearnsCorrectDecisionBoundary()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_MultiFeature_LearnsCorrectDecisionBoundary()
     {
         // 2D separable data: class 1 when x1+x2 > 0, class 0 otherwise
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
@@ -631,8 +632,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Learning Rate Schedule Tests
 
-    [Fact]
-    public void LearningRate_Constant_NeverChanges()
+    [Fact(Timeout = 120000)]
+    public async Task LearningRate_Constant_NeverChanges()
     {
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.05, learningRateSchedule: LearningRateSchedule.Constant);
@@ -649,8 +650,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.True(sgd.GetSampleCount() == 100);
     }
 
-    [Fact]
-    public void LearningRate_InverseScaling_Decreases()
+    [Fact(Timeout = 120000)]
+    public async Task LearningRate_InverseScaling_Decreases()
     {
         // Inverse scaling: lr = lr0 / (1 + alpha * t)
         // After many samples, the effective LR should be smaller
@@ -695,8 +696,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Sample Count and Reset Tests
 
-    [Fact]
-    public void OnlineModel_SampleCount_IncrementsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineModel_SampleCount_IncrementsCorrectly()
     {
         var sgd = new OnlineSGDRegressor<double>();
         var x = new Vector<double>(new double[] { 1.0 });
@@ -710,8 +711,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(2, sgd.GetSampleCount());
     }
 
-    [Fact]
-    public void OnlineModel_BatchPartialFit_IncrementsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineModel_BatchPartialFit_IncrementsCorrectly()
     {
         var sgd = new OnlineSGDRegressor<double>();
 
@@ -728,8 +729,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(5, sgd.GetSampleCount());
     }
 
-    [Fact]
-    public void OnlineModel_Reset_ClearsState()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineModel_Reset_ClearsState()
     {
         var sgd = new OnlineSGDRegressor<double>();
         var x = new Vector<double>(new double[] { 1.0 });
@@ -745,8 +746,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Null(sgd.GetWeights());
     }
 
-    [Fact]
-    public void PARegressor_Reset_ClearsState()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_Reset_ClearsState()
     {
         var pa = new OnlinePassiveAggressiveRegressor<double>();
         var x = new Vector<double>(new double[] { 1.0 });
@@ -764,8 +765,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Batch Predict Tests
 
-    [Fact]
-    public void SGDRegressor_BatchPredict_MatchesSinglePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_BatchPredict_MatchesSinglePredictions()
     {
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.01, learningRateSchedule: LearningRateSchedule.Constant);
@@ -790,8 +791,8 @@ public class OnlineLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGDClassifier_PredictProbabilities_MatchesSingle()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_PredictProbabilities_MatchesSingle()
     {
         var sgd = new OnlineSGDClassifier<double>(
             learningRate: 0.1, learningRateSchedule: LearningRateSchedule.Constant);
@@ -819,8 +820,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region GetParameters / SetParameters Tests
 
-    [Fact]
-    public void SGDRegressor_GetSetParameters_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_GetSetParameters_Roundtrip()
     {
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.01, learningRateSchedule: LearningRateSchedule.Constant);
@@ -845,8 +846,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(pred1, pred2, Tolerance);
     }
 
-    [Fact]
-    public void PAClassifier_GetSetParameters_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_GetSetParameters_Roundtrip()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>();
 
@@ -868,8 +869,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Feature Importance Tests
 
-    [Fact]
-    public void SGDRegressor_FeatureImportance_ReflectsAbsoluteWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_FeatureImportance_ReflectsAbsoluteWeights()
     {
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.01, learningRateSchedule: LearningRateSchedule.Constant,
@@ -906,8 +907,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region ADWIN Drift Detector Tests
 
-    [Fact]
-    public void ADWIN_StationaryData_NoDrift()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_StationaryData_NoDrift()
     {
         // On stationary data, ADWIN should not detect drift (or very rarely)
         var adwin = new ADWINDriftDetector<double>(delta: 0.01);
@@ -924,8 +925,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"ADWIN should rarely detect drift on constant data, got {driftCount} detections");
     }
 
-    [Fact]
-    public void ADWIN_MeanShift_DetectsDrift()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_MeanShift_DetectsDrift()
     {
         // When the mean shifts significantly, ADWIN should detect drift
         var adwin = new ADWINDriftDetector<double>(delta: 0.01);
@@ -952,8 +953,8 @@ public class OnlineLearningDeepMathIntegrationTests
             "ADWIN should detect drift when mean shifts from 0 to 5");
     }
 
-    [Fact]
-    public void ADWIN_GradualDrift_EventuallyDetected()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_GradualDrift_EventuallyDetected()
     {
         // Gradually increasing mean should eventually trigger drift detection
         var adwin = new ADWINDriftDetector<double>(delta: 0.01);
@@ -978,8 +979,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact]
-    public void SGD_VS_PA_Regressor_BothConvergeOnLinearData()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_VS_PA_Regressor_BothConvergeOnLinearData()
     {
         // Both SGD and PA regressors should fit linear data well
         var sgd = new OnlineSGDRegressor<double>(
@@ -1027,8 +1028,8 @@ public class OnlineLearningDeepMathIntegrationTests
             $"PA MSE ({paMSE:F4}) should be low on linear data");
     }
 
-    [Fact]
-    public void SGD_VS_PA_Classifier_BothClassifySeparableData()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_VS_PA_Classifier_BothClassifySeparableData()
     {
         var sgd = new OnlineSGDClassifier<double>(
             learningRate: 0.1, learningRateSchedule: LearningRateSchedule.Constant);
@@ -1053,8 +1054,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region WithParameters and Metadata Tests
 
-    [Fact]
-    public void SGDRegressor_WithParameters_CreatesCorrectCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_WithParameters_CreatesCorrectCopy()
     {
         var sgd = new OnlineSGDRegressor<double>(learningRate: 0.05);
         var x = new Vector<double>(new double[] { 1.0, 2.0 });
@@ -1070,8 +1071,8 @@ public class OnlineLearningDeepMathIntegrationTests
             Assert.Equal(params_[i], newParams[i], Tolerance);
     }
 
-    [Fact]
-    public void OnlineModel_GetModelMetadata_ContainsExpectedFields()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineModel_GetModelMetadata_ContainsExpectedFields()
     {
         var sgd = new OnlineSGDRegressor<double>();
         var x = new Vector<double>(new double[] { 1.0 });
@@ -1088,8 +1089,8 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void SGDRegressor_ZeroLearningRate_NoUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_ZeroLearningRate_NoUpdate()
     {
         // With learning rate = 1e-10 (minimum), updates should be tiny
         var sgd = new OnlineSGDRegressor<double>(
@@ -1104,8 +1105,8 @@ public class OnlineLearningDeepMathIntegrationTests
             "Tiny learning rate should produce negligible weight updates");
     }
 
-    [Fact]
-    public void PARegressor_ZeroFeatureNorm_NoUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_ZeroFeatureNorm_NoUpdate()
     {
         // If x = [0] and no intercept, normSq = 0, tau = 0 → no update
         var pa = new OnlinePassiveAggressiveRegressor<double>(
@@ -1117,8 +1118,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.0, pa.GetWeights()[0], Tolerance);
     }
 
-    [Fact]
-    public void SGDRegressor_NoIntercept_BiasStaysZero()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_NoIntercept_BiasStaysZero()
     {
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.1, learningRateSchedule: LearningRateSchedule.Constant,
@@ -1131,8 +1132,8 @@ public class OnlineLearningDeepMathIntegrationTests
         Assert.Equal(0.0, sgd.GetBias(), Tolerance);
     }
 
-    [Fact]
-    public void FeatureCountMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureCountMismatch_Throws()
     {
         var sgd = new OnlineSGDRegressor<double>();
 

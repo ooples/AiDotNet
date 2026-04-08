@@ -25,7 +25,7 @@ public class PlaygroundExampleCompilationTests
     /// <summary>
     /// Verifies that all playground examples compile without errors.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Playground")]
     public void AllPlaygroundExamples_ShouldCompile()
     {

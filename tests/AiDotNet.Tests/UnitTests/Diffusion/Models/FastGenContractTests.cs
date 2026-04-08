@@ -3,6 +3,7 @@ using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 
@@ -13,8 +14,8 @@ public class FastGenContractTests
 {
     #region Phase 4 — New T2I Models
 
-    [Fact]
-    public void Flux2Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task Flux2Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new Flux2Model<double>();
 
@@ -24,8 +25,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void SANAModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SANAModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SANAModel<double>();
 
@@ -35,8 +36,8 @@ public class FastGenContractTests
         Assert.Equal(32, model.LatentChannels);
     }
 
-    [Fact]
-    public void StableDiffusion35Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task StableDiffusion35Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new StableDiffusion35Model<double>();
 
@@ -46,8 +47,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void LuminaImage2Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task LuminaImage2Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new LuminaImage2Model<double>();
 
@@ -56,8 +57,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void HiDreamModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task HiDreamModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new HiDreamModel<double>();
 
@@ -66,8 +67,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void CogView4Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task CogView4Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new CogView4Model<double>();
 
@@ -76,8 +77,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void PlaygroundV3Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task PlaygroundV3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new PlaygroundV3Model<double>();
 
@@ -86,8 +87,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void Imagen3Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task Imagen3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new Imagen3Model<double>();
 
@@ -96,8 +97,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void MeissonicModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task MeissonicModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new MeissonicModel<double>();
 
@@ -106,8 +107,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void RecraftV3Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task RecraftV3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new RecraftV3Model<double>();
 
@@ -116,8 +117,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void Ideogram3Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task Ideogram3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new Ideogram3Model<double>();
 
@@ -126,8 +127,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void MidJourneyV7Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task MidJourneyV7Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new MidJourneyV7Model<double>();
 
@@ -140,8 +141,8 @@ public class FastGenContractTests
 
     #region Phase 6c — New VAEs
 
-    [Fact]
-    public void DeepCompressionVAE_DefaultConstructor_CreatesValidVAE()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCompressionVAE_DefaultConstructor_CreatesValidVAE()
     {
         var vae = new DeepCompressionVAE<double>();
 
@@ -150,8 +151,8 @@ public class FastGenContractTests
         Assert.True(vae.DownsampleFactor >= 32);
     }
 
-    [Fact]
-    public void EQVAEModel_DefaultConstructor_CreatesValidVAE()
+    [Fact(Timeout = 120000)]
+    public async Task EQVAEModel_DefaultConstructor_CreatesValidVAE()
     {
         var vae = new EQVAEModel<double>();
 
@@ -159,8 +160,8 @@ public class FastGenContractTests
         Assert.True(vae.ParameterCount > 0);
     }
 
-    [Fact]
-    public void LiteVAEModel_DefaultConstructor_CreatesValidVAE()
+    [Fact(Timeout = 120000)]
+    public async Task LiteVAEModel_DefaultConstructor_CreatesValidVAE()
     {
         var vae = new LiteVAEModel<double>();
 
@@ -168,8 +169,8 @@ public class FastGenContractTests
         Assert.True(vae.ParameterCount > 0);
     }
 
-    [Fact]
-    public void SDXLVAEModel_DefaultConstructor_CreatesValidVAE()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLVAEModel_DefaultConstructor_CreatesValidVAE()
     {
         var vae = new SDXLVAEModel<double>();
 
@@ -181,8 +182,8 @@ public class FastGenContractTests
 
     #region Phase 6d — Consistency Models
 
-    [Fact]
-    public void ImprovedConsistencyModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task ImprovedConsistencyModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ImprovedConsistencyModel<double>();
 
@@ -192,8 +193,8 @@ public class FastGenContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
-    public void EasyConsistencyModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task EasyConsistencyModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new EasyConsistencyModel<double>();
 
@@ -202,8 +203,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void MultiStepConsistencyModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task MultiStepConsistencyModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new MultiStepConsistencyModel<double>();
 
@@ -212,8 +213,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void MultistepLCModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task MultistepLCModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new MultistepLCModel<double>();
 
@@ -222,8 +223,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void TrainingEfficientLCM_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingEfficientLCM_DefaultConstructor_CreatesValidModel()
     {
         var model = new TrainingEfficientLCM<double>();
 
@@ -236,8 +237,8 @@ public class FastGenContractTests
 
     #region Phase 6e — Adversarial Distillation
 
-    [Fact]
-    public void SDXLTurboModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLTurboModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SDXLTurboModel<double>();
 
@@ -247,8 +248,8 @@ public class FastGenContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
-    public void SDXLLightningModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLLightningModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SDXLLightningModel<double>();
 
@@ -257,8 +258,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void HyperSDModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task HyperSDModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new HyperSDModel<double>();
 
@@ -267,8 +268,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void DMD2Model_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task DMD2Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new DMD2Model<double>();
 
@@ -277,8 +278,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SenseFlowModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SenseFlowModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SenseFlowModel<double>();
 
@@ -287,8 +288,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SANASprintModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SANASprintModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SANASprintModel<double>();
 
@@ -297,8 +298,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SwiftBrushModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SwiftBrushModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SwiftBrushModel<double>();
 
@@ -307,8 +308,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void FlashDiffusionModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task FlashDiffusionModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new FlashDiffusionModel<double>();
 
@@ -321,8 +322,8 @@ public class FastGenContractTests
 
     #region Phase 6f — Trajectory/Score
 
-    [Fact]
-    public void PCMModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task PCMModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new PCMModel<double>();
 
@@ -331,8 +332,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void TCDModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task TCDModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new TCDModel<double>();
 
@@ -341,8 +342,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void InstaFlowModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task InstaFlowModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new InstaFlowModel<double>();
 
@@ -351,8 +352,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void FlowMapModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task FlowMapModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new FlowMapModel<double>();
 
@@ -361,8 +362,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SCottModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SCottModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SCottModel<double>();
 
@@ -371,8 +372,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void PeRFlowModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task PeRFlowModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new PeRFlowModel<double>();
 
@@ -381,8 +382,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SiDModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SiDModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SiDModel<double>();
 
@@ -391,8 +392,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void SiDDiTModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SiDDiTModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SiDDiTModel<double>();
 
@@ -405,8 +406,8 @@ public class FastGenContractTests
 
     #region Phase 7a — Architecture-Specific Fast
 
-    [Fact]
-    public void SD3TurboModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SD3TurboModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SD3TurboModel<double>();
 
@@ -416,8 +417,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void FluxSchnellModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task FluxSchnellModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new FluxSchnellModel<double>();
 
@@ -427,8 +428,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void SD3FlashModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task SD3FlashModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new SD3FlashModel<double>();
 
@@ -438,8 +439,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void Flux2SchnellModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task Flux2SchnellModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new Flux2SchnellModel<double>();
 
@@ -449,8 +450,8 @@ public class FastGenContractTests
         Assert.Equal(16, model.LatentChannels);
     }
 
-    [Fact]
-    public void PixArtDeltaLCMModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task PixArtDeltaLCMModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new PixArtDeltaLCMModel<double>();
 
@@ -463,8 +464,8 @@ public class FastGenContractTests
 
     #region Phase 7b — Hybrid/Emerging
 
-    [Fact]
-    public void TransfusionModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransfusionModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new TransfusionModel<double>();
 
@@ -473,8 +474,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void MARModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task MARModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new MARModel<double>();
 
@@ -483,8 +484,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void ARDiffusionModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task ARDiffusionModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ARDiffusionModel<double>();
 
@@ -493,8 +494,8 @@ public class FastGenContractTests
         Assert.NotNull(model.VAE);
     }
 
-    [Fact]
-    public void AutoRegressiveMaskedDiffusion_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task AutoRegressiveMaskedDiffusion_DefaultConstructor_CreatesValidModel()
     {
         var model = new AutoRegressiveMaskedDiffusion<double>();
 
@@ -507,8 +508,8 @@ public class FastGenContractTests
 
     #region Phase 6a — New Schedulers
 
-    [Fact]
-    public void RectifiedFlowScheduler_DefaultConstructor_CreatesValidScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task RectifiedFlowScheduler_DefaultConstructor_CreatesValidScheduler()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
         var scheduler = new RectifiedFlowScheduler<double>(config);
@@ -517,8 +518,8 @@ public class FastGenContractTests
         Assert.NotNull(scheduler.Config);
     }
 
-    [Fact]
-    public void FlowDPMSolverScheduler_DefaultConstructor_CreatesValidScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task FlowDPMSolverScheduler_DefaultConstructor_CreatesValidScheduler()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
         var scheduler = new FlowDPMSolverScheduler<double>(config);
@@ -526,8 +527,8 @@ public class FastGenContractTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void DPMSolverV3Scheduler_DefaultConstructor_CreatesValidScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task DPMSolverV3Scheduler_DefaultConstructor_CreatesValidScheduler()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new DPMSolverV3Scheduler<double>(config);
@@ -535,8 +536,8 @@ public class FastGenContractTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void SASolverScheduler_DefaultConstructor_CreatesValidScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task SASolverScheduler_DefaultConstructor_CreatesValidScheduler()
     {
         var config = SchedulerConfig<double>.CreateDefault();
         var scheduler = new SASolverScheduler<double>(config);
@@ -548,8 +549,8 @@ public class FastGenContractTests
 
     #region Clone Tests - Representative Fast Gen Models
 
-    [Fact]
-    public void SDXLTurboModel_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLTurboModel_Clone_CreatesIndependentCopy()
     {
         var model = new SDXLTurboModel<double>();
         var clone = model.Clone();
@@ -559,8 +560,8 @@ public class FastGenContractTests
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
-    [Fact]
-    public void FluxSchnellModel_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task FluxSchnellModel_Clone_CreatesIndependentCopy()
     {
         var model = new FluxSchnellModel<double>();
         var clone = model.Clone();
@@ -570,8 +571,8 @@ public class FastGenContractTests
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
-    [Fact]
-    public void ImprovedConsistencyModel_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ImprovedConsistencyModel_Clone_CreatesIndependentCopy()
     {
         var model = new ImprovedConsistencyModel<double>();
         var clone = model.Clone();
@@ -585,8 +586,8 @@ public class FastGenContractTests
 
     #region GetParameters/SetParameters Round-trip
 
-    [Fact]
-    public void SDXLTurboModel_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLTurboModel_GetSetParameters_RoundTrips()
     {
         var model = new SDXLTurboModel<double>();
 
@@ -598,8 +599,8 @@ public class FastGenContractTests
         Assert.Equal(parameters.Length, retrieved.Length);
     }
 
-    [Fact]
-    public void Flux2Model_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task Flux2Model_GetSetParameters_RoundTrips()
     {
         var model = new Flux2Model<double>();
 
@@ -615,8 +616,8 @@ public class FastGenContractTests
 
     #region GetModelMetadata Tests
 
-    [Fact]
-    public void SDXLTurboModel_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task SDXLTurboModel_GetModelMetadata_ReturnsValidMetadata()
     {
         var model = new SDXLTurboModel<double>();
 
@@ -626,8 +627,8 @@ public class FastGenContractTests
         Assert.NotNull(metadata.Name);
     }
 
-    [Fact]
-    public void FluxSchnellModel_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task FluxSchnellModel_GetModelMetadata_ReturnsValidMetadata()
     {
         var model = new FluxSchnellModel<double>();
 
@@ -637,8 +638,8 @@ public class FastGenContractTests
         Assert.NotNull(metadata.Name);
     }
 
-    [Fact]
-    public void SANAModel_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task SANAModel_GetModelMetadata_ReturnsValidMetadata()
     {
         var model = new SANAModel<double>();
 
@@ -652,8 +653,8 @@ public class FastGenContractTests
 
     #region Gap Analysis — OSDS Model
 
-    [Fact]
-    public void OSDSModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task OSDSModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new OSDSModel<double>();
 
@@ -667,8 +668,8 @@ public class FastGenContractTests
 
     #region Gap Analysis — 3D Score Distillation Methods
 
-    [Fact]
-    public void ScoreDistillationSampling_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task ScoreDistillationSampling_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var sds = new AiDotNet.Diffusion.Distillation.ScoreDistillationSampling<double>(teacher);
@@ -677,8 +678,8 @@ public class FastGenContractTests
         Assert.Equal(100.0, sds.GuidanceScale);
     }
 
-    [Fact]
-    public void VariationalScoreDistillation_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task VariationalScoreDistillation_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var vsd = new AiDotNet.Diffusion.Distillation.VariationalScoreDistillation<double>(teacher);
@@ -688,8 +689,8 @@ public class FastGenContractTests
         Assert.Equal(4, vsd.LoRARank);
     }
 
-    [Fact]
-    public void ConsistencyDistillationSampling_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyDistillationSampling_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var csd = new AiDotNet.Diffusion.Distillation.ConsistencyDistillationSampling<double>(teacher);
@@ -699,8 +700,8 @@ public class FastGenContractTests
         Assert.Equal(1.0, csd.ConsistencyWeight);
     }
 
-    [Fact]
-    public void IntervalScoreMatching_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalScoreMatching_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var ism = new AiDotNet.Diffusion.Distillation.IntervalScoreMatching<double>(teacher);
@@ -710,8 +711,8 @@ public class FastGenContractTests
         Assert.Equal(1, ism.IntervalSteps);
     }
 
-    [Fact]
-    public void DenoisedScoreDistillation_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task DenoisedScoreDistillation_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var dsd = new AiDotNet.Diffusion.Distillation.DenoisedScoreDistillation<double>(teacher);
@@ -721,8 +722,8 @@ public class FastGenContractTests
         Assert.Equal(50, dsd.DenoisingSteps);
     }
 
-    [Fact]
-    public void UnifiedDistillationSampling_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task UnifiedDistillationSampling_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var uds = new AiDotNet.Diffusion.Distillation.UnifiedDistillationSampling<double>(teacher);
@@ -733,8 +734,8 @@ public class FastGenContractTests
         Assert.Equal(1.0, uds.NoiseWeight);
     }
 
-    [Fact]
-    public void RewardScoreDistillation_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task RewardScoreDistillation_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var rsd = new AiDotNet.Diffusion.Distillation.RewardScoreDistillation<double>(teacher);
@@ -744,8 +745,8 @@ public class FastGenContractTests
         Assert.Equal(10.0, rsd.RewardWeight);
     }
 
-    [Fact]
-    public void SemanticScoreDistillation_Constructor_CreatesValid()
+    [Fact(Timeout = 120000)]
+    public async Task SemanticScoreDistillation_Constructor_CreatesValid()
     {
         var teacher = new StableDiffusion15Model<double>();
         var ssd = new AiDotNet.Diffusion.Distillation.SemanticScoreDistillation<double>(teacher);
@@ -760,8 +761,8 @@ public class FastGenContractTests
 
     #region Missing Model Coverage Tests
 
-    [Fact]
-    public void ConsistencyModel_DefaultConstructor_CreatesValidModel()
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ConsistencyModel<double>();
 

@@ -2,6 +2,7 @@ using AiDotNet.NeuralRadianceFields.Data;
 using AiDotNet.NeuralRadianceFields.Models;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralRadianceFields;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralRadianceFields;
 /// </summary>
 public class NeRFTests
 {
-    [Fact]
-    public void NeRF_Construction_CreatesModel()
+    [Fact(Timeout = 60000)]
+    public async Task NeRF_Construction_CreatesModel()
     {
         // Arrange & Act
         var nerf = new NeRF<double>();
@@ -20,8 +21,8 @@ public class NeRFTests
         Assert.NotNull(nerf);
     }
 
-    [Fact]
-    public void NeRF_QueryField_ReturnsRGBAndDensity()
+    [Fact(Timeout = 60000)]
+    public async Task NeRF_QueryField_ReturnsRGBAndDensity()
     {
         // Arrange
         var nerf = new NeRF<double>();
@@ -39,8 +40,8 @@ public class NeRFTests
         Assert.Equal(10, density.Shape[0]);
     }
 
-    [Fact]
-    public void Ray_Construction_CreatesRay()
+    [Fact(Timeout = 60000)]
+    public async Task Ray_Construction_CreatesRay()
     {
         // Arrange
         var origin = new Vector<double>(new double[] { 0, 0, 0 });
@@ -59,8 +60,8 @@ public class NeRFTests
         Assert.Equal(6.0, ray.FarBound);
     }
 
-    [Fact]
-    public void Ray_PointAt_CalculatesCorrectPosition()
+    [Fact(Timeout = 60000)]
+    public async Task Ray_PointAt_CalculatesCorrectPosition()
     {
         // Arrange
         var origin = new Vector<double>(new double[] { 1, 2, 3 });
@@ -76,8 +77,8 @@ public class NeRFTests
         Assert.Equal(8.0, point[2]);  // 3 + 5*1
     }
 
-    [Fact]
-    public void InstantNGP_Construction_CreatesModel()
+    [Fact(Timeout = 60000)]
+    public async Task InstantNGP_Construction_CreatesModel()
     {
         // Arrange & Act
         var instantNGP = new InstantNGP<double>();
@@ -86,8 +87,8 @@ public class NeRFTests
         Assert.NotNull(instantNGP);
     }
 
-    [Fact]
-    public void GaussianSplatting_Construction_CreatesModel()
+    [Fact(Timeout = 60000)]
+    public async Task GaussianSplatting_Construction_CreatesModel()
     {
         // Arrange & Act
         var gaussianSplatting = new GaussianSplatting<double>();
@@ -96,8 +97,8 @@ public class NeRFTests
         Assert.NotNull(gaussianSplatting);
     }
 
-    [Fact]
-    public void GaussianSplatting_InitializeFromPointCloud_CreatesGaussians()
+    [Fact(Timeout = 60000)]
+    public async Task GaussianSplatting_InitializeFromPointCloud_CreatesGaussians()
     {
         // Arrange
         var pointCloud = CreateSamplePointCloudMatrix(numPoints: 100);

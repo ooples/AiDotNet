@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -13,8 +14,8 @@ public class SparseTensorOperationTests
 
     #region Transpose Tests
 
-    [Fact]
-    public void SparseTensor_Transpose_SwapsRowsAndColumns()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Transpose_SwapsRowsAndColumns()
     {
         // Arrange - 3x4 matrix
         int[] rowIndices = { 0, 0, 1, 1, 2, 2 };
@@ -31,8 +32,8 @@ public class SparseTensorOperationTests
         Assert.Equal(6, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Transpose_VerifyValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Transpose_VerifyValues()
     {
         // Arrange - Simple 2x3 matrix
         // [1 2 3]
@@ -58,8 +59,8 @@ public class SparseTensorOperationTests
         Assert.True(Math.Abs(denseTrans[2, 1] - 5.0) < Tolerance);
     }
 
-    [Fact]
-    public void SparseTensor_Transpose_Csr_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Transpose_Csr_PreservesValues()
     {
         // Arrange
         int[] rowPointers = { 0, 2, 3, 5 };
@@ -76,8 +77,8 @@ public class SparseTensorOperationTests
         Assert.Equal(5, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Transpose_Csc_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Transpose_Csc_PreservesValues()
     {
         // Arrange
         int[] colPointers = { 0, 2, 3, 5 };
@@ -94,8 +95,8 @@ public class SparseTensorOperationTests
         Assert.Equal(5, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_DoubleTranspose_RestoresOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_DoubleTranspose_RestoresOriginal()
     {
         // Arrange
         int[] rowIndices = { 0, 1, 2, 0, 2 };
@@ -119,8 +120,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_Transpose_SquareMatrix_VerifyEntries()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Transpose_SquareMatrix_VerifyEntries()
     {
         // Arrange - 3x3 non-symmetric matrix
         // [1 2 0]
@@ -151,8 +152,8 @@ public class SparseTensorOperationTests
 
     #region Coalesce Tests
 
-    [Fact]
-    public void SparseTensor_Coalesce_MergesDuplicateEntries()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_MergesDuplicateEntries()
     {
         // Arrange - Matrix with duplicate entries at (0,0)
         int[] rowIndices = { 0, 0, 1 };
@@ -168,8 +169,8 @@ public class SparseTensorOperationTests
         Assert.Equal(2, coalesced.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_SumsDuplicateValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_SumsDuplicateValues()
     {
         // Arrange - Multiple entries at same position
         int[] rowIndices = { 0, 0, 0, 1, 1 };
@@ -188,8 +189,8 @@ public class SparseTensorOperationTests
         Assert.True(Math.Abs(dense[1, 1] - 9.0) < Tolerance, $"Expected 9.0, got {dense[1, 1]}");
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_RemovesZeros()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_RemovesZeros()
     {
         // Arrange - Entries that sum to zero
         int[] rowIndices = { 0, 0, 1 };
@@ -205,8 +206,8 @@ public class SparseTensorOperationTests
         Assert.Equal(1, coalesced.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_NoDuplicates_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_NoDuplicates_NoChange()
     {
         // Arrange - No duplicate entries
         int[] rowIndices = { 0, 1, 2 };
@@ -222,8 +223,8 @@ public class SparseTensorOperationTests
         Assert.Equal(3, coalesced.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_Empty_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_Empty_ReturnsEmpty()
     {
         // Arrange
         var sparse = new SparseTensor<double>(3, 3, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>());
@@ -235,8 +236,8 @@ public class SparseTensorOperationTests
         Assert.Equal(0, coalesced.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_SortsEntries()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_SortsEntries()
     {
         // Arrange - Entries not in sorted order
         int[] rowIndices = { 2, 0, 1, 0 };
@@ -254,8 +255,8 @@ public class SparseTensorOperationTests
         Assert.True(coalesced.RowIndices[0] <= coalesced.RowIndices[1]);
     }
 
-    [Fact]
-    public void SparseTensor_Coalesce_ManyDuplicates_CorrectSum()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_Coalesce_ManyDuplicates_CorrectSum()
     {
         // Arrange - Many duplicates at same position
         int[] rowIndices = { 1, 1, 1, 1, 1 };
@@ -277,8 +278,8 @@ public class SparseTensorOperationTests
 
     #region ToDense Tests
 
-    [Fact]
-    public void SparseTensor_ToDense_CorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_ToDense_CorrectValues()
     {
         // Arrange
         // [1 0 2]
@@ -308,8 +309,8 @@ public class SparseTensorOperationTests
         Assert.True(Math.Abs(dense[2, 2] - 5.0) < Tolerance);
     }
 
-    [Fact]
-    public void SparseTensor_ToDense_EmptyMatrix_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_ToDense_EmptyMatrix_AllZeros()
     {
         // Arrange
         var sparse = new SparseTensor<double>(3, 3, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>());
@@ -327,8 +328,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_ToDense_Csr_CorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_ToDense_Csr_CorrectValues()
     {
         // Arrange
         int[] rowPointers = { 0, 2, 3, 5 };
@@ -347,8 +348,8 @@ public class SparseTensorOperationTests
         Assert.True(Math.Abs(dense[2, 2] - 5.0) < Tolerance);
     }
 
-    [Fact]
-    public void SparseTensor_ToDense_Csc_CorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_ToDense_Csc_CorrectValues()
     {
         // Arrange - CSC of same matrix
         int[] colPointers = { 0, 2, 3, 5 };
@@ -367,8 +368,8 @@ public class SparseTensorOperationTests
         Assert.True(Math.Abs(dense[2, 2] - 5.0) < Tolerance);
     }
 
-    [Fact]
-    public void SparseTensor_ToDense_RectangularMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_ToDense_RectangularMatrix()
     {
         // Arrange - 2x4 matrix
         int[] rowIndices = { 0, 0, 1, 1 };
@@ -392,8 +393,8 @@ public class SparseTensorOperationTests
 
     #region FromDense Advanced Tests
 
-    [Fact]
-    public void SparseTensor_FromDense_WithTolerance_FiltersSmallValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_FromDense_WithTolerance_FiltersSmallValues()
     {
         // Arrange - Matrix with small values that should be filtered
         var dense = new Tensor<double>(new[] { 3, 3 });
@@ -409,8 +410,8 @@ public class SparseTensorOperationTests
         Assert.Equal(3, sparse.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_FromDense_ToDense_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_FromDense_ToDense_RoundTrip()
     {
         // Arrange
         var dense = new Tensor<double>(new[] { 4, 4 });
@@ -434,8 +435,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_FromDense_AllZeros_EmptySparse()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_FromDense_AllZeros_EmptySparse()
     {
         // Arrange
         var dense = new Tensor<double>(new[] { 5, 5 }); // All zeros
@@ -447,8 +448,8 @@ public class SparseTensorOperationTests
         Assert.Equal(0, sparse.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_FromDense_FullMatrix_AllNonZeros()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_FromDense_FullMatrix_AllNonZeros()
     {
         // Arrange
         var dense = new Tensor<double>(new[] { 2, 2 });
@@ -466,8 +467,8 @@ public class SparseTensorOperationTests
 
     #region Large Sparse Matrix Tests
 
-    [Fact]
-    public void SparseTensor_LargeSparseMatrix_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_LargeSparseMatrix_HandlesCorrectly()
     {
         // Arrange - 100x100 matrix with 10% density
         int size = 100;
@@ -497,8 +498,8 @@ public class SparseTensorOperationTests
         Assert.Equal(SparseStorageFormat.Csc, csc.Format);
     }
 
-    [Fact]
-    public void SparseTensor_VerySparseLargeMatrix_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_VerySparseLargeMatrix_HandlesCorrectly()
     {
         // Arrange - 1000x1000 matrix with only 50 non-zeros (0.005% density)
         int size = 1000;
@@ -525,8 +526,8 @@ public class SparseTensorOperationTests
         Assert.Equal(nnz, csr.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_DiagonalLargeMatrix_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_DiagonalLargeMatrix_HandlesCorrectly()
     {
         // Arrange - 500x500 diagonal matrix
         int size = 500;
@@ -554,8 +555,8 @@ public class SparseTensorOperationTests
 
     #region Format Conversion Value Verification Tests
 
-    [Fact]
-    public void SparseTensor_AllFormats_ProduceSameDense()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_AllFormats_ProduceSameDense()
     {
         // Arrange
         int[] rowIndices = { 0, 0, 1, 2, 2 };
@@ -581,8 +582,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_CsrToCsc_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_CsrToCsc_PreservesValues()
     {
         // Arrange
         int[] rowPointers = { 0, 2, 3, 5 };
@@ -606,8 +607,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_CscToCsr_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_CscToCsr_PreservesValues()
     {
         // Arrange
         int[] colPointers = { 0, 2, 3, 5 };
@@ -635,8 +636,8 @@ public class SparseTensorOperationTests
 
     #region Symmetry and Pattern Tests
 
-    [Fact]
-    public void SparseTensor_SymmetricMatrix_TransposeEqualsSelf()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_SymmetricMatrix_TransposeEqualsSelf()
     {
         // Arrange - Symmetric matrix
         // [1 2 3]
@@ -663,8 +664,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_TridiagonalMatrix_CorrectSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_TridiagonalMatrix_CorrectSparsity()
     {
         // Arrange - Tridiagonal 5x5 matrix
         var rowIndices = new List<int>();
@@ -700,8 +701,8 @@ public class SparseTensorOperationTests
         Assert.Equal(13, sparse.NonZeroCount);
     }
 
-    [Fact]
-    public void SparseTensor_BandMatrix_CorrectStorage()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_BandMatrix_CorrectStorage()
     {
         // Arrange - Banded matrix with bandwidth 2
         var rowIndices = new List<int>();
@@ -735,8 +736,8 @@ public class SparseTensorOperationTests
 
     #region Stress Tests
 
-    [Fact]
-    public void SparseTensor_MultipleConversions_NoDataLoss()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_MultipleConversions_NoDataLoss()
     {
         // Arrange
         int[] rowIndices = { 0, 0, 1, 1, 2 };
@@ -767,8 +768,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_TransposeAndConversions_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_TransposeAndConversions_Consistent()
     {
         // Arrange
         int[] rowIndices = { 0, 1, 2, 0, 1 };
@@ -796,8 +797,8 @@ public class SparseTensorOperationTests
         }
     }
 
-    [Fact]
-    public void SparseTensor_CoalesceAndTranspose_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_CoalesceAndTranspose_Consistent()
     {
         // Arrange - Matrix with duplicates
         int[] rowIndices = { 0, 0, 1, 1, 0 };
@@ -830,8 +831,8 @@ public class SparseTensorOperationTests
 
     #region Numeric Type Tests
 
-    [Fact]
-    public void SparseTensor_IntType_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_IntType_WorksCorrectly()
     {
         // Arrange
         int[] rowIndices = { 0, 1, 2 };
@@ -848,8 +849,8 @@ public class SparseTensorOperationTests
         Assert.Equal(30, sparse.Values[2]);
     }
 
-    [Fact]
-    public void SparseTensor_IntType_Transpose()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_IntType_Transpose()
     {
         // Arrange
         int[] rowIndices = { 0, 1 };
@@ -866,8 +867,8 @@ public class SparseTensorOperationTests
         Assert.Equal(20, dense[0, 1]);
     }
 
-    [Fact]
-    public void SparseTensor_IntType_Coalesce()
+    [Fact(Timeout = 120000)]
+    public async Task SparseTensor_IntType_Coalesce()
     {
         // Arrange - Duplicates
         int[] rowIndices = { 0, 0, 1 };

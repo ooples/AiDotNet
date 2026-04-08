@@ -1,5 +1,6 @@
 using AiDotNet.Postprocessing.Document;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Postprocessing;
 
@@ -10,15 +11,15 @@ public class PostprocessingIntegrationTests
 {
     #region TextPostprocessor Tests
 
-    [Fact]
-    public void TextPostprocessor_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task TextPostprocessor_Construction_WithDefaults()
     {
         using var processor = new TextPostprocessor<double>();
         Assert.NotNull(processor);
     }
 
-    [Fact]
-    public void TextPostprocessor_Construction_WithOptions()
+    [Fact(Timeout = 120000)]
+    public async Task TextPostprocessor_Construction_WithOptions()
     {
         var opts = new TextPostprocessorOptions
         {
@@ -31,8 +32,8 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(processor);
     }
 
-    [Fact]
-    public void TextPostprocessor_Process_PreservesText()
+    [Fact(Timeout = 120000)]
+    public async Task TextPostprocessor_Process_PreservesText()
     {
         using var processor = new TextPostprocessor<double>();
         var result = processor.Process("Hello  World");
@@ -41,8 +42,8 @@ public class PostprocessingIntegrationTests
         Assert.Contains("World", result);
     }
 
-    [Fact]
-    public void TextPostprocessor_Process_NormalizesWhitespace()
+    [Fact(Timeout = 120000)]
+    public async Task TextPostprocessor_Process_NormalizesWhitespace()
     {
         var opts = new TextPostprocessorOptions
         {
@@ -60,15 +61,15 @@ public class PostprocessingIntegrationTests
 
     #region StructuredOutputParser Tests
 
-    [Fact]
-    public void StructuredOutputParser_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task StructuredOutputParser_Construction()
     {
         using var parser = new StructuredOutputParser<double>();
         Assert.NotNull(parser);
     }
 
-    [Fact]
-    public void StructuredOutputParser_ParseKeyValuePairs_ExtractsPairsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task StructuredOutputParser_ParseKeyValuePairs_ExtractsPairsCorrectly()
     {
         using var parser = new StructuredOutputParser<double>();
         var text = "Name: John\nAge: 30\nCity: New York";
@@ -84,22 +85,22 @@ public class PostprocessingIntegrationTests
 
     #region SpellCorrection Tests
 
-    [Fact]
-    public void SpellCorrection_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Construction_WithDefaults()
     {
         using var corrector = new SpellCorrection<double>();
         Assert.NotNull(corrector);
     }
 
-    [Fact]
-    public void SpellCorrection_Construction_WithMaxEditDistance()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Construction_WithMaxEditDistance()
     {
         using var corrector = new SpellCorrection<double>(3);
         Assert.NotNull(corrector);
     }
 
-    [Fact]
-    public void SpellCorrection_Process_ReturnsProcessedText()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_ReturnsProcessedText()
     {
         using var corrector = new SpellCorrection<double>();
         var result = corrector.Process("hello world");
@@ -112,15 +113,15 @@ public class PostprocessingIntegrationTests
 
     #region EntityLinking Tests
 
-    [Fact]
-    public void EntityLinking_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task EntityLinking_Construction()
     {
         using var linker = new EntityLinking<double>();
         Assert.NotNull(linker);
     }
 
-    [Fact]
-    public void EntityLinking_RegisterEntity_PersistsEntity()
+    [Fact(Timeout = 120000)]
+    public async Task EntityLinking_RegisterEntity_PersistsEntity()
     {
         using var linker = new EntityLinking<double>();
         var entity = new Entity
@@ -141,8 +142,8 @@ public class PostprocessingIntegrationTests
 
     #region Data Class Tests
 
-    [Fact]
-    public void Entity_Properties_SetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Entity_Properties_SetCorrectly()
     {
         var entity = new Entity
         {
@@ -165,8 +166,8 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(entity.Attributes);
     }
 
-    [Fact]
-    public void ValidationResult_Properties_SetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationResult_Properties_SetCorrectly()
     {
         var result = new ValidationResult
         {
@@ -178,8 +179,8 @@ public class PostprocessingIntegrationTests
         Assert.Empty(result.Warnings);
     }
 
-    [Fact]
-    public void ValidationResult_WithErrors_IsInvalid()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationResult_WithErrors_IsInvalid()
     {
         var result = new ValidationResult
         {
@@ -191,8 +192,8 @@ public class PostprocessingIntegrationTests
         Assert.Single(result.Errors);
     }
 
-    [Fact]
-    public void DocumentSchema_Properties_SetCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentSchema_Properties_SetCorrectly()
     {
         var schema = new DocumentSchema();
         schema.RequiredFields.Add("Name");
@@ -205,8 +206,8 @@ public class PostprocessingIntegrationTests
         Assert.Single(schema.FieldPatterns);
     }
 
-    [Fact]
-    public void TextPostprocessorOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task TextPostprocessorOptions_DefaultValues()
     {
         var opts = new TextPostprocessorOptions();
         Assert.True(opts.RemoveControlCharacters);
@@ -218,8 +219,8 @@ public class PostprocessingIntegrationTests
         Assert.True(opts.RemoveDuplicateSpaces);
     }
 
-    [Fact]
-    public void InvoiceData_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task InvoiceData_Construction()
     {
         var invoice = new InvoiceData
         {
@@ -238,8 +239,8 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(invoice.LineItems);
     }
 
-    [Fact]
-    public void ReceiptData_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task ReceiptData_Construction()
     {
         var receipt = new ReceiptData
         {

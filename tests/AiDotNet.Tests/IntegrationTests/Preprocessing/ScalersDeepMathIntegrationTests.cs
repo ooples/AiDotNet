@@ -1,5 +1,6 @@
 using AiDotNet.Preprocessing.Scalers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -19,8 +20,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region StandardScaler
 
-    [Fact]
-    public void StandardScaler_HandCalculated_SingleColumn()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_HandCalculated_SingleColumn()
     {
         // x = {2, 4, 4, 4, 5, 5, 7, 9}
         // mean = 40/8 = 5
@@ -39,8 +40,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal((9.0 - mean) / std, transformed[7, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void StandardScaler_TransformedData_MeanIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_TransformedData_MeanIsZero()
     {
         // After standardization, mean of transformed data should be ~0
         var scaler = new StandardScaler<double>();
@@ -56,8 +57,8 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void StandardScaler_TransformedData_StdIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_TransformedData_StdIsOne()
     {
         // After standardization, std of transformed data should be ~1
         var scaler = new StandardScaler<double>();
@@ -76,8 +77,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(1.0, std, MediumTolerance);
     }
 
-    [Fact]
-    public void StandardScaler_InverseTransform_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_InverseTransform_RecoverOriginal()
     {
         // FitTransform then InverseTransform should give back original data
         var scaler = new StandardScaler<double>();
@@ -91,8 +92,8 @@ public class ScalersDeepMathIntegrationTests
                 Assert.Equal(original[i, j], recovered[i, j], MediumTolerance);
     }
 
-    [Fact]
-    public void StandardScaler_WithMeanFalse_OnlyScales()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_WithMeanFalse_OnlyScales()
     {
         // Without centering, should only divide by std
         var scaler = new StandardScaler<double>(withMean: false, withStd: true);
@@ -108,8 +109,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(6.0 / std, transformed[2, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void StandardScaler_WithStdFalse_OnlyCenters()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_WithStdFalse_OnlyCenters()
     {
         // Without scaling, should only subtract mean
         var scaler = new StandardScaler<double>(withMean: true, withStd: false);
@@ -123,8 +124,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(2.0, transformed[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void StandardScaler_ConstantColumn_NoScaling()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_ConstantColumn_NoScaling()
     {
         // When all values are the same, std=0. Scaler should use 1 instead (no scaling)
         var scaler = new StandardScaler<double>();
@@ -136,8 +137,8 @@ public class ScalersDeepMathIntegrationTests
             Assert.Equal(0.0, transformed[i, 0], Tolerance);
     }
 
-    [Fact]
-    public void StandardScaler_FitAndTransform_SeparateData()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_FitAndTransform_SeparateData()
     {
         // Fit on training data, transform test data using training parameters
         var scaler = new StandardScaler<double>();
@@ -155,8 +156,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal((-5.0 - mean) / std, transformed[2, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void StandardScaler_ColumnIndices_OnlyScalesSpecifiedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_ColumnIndices_OnlyScalesSpecifiedColumns()
     {
         // Only scale column 0, leave column 1 untouched
         var scaler = new StandardScaler<double>(columnIndices: new[] { 0 });
@@ -182,8 +183,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region MinMaxScaler
 
-    [Fact]
-    public void MinMaxScaler_Default_ScalesTo01()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_Default_ScalesTo01()
     {
         // Default range is [0, 1]
         var scaler = new MinMaxScaler<double>();
@@ -197,8 +198,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(1.0, transformed[4, 0], Tolerance);   // max → 1
     }
 
-    [Fact]
-    public void MinMaxScaler_CustomRange_Minus1To1()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_CustomRange_Minus1To1()
     {
         // Scale to [-1, 1]
         var scaler = new MinMaxScaler<double>(-1.0, 1.0);
@@ -210,8 +211,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(1.0, transformed[2, 0], Tolerance);  // max → 1
     }
 
-    [Fact]
-    public void MinMaxScaler_InverseTransform_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_InverseTransform_RecoverOriginal()
     {
         var scaler = new MinMaxScaler<double>();
         double[,] original = { { 1, 10 }, { 5, 50 }, { 10, 100 } };
@@ -224,8 +225,8 @@ public class ScalersDeepMathIntegrationTests
                 Assert.Equal(original[i, j], recovered[i, j], MediumTolerance);
     }
 
-    [Fact]
-    public void MinMaxScaler_ConstantColumn_ScalesToMidpoint()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_ConstantColumn_ScalesToMidpoint()
     {
         // When min == max, should map to midpoint of feature range
         var scaler = new MinMaxScaler<double>();
@@ -237,8 +238,8 @@ public class ScalersDeepMathIntegrationTests
             Assert.Equal(0.5, transformed[i, 0], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScaler_NegativeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_NegativeValues_HandlesCorrectly()
     {
         // Data with negative values
         var scaler = new MinMaxScaler<double>();
@@ -250,8 +251,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(1.0, transformed[2, 0], Tolerance);   // 10 → 1
     }
 
-    [Fact]
-    public void MinMaxScaler_MultipleColumns_IndependentScaling()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_MultipleColumns_IndependentScaling()
     {
         // Each column should be scaled independently
         var scaler = new MinMaxScaler<double>();
@@ -266,8 +267,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(1.0, transformed[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void MinMaxScaler_TransformNewData_UsesTrainingMinMax()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_TransformNewData_UsesTrainingMinMax()
     {
         // Transform new data using training data's min/max
         var scaler = new MinMaxScaler<double>();
@@ -282,8 +283,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(-0.5, transformed[2, 0], Tolerance);  // -50/100
     }
 
-    [Fact]
-    public void MinMaxScaler_CustomRange_InverseRecovery()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_CustomRange_InverseRecovery()
     {
         var scaler = new MinMaxScaler<double>(-1.0, 1.0);
         double[,] original = { { -100 }, { 0 }, { 100 } };
@@ -303,8 +304,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region MaxAbsScaler
 
-    [Fact]
-    public void MaxAbsScaler_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_HandCalculated()
     {
         // x = {-10, 5, 8}, max_abs = 10
         // scaled: {-1, 0.5, 0.8}
@@ -317,8 +318,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.8, transformed[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void MaxAbsScaler_OutputInMinus1To1()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_OutputInMinus1To1()
     {
         var scaler = new MaxAbsScaler<double>();
         var data = CreateMatrix(new double[,] { { -100 }, { 50 }, { -75 }, { 30 }, { 100 } });
@@ -331,8 +332,8 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MaxAbsScaler_PreservesZeros()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_PreservesZeros()
     {
         // Zero values should remain zero
         var scaler = new MaxAbsScaler<double>();
@@ -343,8 +344,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.0, transformed[2, 0], Tolerance);
     }
 
-    [Fact]
-    public void MaxAbsScaler_InverseTransform_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_InverseTransform_RecoverOriginal()
     {
         var scaler = new MaxAbsScaler<double>();
         double[,] original = { { -3 }, { 0 }, { 5 }, { -8 } };
@@ -356,8 +357,8 @@ public class ScalersDeepMathIntegrationTests
             Assert.Equal(original[i, 0], recovered[i, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void MaxAbsScaler_AllZeros_NoScaling()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_AllZeros_NoScaling()
     {
         // When all values are zero, max_abs=0→1, so output should be 0
         var scaler = new MaxAbsScaler<double>();
@@ -376,8 +377,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region RobustScaler
 
-    [Fact]
-    public void RobustScaler_HandCalculated_OddSamples()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_HandCalculated_OddSamples()
     {
         // Sorted: {1, 2, 3, 4, 5, 6, 7, 8, 9}
         // n=9, median = 5 (index 4)
@@ -395,8 +396,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal((9.0 - median) / iqr, transformed[8, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void RobustScaler_MedianValueMapsToZero()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_MedianValueMapsToZero()
     {
         // The median value should map to 0 after centering
         var scaler = new RobustScaler<double>();
@@ -407,8 +408,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.0, transformed[2, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void RobustScaler_InverseTransform_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_InverseTransform_RecoverOriginal()
     {
         var scaler = new RobustScaler<double>();
         double[,] original = { { 1 }, { 3 }, { 5 }, { 7 }, { 9 } };
@@ -420,8 +421,8 @@ public class ScalersDeepMathIntegrationTests
             Assert.Equal(original[i, 0], recovered[i, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void RobustScaler_WithCenteringFalse_OnlyScales()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_WithCenteringFalse_OnlyScales()
     {
         var scaler = new RobustScaler<double>(withCentering: false, withScaling: true);
         var data = CreateMatrix(new double[,] { { 1 }, { 3 }, { 5 }, { 7 }, { 9 } });
@@ -435,8 +436,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(9.0 / iqr, transformed[4, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void RobustScaler_WithScalingFalse_OnlyCenters()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_WithScalingFalse_OnlyCenters()
     {
         var scaler = new RobustScaler<double>(withCentering: true, withScaling: false);
         var data = CreateMatrix(new double[,] { { 1 }, { 3 }, { 5 }, { 7 }, { 9 } });
@@ -449,8 +450,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(9.0 - median, transformed[4, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void RobustScaler_OutliersDoNotAffectScaling()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_OutliersDoNotAffectScaling()
     {
         // Add extreme outliers - they shouldn't affect median or IQR much
         var scaler1 = new RobustScaler<double>();
@@ -473,8 +474,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region Normalizer
 
-    [Fact]
-    public void Normalizer_L2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_L2_HandCalculated()
     {
         // Row [3, 4]: L2 norm = sqrt(9+16) = 5
         // Normalized: [3/5, 4/5] = [0.6, 0.8]
@@ -486,8 +487,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.8, transformed[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void Normalizer_L2_ResultHasUnitNorm()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_L2_ResultHasUnitNorm()
     {
         // After L2 normalization, each row should have L2 norm = 1
         var normalizer = new Normalizer<double>(NormType.L2);
@@ -503,8 +504,8 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Normalizer_L1_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_L1_HandCalculated()
     {
         // Row [3, -4]: L1 norm = |3|+|-4| = 7
         // Normalized: [3/7, -4/7]
@@ -516,8 +517,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(-4.0 / 7.0, transformed[0, 1], Tolerance);
     }
 
-    [Fact]
-    public void Normalizer_L1_ResultSumAbsEqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_L1_ResultSumAbsEqualsOne()
     {
         // After L1 normalization, sum of absolute values of each row = 1
         var normalizer = new Normalizer<double>(NormType.L1);
@@ -533,8 +534,8 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Normalizer_Max_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_Max_HandCalculated()
     {
         // Row [3, -4, 2]: Max norm = max(3, 4, 2) = 4
         // Normalized: [3/4, -4/4, 2/4] = [0.75, -1, 0.5]
@@ -547,8 +548,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.5, transformed[0, 2], Tolerance);
     }
 
-    [Fact]
-    public void Normalizer_Max_MaxAbsValueIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_Max_MaxAbsValueIsOne()
     {
         // After Max normalization, max absolute value of each row = 1
         var normalizer = new Normalizer<double>(NormType.Max);
@@ -564,8 +565,8 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Normalizer_L2_ZeroRow_HandleGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_L2_ZeroRow_HandleGracefully()
     {
         // A row of all zeros has norm 0. Normalizer should handle without NaN.
         var normalizer = new Normalizer<double>(NormType.L2);
@@ -585,8 +586,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(3.0 / norm, transformed[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void Normalizer_PreservesDirection()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_PreservesDirection()
     {
         // L2 normalization preserves the direction (ratio) between elements
         var normalizer = new Normalizer<double>(NormType.L2);
@@ -606,8 +607,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region LogScaler
 
-    [Fact]
-    public void LogScaler_PositiveValues_ScalesToZeroOne()
+    [Fact(Timeout = 120000)]
+    public async Task LogScaler_PositiveValues_ScalesToZeroOne()
     {
         // All positive values: shift=0, log([1,10,100]) then normalize to [0,1]
         var scaler = new LogScaler<double>();
@@ -623,8 +624,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Equal(0.5, transformed[1, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void LogScaler_NegativeValues_ShiftsToPositive()
+    [Fact(Timeout = 120000)]
+    public async Task LogScaler_NegativeValues_ShiftsToPositive()
     {
         // Data with negatives: min=-5, shift = -(-5) + 1 = 6
         // Shifted: {6-5, 6+0, 6+5} = {1, 6, 11}
@@ -639,8 +640,8 @@ public class ScalersDeepMathIntegrationTests
             $"Middle value should be in (0,1), got {transformed[1, 0]}");
     }
 
-    [Fact]
-    public void LogScaler_InverseTransform_RecoverOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task LogScaler_InverseTransform_RecoverOriginal()
     {
         var scaler = new LogScaler<double>();
         double[,] original = { { 1 }, { 10 }, { 100 }, { 1000 } };
@@ -652,8 +653,8 @@ public class ScalersDeepMathIntegrationTests
             Assert.Equal(original[i, 0], recovered[i, 0], MediumTolerance);
     }
 
-    [Fact]
-    public void LogScaler_EquallySpaced_LogValues_EquallySpaced_Output()
+    [Fact(Timeout = 120000)]
+    public async Task LogScaler_EquallySpaced_LogValues_EquallySpaced_Output()
     {
         // Powers of 10: [1, 10, 100, 1000]
         // In log space these are equally spaced: [0, ln10, 2*ln10, 3*ln10]
@@ -675,8 +676,8 @@ public class ScalersDeepMathIntegrationTests
 
     #region Cross-Scaler Consistency
 
-    [Fact]
-    public void StandardScaler_And_MinMaxScaler_BothPreserveMeanRelativeOrder()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_And_MinMaxScaler_BothPreserveMeanRelativeOrder()
     {
         // Both scalers should preserve the relative order of values
         var stdScaler = new StandardScaler<double>();
@@ -698,8 +699,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.True(mmTransformed[4, 0] < mmTransformed[3, 0]);
     }
 
-    [Fact]
-    public void AllScalers_InverseTransform_Idempotent()
+    [Fact(Timeout = 120000)]
+    public async Task AllScalers_InverseTransform_Idempotent()
     {
         // For all invertible scalers: InverseTransform(Transform(x)) ≈ x
         double[,] original = { { 1, 10 }, { 5, 50 }, { 10, 100 }, { 2, 20 }, { 8, 80 } };
@@ -737,15 +738,15 @@ public class ScalersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MinMaxScaler_InvalidRange_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_InvalidRange_ThrowsException()
     {
         Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(1.0, 0.0));
         Assert.Throws<ArgumentException>(() => new MinMaxScaler<double>(5.0, 5.0));
     }
 
-    [Fact]
-    public void Scaler_NotFitted_ThrowsOnTransform()
+    [Fact(Timeout = 120000)]
+    public async Task Scaler_NotFitted_ThrowsOnTransform()
     {
         var scaler = new StandardScaler<double>();
         var data = CreateMatrix(new double[,] { { 1 }, { 2 } });
@@ -753,8 +754,8 @@ public class ScalersDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => scaler.Transform(data));
     }
 
-    [Fact]
-    public void StandardScaler_TwoSamples_VarianceCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_TwoSamples_VarianceCalculation()
     {
         // With only 2 samples: mean = 1.5, variance = (0.25+0.25)/1 = 0.5, std = sqrt(0.5)
         var scaler = new StandardScaler<double>();

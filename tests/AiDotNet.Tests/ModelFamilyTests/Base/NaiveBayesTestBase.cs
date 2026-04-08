@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact]
-    public void ZeroVarianceFeature_ShouldNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroVarianceFeature_ShouldNotCrash()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -46,8 +47,8 @@ public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact]
-    public void Predictions_ShouldBeValidLabels()
+    [Fact(Timeout = 60000)]
+    public async Task Predictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Search;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Components;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Reasoning.Search;
 
@@ -23,7 +24,7 @@ public class SearchAlgorithmTests
         _mockEvaluator = new Mock<IThoughtEvaluator<double>>();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BreadthFirstSearch_FindsGoalNode()
     {
         // Arrange
@@ -43,7 +44,7 @@ public class SearchAlgorithmTests
         Assert.Equal(root, path[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task DepthFirstSearch_ExploresDepthFirst()
     {
         // Arrange
@@ -62,7 +63,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BeamSearch_RespectsBeamWidth()
     {
         // Arrange
@@ -82,7 +83,7 @@ public class SearchAlgorithmTests
         // Beam search should prune to beam width at each level
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task MonteCarloTreeSearch_BalancesExplorationAndExploitation()
     {
         // Arrange
@@ -104,7 +105,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BestFirstSearch_SelectsHighestScoredNodes()
     {
         // Arrange
@@ -136,7 +137,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SearchWithCancellation_ThrowsOperationCanceledException()
     {
         // Arrange
@@ -161,7 +162,7 @@ public class SearchAlgorithmTests
         );
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SearchWithMaxDepth_StopsAtLimit()
     {
         // Arrange
@@ -202,7 +203,7 @@ public class SearchAlgorithmTests
         Assert.NotEmpty(path);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task MCTS_WithMoreSimulations_ConvergesToBetterSolution()
     {
         // Arrange

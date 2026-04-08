@@ -5,13 +5,14 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Training;
 using AiDotNet.Training.Configuration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.Training
 {
     public class TrainerTests
     {
-        [Fact]
-        public void Trainer_WithInMemoryData_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithInMemoryData_CompletesTraining()
         {
             // Arrange - create a simple time series dataset
             var config = new TrainingRecipeConfig
@@ -51,8 +52,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.True(result.TrainingDuration.TotalMilliseconds > 0);
         }
 
-        [Fact]
-        public void Trainer_WithCsvData_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithCsvData_CompletesTraining()
         {
             // Arrange - create a temporary CSV file
             var tempFile = Path.GetTempFileName();
@@ -100,8 +101,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             }
         }
 
-        [Fact]
-        public void Trainer_FromYamlString_CreatesAndRunsCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_FromYamlString_CreatesAndRunsCorrectly()
         {
             // Arrange - create temp CSV and YAML files
             var csvFile = Path.GetTempFileName();
@@ -150,8 +151,8 @@ trainer:
             }
         }
 
-        [Fact]
-        public void Trainer_WithNoData_ThrowsInvalidOperationException()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithNoData_ThrowsInvalidOperationException()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -166,8 +167,8 @@ trainer:
             Assert.Throws<InvalidOperationException>(() => trainer.Run());
         }
 
-        [Fact]
-        public void Trainer_WithNoModel_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithNoModel_ThrowsArgumentException()
         {
             // Arrange
             var config = new TrainingRecipeConfig();
@@ -176,15 +177,15 @@ trainer:
             Assert.Throws<ArgumentException>(() => new Trainer<double>(config));
         }
 
-        [Fact]
-        public void Trainer_WithNullConfig_ThrowsArgumentNullException()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithNullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new Trainer<double>((TrainingRecipeConfig)null));
         }
 
-        [Fact]
-        public void Trainer_EpochLosses_AreRecorded()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_EpochLosses_AreRecorded()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -222,8 +223,8 @@ trainer:
             }
         }
 
-        [Fact]
-        public void Trainer_ConfigProperty_ReturnsOriginalConfig()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_ConfigProperty_ReturnsOriginalConfig()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -240,8 +241,8 @@ trainer:
             Assert.Equal("ExponentialSmoothing", trainer.Config.Model?.Name);
         }
 
-        [Fact]
-        public void Trainer_WithOptimizer_CreatesOptimizerAndSetsModel()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithOptimizer_CreatesOptimizerAndSetsModel()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -258,8 +259,8 @@ trainer:
             Assert.NotNull(trainer.Optimizer);
         }
 
-        [Fact]
-        public void Trainer_WithoutOptimizer_OptimizerIsNull()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithoutOptimizer_OptimizerIsNull()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -275,8 +276,8 @@ trainer:
             Assert.Null(trainer.Optimizer);
         }
 
-        [Fact]
-        public void Trainer_WithInvalidOptimizerName_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithInvalidOptimizerName_ThrowsArgumentException()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -289,8 +290,8 @@ trainer:
             Assert.Throws<ArgumentException>(() => new Trainer<double>(config));
         }
 
-        [Fact]
-        public void Trainer_WithOptimizerAndData_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithOptimizerAndData_CompletesTraining()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -328,8 +329,8 @@ trainer:
             Assert.NotNull(trainer.Optimizer);
         }
 
-        [Fact]
-        public void Trainer_WithSeed_ProducesReproducibleResults()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithSeed_ProducesReproducibleResults()
         {
             // Arrange - run the same training twice with the same seed
             var config = new TrainingRecipeConfig
@@ -371,8 +372,8 @@ trainer:
             }
         }
 
-        [Fact]
-        public void Trainer_DefaultsToModelLossFunction_WhenNotSpecified()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_DefaultsToModelLossFunction_WhenNotSpecified()
         {
             // Arrange - no LossFunction section in config
             var config = new TrainingRecipeConfig

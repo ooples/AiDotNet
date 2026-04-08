@@ -1,5 +1,6 @@
 using AiDotNet.Data.Sampling;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Data;
 
@@ -15,8 +16,8 @@ public class DataSamplingIntegrationTests
 {
     #region StratifiedSampler
 
-    [Fact]
-    public void StratifiedSampler_ReturnsAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_ReturnsAllIndices()
     {
         var labels = new[] { 0, 0, 0, 1, 1, 2 };
         var sampler = new StratifiedSampler(labels, numClasses: 3, seed: 42);
@@ -27,8 +28,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(6, indices.Distinct().Count());
     }
 
-    [Fact]
-    public void StratifiedSampler_Length_MatchesDataSize()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_Length_MatchesDataSize()
     {
         var labels = new[] { 0, 1, 0, 1, 0, 1, 2, 2 };
         var sampler = new StratifiedSampler(labels, numClasses: 3);
@@ -36,8 +37,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(8, sampler.Length);
     }
 
-    [Fact]
-    public void StratifiedSampler_NumClasses_Property()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_NumClasses_Property()
     {
         var labels = new[] { 0, 1, 2 };
         var sampler = new StratifiedSampler(labels, numClasses: 3);
@@ -45,22 +46,22 @@ public class DataSamplingIntegrationTests
         Assert.Equal(3, sampler.NumClasses);
     }
 
-    [Fact]
-    public void StratifiedSampler_NullLabels_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_NullLabels_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new StratifiedSampler(null, numClasses: 2));
     }
 
-    [Fact]
-    public void StratifiedSampler_LessThan2Classes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_LessThan2Classes_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new StratifiedSampler(new[] { 0, 0 }, numClasses: 1));
     }
 
-    [Fact]
-    public void StratifiedSampler_LabelsCanBeUpdated()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_LabelsCanBeUpdated()
     {
         var sampler = new StratifiedSampler(new[] { 0, 0, 1, 1 }, numClasses: 2, seed: 42);
         Assert.Equal(4, sampler.Length);
@@ -72,8 +73,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(6, indices.Count);
     }
 
-    [Fact]
-    public void StratifiedSampler_ContainsAllClasses()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedSampler_ContainsAllClasses()
     {
         var labels = new[] { 0, 0, 0, 0, 0, 1, 1, 2 };
         var sampler = new StratifiedSampler(labels, numClasses: 3, seed: 42);
@@ -91,8 +92,8 @@ public class DataSamplingIntegrationTests
 
     #region StratifiedBatchSampler
 
-    [Fact]
-    public void StratifiedBatchSampler_CreatesBatches()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_CreatesBatches()
     {
         var labels = Enumerable.Repeat(0, 50).Concat(Enumerable.Repeat(1, 50)).ToArray();
         var sampler = new StratifiedBatchSampler(labels, numClasses: 2, batchSize: 10, seed: 42);
@@ -107,8 +108,8 @@ public class DataSamplingIntegrationTests
         }
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_DropLast_SkipsIncompleteBatch()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_DropLast_SkipsIncompleteBatch()
     {
         // 15 samples, batchSize 4 => 3 full batches (12), 1 incomplete (3)
         var labels = new[] { 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1 };
@@ -121,29 +122,29 @@ public class DataSamplingIntegrationTests
         }
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_NullLabels_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_NullLabels_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new StratifiedBatchSampler(null, numClasses: 2, batchSize: 4));
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_LessThan2Classes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_LessThan2Classes_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new StratifiedBatchSampler(new[] { 0, 0 }, numClasses: 1, batchSize: 2));
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_ZeroBatchSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_ZeroBatchSize_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new StratifiedBatchSampler(new[] { 0, 1 }, numClasses: 2, batchSize: 0));
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_Properties()
     {
         var labels = new[] { 0, 1, 0, 1 };
         var sampler = new StratifiedBatchSampler(labels, numClasses: 2, batchSize: 2, dropLast: true);
@@ -154,8 +155,8 @@ public class DataSamplingIntegrationTests
         Assert.True(sampler.DropLast);
     }
 
-    [Fact]
-    public void StratifiedBatchSampler_GetIndices_ReturnsAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task StratifiedBatchSampler_GetIndices_ReturnsAllIndices()
     {
         var labels = new[] { 0, 0, 1, 1, 2, 2 };
         var sampler = new StratifiedBatchSampler(labels, numClasses: 3, batchSize: 3, seed: 42);
@@ -168,8 +169,8 @@ public class DataSamplingIntegrationTests
 
     #region ImportanceSampler
 
-    [Fact]
-    public void ImportanceSampler_DefaultUniform_ReturnsAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_DefaultUniform_ReturnsAllIndices()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 20, seed: 42);
 
@@ -179,8 +180,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(20, sampler.Length);
     }
 
-    [Fact]
-    public void ImportanceSampler_UpdateImportance_AffectsSampling()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_UpdateImportance_AffectsSampling()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 10, smoothingFactor: 0.0, seed: 42);
 
@@ -198,8 +199,8 @@ public class DataSamplingIntegrationTests
         Assert.True(count0 > 1, $"Index 0 should appear more than once with high importance, got {count0}");
     }
 
-    [Fact]
-    public void ImportanceSampler_BatchUpdateImportances()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_BatchUpdateImportances()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 5, seed: 42);
 
@@ -212,8 +213,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(1.0, sampler.ImportanceScores[2]);
     }
 
-    [Fact]
-    public void ImportanceSampler_SetImportances_ReplacesAll()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_SetImportances_ReplacesAll()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 3, seed: 42);
 
@@ -224,8 +225,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(3.0, sampler.ImportanceScores[2]);
     }
 
-    [Fact]
-    public void ImportanceSampler_SetImportances_WrongSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_SetImportances_WrongSize_Throws()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 3);
 
@@ -233,15 +234,15 @@ public class DataSamplingIntegrationTests
             sampler.SetImportances(new[] { 1.0, 2.0 }));
     }
 
-    [Fact]
-    public void ImportanceSampler_ZeroDatasetSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_ZeroDatasetSize_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ImportanceSampler<double>(datasetSize: 0));
     }
 
-    [Fact]
-    public void ImportanceSampler_GetIndicesWithoutReplacement()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_GetIndicesWithoutReplacement()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 10, seed: 42);
         sampler.SetImportances(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -252,8 +253,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(5, indices.Distinct().Count()); // No duplicates
     }
 
-    [Fact]
-    public void ImportanceSampler_GetCorrectionFactor_NonZero()
+    [Fact(Timeout = 120000)]
+    public async Task ImportanceSampler_GetCorrectionFactor_NonZero()
     {
         var sampler = new ImportanceSampler<double>(datasetSize: 5, seed: 42);
         sampler.SetImportances(new[] { 1.0, 1.0, 1.0, 1.0, 1.0 });
@@ -266,8 +267,8 @@ public class DataSamplingIntegrationTests
 
     #region ActiveLearningSampler
 
-    [Fact]
-    public void ActiveLearningSampler_InitialState()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_InitialState()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 20);
 
@@ -276,8 +277,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(20, sampler.UnlabeledCount);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_MarkAsLabeled_UpdatesCounts()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_MarkAsLabeled_UpdatesCounts()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 10);
 
@@ -288,8 +289,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(8, sampler.UnlabeledCount);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_MarkMultipleLabeled()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_MarkMultipleLabeled()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 10);
 
@@ -299,8 +300,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(6, sampler.UnlabeledCount);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_GetIndices_ReturnsOnlyLabeled()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_GetIndices_ReturnsOnlyLabeled()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 10, seed: 42);
 
@@ -312,8 +313,8 @@ public class DataSamplingIntegrationTests
         Assert.All(indices, i => Assert.True(i == 2 || i == 5 || i == 8));
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_Uncertainty()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_Uncertainty()
     {
         var sampler = new ActiveLearningSampler<double>(
             datasetSize: 10,
@@ -334,8 +335,8 @@ public class DataSamplingIntegrationTests
         Assert.Contains(8, selected); // uncertainty 0.8
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_Random()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_Random()
     {
         var sampler = new ActiveLearningSampler<double>(
             datasetSize: 10,
@@ -348,8 +349,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(5, selected.Distinct().Count()); // All unique
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_Diversity()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_Diversity()
     {
         var sampler = new ActiveLearningSampler<double>(
             datasetSize: 20,
@@ -361,8 +362,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(5, selected.Count);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_Hybrid()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_Hybrid()
     {
         var sampler = new ActiveLearningSampler<double>(
             datasetSize: 20,
@@ -380,8 +381,8 @@ public class DataSamplingIntegrationTests
         Assert.True(selected.Count >= 1);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_SkipsLabeled()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_SkipsLabeled()
     {
         var sampler = new ActiveLearningSampler<double>(
             datasetSize: 10,
@@ -402,8 +403,8 @@ public class DataSamplingIntegrationTests
         Assert.DoesNotContain(9, selected);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_SelectForLabeling_AllLabeled_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_SelectForLabeling_AllLabeled_ReturnsEmpty()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 3);
 
@@ -414,15 +415,15 @@ public class DataSamplingIntegrationTests
         Assert.Empty(selected);
     }
 
-    [Fact]
-    public void ActiveLearningSampler_ZeroDatasetSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_ZeroDatasetSize_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ActiveLearningSampler<double>(datasetSize: 0));
     }
 
-    [Fact]
-    public void ActiveLearningSampler_UpdateUncertainties_Batch()
+    [Fact(Timeout = 120000)]
+    public async Task ActiveLearningSampler_UpdateUncertainties_Batch()
     {
         var sampler = new ActiveLearningSampler<double>(datasetSize: 5);
 
@@ -439,8 +440,8 @@ public class DataSamplingIntegrationTests
 
     #region Samplers Factory
 
-    [Fact]
-    public void Samplers_Random_CreatesRandomSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Random_CreatesRandomSampler()
     {
         var sampler = Samplers.Random(100, seed: 42);
 
@@ -450,8 +451,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(100, indices.Count);
     }
 
-    [Fact]
-    public void Samplers_Sequential_CreatesSequentialSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Sequential_CreatesSequentialSampler()
     {
         var sampler = Samplers.Sequential(50);
 
@@ -461,8 +462,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(Enumerable.Range(0, 50).ToList(), indices);
     }
 
-    [Fact]
-    public void Samplers_Subset_CreatesSubsetSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Subset_CreatesSubsetSampler()
     {
         var sampler = Samplers.Subset(new[] { 5, 10, 15 }, shuffle: false);
 
@@ -471,8 +472,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(new[] { 5, 10, 15 }, sampler.GetIndices().ToList());
     }
 
-    [Fact]
-    public void Samplers_Stratified_CreatesStratifiedSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Stratified_CreatesStratifiedSampler()
     {
         var labels = new[] { 0, 0, 1, 1, 2, 2 };
         var sampler = Samplers.Stratified(labels, numClasses: 3, seed: 42);
@@ -481,8 +482,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(6, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_Weighted_CreatesWeightedSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Weighted_CreatesWeightedSampler()
     {
         var sampler = Samplers.Weighted(new[] { 1.0, 2.0, 3.0 }, numSamples: 10, seed: 42);
 
@@ -490,8 +491,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(10, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_Balanced_CreatesBalancedSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Balanced_CreatesBalancedSampler()
     {
         var labels = Enumerable.Repeat(0, 90).Concat(Enumerable.Repeat(1, 10)).ToList();
         var sampler = Samplers.Balanced(labels, numClasses: 2, seed: 42);
@@ -500,8 +501,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(100, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_Curriculum_CreatesCurriculumSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Curriculum_CreatesCurriculumSampler()
     {
         var difficulties = new[] { 0.1, 0.3, 0.5, 0.7, 0.9 };
         var sampler = Samplers.Curriculum(difficulties, totalEpochs: 50, seed: 42);
@@ -510,8 +511,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(5, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_SelfPaced_CreatesSelfPacedSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_SelfPaced_CreatesSelfPacedSampler()
     {
         var sampler = Samplers.SelfPaced(datasetSize: 100, seed: 42);
 
@@ -519,8 +520,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(100, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_Importance_CreatesImportanceSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_Importance_CreatesImportanceSampler()
     {
         var sampler = Samplers.Importance(datasetSize: 50, seed: 42);
 
@@ -528,8 +529,8 @@ public class DataSamplingIntegrationTests
         Assert.Equal(50, sampler.Length);
     }
 
-    [Fact]
-    public void Samplers_ActiveLearning_CreatesActiveLearningtSampler()
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_ActiveLearning_CreatesActiveLearningtSampler()
     {
         var sampler = Samplers.ActiveLearning(datasetSize: 50, seed: 42);
 

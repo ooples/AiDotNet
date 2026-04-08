@@ -1,13 +1,14 @@
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class SealHomomorphicEncryptionProviderTests
 {
-    [Fact]
-    public void AggregateEncryptedWeightedAverage_ValidatesInputs()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateEncryptedWeightedAverage_ValidatesInputs()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
         var baseline = new Vector<double>(new[] { 1.0 });
@@ -21,8 +22,8 @@ public class SealHomomorphicEncryptionProviderTests
         Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, null!));
     }
 
-    [Fact]
-    public void AggregateEncryptedWeightedAverage_ReturnsBaseline_WhenNoValidEncryptedIndices()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateEncryptedWeightedAverage_ReturnsBaseline_WhenNoValidEncryptedIndices()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
         var baseline = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -41,8 +42,8 @@ public class SealHomomorphicEncryptionProviderTests
         Assert.Equal(3.0, result[2], precision: 12);
     }
 
-    [Fact]
-    public void AggregateEncryptedWeightedAverage_ThrowsWhenWeightsMissingOrInvalid()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateEncryptedWeightedAverage_ThrowsWhenWeightsMissingOrInvalid()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
         var baseline = new Vector<double>(new[] { 1.0 });
@@ -62,8 +63,8 @@ public class SealHomomorphicEncryptionProviderTests
             options: new HomomorphicEncryptionOptions { Scheme = (HomomorphicEncryptionScheme)999 }));
     }
 
-    [Fact]
-    public void AggregateEncryptedWeightedAverage_ThrowsForUnknownScheme()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateEncryptedWeightedAverage_ThrowsForUnknownScheme()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
         var baseline = new Vector<double>(new[] { 1.0 });
@@ -76,8 +77,8 @@ public class SealHomomorphicEncryptionProviderTests
             options: new HomomorphicEncryptionOptions { Scheme = (HomomorphicEncryptionScheme)999 }));
     }
 
-    [Fact]
-    public void GetProviderName_IsStable()
+    [Fact(Timeout = 60000)]
+    public async Task GetProviderName_IsStable()
     {
         var provider = new SealHomomorphicEncryptionProvider<double>();
         Assert.Equal("SEAL", provider.GetProviderName());

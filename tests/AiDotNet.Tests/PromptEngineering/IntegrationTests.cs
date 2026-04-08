@@ -3,6 +3,7 @@ using AiDotNet.PromptEngineering;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
@@ -14,8 +15,8 @@ public class IntegrationTests
 {
     #region Template Composition Integration
 
-    [Fact]
-    public void CompositeTemplate_WithConditional_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task CompositeTemplate_WithConditional_WorksTogether()
     {
         var composite = CompositePromptTemplate.Builder()
             .Add("System: You are a helpful assistant.")
@@ -45,8 +46,8 @@ public class IntegrationTests
         Assert.Contains("User: What is machine learning?", withoutContext);
     }
 
-    [Fact]
-    public void ChainOfThoughtTemplate_WithContextWindow_TruncatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ChainOfThoughtTemplate_WithContextWindow_TruncatesCorrectly()
     {
         var task = "Solve this very complex mathematical problem";
         var cot = new ChainOfThoughtTemplate(task);
@@ -61,8 +62,8 @@ public class IntegrationTests
         Assert.True(manager.FitsInWindow(prompt));
     }
 
-    [Fact]
-    public void RolePlayingTemplate_WithStructuredOutput_CombinesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RolePlayingTemplate_WithStructuredOutput_CombinesCorrectly()
     {
         // Use the role constructor (not template constructor) by providing expertise param
         var role = new RolePlayingTemplate("data analyst", expertise: null)
@@ -89,8 +90,8 @@ public class IntegrationTests
 
     #region Few-Shot with Templates Integration
 
-    [Fact]
-    public void FewShotPromptTemplate_WithExamples_FormatsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FewShotPromptTemplate_WithExamples_FormatsCorrectly()
     {
         var selector = new FixedExampleSelector<double>();
         selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
@@ -114,8 +115,8 @@ public class IntegrationTests
         Assert.Contains("Good morning", prompt);
     }
 
-    [Fact]
-    public void RandomExampleSelector_SelectsCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task RandomExampleSelector_SelectsCorrectCount()
     {
         var selector = new RandomExampleSelector<double>(seed: 42);
 
@@ -133,8 +134,8 @@ public class IntegrationTests
         Assert.Equal(3, selected.Count);
     }
 
-    [Fact]
-    public void FixedExampleSelector_ReturnsAllExamples()
+    [Fact(Timeout = 120000)]
+    public async Task FixedExampleSelector_ReturnsAllExamples()
     {
         var selector = new FixedExampleSelector<double>();
 
@@ -152,8 +153,8 @@ public class IntegrationTests
 
     #region Context Window Management Integration
 
-    [Fact]
-    public void ContextWindowManager_WithLongPrompt_SplitsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ContextWindowManager_WithLongPrompt_SplitsCorrectly()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
 
@@ -167,8 +168,8 @@ public class IntegrationTests
         }
     }
 
-    [Fact]
-    public void ContextWindowManager_EstimatesTokensReasonably()
+    [Fact(Timeout = 120000)]
+    public async Task ContextWindowManager_EstimatesTokensReasonably()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -182,8 +183,8 @@ public class IntegrationTests
         Assert.True(shortEstimate > 0);
     }
 
-    [Fact]
-    public void ContextWindowManager_ReservedTokens_AccountedFor()
+    [Fact(Timeout = 120000)]
+    public async Task ContextWindowManager_ReservedTokens_AccountedFor()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
 
@@ -197,8 +198,8 @@ public class IntegrationTests
 
     #region Template Chaining Integration
 
-    [Fact]
-    public void MultipleTemplates_ChainedTogether_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleTemplates_ChainedTogether_ProducesValidOutput()
     {
         // Step 1: Create a role-playing prompt using role constructor
         var roleTemplate = new RolePlayingTemplate("expert software engineer", expertise: null)
@@ -229,8 +230,8 @@ public class IntegrationTests
         Assert.Contains("json", finalPrompt.ToLower());
     }
 
-    [Fact]
-    public void InstructionTemplate_WithConditionals_ProducesCorrectOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InstructionTemplate_WithConditionals_ProducesCorrectOutput()
     {
         var instructionTemplate = new InstructionFollowingTemplate()
             .AddInstruction("Read the input carefully")
@@ -270,8 +271,8 @@ public class IntegrationTests
 
     #region End-to-End Workflow Integration
 
-    [Fact]
-    public void CompleteWorkflow_QASystem_WorksEndToEnd()
+    [Fact(Timeout = 120000)]
+    public async Task CompleteWorkflow_QASystem_WorksEndToEnd()
     {
         // Simulate a QA system workflow
 
@@ -311,8 +312,8 @@ public class IntegrationTests
         Assert.Contains("What is the largest planet?", prompt);
     }
 
-    [Fact]
-    public void CompleteWorkflow_DataAnalysis_WorksEndToEnd()
+    [Fact(Timeout = 120000)]
+    public async Task CompleteWorkflow_DataAnalysis_WorksEndToEnd()
     {
         // Simulate a data analysis workflow
 
@@ -350,8 +351,8 @@ public class IntegrationTests
         Assert.Contains("summary", finalPrompt);
     }
 
-    [Fact]
-    public void CompleteWorkflow_CodeReview_WorksEndToEnd()
+    [Fact(Timeout = 120000)]
+    public async Task CompleteWorkflow_CodeReview_WorksEndToEnd()
     {
         // Simulate a code review workflow
 
@@ -394,8 +395,8 @@ public class IntegrationTests
 
     #region Error Handling Integration
 
-    [Fact]
-    public void Integration_MissingRequiredVariable_ThrowsAppropriately()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_MissingRequiredVariable_ThrowsAppropriately()
     {
         var template = new SimplePromptTemplate("Hello {name}, your order {orderId} is ready");
 
@@ -406,8 +407,8 @@ public class IntegrationTests
         }));
     }
 
-    [Fact]
-    public void Integration_InvalidTemplateChain_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_InvalidTemplateChain_HandlesGracefully()
     {
         var template1 = new SimplePromptTemplate("Step 1: {step1}");
         var template2 = new ConditionalPromptTemplate("{{#if result}}{result}{{/if}}");

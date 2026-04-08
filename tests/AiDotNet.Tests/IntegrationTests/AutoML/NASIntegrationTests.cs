@@ -5,6 +5,7 @@ using AiDotNet.AutoML;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML
 {
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
     {
         #region FBNet End-to-End Tests
 
-        [Fact]
-        public void FBNet_EndToEnd_SearchSpaceToArchitectureDerivation()
+        [Fact(Timeout = 120000)]
+        public async Task FBNet_EndToEnd_SearchSpaceToArchitectureDerivation()
         {
             // Arrange - Create search space with operations
             var searchSpace = new SearchSpaceBase<double>();
@@ -66,8 +67,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             }
         }
 
-        [Fact]
-        public void FBNet_EndToEnd_ConstraintSatisfaction()
+        [Fact(Timeout = 120000)]
+        public async Task FBNet_EndToEnd_ConstraintSatisfaction()
         {
             // Arrange - Create FBNet with tight constraints
             var searchSpace = new SearchSpaceBase<double>();
@@ -91,8 +92,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(meetsConstraints, $"Architecture should meet loose constraints. Latency={cost.Latency}, Memory={cost.Memory}, Energy={cost.Energy}");
         }
 
-        [Fact]
-        public void FBNet_EndToEnd_LossComputationWithLatencyRegularization()
+        [Fact(Timeout = 120000)]
+        public async Task FBNet_EndToEnd_LossComputationWithLatencyRegularization()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -139,8 +140,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region OnceForAll End-to-End Tests
 
-        [Fact]
-        public void OnceForAll_EndToEnd_ProgressiveShrinking()
+        [Fact(Timeout = 120000)]
+        public async Task OnceForAll_EndToEnd_ProgressiveShrinking()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -180,8 +181,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(uniqueKernels >= 2, "Stage 4 should have varied kernel sizes");
         }
 
-        [Fact]
-        public void OnceForAll_EndToEnd_HardwareSpecialization()
+        [Fact(Timeout = 120000)]
+        public async Task OnceForAll_EndToEnd_HardwareSpecialization()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -232,8 +233,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Contains(serverConfig.Depth, new[] { 2, 4, 6 });
         }
 
-        [Fact]
-        public void OnceForAll_EndToEnd_SharedWeights()
+        [Fact(Timeout = 120000)]
+        public async Task OnceForAll_EndToEnd_SharedWeights()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -262,8 +263,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Hardware Cost Model Integration Tests
 
-        [Fact]
-        public void HardwareCostModel_EndToEnd_ArchitectureAnalysis()
+        [Fact(Timeout = 120000)]
+        public async Task HardwareCostModel_EndToEnd_ArchitectureAnalysis()
         {
             // Arrange - Build a realistic architecture
             var costModel = new HardwareCostModel<double>(HardwarePlatform.Mobile);
@@ -305,8 +306,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
                 $"Breakdown sum ({breakdownLatencySum}) should match total ({totalCost.Latency})");
         }
 
-        [Fact]
-        public void HardwareCostModel_EndToEnd_CalibrationFlow()
+        [Fact(Timeout = 120000)]
+        public async Task HardwareCostModel_EndToEnd_CalibrationFlow()
         {
             // Arrange
             var costModel = new HardwareCostModel<double>(HardwarePlatform.GPU);
@@ -333,8 +334,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Equal(1.0, costModel.GetCalibrationFactor("unknown_op"));
         }
 
-        [Fact]
-        public void HardwareCostModel_EndToEnd_CrossPlatformComparison()
+        [Fact(Timeout = 120000)]
+        public async Task HardwareCostModel_EndToEnd_CrossPlatformComparison()
         {
             // Arrange - Same architecture on different platforms
             var architecture = new Architecture<double>();
@@ -375,8 +376,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Cross-Algorithm Integration Tests
 
-        [Fact]
-        public void NAS_EndToEnd_FBNetArchitectureToOnceForAllSpecialization()
+        [Fact(Timeout = 120000)]
+        public async Task NAS_EndToEnd_FBNetArchitectureToOnceForAllSpecialization()
         {
             // Arrange - Use FBNet to derive an architecture
             var searchSpace = new SearchSpaceBase<double>();
@@ -421,8 +422,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(ofaConfig.Depth > 0);
         }
 
-        [Fact]
-        public void NAS_EndToEnd_MultipleAlgorithmsSharedCostModel()
+        [Fact(Timeout = 120000)]
+        public async Task NAS_EndToEnd_MultipleAlgorithmsSharedCostModel()
         {
             // Arrange - Create a shared cost model
             var costModel = new HardwareCostModel<double>(HardwarePlatform.Mobile);
@@ -458,8 +459,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Edge Case Integration Tests
 
-        [Fact]
-        public void NAS_EndToEnd_MinimalConfiguration()
+        [Fact(Timeout = 120000)]
+        public async Task NAS_EndToEnd_MinimalConfiguration()
         {
             // Arrange - Minimal valid configuration
             var searchSpace = new SearchSpaceBase<double>();
@@ -482,8 +483,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Equal(1, ofaConfig.Depth);
         }
 
-        [Fact]
-        public void NAS_EndToEnd_LargeConfiguration()
+        [Fact(Timeout = 120000)]
+        public async Task NAS_EndToEnd_LargeConfiguration()
         {
             // Arrange - Large configuration
             var searchSpace = new SearchSpaceBase<double>();
@@ -517,8 +518,8 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(fbnetCost.Latency > 0);
         }
 
-        [Fact]
-        public void NAS_EndToEnd_VeryTightConstraints()
+        [Fact(Timeout = 120000)]
+        public async Task NAS_EndToEnd_VeryTightConstraints()
         {
             // Arrange - Constraints that are nearly impossible to meet
             var searchSpace = new SearchSpaceBase<double>();

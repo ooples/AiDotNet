@@ -1,5 +1,6 @@
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -16,8 +17,8 @@ public class LayerMathematicalTests2
     /// <summary>
     /// Conv2D output size: floor((H + 2*padding - kernelSize) / stride) + 1
     /// </summary>
-    [Fact]
-    public void Conv2DLayer_OutputSize_WithPadding()
+    [Fact(Timeout = 120000)]
+    public async Task Conv2DLayer_OutputSize_WithPadding()
     {
         // inputDepth=1, inputHeight=8, inputWidth=8, outputDepth=4, kernelSize=3, stride=1, padding=1
         var layer = new ConvolutionalLayer<double>(1, 8, 8, 4, 3, 1, 1);
@@ -32,8 +33,8 @@ public class LayerMathematicalTests2
         Assert.Equal(8, output.Shape[3]); // width preserved
     }
 
-    [Fact]
-    public void Conv2DLayer_Stride2_HalvesSize()
+    [Fact(Timeout = 120000)]
+    public async Task Conv2DLayer_Stride2_HalvesSize()
     {
         // stride=2, padding=1
         var layer = new ConvolutionalLayer<double>(1, 8, 8, 4, 3, 2, 1);
@@ -46,8 +47,8 @@ public class LayerMathematicalTests2
         Assert.Equal(4, output.Shape[3]);
     }
 
-    [Fact]
-    public void Conv2DLayer_ZeroInput_ProducesBiasOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Conv2DLayer_ZeroInput_ProducesBiasOutput()
     {
         // With zero input, output should be just the convolution bias
         var layer = new ConvolutionalLayer<double>(1, 4, 4, 2, 3, 1, 1);
@@ -65,8 +66,8 @@ public class LayerMathematicalTests2
 
     #region Pooling Layer Tests
 
-    [Fact]
-    public void MaxPool2D_OutputSize()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool2D_OutputSize()
     {
         // inputShape=[1, 4, 4], poolSize=2, stride=2
         var layer = new MaxPoolingLayer<double>([1, 4, 4], 2, 2);
@@ -81,8 +82,8 @@ public class LayerMathematicalTests2
         Assert.Equal(2, output.Shape[3]);
     }
 
-    [Fact]
-    public void MaxPool2D_SelectsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool2D_SelectsMaximum()
     {
         var layer = new MaxPoolingLayer<double>([1, 2, 2], 2, 2);
 
@@ -95,8 +96,8 @@ public class LayerMathematicalTests2
         Assert.Equal(4.0, output[0], Tol);
     }
 
-    [Fact]
-    public void MaxPool2D_Idempotent_ForConstantInput()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool2D_Idempotent_ForConstantInput()
     {
         // If all values are the same, max pooling should preserve the value
         var layer = new MaxPoolingLayer<double>([1, 4, 4], 2, 2);
@@ -110,8 +111,8 @@ public class LayerMathematicalTests2
             Assert.Equal(7.0, output[i], Tol);
     }
 
-    [Fact]
-    public void AvgPool2D_ComputesAverage()
+    [Fact(Timeout = 120000)]
+    public async Task AvgPool2D_ComputesAverage()
     {
         var layer = new AveragePoolingLayer<double>([1, 2, 2], 2, 2);
 
@@ -128,8 +129,8 @@ public class LayerMathematicalTests2
 
     #region Layer Normalization Tests
 
-    [Fact]
-    public void LayerNorm_NormalizesEachSample()
+    [Fact(Timeout = 120000)]
+    public async Task LayerNorm_NormalizesEachSample()
     {
         int featureSize = 4;
         var layer = new LayerNormalizationLayer<double>(featureSize);
@@ -156,8 +157,8 @@ public class LayerMathematicalTests2
 
     #region Embedding Layer Tests
 
-    [Fact]
-    public void EmbeddingLayer_OutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_OutputShape()
     {
         int vocabSize = 100, embeddingDim = 32;
         var layer = new EmbeddingLayer<double>(vocabSize, embeddingDim);
@@ -169,8 +170,8 @@ public class LayerMathematicalTests2
         Assert.Equal(embeddingDim, output.Shape[1]);
     }
 
-    [Fact]
-    public void EmbeddingLayer_SameIndex_SameVector()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_SameIndex_SameVector()
     {
         int vocabSize = 10, embeddingDim = 4;
         var layer = new EmbeddingLayer<double>(vocabSize, embeddingDim);
@@ -184,8 +185,8 @@ public class LayerMathematicalTests2
             Assert.Equal(output1[i], output2[i], Tol);
     }
 
-    [Fact]
-    public void EmbeddingLayer_DifferentIndices_DifferentVectors()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_DifferentIndices_DifferentVectors()
     {
         int vocabSize = 10, embeddingDim = 8;
         var layer = new EmbeddingLayer<double>(vocabSize, embeddingDim);

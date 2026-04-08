@@ -12,8 +12,8 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class TextBenchmarkTests
 {
-    [Fact]
-    public void GlueOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task GlueOptions_DefaultValues()
     {
         var options = new GlueDataLoaderOptions();
         Assert.Equal(GlueTask.SST2, options.Task);
@@ -22,8 +22,8 @@ public class TextBenchmarkTests
         Assert.True(options.AutoDownload);
     }
 
-    [Fact]
-    public void SuperGlueOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SuperGlueOptions_DefaultValues()
     {
         var options = new SuperGlueDataLoaderOptions();
         Assert.Equal(SuperGlueTask.BoolQ, options.Task);
@@ -31,8 +31,8 @@ public class TextBenchmarkTests
         Assert.Equal(30000, options.VocabularySize);
     }
 
-    [Fact]
-    public void SquadOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SquadOptions_DefaultValues()
     {
         var options = new SquadDataLoaderOptions();
         Assert.Equal(384, options.MaxContextLength);
@@ -40,15 +40,15 @@ public class TextBenchmarkTests
         Assert.False(options.Version2);
     }
 
-    [Fact]
-    public void WikiText103Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task WikiText103Options_DefaultValues()
     {
         var options = new WikiText103DataLoaderOptions();
         Assert.Equal(256, options.SequenceLength);
         Assert.Equal(30000, options.VocabularySize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GlueDataLoader_LoadsTsvData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "glue_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -88,7 +88,7 @@ public class TextBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task WikiText103DataLoader_LoadsTextData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "wikitext_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -122,7 +122,7 @@ public class TextBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task StreamingTextDataset_LoadsTextFiles()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "streaming_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -159,8 +159,8 @@ public class TextBenchmarkTests
         }
     }
 
-    [Fact]
-    public void DomainMixingSampler_ProducesIndices()
+    [Fact(Timeout = 120000)]
+    public async Task DomainMixingSampler_ProducesIndices()
     {
         var domainSizes = new[] { 100, 200, 50 };
         var domainWeights = new[] { 0.5, 0.3, 0.2 };
@@ -179,8 +179,8 @@ public class TextBenchmarkTests
         }
     }
 
-    [Fact]
-    public void DomainMixingSampler_ThrowsOnMismatchedArrays()
+    [Fact(Timeout = 120000)]
+    public async Task DomainMixingSampler_ThrowsOnMismatchedArrays()
     {
         Assert.Throws<ArgumentException>(() =>
             new DomainMixingSampler(new[] { 100, 200 }, new[] { 0.5, 0.3, 0.2 }));

@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Ensemble;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -62,15 +63,15 @@ public class EnsembleAnomalyDetectionTests
 
     #region AveragingDetector Tests
 
-    [Fact]
-    public void Averaging_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task Averaging_Construction_NotFittedByDefault()
     {
         var detector = new AveragingDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void Averaging_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Averaging_OutlierGetsHighestScore()
     {
         var detector = new AveragingDetector<double>();
         var data = CreateTestData();
@@ -81,8 +82,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Averaging_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Averaging_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AveragingDetector<double>();
         var data = CreateTestData();
@@ -95,8 +96,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region MaximumDetector Tests
 
-    [Fact]
-    public void Maximum_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Maximum_OutlierGetsHighestScore()
     {
         var detector = new MaximumDetector<double>();
         var data = CreateTestData();
@@ -106,8 +107,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Maximum_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Maximum_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MaximumDetector<double>();
         var data = CreateTestData();
@@ -120,8 +121,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region FeatureBaggingDetector Tests
 
-    [Fact]
-    public void FeatureBagging_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureBagging_OutlierGetsHighestScore()
     {
         var detector = new FeatureBaggingDetector<double>();
         var data = CreateTestData();
@@ -131,8 +132,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void FeatureBagging_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureBagging_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FeatureBaggingDetector<double>();
         var data = CreateTestData();
@@ -145,8 +146,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region RandomSubspaceDetector Tests
 
-    [Fact]
-    public void RandomSubspace_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSubspace_OutlierGetsHighestScore()
     {
         var detector = new RandomSubspaceDetector<double>();
         var data = CreateTestData();
@@ -156,8 +157,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void RandomSubspace_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSubspace_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new RandomSubspaceDetector<double>();
         var data = CreateTestData();
@@ -170,8 +171,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region LSCPDetector Tests
 
-    [Fact]
-    public void LSCP_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LSCP_OutlierGetsHighestScore()
     {
         var detector = new LSCPDetector<double>();
         var data = CreateTestData();
@@ -181,8 +182,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void LSCP_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task LSCP_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LSCPDetector<double>();
         var data = CreateTestData();
@@ -195,8 +196,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region SUODDetector Tests
 
-    [Fact]
-    public void SUOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task SUOD_OutlierGetsHighestScore()
     {
         var detector = new SUODDetector<double>();
         var data = CreateTestData();
@@ -206,8 +207,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void SUOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task SUOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SUODDetector<double>();
         var data = CreateTestData();
@@ -220,8 +221,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region XGBODDetector Tests
 
-    [Fact]
-    public void XGBOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task XGBOD_OutlierGetsHighestScore()
     {
         var detector = new XGBODDetector<double>();
         var data = CreateTestData();
@@ -231,8 +232,8 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void XGBOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task XGBOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new XGBODDetector<double>();
         var data = CreateTestData();
@@ -245,8 +246,8 @@ public class EnsembleAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllEnsembleDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllEnsembleDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

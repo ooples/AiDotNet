@@ -1,6 +1,7 @@
 using AiDotNet.UncertaintyQuantification.Calibration;
 using Xunit;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.UncertaintyQuantification;
 
@@ -14,8 +15,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
 
     #region ECE - Hand-Computed Values
 
-    [Fact]
-    public void ECE_SingleBin_Overconfident_ExactECE025()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_SingleBin_Overconfident_ExactECE025()
     {
         // 8 samples all with prob=0.75 (exact in IEEE 754), only 4 correct
         // All go to bin 7 (floor(0.75*10) = 7)
@@ -30,8 +31,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_TwoBins_PerfectCalibration_ExactlyZero()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_TwoBins_PerfectCalibration_ExactlyZero()
     {
         // Using IEEE 754-exact values (0.25 = 1/4, 0.75 = 3/4):
         // Bin 2 (prob=0.25): 4 samples, 1 correct -> acc=0.25, conf=0.25, diff=0
@@ -46,8 +47,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_SingleSample_CorrectPrediction_ExactECE()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_SingleSample_CorrectPrediction_ExactECE()
     {
         // 1 sample with prob=0.75, correct prediction
         // Bin 7: acc=1.0, conf=0.75
@@ -61,8 +62,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_SingleSample_WrongPrediction_ExactECE()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_SingleSample_WrongPrediction_ExactECE()
     {
         // 1 sample with prob=0.75, wrong prediction
         // Bin 7: acc=0.0, conf=0.75
@@ -76,8 +77,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_TwoBins_BothOverconfident_WeightedAverage()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_TwoBins_BothOverconfident_WeightedAverage()
     {
         // Bin 2 (prob=0.25): 4 samples, 0 correct -> acc=0.0, conf=0.25
         // Bin 7 (prob=0.75): 4 samples, 4 correct -> acc=1.0, conf=0.75
@@ -92,8 +93,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_ProbExactlyZero_GoesToBinZero()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_ProbExactlyZero_GoesToBinZero()
     {
         // prob=0.0 -> bin 0, prob=0.5 -> bin 5
         // Both predictions correct
@@ -109,8 +110,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_ProbExactlyOne_GoesToLastBin()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_ProbExactlyOne_GoesToLastBin()
     {
         // prob=1.0 -> clamped to bin 9 (last bin with numBins=10)
         // prob=0.5 -> bin 5
@@ -126,8 +127,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_ReliabilityDiagram_MatchesHandComputation()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_ReliabilityDiagram_MatchesHandComputation()
     {
         // 4 samples in bin 2 (prob=0.25): 1 correct
         // 4 samples in bin 7 (prob=0.75): 3 correct
@@ -151,8 +152,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(4, diagram[1].count);
     }
 
-    [Fact]
-    public void ECE_AllPredictionsWrong_AtMidConfidence()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_AllPredictionsWrong_AtMidConfidence()
     {
         // All predictions wrong at prob=0.5
         // Bin 5: 4 samples, 0 correct -> acc=0.0, conf=0.5
@@ -166,8 +167,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void ECE_IncreasingOverconfidence_ECEIncreases()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_IncreasingOverconfidence_ECEIncreases()
     {
         // As accuracy drops below confidence, ECE should increase monotonically
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -193,8 +194,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.True(ece2 < ece3);
     }
 
-    [Fact]
-    public void ECE_OneBin_ECEEqualsAbsDifference()
+    [Fact(Timeout = 120000)]
+    public async Task ECE_OneBin_ECEEqualsAbsDifference()
     {
         // With numBins=1, all samples go in one bin
         // ECE = |overall_accuracy - overall_avg_confidence|
@@ -217,8 +218,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
 
     #region TemperatureScaling - ScaleLogits Math
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_ExactDivision_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_ExactDivision_HandComputed()
     {
         // logits = [6, 3, 1.5], T=1.5 -> scaled = [4, 2, 1]
         var ts = new TemperatureScaling<double>(initialTemperature: 1.5);
@@ -229,8 +230,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(1.0, scaled[2], Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_NegativeLogits_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_NegativeLogits_HandComputed()
     {
         // logits = [-2, -4, -6], T=2 -> scaled = [-1, -2, -3]
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
@@ -241,8 +242,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(-3.0, scaled[2], Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_ScaleLogits_PreservesZero()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_ScaleLogits_PreservesZero()
     {
         // logits = [3, 0, -1], T=2 -> scaled = [1.5, 0, -0.5]
         var ts = new TemperatureScaling<double>(initialTemperature: 2.0);
@@ -253,8 +254,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.Equal(-0.5, scaled[2], Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScaling_SoftmaxAfterScaling_ProbsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_SoftmaxAfterScaling_ProbsSumToOne()
     {
         // Scale logits [3, 1, -1, 0] with T=2 -> [1.5, 0.5, -0.5, 0]
         // Compute softmax manually and verify sum = 1
@@ -276,8 +277,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         Assert.True(probs[3] > probs[2], "Zero logit > negative logit");
     }
 
-    [Fact]
-    public void TemperatureScaling_LargeLogits_ScalingDoesNotOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_LargeLogits_ScalingDoesNotOverflow()
     {
         // With very large logits, scaling should produce finite values
         var ts = new TemperatureScaling<double>(initialTemperature: 1.0);
@@ -294,8 +295,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
 
     #region TemperatureScaling - Calibration Gradient Correctness
 
-    [Fact]
-    public void TemperatureScaling_GradientDirection_SingleWrongSample_TemperatureIncreases()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_GradientDirection_SingleWrongSample_TemperatureIncreases()
     {
         // Single sample: logits = [5, 0, 0], true label = 1 (model is confidently wrong)
         // At T=1: softmax(5,0,0) ~ [0.987, 0.007, 0.007]
@@ -317,8 +318,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
             $"Temperature should increase for confidently wrong prediction. Got {ts.Temperature}");
     }
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_OverconfidentModel_TemperatureIncreases()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_OverconfidentModel_TemperatureIncreases()
     {
         // Model predicts class 0 with ~98.7% confidence (logits [5,0,0])
         // But is only correct 60% of the time
@@ -342,8 +343,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
             $"Overconfident model should have T > 1 after calibration, got {ts.Temperature}");
     }
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_OverconfidentModel_NLLDecreases()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_OverconfidentModel_NLLDecreases()
     {
         // After proper calibration, NLL should decrease (predictions become better calibrated)
         int numSamples = 10;
@@ -372,8 +373,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
             $"NLL should decrease after calibration. Before: {nllBefore:F6}, After: {nllAfter:F6}, T={ts.Temperature:F6}");
     }
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_PerfectModel_TemperatureNearOne()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_PerfectModel_TemperatureNearOne()
     {
         // All predictions correct with high confidence -> T should stay near 1.0
         int numSamples = 10;
@@ -395,8 +396,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
             $"Perfect model should have T near 1.0, got {ts.Temperature}");
     }
 
-    [Fact]
-    public void TemperatureScaling_TemperatureFloor_ClampsAtMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_TemperatureFloor_ClampsAtMinimum()
     {
         // With very high learning rate, temperature update could go negative
         // The code should clamp at 0.01
@@ -414,8 +415,8 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
             $"Temperature should never go below 0.01, got {ts.Temperature}");
     }
 
-    [Fact]
-    public void TemperatureScaling_Calibrate_Convergence_MoreIterationsStabilizes()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScaling_Calibrate_Convergence_MoreIterationsStabilizes()
     {
         // After enough iterations, temperature should stabilize
         int numSamples = 20;

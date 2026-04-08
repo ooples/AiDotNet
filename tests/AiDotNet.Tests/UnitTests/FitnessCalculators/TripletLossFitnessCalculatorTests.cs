@@ -6,13 +6,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class TripletLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectSeparation_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectSeparation_ReturnsZero()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>(margin: 1.0);
@@ -35,8 +36,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -59,8 +60,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -85,8 +86,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithDifferentMargins_AffectsLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithDifferentMargins_AffectsLoss()
     {
         // Arrange
         var calculatorSmallMargin = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>(margin: 0.5);
@@ -113,8 +114,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(resultLarge >= 0.0);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -123,8 +124,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -136,8 +137,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -149,8 +150,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<float, Matrix<float>, Vector<float>>(margin: 1.0f);
@@ -173,8 +174,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -183,8 +184,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Matrix<double>, Vector<double>>)null));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>(dataSetType: DataSetType.Training);
@@ -194,8 +195,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>(dataSetType: DataSetType.Testing);
@@ -205,8 +206,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultMargin_UsesDefaultValue()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultMargin_UsesDefaultValue()
     {
         // Arrange & Act
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -216,8 +217,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMultipleSamplesPerClass_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMultipleSamplesPerClass_HandlesCorrectly()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();
@@ -242,8 +243,8 @@ public class TripletLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithHighDimensionalFeatures_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithHighDimensionalFeatures_WorksCorrectly()
     {
         // Arrange
         var calculator = new TripletLossFitnessCalculator<double, Matrix<double>, Vector<double>>();

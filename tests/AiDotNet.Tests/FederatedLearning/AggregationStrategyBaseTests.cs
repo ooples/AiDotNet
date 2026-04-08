@@ -1,11 +1,12 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using Xunit;
 
 public class AggregationStrategyBaseTests
 {
-    [Fact]
-    public void GetTotalWeightOrThrow_Throws_WhenWeightsNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalWeightOrThrow_Throws_WhenWeightsNull()
     {
         Assert.Throws<ArgumentException>(() =>
             AggregationStrategyBaseAccessor.CallGetTotalWeightOrThrow(
@@ -14,8 +15,8 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact]
-    public void GetTotalWeightOrThrow_Throws_WhenWeightsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalWeightOrThrow_Throws_WhenWeightsEmpty()
     {
         Assert.Throws<ArgumentException>(() =>
             AggregationStrategyBaseAccessor.CallGetTotalWeightOrThrow(
@@ -24,8 +25,8 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact]
-    public void GetTotalWeightOrThrow_Throws_WhenClientWeightMissing()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalWeightOrThrow_Throws_WhenClientWeightMissing()
     {
         var weights = new Dictionary<int, double> { [1] = 1.0 };
 
@@ -36,8 +37,8 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact]
-    public void GetTotalWeightOrThrow_Throws_WhenTotalWeightNotPositive()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalWeightOrThrow_Throws_WhenTotalWeightNotPositive()
     {
         var weights = new Dictionary<int, double> { [1] = 0.0, [2] = -1.0 };
 
@@ -48,8 +49,8 @@ public class AggregationStrategyBaseTests
                 paramName: "weights"));
     }
 
-    [Fact]
-    public void GetTotalWeightOrThrow_ReturnsSum_ForValidWeights()
+    [Fact(Timeout = 60000)]
+    public async Task GetTotalWeightOrThrow_ReturnsSum_ForValidWeights()
     {
         var weights = new Dictionary<int, double> { [1] = 0.25, [2] = 0.75 };
 

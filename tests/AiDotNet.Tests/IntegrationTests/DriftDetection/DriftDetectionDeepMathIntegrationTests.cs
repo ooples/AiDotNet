@@ -1,5 +1,6 @@
 using AiDotNet.DriftDetection;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DriftDetection;
 
@@ -14,8 +15,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region DDM Formula Verification
 
-    [Fact]
-    public void DDM_ErrorRate_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_ErrorRate_HandCalculated()
     {
         // Feed 3 errors in 10 observations: error rate = 3/10 = 0.3
         var ddm = new DDM<double>(minimumObservations: 1);
@@ -28,8 +29,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(10, ddm.ObservationCount);
     }
 
-    [Fact]
-    public void DDM_StandardDeviation_Formula_p_s()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_StandardDeviation_Formula_p_s()
     {
         // p = errors/n, s = sqrt(p*(1-p)/n)
         // 2 errors in 10 obs: p=0.2, s=sqrt(0.2*0.8/10)=sqrt(0.016)=0.12649
@@ -50,8 +51,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(ddm.GetMinimumPsi() <= expectedPsi + 1e-10);
     }
 
-    [Fact]
-    public void DDM_MinPsi_UpdatedToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_MinPsi_UpdatedToMinimum()
     {
         // After warm-up, the minimum p+s should reflect the best (lowest) error period
         var ddm = new DDM<double>(minimumObservations: 5);
@@ -74,8 +75,8 @@ public class DriftDetectionDeepMathIntegrationTests
             $"MinPsi should decrease when error rate drops: {minPsi2} < {minPsi1}");
     }
 
-    [Fact]
-    public void DDM_DriftDetection_WhenErrorExceedsThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_DriftDetection_WhenErrorExceedsThreshold()
     {
         // warningBound = minP + 2*minS
         // driftBound = minP + 3*minS
@@ -95,8 +96,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(ddm.IsInDrift);
     }
 
-    [Fact]
-    public void DDM_WarningZone_BetweenThresholds()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_WarningZone_BetweenThresholds()
     {
         // Need minP > 0 so warning and drift bounds are different
         var ddm = new DDM<double>(warningThreshold: 2.0, driftThreshold: 3.0, minimumObservations: 5);
@@ -124,8 +125,8 @@ public class DriftDetectionDeepMathIntegrationTests
             "Should trigger at least warning with increased error rate");
     }
 
-    [Fact]
-    public void DDM_NoDetectionDuringWarmup()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_NoDetectionDuringWarmup()
     {
         var ddm = new DDM<double>(minimumObservations: 30);
 
@@ -137,8 +138,8 @@ public class DriftDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DDM_ErrorCounting_ThresholdAt05()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_ErrorCounting_ThresholdAt05()
     {
         // Values > 0.5 count as errors
         var ddm = new DDM<double>(minimumObservations: 1);
@@ -151,8 +152,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(0.5, ddm.GetErrorRate(), Tolerance); // 2/4
     }
 
-    [Fact]
-    public void DDM_DriftProbability_ScalesWithDistance()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_DriftProbability_ScalesWithDistance()
     {
         // When in warning zone, DriftProbability = (p - warningBound) / (driftBound - warningBound)
         var ddm = new DDM<double>(warningThreshold: 2.0, driftThreshold: 3.0, minimumObservations: 5);
@@ -172,8 +173,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region EDDM Formula Verification
 
-    [Fact]
-    public void EDDM_DistanceBetweenErrors_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_DistanceBetweenErrors_HandCalculated()
     {
         // Errors at positions 5, 10, 15 → distances: 5, 5
         var eddm = new EDDM<double>(minimumObservations: 1, minimumErrors: 2);
@@ -187,8 +188,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(5.0, eddm.GetMeanDistance(), MediumTolerance);
     }
 
-    [Fact]
-    public void EDDM_WelfordMean_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_WelfordMean_HandCalculated()
     {
         // Errors at positions 3, 7, 12 → distances: 4, 5
         // Welford's mean of [4, 5] = 4.5
@@ -204,8 +205,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(4.5, eddm.GetMeanDistance(), MediumTolerance);
     }
 
-    [Fact]
-    public void EDDM_WelfordStd_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_WelfordStd_HandCalculated()
     {
         // Errors at 2, 5, 10 → distances: 3, 5
         // Welford: n=2, mean=4, M2 = (3-4)*(3-4) + ... but careful with Welford order
@@ -230,8 +231,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2.0), eddm.GetDistanceStd(), MediumTolerance);
     }
 
-    [Fact]
-    public void EDDM_Ratio_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_Ratio_HandCalculated()
     {
         // After establishing max psi, verify ratio computation
         var eddm = new EDDM<double>(warningThreshold: 0.95, driftThreshold: 0.90,
@@ -246,8 +247,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(ratio1 >= 0.9, $"Initial ratio should be near 1.0, got {ratio1}");
     }
 
-    [Fact]
-    public void EDDM_NoDetectionDuringWarmup()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_NoDetectionDuringWarmup()
     {
         var eddm = new EDDM<double>(minimumObservations: 30, minimumErrors: 30);
 
@@ -259,8 +260,8 @@ public class DriftDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void EDDM_DriftWhenDistancesShrink()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_DriftWhenDistancesShrink()
     {
         var eddm = new EDDM<double>(warningThreshold: 0.95, driftThreshold: 0.90,
             minimumObservations: 1, minimumErrors: 3);
@@ -287,8 +288,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region Page-Hinkley Formula Verification
 
-    [Fact]
-    public void PageHinkley_RunningMean_WelfordFormula()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_RunningMean_WelfordFormula()
     {
         // Welford mean after [1, 3, 5, 7, 9]:
         // After 1: mean=1
@@ -305,8 +306,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(5.0, ph.EstimatedMean, MediumTolerance);
     }
 
-    [Fact]
-    public void PageHinkley_CumulativeSum_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_CumulativeSum_HandCalculated()
     {
         // sum += (val - runningMean - alpha)
         // With alpha=0 for simplicity:
@@ -324,8 +325,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(10.0, ph.GetCumulativeSum(), MediumTolerance);
     }
 
-    [Fact]
-    public void PageHinkley_CumulativeSum_WithAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_CumulativeSum_WithAlpha()
     {
         // alpha=1: sum += (val - mean - 1)
         // val=1: mean=1, sum += 1-1-1=-1 → sum=-1
@@ -342,8 +343,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(5.0, ph.GetCumulativeSum(), MediumTolerance);
     }
 
-    [Fact]
-    public void PageHinkley_TestStatistic_DetectIncrease()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_TestStatistic_DetectIncrease()
     {
         // For DetectIncrease: statistic = sum - sumMin
         // Constant stream then sudden increase
@@ -364,8 +365,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(stat2 > stat1, "Test statistic should increase with rising values");
     }
 
-    [Fact]
-    public void PageHinkley_DetectsIncrease_WhenMeanShifts()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_DetectsIncrease_WhenMeanShifts()
     {
         var ph = new PageHinkley<double>(lambda: 10, alpha: 0.005,
             mode: PageHinkley<double>.DetectionMode.DetectIncrease, minimumObservations: 5);
@@ -388,8 +389,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(driftDetected, "Page-Hinkley should detect increase in mean");
     }
 
-    [Fact]
-    public void PageHinkley_DetectsDecrease_WhenMeanDrops()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_DetectsDecrease_WhenMeanDrops()
     {
         var ph = new PageHinkley<double>(lambda: 10, alpha: 0.005,
             mode: PageHinkley<double>.DetectionMode.DetectDecrease, minimumObservations: 5);
@@ -412,8 +413,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(driftDetected, "Page-Hinkley should detect decrease in mean");
     }
 
-    [Fact]
-    public void PageHinkley_DetectBoth_CatchesEitherDirection()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_DetectBoth_CatchesEitherDirection()
     {
         var ph = new PageHinkley<double>(lambda: 10, alpha: 0.005,
             mode: PageHinkley<double>.DetectionMode.DetectBoth, minimumObservations: 5);
@@ -436,8 +437,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(driftDetected, "DetectBoth should catch upward shift");
     }
 
-    [Fact]
-    public void PageHinkley_NoDrift_StableStream()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_NoDrift_StableStream()
     {
         var ph = new PageHinkley<double>(lambda: 50, alpha: 0.005, minimumObservations: 5);
 
@@ -455,8 +456,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.False(anyDrift, "Constant stream should not trigger drift");
     }
 
-    [Fact]
-    public void PageHinkley_Warning_At80Percent()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_Warning_At80Percent()
     {
         // Warning triggers when DriftProbability > 0.8
         var ph = new PageHinkley<double>(lambda: 100, alpha: 0,
@@ -487,8 +488,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region ADWIN Formula Verification
 
-    [Fact]
-    public void ADWIN_WindowSize_GrowsWithObservations()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_WindowSize_GrowsWithObservations()
     {
         var adwin = new ADWIN<double>();
 
@@ -500,8 +501,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(adwin.WindowSize > 0, "Window should grow with stable observations");
     }
 
-    [Fact]
-    public void ADWIN_EstimatedMean_MatchesRunningAverage()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_EstimatedMean_MatchesRunningAverage()
     {
         var adwin = new ADWIN<double>();
 
@@ -514,8 +515,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(3.0, adwin.EstimatedMean, MediumTolerance);
     }
 
-    [Fact]
-    public void ADWIN_DetectsDrift_WhenMeanShifts()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_DetectsDrift_WhenMeanShifts()
     {
         var adwin = new ADWIN<double>(delta: 0.01);
 
@@ -537,8 +538,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.True(driftDetected, "ADWIN should detect shift from 0 to 1");
     }
 
-    [Fact]
-    public void ADWIN_WindowShrinks_OnDrift()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_WindowShrinks_OnDrift()
     {
         var adwin = new ADWIN<double>(delta: 0.01);
 
@@ -563,8 +564,8 @@ public class DriftDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ADWIN_NoDrift_StableStream()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_NoDrift_StableStream()
     {
         var adwin = new ADWIN<double>(delta: 0.002);
 
@@ -585,8 +586,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact]
-    public void AllDetectors_StableStream_NoDrift()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_StableStream_NoDrift()
     {
         var ddm = new DDM<double>();
         var eddm = new EDDM<double>();
@@ -602,8 +603,8 @@ public class DriftDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllDetectors_Reset_ClearsCompletely()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_Reset_ClearsCompletely()
     {
         var ddm = new DDM<double>();
         var ph = new PageHinkley<double>();
@@ -633,8 +634,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.False(adwin.IsInDrift);
     }
 
-    [Fact]
-    public void AllDetectors_SuddenDrift_EventuallyDetected()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_SuddenDrift_EventuallyDetected()
     {
         // Phase 1: all correct. Phase 2: all errors.
         // All detectors should eventually detect drift.
@@ -670,8 +671,8 @@ public class DriftDetectionDeepMathIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact]
-    public void DDM_Validation_ThrowsForInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_Validation_ThrowsForInvalidParams()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new DDM<double>(warningThreshold: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DDM<double>(warningThreshold: -1));
@@ -680,8 +681,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DDM<double>(minimumObservations: 0));
     }
 
-    [Fact]
-    public void EDDM_Validation_ThrowsForInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_Validation_ThrowsForInvalidParams()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new EDDM<double>(warningThreshold: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new EDDM<double>(warningThreshold: 1));
@@ -691,24 +692,24 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new EDDM<double>(minimumErrors: 1));
     }
 
-    [Fact]
-    public void PageHinkley_Validation_ThrowsForInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_Validation_ThrowsForInvalidParams()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PageHinkley<double>(lambda: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PageHinkley<double>(lambda: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PageHinkley<double>(alpha: -1));
     }
 
-    [Fact]
-    public void ADWIN_Validation_ThrowsForInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task ADWIN_Validation_ThrowsForInvalidParams()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ADWIN<double>(delta: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ADWIN<double>(delta: 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ADWIN<double>(maxBuckets: 1));
     }
 
-    [Fact]
-    public void DDM_ObservationCount_Increments()
+    [Fact(Timeout = 120000)]
+    public async Task DDM_ObservationCount_Increments()
     {
         var ddm = new DDM<double>();
         Assert.Equal(0, ddm.ObservationCount);
@@ -720,8 +721,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(2, ddm.ObservationCount);
     }
 
-    [Fact]
-    public void EDDM_ErrorCount_TracksErrors()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_ErrorCount_TracksErrors()
     {
         var eddm = new EDDM<double>(minimumObservations: 1, minimumErrors: 2);
 
@@ -738,8 +739,8 @@ public class DriftDetectionDeepMathIntegrationTests
         Assert.Equal(2, eddm.ErrorCount);
     }
 
-    [Fact]
-    public void PageHinkley_ConstantValues_SumStaysNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task PageHinkley_ConstantValues_SumStaysNearZero()
     {
         // With constant values, deviations from mean approach 0
         var ph = new PageHinkley<double>(lambda: 50, alpha: 0, minimumObservations: 1);
@@ -752,8 +753,8 @@ public class DriftDetectionDeepMathIntegrationTests
             $"Cumulative sum should be near 0 for constant stream, got {ph.GetCumulativeSum()}");
     }
 
-    [Fact]
-    public void EDDM_DistanceStd_ZeroWithTwoErrors()
+    [Fact(Timeout = 120000)]
+    public async Task EDDM_DistanceStd_ZeroWithTwoErrors()
     {
         // Need errorCount > 2 for non-zero std
         var eddm = new EDDM<double>(minimumObservations: 1, minimumErrors: 2);

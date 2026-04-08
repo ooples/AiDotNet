@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -16,8 +17,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class InferenceOptimizerIntegrationTests
 {
-    [Fact]
-    public void Optimizer_RewritesMHA_ToCachedMHA_PreservingRoPE()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_RewritesMHA_ToCachedMHA_PreservingRoPE()
     {
         var model = CreateMHAModel(PositionalEncodingType.Rotary);
         Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
@@ -43,8 +44,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(PositionalEncodingType.Rotary, cached.PositionalEncoding);
     }
 
-    [Fact]
-    public void Optimizer_RewritesGQA_ToCachedGQA_WithKVCache()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_RewritesGQA_ToCachedGQA_WithKVCache()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
         Assert.Contains(model.Layers, l => l is GroupedQueryAttentionLayer<float>);
@@ -69,8 +70,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(2, cachedGqa.KVHeadCount);
     }
 
-    [Fact]
-    public void Optimizer_GQA_KVCacheUsesKVHeadCount()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_GQA_KVCacheUsesKVHeadCount()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
 
@@ -99,8 +100,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.True((double)cacheStats["MaxMemoryMB"] > 0);
     }
 
-    [Fact]
-    public void Optimizer_GQA_WithRoPE_PreservesEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_GQA_WithRoPE_PreservesEncoding()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2, posEncoding: PositionalEncodingType.Rotary);
 
@@ -175,8 +176,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(2, quantized.KVHeadCount);
     }
 
-    [Fact]
-    public void Optimizer_QuantizationNone_DoesNotRewriteAttention()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_QuantizationNone_DoesNotRewriteAttention()
     {
         var model = CreateMHAModel();
 
@@ -195,8 +196,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.DoesNotContain(optimized.Layers, l => l is QuantizedAttentionLayer);
     }
 
-    [Fact]
-    public void Optimizer_Statistics_IncludeNewFields()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_Statistics_IncludeNewFields()
     {
         var model = CreateMHAModel();
 
@@ -216,8 +217,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.True(stats.ContainsKey("PositionalEncoding"));
     }
 
-    [Fact]
-    public void Optimizer_MHA_RewriteToFlash_PreservesOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_MHA_RewriteToFlash_PreservesOutputShape()
     {
         var model = CreateMHAModel();
         Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
@@ -237,8 +238,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
     }
 
-    [Fact]
-    public void Optimizer_MixedLayers_QuantizesBothDenseAndAttention()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_MixedLayers_QuantizesBothDenseAndAttention()
     {
         // Model with MHA + Dense layers
         var model = CreateMixedModel();
@@ -259,8 +260,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.Contains(optimized.Layers, l => l.GetType().Name.Contains("QuantizedDenseLayer"));
     }
 
-    [Fact]
-    public void KVCacheConfig_GQA_MemorySavings_ProportionalToKVHeadRatio()
+    [Fact(Timeout = 120000)]
+    public async Task KVCacheConfig_GQA_MemorySavings_ProportionalToKVHeadRatio()
     {
         // Verify that KV-cache memory scales linearly with NumHeads.
         // GQA with numKVHeads=8 vs numKVHeads=1 should give exactly 8x savings.
@@ -299,8 +300,8 @@ public class InferenceOptimizerIntegrationTests
         Assert.Equal(8.0, ratio, precision: 1);
     }
 
-    [Fact]
-    public void KVCacheConfig_Llama70B_GQA_Savings_8x()
+    [Fact(Timeout = 120000)]
+    public async Task KVCacheConfig_Llama70B_GQA_Savings_8x()
     {
         // Llama 2 70B uses 64 Q heads, 8 KV heads -> 8x KV-cache savings
         var fullMHA = new KVCacheConfig

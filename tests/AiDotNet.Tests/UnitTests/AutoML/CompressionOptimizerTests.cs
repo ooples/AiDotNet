@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.AutoML
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.AutoML
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Arrange & Act
             var optimizer = new CompressionOptimizer<double>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Empty(optimizer.TrialHistory);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -47,8 +48,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Options Tests
 
-        [Fact]
-        public void CompressionOptimizerOptions_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionOptimizerOptions_DefaultValues_AreCorrect()
         {
             // Arrange & Act
             var options = new CompressionOptimizerOptions();
@@ -67,8 +68,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Null(options.RandomSeed);
         }
 
-        [Fact]
-        public void CompressionOptimizerOptions_CustomValues_AreSet()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionOptimizerOptions_CustomValues_AreSet()
         {
             // Arrange & Act
             var options = new CompressionOptimizerOptions
@@ -104,8 +105,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Optimize Tests
 
-        [Fact]
-        public void Optimize_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithNullWeights_ThrowsException()
         {
             // Arrange
             var optimizer = new CompressionOptimizer<double>();
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.AutoML
                 optimizer.Optimize(null!, evaluator));
         }
 
-        [Fact]
-        public void Optimize_WithNullEvaluator_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithNullEvaluator_ThrowsException()
         {
             // Arrange
             var optimizer = new CompressionOptimizer<double>();
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.AutoML
                 optimizer.Optimize(weights, null!));
         }
 
-        [Fact]
-        public void Optimize_WithValidInputs_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithValidInputs_ReturnsResult()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -161,8 +162,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.True(result.Success);
         }
 
-        [Fact]
-        public void Optimize_RecordsTrialHistory()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_RecordsTrialHistory()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -189,8 +190,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.True(optimizer.TrialHistory.Count <= 3);
         }
 
-        [Fact]
-        public void Optimize_SetsBestTrial()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_SetsBestTrial()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -222,8 +223,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Trial Tests
 
-        [Fact]
-        public void CompressionTrial_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionTrial_DefaultValues_AreCorrect()
         {
             // Arrange & Act
             var trial = new CompressionTrial<double>();
@@ -237,8 +238,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Null(trial.ErrorMessage);
         }
 
-        [Fact]
-        public void CompressionTrial_CanSetProperties()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionTrial_CanSetProperties()
         {
             // Arrange & Act
             var trial = new CompressionTrial<double>
@@ -261,8 +262,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region GetSummary Tests
 
-        [Fact]
-        public void GetSummary_WithNoTrials_ReturnsValidSummary()
+        [Fact(Timeout = 60000)]
+        public async Task GetSummary_WithNoTrials_ReturnsValidSummary()
         {
             // Arrange
             var optimizer = new CompressionOptimizer<double>();
@@ -276,8 +277,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Contains("No successful trials completed", summary);
         }
 
-        [Fact]
-        public void GetSummary_WithTrials_ContainsDetails()
+        [Fact(Timeout = 60000)]
+        public async Task GetSummary_WithTrials_ContainsDetails()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -312,8 +313,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Type-Specific Tests
 
-        [Fact]
-        public void Optimize_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -343,8 +344,8 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Edge Case Tests
 
-        [Fact]
-        public void Optimize_WithOnlyQuantization_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithOnlyQuantization_WorksCorrectly()
         {
             // Arrange
             var options = new CompressionOptimizerOptions
@@ -371,8 +372,8 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Equal(CompressionType.WeightClustering, result.Technique);
         }
 
-        [Fact]
-        public void Optimize_WithOnlyEncoding_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Optimize_WithOnlyEncoding_WorksCorrectly()
         {
             // Arrange
             var options = new CompressionOptimizerOptions

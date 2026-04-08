@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.SurvivalAnalysis;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SurvivalAnalysis;
 
@@ -34,16 +35,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region KaplanMeierEstimator Tests
 
-    [Fact]
-    public void KaplanMeier_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_Construction()
     {
         var km = new KaplanMeierEstimator<double>();
         Assert.NotNull(km);
         Assert.False(km.IsTrained);
     }
 
-    [Fact]
-    public void KaplanMeier_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_FitSurvival_SetsTrainedState()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -51,8 +52,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(km.IsTrained);
     }
 
-    [Fact]
-    public void KaplanMeier_SurvivalCurve_MonotoneDecreasing()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_SurvivalCurve_MonotoneDecreasing()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -69,8 +70,8 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaplanMeier_SurvivalStartsAtOne()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_SurvivalStartsAtOne()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -82,8 +83,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.Equal(1.0, baseline[0], 1e-10);
     }
 
-    [Fact]
-    public void KaplanMeier_PredictSurvival_ReturnsValidProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_PredictSurvival_ReturnsValidProbabilities()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -105,8 +106,8 @@ public class SurvivalAnalysisIntegrationTests
                 "Survival probability should decrease over time");
     }
 
-    [Fact]
-    public void KaplanMeier_GetNumberAtRisk_DecreasesOverTime()
+    [Fact(Timeout = 120000)]
+    public async Task KaplanMeier_GetNumberAtRisk_DecreasesOverTime()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -125,16 +126,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region NelsonAalenEstimator Tests
 
-    [Fact]
-    public void NelsonAalen_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_Construction()
     {
         var na = new NelsonAalenEstimator<double>();
         Assert.NotNull(na);
         Assert.False(na.IsTrained);
     }
 
-    [Fact]
-    public void NelsonAalen_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_FitSurvival_SetsTrainedState()
     {
         var na = new NelsonAalenEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -142,8 +143,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(na.IsTrained);
     }
 
-    [Fact]
-    public void NelsonAalen_CumulativeHazard_MonotoneIncreasing()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_CumulativeHazard_MonotoneIncreasing()
     {
         var na = new NelsonAalenEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -160,8 +161,8 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void NelsonAalen_VarianceEstimate_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NelsonAalen_VarianceEstimate_NonNegative()
     {
         var na = new NelsonAalenEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -179,16 +180,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region CoxProportionalHazards Tests
 
-    [Fact]
-    public void Cox_Construction_WithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_Construction_WithDefaults()
     {
         var cox = new CoxProportionalHazards<double>();
         Assert.NotNull(cox);
         Assert.False(cox.IsTrained);
     }
 
-    [Fact]
-    public void Cox_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_FitSurvival_SetsTrainedState()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -196,8 +197,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(cox.IsTrained);
     }
 
-    [Fact]
-    public void Cox_PredictHazardRatio_ReturnsPositiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_PredictHazardRatio_ReturnsPositiveValues()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -211,8 +212,8 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void Cox_GetCoefficients_ReturnsCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_GetCoefficients_ReturnsCorrectCount()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -223,8 +224,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.Equal(features.Columns, coefficients.Length);
     }
 
-    [Fact]
-    public void Cox_GetFeatureHazardRatios_MatchesExpCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task Cox_GetFeatureHazardRatios_MatchesExpCoefficients()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -245,16 +246,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region WeibullAFT Tests
 
-    [Fact]
-    public void WeibullAFT_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_Construction()
     {
         var weibull = new WeibullAFT<double>();
         Assert.NotNull(weibull);
         Assert.False(weibull.IsTrained);
     }
 
-    [Fact]
-    public void WeibullAFT_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_FitSurvival_SetsTrainedState()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -262,8 +263,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(weibull.IsTrained);
     }
 
-    [Fact]
-    public void WeibullAFT_Predict_ReturnsPositiveSurvivalTimes()
+    [Fact(Timeout = 120000)]
+    public async Task WeibullAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -281,16 +282,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region LogNormalAFT Tests
 
-    [Fact]
-    public void LogNormalAFT_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_Construction()
     {
         var lognormal = new LogNormalAFT<double>();
         Assert.NotNull(lognormal);
         Assert.False(lognormal.IsTrained);
     }
 
-    [Fact]
-    public void LogNormalAFT_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_FitSurvival_SetsTrainedState()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -298,8 +299,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(lognormal.IsTrained);
     }
 
-    [Fact]
-    public void LogNormalAFT_Predict_ReturnsPositiveSurvivalTimes()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormalAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -317,16 +318,16 @@ public class SurvivalAnalysisIntegrationTests
 
     #region RandomSurvivalForest Tests
 
-    [Fact]
-    public void RandomSurvivalForest_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSurvivalForest_Construction()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3);
         Assert.NotNull(rsf);
         Assert.False(rsf.IsTrained);
     }
 
-    [Fact]
-    public void RandomSurvivalForest_FitSurvival_SetsTrainedState()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSurvivalForest_FitSurvival_SetsTrainedState()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -334,8 +335,8 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(rsf.IsTrained);
     }
 
-    [Fact]
-    public void RandomSurvivalForest_Predict_ReturnsPositiveSurvivalTimes()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSurvivalForest_Predict_ReturnsPositiveSurvivalTimes()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -353,8 +354,8 @@ public class SurvivalAnalysisIntegrationTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllSurvivalModels_ThrowWhenNotFitted()
+    [Fact(Timeout = 120000)]
+    public async Task AllSurvivalModels_ThrowWhenNotFitted()
     {
         var models = new SurvivalModelBase<double>[]
         {
@@ -375,8 +376,8 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void SurvivalModels_ValidateBadData_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SurvivalModels_ValidateBadData_Throws()
     {
         var km = new KaplanMeierEstimator<double>();
         var features = new Matrix<double>(5, 2);

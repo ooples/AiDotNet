@@ -1,12 +1,13 @@
 #if NET8_0_OR_GREATER
 using System.Reflection;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisToolingCliTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Main_WithHelp_ReturnsZero()
     {
         var (exitCode, stdOut, stdErr) = await InvokeAsync(Array.Empty<string>());
@@ -15,7 +16,7 @@ public sealed class ProgramSynthesisToolingCliTests
         Assert.True(string.IsNullOrWhiteSpace(stdErr));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Main_WithUnknownCommand_ReturnsOne()
     {
         var (exitCode, _, stdErr) = await InvokeAsync(new[] { "nope" });
@@ -23,7 +24,7 @@ public sealed class ProgramSynthesisToolingCliTests
         Assert.Contains("Unknown command", stdErr);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Main_Train_WithEmptyDataset_ReturnsOne()
     {
         var trainPath = Path.GetTempFileName();
@@ -49,7 +50,7 @@ public sealed class ProgramSynthesisToolingCliTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Main_Evaluate_WithMissingModel_ReturnsOne()
     {
         var missingModel = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing.model");

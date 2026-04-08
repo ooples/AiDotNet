@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -20,8 +21,8 @@ public class TreeBasedRegressionIntegrationTests
 
     #region DecisionTreeRegression Tests
 
-    [Fact]
-    public void DecisionTreeRegression_Train_SimpleData_FitsWithinBounds()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_Train_SimpleData_FitsWithinBounds()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5, MinSamplesSplit = 2 };
@@ -45,8 +46,8 @@ public class TreeBasedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void DecisionTreeRegression_Train_MaxDepth1_CreatesSimpleTree()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_Train_MaxDepth1_CreatesSimpleTree()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 1, MinSamplesSplit = 2 };
@@ -67,8 +68,8 @@ public class TreeBasedRegressionIntegrationTests
             $"MaxDepth=1 should produce at most 2 unique predictions, got {uniquePredictions.Count}");
     }
 
-    [Fact]
-    public void DecisionTreeRegression_Predict_NewData_ReturnsReasonableValues()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_Predict_NewData_ReturnsReasonableValues()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5, MinSamplesSplit = 2 };
@@ -91,8 +92,8 @@ public class TreeBasedRegressionIntegrationTests
             $"Prediction should be in [10, 50], got {predictions[1]}");
     }
 
-    [Fact]
-    public void DecisionTreeRegression_GetFeatureImportance_ReturnsNonNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_GetFeatureImportance_ReturnsNonNegativeValues()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5, MinSamplesSplit = 2 };
@@ -117,7 +118,7 @@ public class TreeBasedRegressionIntegrationTests
 
     #region RandomForestRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_TrainAsync_MultipleTreesImproveStability()
     {
         // Arrange
@@ -155,7 +156,7 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal(20, forestMany.NumberOfTrees);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_PredictAsync_ReturnsAveragedPredictions()
     {
         // Arrange
@@ -184,7 +185,7 @@ public class TreeBasedRegressionIntegrationTests
             $"Prediction should be around 30, got {predictions[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -209,7 +210,7 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal(0.8, (double)metadata.AdditionalInfo["MaxFeatures"], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_Seed_ProducesReproducibleResults()
     {
         // Arrange
@@ -253,7 +254,7 @@ public class TreeBasedRegressionIntegrationTests
 
     #region GradientBoostingRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GradientBoostingRegression_TrainAsync_FitsData()
     {
         // Arrange
@@ -286,7 +287,7 @@ public class TreeBasedRegressionIntegrationTests
         Assert.True(mse < 2.0, $"MSE should be low, got {mse}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GradientBoostingRegression_LearningRate_AffectsTraining()
     {
         // Arrange
@@ -338,7 +339,7 @@ public class TreeBasedRegressionIntegrationTests
 
     #region AdaBoostR2Regression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AdaBoostR2Regression_TrainAsync_FitsData()
     {
         // Arrange
@@ -370,7 +371,7 @@ public class TreeBasedRegressionIntegrationTests
 
     #region ExtremelyRandomizedTreesRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ExtremelyRandomizedTreesRegression_TrainAsync_FitsData()
     {
         // Arrange
@@ -403,7 +404,7 @@ public class TreeBasedRegressionIntegrationTests
 
     #region QuantileRegressionForests Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task QuantileRegressionForests_TrainAsync_ProvidesQuantiles()
     {
         // Arrange
@@ -433,8 +434,8 @@ public class TreeBasedRegressionIntegrationTests
 
     #region ConditionalInferenceTreeRegression Tests
 
-    [Fact]
-    public void ConditionalInferenceTreeRegression_Train_SimpleData_FitsWithinBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalInferenceTreeRegression_Train_SimpleData_FitsWithinBounds()
     {
         // Arrange
         var options = new ConditionalInferenceTreeOptions
@@ -464,8 +465,8 @@ public class TreeBasedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void ConditionalInferenceTreeRegression_Train_WithSignificanceTest_SelectsFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalInferenceTreeRegression_Train_WithSignificanceTest_SelectsFeatures()
     {
         // Arrange
         var options = new ConditionalInferenceTreeOptions
@@ -492,8 +493,8 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void ConditionalInferenceTreeRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalInferenceTreeRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new ConditionalInferenceTreeOptions
@@ -519,8 +520,8 @@ public class TreeBasedRegressionIntegrationTests
 
     #region M5ModelTree Tests
 
-    [Fact]
-    public void M5ModelTree_Train_SimpleData_FitsWithLinearModels()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_Train_SimpleData_FitsWithLinearModels()
     {
         // Arrange
         var options = new M5ModelTreeOptions
@@ -548,8 +549,8 @@ public class TreeBasedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void M5ModelTree_Train_PiecewiseLinearData_CapturesBothRegimes()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_Train_PiecewiseLinearData_CapturesBothRegimes()
     {
         // Arrange
         var options = new M5ModelTreeOptions
@@ -579,8 +580,8 @@ public class TreeBasedRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void M5ModelTree_Predict_NewData_Extrapolates()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_Predict_NewData_Extrapolates()
     {
         // Arrange
         var options = new M5ModelTreeOptions
@@ -606,8 +607,8 @@ public class TreeBasedRegressionIntegrationTests
         Assert.True(predictions[0] > 10, "Should extrapolate beyond training data");
     }
 
-    [Fact]
-    public void M5ModelTree_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new M5ModelTreeOptions
@@ -628,8 +629,8 @@ public class TreeBasedRegressionIntegrationTests
 
     }
 
-    [Fact]
-    public void M5ModelTree_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task M5ModelTree_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new M5ModelTreeOptions
@@ -661,8 +662,8 @@ public class TreeBasedRegressionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void DecisionTreeRegression_Train_SingleSample_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_Train_SingleSample_HandlesGracefully()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5, MinSamplesSplit = 1 };
@@ -678,7 +679,7 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal(10.0, predictions[0], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_Train_HighDimensionalData_HandlesCorrectly()
     {
         // Arrange
@@ -722,8 +723,8 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal(numSamples, predictions.Length);
     }
 
-    [Fact]
-    public void DecisionTreeRegression_Train_ConstantTarget_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_Train_ConstantTarget_HandlesCorrectly()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 5, MinSamplesSplit = 2 };
@@ -749,8 +750,8 @@ public class TreeBasedRegressionIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void DecisionTreeRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new DecisionTreeOptions { MaxDepth = 3, MinSamplesSplit = 2 };
@@ -774,7 +775,7 @@ public class TreeBasedRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RandomForestRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange

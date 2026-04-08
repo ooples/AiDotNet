@@ -5,13 +5,14 @@ using AiDotNet.Inference;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
 public class DebugQuantizationTest
 {
-    [Fact]
-    public void Debug_WeightOnlyQuantization()
+    [Fact(Timeout = 60000)]
+    public async Task Debug_WeightOnlyQuantization()
     {
         Console.WriteLine("DEBUG: Starting Debug_WeightOnlyQuantization");
         var model = CreateTinyDenseModel();

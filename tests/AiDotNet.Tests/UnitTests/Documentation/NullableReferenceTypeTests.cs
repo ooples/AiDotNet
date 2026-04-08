@@ -1,6 +1,7 @@
 #nullable enable
 
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Documentation;
 
@@ -27,8 +28,8 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that a method with a non-nullable parameter can receive null at runtime.
     /// </summary>
-    [Fact]
-    public void NonNullableParameter_CanReceiveNull_AtRuntime()
+    [Fact(Timeout = 60000)]
+    public async Task NonNullableParameter_CanReceiveNull_AtRuntime()
     {
         // Suppress the nullable warning at the call site to simulate a caller without NRT.
         // The method signature says non-nullable, but we force null through at runtime.
@@ -42,8 +43,8 @@ public class NullableReferenceTypeTests
     /// Demonstrates that a non-nullable property can be set to null via an object initializer
     /// when a caller suppresses NRT warnings.
     /// </summary>
-    [Fact]
-    public void NonNullableProperty_CanBeNull_WhenSetFromDisabledContext()
+    [Fact(Timeout = 60000)]
+    public async Task NonNullableProperty_CanBeNull_WhenSetFromDisabledContext()
     {
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
         var holder = new StringHolder { Value = null };
@@ -54,8 +55,8 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that an array of non-nullable type contains null default elements.
     /// </summary>
-    [Fact]
-    public void NonNullableArray_ContainsNullDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task NonNullableArray_ContainsNullDefaults()
     {
         // string[] is an array of "non-nullable" strings,
         // but default(string) is null, so each element starts as null.
@@ -68,8 +69,8 @@ public class NullableReferenceTypeTests
     /// <summary>
     /// Demonstrates that casting through object erases NRT information.
     /// </summary>
-    [Fact]
-    public void CastingThroughObject_ErasesNullability()
+    [Fact(Timeout = 60000)]
+    public async Task CastingThroughObject_ErasesNullability()
     {
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
         object? boxed = null;

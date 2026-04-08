@@ -8,6 +8,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -28,8 +29,8 @@ public class DeepCorrectnessTests
 
     #region Convergence Tests
 
-    [Fact]
-    public void MAML_LossDecreases_OverMultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -57,8 +58,8 @@ public class DeepCorrectnessTests
             $"MAML loss did not trend downward: early avg={earlyAvg:F6}, late avg={lateAvg:F6}");
     }
 
-    [Fact]
-    public void ProtoNets_LossDecreases_OverMultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new ProtoNetsOptions<double, Matrix<double>, Vector<double>>(model)
@@ -83,8 +84,8 @@ public class DeepCorrectnessTests
             $"ProtoNets loss did not trend downward: early={earlyAvg:F6}, late={lateAvg:F6}");
     }
 
-    [Fact]
-    public void CNP_LossDecreases_OverMultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task CNP_LossDecreases_OverMultipleEpochs()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new CNPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -113,8 +114,8 @@ public class DeepCorrectnessTests
 
     #region Adaptation Quality Tests
 
-    [Fact]
-    public void MAML_AdaptedModel_OutperformsUnadapted()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_AdaptedModel_OutperformsUnadapted()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -146,8 +147,8 @@ public class DeepCorrectnessTests
             $"MAML adapted model did not improve: pre={preAdaptLoss:F6}, post={postAdaptLoss:F6}");
     }
 
-    [Fact]
-    public void ProtoNets_AdaptedModel_ProducesValidPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_AdaptedModel_ProducesValidPredictions()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new ProtoNetsOptions<double, Matrix<double>, Vector<double>>(model)
@@ -184,8 +185,8 @@ public class DeepCorrectnessTests
 
     #region Determinism and Reproducibility
 
-    [Fact]
-    public void MAML_FixedSeed_ProducesIdenticalResults()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_FixedSeed_ProducesIdenticalResults()
     {
         double loss1 = RunMAMLWithSeed(42);
         double loss2 = RunMAMLWithSeed(42);
@@ -193,8 +194,8 @@ public class DeepCorrectnessTests
         Assert.Equal(loss1, loss2, 10); // Should be exactly equal with same seed
     }
 
-    [Fact]
-    public void MAML_DifferentSeeds_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_DifferentSeeds_ProduceDifferentResults()
     {
         double loss1 = RunMAMLWithSeed(42);
         double loss2 = RunMAMLWithSeed(99);
@@ -220,8 +221,8 @@ public class DeepCorrectnessTests
 
     #region Parameter Isolation
 
-    [Fact]
-    public void MAML_Adapt_DoesNotCorruptMetaParameters()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_Adapt_DoesNotCorruptMetaParameters()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -254,8 +255,8 @@ public class DeepCorrectnessTests
         }
     }
 
-    [Fact]
-    public void MAML_MultipleAdaptations_AreIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_MultipleAdaptations_AreIndependent()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -296,8 +297,8 @@ public class DeepCorrectnessTests
 
     #region Gradient Flow Verification
 
-    [Fact]
-    public void MAML_GradientsAreNonZeroAndBounded()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_GradientsAreNonZeroAndBounded()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -327,8 +328,8 @@ public class DeepCorrectnessTests
         Assert.True(allBounded, "Gradients should be bounded (no explosion)");
     }
 
-    [Fact]
-    public void MultipleAlgorithms_GradientFlowConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleAlgorithms_GradientFlowConsistency()
     {
         var rng = new Random(900);
         var task = CreateClassificationTask(InputDim, 2, 3, 4, rng);
@@ -382,8 +383,8 @@ public class DeepCorrectnessTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void MAML_SingleExamplePerClass_StillConverges()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_SingleExamplePerClass_StillConverges()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -410,8 +411,8 @@ public class DeepCorrectnessTests
             "Average 1-shot loss should be finite");
     }
 
-    [Fact]
-    public void MAML_HighDimensionalInput_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_HighDimensionalInput_HandledCorrectly()
     {
         const int highDim = 32;
         var model = new LinearVectorModel(highDim);
@@ -433,8 +434,8 @@ public class DeepCorrectnessTests
         Assert.Equal(tasks[0].QuerySetY.Length, preds.Length);
     }
 
-    [Fact]
-    public void MAML_LargeBatch_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_LargeBatch_HandledCorrectly()
     {
         var model = new LinearVectorModel(InputDim);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -455,8 +456,8 @@ public class DeepCorrectnessTests
 
     #region Data Infrastructure Deep Tests
 
-    [Fact]
-    public void SineWaveDataset_TasksAreDistinct()
+    [Fact(Timeout = 120000)]
+    public async Task SineWaveDataset_TasksAreDistinct()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 50, examplesPerClass: 30, seed: 42);
@@ -482,8 +483,8 @@ public class DeepCorrectnessTests
         Assert.True(anyDifferent, "Different episodes should have different support data");
     }
 
-    [Fact]
-    public void GaussianDataset_ClassesAreWellSeparated()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianDataset_ClassesAreWellSeparated()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 5, examplesPerClass: 50, featureDim: 4, classSeparation: 5.0, seed: 42);
@@ -518,8 +519,8 @@ public class DeepCorrectnessTests
         }
     }
 
-    [Fact]
-    public void RotatedDigitsDataset_ProducesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task RotatedDigitsDataset_ProducesCorrectDimensions()
     {
         var dataset = new RotatedDigitsMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 10, examplesPerClass: 20, featureDim: 8, seed: 42);
@@ -541,8 +542,8 @@ public class DeepCorrectnessTests
         Assert.Equal(9, task.QuerySetY.Length);
     }
 
-    [Fact]
-    public void MetaDatasetFormat_SamplesFromCorrectDomain()
+    [Fact(Timeout = 120000)]
+    public async Task MetaDatasetFormat_SamplesFromCorrectDomain()
     {
         var sine = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 10, examplesPerClass: 20, seed: 42);
@@ -568,8 +569,8 @@ public class DeepCorrectnessTests
             $"Unexpected domain: {epRandom.Domain}");
     }
 
-    [Fact]
-    public void TaskDifficultyEstimator_EasyTaskHasLowDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task TaskDifficultyEstimator_EasyTaskHasLowDifficulty()
     {
         // Create a well-separated 2-class task
         var supportX = new Vector<double>(8); // 2 examples * 4 features
@@ -590,8 +591,8 @@ public class DeepCorrectnessTests
         Assert.True(difficulty < 0.5, $"Easy task should have low difficulty, got {difficulty:F4}");
     }
 
-    [Fact]
-    public void TaskDifficultyEstimator_HardTaskHasHighDifficulty()
+    [Fact(Timeout = 120000)]
+    public async Task TaskDifficultyEstimator_HardTaskHasHighDifficulty()
     {
         // Create overlapping 2-class task
         var supportX = new Vector<double>(16); // 4 examples * 4 features
@@ -614,8 +615,8 @@ public class DeepCorrectnessTests
         Assert.True(difficulty > 0.3, $"Hard task should have high difficulty, got {difficulty:F4}");
     }
 
-    [Fact]
-    public void CurriculumSampler_IncreasesDifficultyOverTime()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumSampler_IncreasesDifficultyOverTime()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 4, seed: 42);
@@ -641,8 +642,8 @@ public class DeepCorrectnessTests
         Assert.NotNull(laterEpisode.Task);
     }
 
-    [Fact]
-    public void ModelPredictiveSampler_OperatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModelPredictiveSampler_OperatesCorrectly()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
             numClasses: 20, examplesPerClass: 30, featureDim: 4, seed: 42);
@@ -666,8 +667,8 @@ public class DeepCorrectnessTests
 
     #region Multi-Algorithm Consistency
 
-    [Fact]
-    public void AllNeuralProcesses_ProduceFiniteLossAcrossMultipleEpochs()
+    [Fact(Timeout = 120000)]
+    public async Task AllNeuralProcesses_ProduceFiniteLossAcrossMultipleEpochs()
     {
         var npAlgorithms = new (string Name, Func<MetaLearnerBase<double, Matrix<double>, Vector<double>>> Factory)[]
         {

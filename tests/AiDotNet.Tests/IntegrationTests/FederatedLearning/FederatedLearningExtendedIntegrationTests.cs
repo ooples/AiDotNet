@@ -6,6 +6,7 @@ using AiDotNet.FederatedLearning.Verification;
 using AiDotNet.FederatedLearning.Vertical;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FederatedLearning;
 
@@ -21,8 +22,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region PsiResult
 
-    [Fact]
-    public void PsiResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PsiResult_DefaultValues()
     {
         var result = new PsiResult();
         Assert.NotNull(result.IntersectionIds);
@@ -40,8 +41,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Empty(result.FuzzyMatchConfidences);
     }
 
-    [Fact]
-    public void PsiResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task PsiResult_SetProperties()
     {
         var result = new PsiResult
         {
@@ -70,8 +71,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region DriftType Enum
 
-    [Fact]
-    public void DriftType_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task DriftType_AllValues()
     {
         var values = (((DriftType[])Enum.GetValues(typeof(DriftType))));
         Assert.Equal(5, values.Length);
@@ -86,8 +87,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region DriftAction Enum
 
-    [Fact]
-    public void DriftAction_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task DriftAction_AllValues()
     {
         var values = (((DriftAction[])Enum.GetValues(typeof(DriftAction))));
         Assert.Equal(5, values.Length);
@@ -102,8 +103,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region ClientDriftResult
 
-    [Fact]
-    public void ClientDriftResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ClientDriftResult_DefaultValues()
     {
         var result = new ClientDriftResult();
         Assert.Equal(0, result.ClientId);
@@ -114,8 +115,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(1.0, result.SuggestedWeightMultiplier, Tolerance);
     }
 
-    [Fact]
-    public void ClientDriftResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ClientDriftResult_SetProperties()
     {
         var result = new ClientDriftResult
         {
@@ -138,8 +139,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region DriftReport
 
-    [Fact]
-    public void DriftReport_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DriftReport_DefaultValues()
     {
         var report = new DriftReport();
         Assert.Equal(0, report.Round);
@@ -151,8 +152,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(string.Empty, report.Summary);
     }
 
-    [Fact]
-    public void DriftReport_WithClients()
+    [Fact(Timeout = 120000)]
+    public async Task DriftReport_WithClients()
     {
         var report = new DriftReport
         {
@@ -180,8 +181,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region UnlearningCertificate
 
-    [Fact]
-    public void UnlearningCertificate_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningCertificate_DefaultValues()
     {
         var cert = new UnlearningCertificate();
         Assert.Equal(0, cert.TargetClientId);
@@ -196,8 +197,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(string.Empty, cert.Summary);
     }
 
-    [Fact]
-    public void UnlearningCertificate_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningCertificate_SetProperties()
     {
         var cert = new UnlearningCertificate
         {
@@ -222,8 +223,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal("abc123", cert.PreUnlearningModelHash);
     }
 
-    [Fact]
-    public void UnlearningCertificate_TimestampDefaultsToUtc()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningCertificate_TimestampDefaultsToUtc()
     {
         var before = DateTime.UtcNow;
         var cert = new UnlearningCertificate();
@@ -235,8 +236,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region RemoteAttestationResult
 
-    [Fact]
-    public void RemoteAttestationResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task RemoteAttestationResult_DefaultValues()
     {
         var result = new RemoteAttestationResult();
         Assert.False(result.IsValid);
@@ -249,8 +250,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(string.Empty, result.FirmwareVersion);
     }
 
-    [Fact]
-    public void RemoteAttestationResult_Valid()
+    [Fact(Timeout = 120000)]
+    public async Task RemoteAttestationResult_Valid()
     {
         var result = new RemoteAttestationResult
         {
@@ -271,8 +272,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(3, result.RawQuote.Length);
     }
 
-    [Fact]
-    public void RemoteAttestationResult_Failed()
+    [Fact(Timeout = 120000)]
+    public async Task RemoteAttestationResult_Failed()
     {
         var result = new RemoteAttestationResult
         {
@@ -287,8 +288,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region VerificationProof
 
-    [Fact]
-    public void VerificationProof_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationProof_DefaultValues()
     {
         var proof = new VerificationProof();
         Assert.NotNull(proof.ProofData);
@@ -300,8 +301,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(string.Empty, proof.ProofSystem);
     }
 
-    [Fact]
-    public void VerificationProof_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationProof_SetProperties()
     {
         var proof = new VerificationProof
         {
@@ -322,16 +323,16 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region VerificationConstraint
 
-    [Fact]
-    public void VerificationConstraint_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationConstraint_DefaultValues()
     {
         var constraint = new AiDotNet.FederatedLearning.Verification.VerificationConstraint();
         Assert.Equal(0.0, constraint.Bound, Tolerance);
         Assert.Equal(0, constraint.Dimension);
     }
 
-    [Fact]
-    public void VerificationConstraint_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationConstraint_SetProperties()
     {
         var constraint = new AiDotNet.FederatedLearning.Verification.VerificationConstraint
         {
@@ -348,8 +349,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region ConstraintType Enum (Verification)
 
-    [Fact]
-    public void VerificationConstraintType_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationConstraintType_AllValues()
     {
         var values = (((AiDotNet.FederatedLearning.Verification.ConstraintType[])Enum.GetValues(typeof(AiDotNet.FederatedLearning.Verification.ConstraintType))));
         Assert.Equal(4, values.Length);
@@ -363,16 +364,16 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region TrainingStepLog and TrainingStep
 
-    [Fact]
-    public void TrainingStepLog_DefaultEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingStepLog_DefaultEmpty()
     {
         var log = new TrainingStepLog();
         Assert.NotNull(log.Steps);
         Assert.Empty(log.Steps);
     }
 
-    [Fact]
-    public void TrainingStepLog_AddSteps()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingStepLog_AddSteps()
     {
         var log = new TrainingStepLog();
         log.Steps.Add(new TrainingStep { Epoch = 0, Loss = 1.5 });
@@ -382,8 +383,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(1.5, log.Steps[0].Loss, Tolerance);
     }
 
-    [Fact]
-    public void TrainingStep_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingStep_DefaultValues()
     {
         var step = new TrainingStep();
         Assert.Equal(0, step.Epoch);
@@ -394,8 +395,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Empty(step.ModelStateHash);
     }
 
-    [Fact]
-    public void TrainingStep_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingStep_SetProperties()
     {
         var step = new TrainingStep
         {
@@ -414,8 +415,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region VflAlignmentSummary
 
-    [Fact]
-    public void VflAlignmentSummary_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VflAlignmentSummary_DefaultValues()
     {
         var summary = new VflAlignmentSummary();
         Assert.Equal(0, summary.AlignedEntityCount);
@@ -428,8 +429,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(TimeSpan.Zero, summary.AlignmentTime);
     }
 
-    [Fact]
-    public void VflAlignmentSummary_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VflAlignmentSummary_SetProperties()
     {
         var summary = new VflAlignmentSummary
         {
@@ -450,8 +451,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region VflEpochResult
 
-    [Fact]
-    public void VflEpochResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VflEpochResult_DefaultValues()
     {
         var result = new VflEpochResult<double>();
         Assert.Equal(0, result.Epoch);
@@ -462,8 +463,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Null(result.PrivacyBudgetSpent);
     }
 
-    [Fact]
-    public void VflEpochResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VflEpochResult_SetProperties()
     {
         var result = new VflEpochResult<double>
         {
@@ -487,8 +488,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region VflTrainingResult
 
-    [Fact]
-    public void VflTrainingResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VflTrainingResult_DefaultValues()
     {
         var result = new VflTrainingResult<double>();
         Assert.NotNull(result.EpochHistory);
@@ -501,8 +502,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(0, result.NumberOfParties);
     }
 
-    [Fact]
-    public void VflTrainingResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VflTrainingResult_SetProperties()
     {
         var result = new VflTrainingResult<double>
         {
@@ -527,8 +528,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(2, result.EpochHistory.Count);
     }
 
-    [Fact]
-    public void VflTrainingResult_EpochHistory_LossDecreases()
+    [Fact(Timeout = 120000)]
+    public async Task VflTrainingResult_EpochHistory_LossDecreases()
     {
         var result = new VflTrainingResult<double>
         {
@@ -551,8 +552,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region Cross-Module: UnlearningMethod Enum
 
-    [Fact]
-    public void UnlearningMethod_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningMethod_HasExpectedValues()
     {
         Assert.Equal(0, (int)UnlearningMethod.ExactRetraining);
         Assert.Equal(1, (int)UnlearningMethod.GradientAscent);
@@ -563,8 +564,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region Cross-Module: PSI with Alignment Mappings
 
-    [Fact]
-    public void PsiResult_AlignmentConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task PsiResult_AlignmentConsistency()
     {
         var result = new PsiResult
         {
@@ -599,8 +600,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region Cross-Module: Drift Report Analysis
 
-    [Fact]
-    public void DriftReport_MultipleClientDriftTypes()
+    [Fact(Timeout = 120000)]
+    public async Task DriftReport_MultipleClientDriftTypes()
     {
         var report = new DriftReport
         {
@@ -632,8 +633,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region Cross-Module: Attestation and Verification
 
-    [Fact]
-    public void RemoteAttestationResult_QuoteTimestamp_NotStale()
+    [Fact(Timeout = 120000)]
+    public async Task RemoteAttestationResult_QuoteTimestamp_NotStale()
     {
         var result = new RemoteAttestationResult
         {
@@ -644,8 +645,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.True((DateTime.UtcNow - result.QuoteTimestamp).TotalMinutes < 1);
     }
 
-    [Fact]
-    public void VerificationProof_DifferentProofSystems()
+    [Fact(Timeout = 120000)]
+    public async Task VerificationProof_DifferentProofSystems()
     {
         var hashProof = new VerificationProof { ProofSystem = "HashCommitment" };
         var pedersenProof = new VerificationProof { ProofSystem = "PedersenCommitment" };
@@ -657,8 +658,8 @@ public class FederatedLearningExtendedIntegrationTests
 
     #region Cross-Module: Certificate Verification Semantics
 
-    [Fact]
-    public void UnlearningCertificate_IdealMembershipScore()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningCertificate_IdealMembershipScore()
     {
         // A well-unlearned model should have membership inference score near 0.5
         // (attacker can't distinguish member from non-member)
@@ -670,8 +671,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.InRange(cert.MembershipInferenceScore, 0.45, 0.55);
     }
 
-    [Fact]
-    public void UnlearningCertificate_HashesChange()
+    [Fact(Timeout = 120000)]
+    public async Task UnlearningCertificate_HashesChange()
     {
         var cert = new UnlearningCertificate
         {

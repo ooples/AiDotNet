@@ -5,13 +5,14 @@ using AiDotNet.Models;
 using AiDotNet.Regularization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Regularization
 {
     public class L2RegularizationTests
     {
-        [Fact]
-        public void Constructor_WithDefaultOptions_UsesDefaultStrength()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_UsesDefaultStrength()
         {
             // Arrange & Act
             var regularization = new L2Regularization<double, Vector<double>, Vector<double>>();
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.0, regularization.GetOptions().L1Ratio);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_UsesCustomStrength()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_UsesCustomStrength()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -40,8 +41,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.05, regularization.GetOptions().Strength);
         }
 
-        [Fact]
-        public void Regularize_VectorGradient_AddsL2Penalty()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_VectorGradient_AddsL2Penalty()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -67,8 +68,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(3.4, result[2], 10);
         }
 
-        [Fact]
-        public void Regularize_VectorGradient_WithZeroCoefficients_DoesNotAddPenalty()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_VectorGradient_WithZeroCoefficients_DoesNotAddPenalty()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -91,8 +92,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(3.0, result[2], 10);
         }
 
-        [Fact]
-        public void Regularize_Vector_ShrinksAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_Vector_ShrinksAllValues()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(4.5, result[3], 10);  // 5.0 * 0.9
         }
 
-        [Fact]
-        public void Regularize_Vector_DoesNotProduceSparseSolution()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_Vector_DoesNotProduceSparseSolution()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -142,8 +143,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             }
         }
 
-        [Fact]
-        public void Regularize_Matrix_ShrinksAllValues()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_Matrix_ShrinksAllValues()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(4.5, result[1, 1], 10);
         }
 
-        [Fact]
-        public void Regularize_TensorGradient_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_TensorGradient_WorksCorrectly()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(4.5, result[1, 1], 10);
         }
 
-        [Fact]
-        public void Regularize_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(3.6f, result[2], 5);
         }
 
-        [Fact]
-        public void Regularize_WithHighStrength_ShrinksMore()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_WithHighStrength_ShrinksMore()
         {
             // Arrange
             var lowStrength = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -250,8 +251,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             }
         }
 
-        [Fact]
-        public void Regularize_Vector_PreservesSign()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_Vector_PreservesSign()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -274,8 +275,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.True(result[3] < 0.0);  // Negative input -> negative output
         }
 
-        [Fact]
-        public void Regularize_Vector_ShrinksProportionally()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_Vector_ShrinksProportionally()
         {
             // Arrange
             var options = new RegularizationOptions
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(shrinkageFactor, result[2] / data[2], 10);
         }
 
-        [Fact]
-        public void Regularize_WithNegativeCoefficients_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Regularize_WithNegativeCoefficients_WorksCorrectly()
         {
             // Arrange
             var options = new RegularizationOptions

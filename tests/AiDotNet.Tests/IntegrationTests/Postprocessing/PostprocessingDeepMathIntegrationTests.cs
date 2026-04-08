@@ -1,5 +1,6 @@
 using AiDotNet.Postprocessing.Document;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Postprocessing;
 
@@ -18,8 +19,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// The word "the" is in the dictionary, so IsCorrect("the") == true.
     /// GetSuggestions for a correct word should return it at distance 0.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_IdenticalStrings_Distance0()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_IdenticalStrings_Distance0()
     {
         using var sc = new SpellCorrection<double>();
         // "the" is in basic dictionary
@@ -30,8 +31,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Single substitution: "thr" vs "the" = distance 1 (r -> e).
     /// GetSuggestions("thr") should include "the" within maxEditDistance=2.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_SingleSubstitution_ReturnsCorrectWord()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_SingleSubstitution_ReturnsCorrectWord()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("thr", maxSuggestions: 10);
@@ -44,8 +45,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Single insertion: "te" vs "the" = distance 1 (insert h).
     /// "te" has distance 1 to "the" (insert 'h' at position 1).
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_SingleInsertion_ReturnsCorrectWord()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_SingleInsertion_ReturnsCorrectWord()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("te", maxSuggestions: 10);
@@ -57,8 +58,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Single deletion: "thhe" vs "the" = distance 1 (delete extra h).
     /// "thhe" -> "the" via single deletion, distance 1.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_SingleDeletion_ReturnsCorrectWord()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_SingleDeletion_ReturnsCorrectWord()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("thhe", maxSuggestions: 10);
@@ -71,8 +72,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Standard Levenshtein would give 2 (substitute h->t, t->h), but
     /// Damerau-Levenshtein counts transposition of adjacent chars as 1.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_Transposition_Distance1()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_Transposition_Distance1()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("hte", maxSuggestions: 10);
@@ -84,8 +85,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Verifies that "teh" (transposition of 'e' and 'h') produces "the" as suggestion.
     /// Damerau-Levenshtein distance("teh", "the") = 1 (transpose eh -> he).
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_TranspositionEndChars_ReturnsTheAsFirst()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_TranspositionEndChars_ReturnsTheAsFirst()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("teh", maxSuggestions: 5);
@@ -100,8 +101,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// "xyz" has no dictionary word within distance 2 of similar length.
     /// With maxEditDistance=2 (default), GetSuggestions should return few or no results.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_TwoSubstitutions_FarWord_FewSuggestions()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_TwoSubstitutions_FarWord_FewSuggestions()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 1);
         var suggestions = sc.GetSuggestions("xyz", maxSuggestions: 10);
@@ -117,8 +118,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Actually, dictionary contains "a" and "i" which are length 1 (distance 1 from ""),
     /// so with default maxEditDistance=2, those should appear.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_EmptyVsDictWord_DistanceEqualsLength()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_EmptyVsDictWord_DistanceEqualsLength()
     {
         using var sc = new SpellCorrection<double>();
         var suggestions = sc.GetSuggestions("", maxSuggestions: 10);
@@ -132,8 +133,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Custom dictionary word: adding "keras" and then checking suggestions for "kera".
     /// "kera" -> "keras" via single insertion, distance 1.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_CustomDictionary_SingleInsertion_ReturnsSuggestion()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_CustomDictionary_SingleInsertion_ReturnsSuggestion()
     {
         using var sc = new SpellCorrection<double>();
         sc.AddToDictionary("keras");
@@ -152,8 +153,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// "helo" vs "her" = distance 2 (sub l->r, delete o)
     /// First suggestion should be the closest.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Suggestions_OrderedByDistance_ClosestFirst()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Suggestions_OrderedByDistance_ClosestFirst()
     {
         using var sc = new SpellCorrection<double>();
         sc.AddToDictionary("hello");
@@ -168,8 +169,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// When two suggestions have the same edit distance, the one with smaller length difference is first.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Suggestions_SameDistance_ShorterLengthDiffFirst()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Suggestions_SameDistance_ShorterLengthDiffFirst()
     {
         using var sc = new SpellCorrection<double>();
         sc.AddToDictionary("cat");
@@ -193,8 +194,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// All-uppercase input should produce all-uppercase output.
     /// "THR" (all caps) corrected to "THE" (all caps).
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_AllUppercase_PreservesCase()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_AllUppercase_PreservesCase()
     {
         using var sc = new SpellCorrection<double>();
         // "THR" is NeedsCorrection check: length > 2, no digits, no special chars, not in dictionary
@@ -209,8 +210,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Title case input should produce title case output.
     /// "Thr" corrected to "The" (title case preserved).
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_TitleCase_PreservesCase()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_TitleCase_PreservesCase()
     {
         using var sc = new SpellCorrection<double>();
         var result = sc.Process("Thr");
@@ -221,8 +222,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Lowercase input stays lowercase.
     /// "thr" corrected to "the".
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_Lowercase_PreservesCase()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_Lowercase_PreservesCase()
     {
         using var sc = new SpellCorrection<double>();
         var result = sc.Process("thr");
@@ -232,8 +233,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Words with 2 or fewer characters are never corrected (NeedsCorrection returns false).
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_ShortWord_NotCorrected()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_ShortWord_NotCorrected()
     {
         using var sc = new SpellCorrection<double>();
         // "zq" has length 2, so NeedsCorrection returns false (skips short words)
@@ -244,8 +245,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Words containing digits are never corrected.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_WordWithDigit_NotCorrected()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_WordWithDigit_NotCorrected()
     {
         using var sc = new SpellCorrection<double>();
         var result = sc.Process("abc123");
@@ -255,8 +256,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Numbers are always considered correct by IsCorrect.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_IsCorrect_Number_AlwaysTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_IsCorrect_Number_AlwaysTrue()
     {
         using var sc = new SpellCorrection<double>();
         Assert.True(sc.IsCorrect("42"));
@@ -271,8 +272,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Adding a word to custom dictionary makes it "correct".
     /// </summary>
-    [Fact]
-    public void SpellCorrection_AddToDictionary_MakesWordCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_AddToDictionary_MakesWordCorrect()
     {
         using var sc = new SpellCorrection<double>();
         Assert.False(sc.IsCorrect("pytorch"));
@@ -283,8 +284,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Custom dictionary words appear in suggestions for nearby misspellings.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_AddToDictionary_AppearsInSuggestions()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_AddToDictionary_AppearsInSuggestions()
     {
         using var sc = new SpellCorrection<double>();
         sc.AddToDictionary("tensorflow");
@@ -302,8 +303,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// LoadDictionary replaces (clears) the custom dictionary.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_LoadDictionary_ReplacesCustomWords()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_LoadDictionary_ReplacesCustomWords()
     {
         using var sc = new SpellCorrection<double>();
         sc.AddToDictionary("oldword");
@@ -317,8 +318,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Case insensitivity: dictionary lookup is case-insensitive.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_IsCorrect_CaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_IsCorrect_CaseInsensitive()
     {
         using var sc = new SpellCorrection<double>();
         // "The" should match "the" in dictionary (StringComparer.OrdinalIgnoreCase)
@@ -335,8 +336,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// Process preserves non-word characters (punctuation, spaces) while correcting words.
     /// "Thr qick dog" -> "The quick dog" (corrects "Thr" -> "The", "qick" -> "quick")
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_PreservesNonWordCharacters()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_PreservesNonWordCharacters()
     {
         using var sc = new SpellCorrection<double>();
         // "Thr" -> "The" (distance 1, sub r->e, title case preserved)
@@ -352,8 +353,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Empty input returns empty output.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_EmptyInput_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_EmptyInput_ReturnsEmpty()
     {
         using var sc = new SpellCorrection<double>();
         Assert.Equal("", sc.Process(""));
@@ -362,8 +363,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Null input returns null output.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_NullInput_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_NullInput_ReturnsNull()
     {
         using var sc = new SpellCorrection<double>();
         string result = sc.Process(null!);
@@ -373,8 +374,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// <summary>
     /// Words already in dictionary are not changed.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_Process_CorrectWord_NotChanged()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_Process_CorrectWord_NotChanged()
     {
         using var sc = new SpellCorrection<double>();
         var result = sc.Process("hello");
@@ -390,8 +391,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// "abc" vs "a" = distance 2 (delete b, delete c).
     /// But with maxEditDistance=1, "abc" won't get "a" as suggestion.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_MaxEditDistance1_NoDistance2Suggestions()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_MaxEditDistance1_NoDistance2Suggestions()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 1);
         // "abc" vs "a" = distance 2 (delete 'b' and 'c')
@@ -418,8 +419,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// With distance 2, "wxyz" vs "wxy" = distance 1, "wxyz" vs "wx" = distance 2.
     /// Using unique custom words avoids collision with the basic dictionary.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_MaxEditDistance2_IncludesDistance2()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_MaxEditDistance2_IncludesDistance2()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 2);
         sc.AddToDictionary("wxyz");
@@ -441,8 +442,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// "ba" vs "ab" should be distance 1 (Damerau transposition), not 2 (two substitutions).
     /// We verify this via custom dictionary.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_DamerauTransposition_AdjacentSwap_Distance1()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_DamerauTransposition_AdjacentSwap_Distance1()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 1);
         sc.AddToDictionary("ab");
@@ -457,8 +458,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// "cab" vs "abc" = distance 2 (not a single transposition).
     /// Verify with maxEditDistance=1: "abc" should NOT appear.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_NonAdjacentSwap_NotSingleTransposition()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_NonAdjacentSwap_NotSingleTransposition()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 1);
         sc.AddToDictionary("abc");
@@ -482,8 +483,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// So min(dp[1,2]+1, dp[2,1]+1, dp[1,1]+1, dp[0,0]+1) = min(2, 2, 2, 1) = 1
     /// This confirms distance("ba","ab") = 1.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_DamerauTransposition_HandComputed_BA_AB()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_DamerauTransposition_HandComputed_BA_AB()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 1);
         sc.AddToDictionary("ab");
@@ -500,8 +501,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// kitten -> sitten (sub k->s) -> sittin (sub e->i) -> sitting (insert g) = 3 edits.
     /// With maxEditDistance=2, "sitting" should NOT be suggested for "kitten".
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_KittenSitting_Distance3()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_KittenSitting_Distance3()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 2);
         sc.AddToDictionary("sitting");
@@ -518,8 +519,8 @@ public class PostprocessingDeepMathIntegrationTests
     /// saturday -> sturday (del a) -> sunday (sub t->n, del r)...
     /// Let me use the DP table: the well-known answer is 3.
     /// </summary>
-    [Fact]
-    public void SpellCorrection_EditDistance_SaturdaySunday_Distance3()
+    [Fact(Timeout = 120000)]
+    public async Task SpellCorrection_EditDistance_SaturdaySunday_Distance3()
     {
         using var sc = new SpellCorrection<double>(maxEditDistance: 2);
         sc.AddToDictionary("sunday");

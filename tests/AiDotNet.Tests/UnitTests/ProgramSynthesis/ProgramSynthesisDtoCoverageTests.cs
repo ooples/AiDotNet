@@ -5,6 +5,7 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.ProgramSynthesis.Results;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
@@ -50,8 +51,8 @@ public sealed class ProgramSynthesisDtoCoverageTests
         Assert.Equal(expectedTask, result.Task);
     }
 
-    [Fact]
-    public void ProgramSynthesis_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
+    [Fact(Timeout = 60000)]
+    public async Task ProgramSynthesis_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
     {
         var assembly = typeof(CodeTaskRequestBase).Assembly;
 

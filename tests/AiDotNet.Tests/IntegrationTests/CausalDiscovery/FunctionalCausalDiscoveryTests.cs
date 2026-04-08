@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery.Functional;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -27,8 +28,8 @@ public class FunctionalCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void ANM_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task ANM_FindsCausalStructure()
     {
         var algo = new ANMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -36,8 +37,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void CAM_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CAM_FindsCausalStructure()
     {
         var algo = new CAMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -45,8 +46,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void CAMUV_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CAMUV_FindsCausalStructure()
     {
         var algo = new CAMUVAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -54,8 +55,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void DirectLiNGAM_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task DirectLiNGAM_FindsCausalStructure()
     {
         var algo = new DirectLiNGAMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -63,8 +64,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void ICALiNGAM_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task ICALiNGAM_FindsCausalStructure()
     {
         var algo = new ICALiNGAMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -72,8 +73,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void VARLiNGAM_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task VARLiNGAM_FindsCausalStructure()
     {
         var algo = new VARLiNGAMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -81,8 +82,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void PNL_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task PNL_FindsCausalStructure()
     {
         var algo = new PNLAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -90,8 +91,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void IGCI_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task IGCI_FindsCausalStructure()
     {
         var algo = new IGCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -99,8 +100,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void RCD_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task RCD_FindsCausalStructure()
     {
         var algo = new RCDAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -108,8 +109,8 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void CCDr_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CCDr_FindsCausalStructure()
     {
         var algo = new CCDrAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

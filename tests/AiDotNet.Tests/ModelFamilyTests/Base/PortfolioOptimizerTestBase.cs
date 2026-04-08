@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
 {
-    [Fact]
-    public void Allocations_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task Allocations_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -26,8 +27,8 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
         }
     }
 
-    [Fact]
-    public void Portfolio_ShouldBeNonEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Portfolio_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

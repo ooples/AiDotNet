@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 testActual, testPredicted);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var options = new NeuralNetworkFitDetectorOptions
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null!));
         }
 
-        [Fact]
-        public void DetectFit_WithSimilarTrainAndValidationMse_ReturnsGoodFit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithSimilarTrainAndValidationMse_ReturnsGoodFit()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_WithLargeValidationMse_IndicatesPoorFit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithLargeValidationMse_IndicatesPoorFit()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -97,8 +98,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_CalculatesConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_CalculatesConfidenceLevel()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -113,8 +114,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_GeneratesRecommendationsBasedOnFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -129,8 +130,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -146,8 +147,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact]
-        public void DetectFit_IncludesLossInfoInAdditionalInfo()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesLossInfoInAdditionalInfo()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -165,8 +166,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.AdditionalInfo.ContainsKey("OverfittingScore"));
         }
 
-        [Fact]
-        public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
             var options = new NeuralNetworkFitDetectorOptions
@@ -186,8 +187,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_WithModerateFit_ReturnsModerate()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithModerateFit_ReturnsModerate()
         {
             // Arrange
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();

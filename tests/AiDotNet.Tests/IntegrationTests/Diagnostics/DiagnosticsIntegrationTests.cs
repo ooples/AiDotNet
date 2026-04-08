@@ -1,6 +1,7 @@
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Diagnostics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Diagnostics;
 
@@ -12,8 +13,8 @@ public class DiagnosticsIntegrationTests
 {
     #region MemoryTracker Tests
 
-    [Fact]
-    public void MemoryTracker_Enable_SetsIsEnabled()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Enable_SetsIsEnabled()
     {
         // Ensure clean state
         MemoryTracker.Disable();
@@ -26,8 +27,8 @@ public class DiagnosticsIntegrationTests
         MemoryTracker.Disable();
     }
 
-    [Fact]
-    public void MemoryTracker_Disable_SetsIsEnabledFalse()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Disable_SetsIsEnabledFalse()
     {
         MemoryTracker.Enable();
         Assert.True(MemoryTracker.IsEnabled);
@@ -36,8 +37,8 @@ public class DiagnosticsIntegrationTests
         Assert.False(MemoryTracker.IsEnabled);
     }
 
-    [Fact]
-    public void MemoryTracker_Snapshot_ReturnsValidSnapshot()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Snapshot_ReturnsValidSnapshot()
     {
         var snapshot = MemoryTracker.Snapshot("TestSnapshot");
 
@@ -48,8 +49,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(snapshot.Timestamp <= DateTime.UtcNow);
     }
 
-    [Fact]
-    public void MemoryTracker_Snapshot_WithForceGC_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Snapshot_WithForceGC_WorksCorrectly()
     {
         var snapshot = MemoryTracker.Snapshot("GCSnapshot", forceGC: true);
 
@@ -57,8 +58,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(snapshot.TotalMemory > 0);
     }
 
-    [Fact]
-    public void MemoryTracker_Snapshot_WithoutLabel_GeneratesDefaultLabel()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Snapshot_WithoutLabel_GeneratesDefaultLabel()
     {
         var snapshot = MemoryTracker.Snapshot();
 
@@ -66,8 +67,8 @@ public class DiagnosticsIntegrationTests
         Assert.StartsWith("Snapshot_", snapshot.Label);
     }
 
-    [Fact]
-    public void MemoryTracker_GetHistory_ReturnsRecordedSnapshots()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_GetHistory_ReturnsRecordedSnapshots()
     {
         MemoryTracker.Reset();
         MemoryTracker.Enable();
@@ -85,8 +86,8 @@ public class DiagnosticsIntegrationTests
         MemoryTracker.Reset();
     }
 
-    [Fact]
-    public void MemoryTracker_Reset_ClearsHistory()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_Reset_ClearsHistory()
     {
         MemoryTracker.Enable();
         MemoryTracker.Snapshot("BeforeReset");
@@ -99,16 +100,16 @@ public class DiagnosticsIntegrationTests
         MemoryTracker.Disable();
     }
 
-    [Fact]
-    public void MemoryTracker_GetPressureLevel_ReturnsValidLevel()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_GetPressureLevel_ReturnsValidLevel()
     {
         var level = MemoryTracker.GetPressureLevel();
 
         Assert.True(Enum.IsDefined(typeof(MemoryPressureLevel), level));
     }
 
-    [Fact]
-    public void MemoryTracker_EstimateTensorMemory_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_EstimateTensorMemory_CalculatesCorrectly()
     {
         // 1000 x 1000 tensor with 4 bytes per element
         var memory = MemoryTracker.EstimateTensorMemory(new[] { 1000, 1000 }, elementSize: 4);
@@ -116,8 +117,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(4_000_000L, memory);
     }
 
-    [Fact]
-    public void MemoryTracker_EstimateTensorMemory_Handles3DTensor()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_EstimateTensorMemory_Handles3DTensor()
     {
         // 32 x 128 x 768 tensor with 4 bytes per element
         var memory = MemoryTracker.EstimateTensorMemory(new[] { 32, 128, 768 }, elementSize: 4);
@@ -125,8 +126,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(32L * 128 * 768 * 4, memory);
     }
 
-    [Fact]
-    public void MemoryTracker_EstimateKVCacheMemory_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_EstimateKVCacheMemory_CalculatesCorrectly()
     {
         // 12 layers, 12 heads, 64 head dim, 512 seq len, batch 1, 4 bytes
         var memory = MemoryTracker.EstimateKVCacheMemory(
@@ -143,8 +144,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(expected, memory);
     }
 
-    [Fact]
-    public void MemoryTracker_TrackScope_ReturnsValidScope()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryTracker_TrackScope_ReturnsValidScope()
     {
         using var scope = MemoryTracker.TrackScope("ScopeTest");
 
@@ -157,8 +158,8 @@ public class DiagnosticsIntegrationTests
 
     #region MemorySnapshot Tests
 
-    [Fact]
-    public void MemorySnapshot_CompareTo_ReturnsValidDiff()
+    [Fact(Timeout = 120000)]
+    public async Task MemorySnapshot_CompareTo_ReturnsValidDiff()
     {
         var before = MemoryTracker.Snapshot("Before");
 
@@ -174,8 +175,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(diff.Duration.TotalMilliseconds >= 0);
     }
 
-    [Fact]
-    public void MemorySnapshot_ToString_ContainsLabel()
+    [Fact(Timeout = 120000)]
+    public async Task MemorySnapshot_ToString_ContainsLabel()
     {
         var snapshot = MemoryTracker.Snapshot("TestLabel");
         var str = snapshot.ToString();
@@ -184,8 +185,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("Total:", str);
     }
 
-    [Fact]
-    public void MemorySnapshot_Properties_ArePopulated()
+    [Fact(Timeout = 120000)]
+    public async Task MemorySnapshot_Properties_ArePopulated()
     {
         var snapshot = MemoryTracker.Snapshot("PropsTest");
 
@@ -201,8 +202,8 @@ public class DiagnosticsIntegrationTests
 
     #region MemoryDiff Tests
 
-    [Fact]
-    public void MemoryDiff_AllocationRatePerSecond_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryDiff_AllocationRatePerSecond_CalculatesCorrectly()
     {
         var before = MemoryTracker.Snapshot("Before");
         Thread.Sleep(100);
@@ -213,8 +214,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(diff.AllocationRatePerSecond >= 0 || diff.TotalMemoryDelta < 0);
     }
 
-    [Fact]
-    public void MemoryDiff_ToString_ContainsRelevantInfo()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryDiff_ToString_ContainsRelevantInfo()
     {
         var before = MemoryTracker.Snapshot("Before");
         var after = MemoryTracker.Snapshot("After");
@@ -230,8 +231,8 @@ public class DiagnosticsIntegrationTests
 
     #region MemoryPressureLevel Tests
 
-    [Fact]
-    public void MemoryPressureLevel_AllValuesExist()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryPressureLevel_AllValuesExist()
     {
         var values = (MemoryPressureLevel[])Enum.GetValues(typeof(MemoryPressureLevel));
 
@@ -245,8 +246,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfilerSession Tests
 
-    [Fact]
-    public void ProfilerSession_DefaultConstructor_CreatesSession()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_DefaultConstructor_CreatesSession()
     {
         var session = new ProfilerSession();
 
@@ -254,8 +255,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(0, session.OperationCount);
     }
 
-    [Fact]
-    public void ProfilerSession_WithConfig_UsesConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_WithConfig_UsesConfig()
     {
         var config = new ProfilingConfig { Enabled = true, SamplingRate = 0.5 };
         var session = new ProfilerSession(config);
@@ -264,8 +265,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(session.IsEnabled);
     }
 
-    [Fact]
-    public void ProfilerSession_Enable_SetsIsEnabled()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Enable_SetsIsEnabled()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = false, AutoEnableInDebug = false });
         Assert.False(session.IsEnabled);
@@ -274,8 +275,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(session.IsEnabled);
     }
 
-    [Fact]
-    public void ProfilerSession_Disable_ClearsIsEnabled()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Disable_ClearsIsEnabled()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         Assert.True(session.IsEnabled);
@@ -284,8 +285,8 @@ public class DiagnosticsIntegrationTests
         Assert.False(session.IsEnabled);
     }
 
-    [Fact]
-    public void ProfilerSession_Scope_TracksOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Scope_TracksOperation()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -301,8 +302,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(stats.MeanMs >= 10);
     }
 
-    [Fact]
-    public void ProfilerSession_Start_CreatesManualTimer()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Start_CreatesManualTimer()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -316,8 +317,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(stats.MeanMs >= 10);
     }
 
-    [Fact]
-    public void ProfilerSession_MultipleScopes_TracksAll()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_MultipleScopes_TracksAll()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -334,8 +335,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(5, stats.Count);
     }
 
-    [Fact]
-    public void ProfilerSession_Reset_ClearsData()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Reset_ClearsData()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -351,8 +352,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(0, session.OperationCount);
     }
 
-    [Fact]
-    public void ProfilerSession_GetReport_ReturnsValidReport()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_GetReport_ReturnsValidReport()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -366,8 +367,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(report.TotalRuntime.TotalMilliseconds > 0);
     }
 
-    [Fact]
-    public void ProfilerSession_GetSummary_ReturnsString()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_GetSummary_ReturnsString()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -379,8 +380,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("Profiling Report", summary);
     }
 
-    [Fact]
-    public void ProfilerSession_GetOperationNames_ReturnsNames()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_GetOperationNames_ReturnsNames()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -396,8 +397,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("Gamma", names);
     }
 
-    [Fact]
-    public void ProfilerSession_Elapsed_TracksTime()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_Elapsed_TracksTime()
     {
         var session = new ProfilerSession();
         Thread.Sleep(50);
@@ -405,8 +406,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(session.Elapsed.TotalMilliseconds >= 50);
     }
 
-    [Fact]
-    public void ProfilerSession_DisabledSession_DoesNotRecord()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSession_DisabledSession_DoesNotRecord()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = false, AutoEnableInDebug = false });
 
@@ -422,8 +423,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfilerSessionTimer Tests
 
-    [Fact]
-    public void ProfilerSessionTimer_Name_ReturnsCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSessionTimer_Name_ReturnsCorrectName()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         var timer = session.Start("TimerName");
@@ -433,8 +434,8 @@ public class DiagnosticsIntegrationTests
         timer.Stop();
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_Elapsed_TracksTime()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSessionTimer_Elapsed_TracksTime()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         var timer = session.Start("ElapsedTest");
@@ -447,8 +448,8 @@ public class DiagnosticsIntegrationTests
         timer.Stop();
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_DoubleStop_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSessionTimer_DoubleStop_DoesNotThrow()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         var timer = session.Start("DoubleStop");
@@ -459,8 +460,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(1, session.OperationCount);
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_Dispose_StopsTimer()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSessionTimer_Dispose_StopsTimer()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -476,8 +477,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfilerSessionScope Tests
 
-    [Fact]
-    public void ProfilerSessionScope_Elapsed_TracksTime()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerSessionScope_Elapsed_TracksTime()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -492,8 +493,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfileReport Tests
 
-    [Fact]
-    public void ProfileReport_GetAllStats_ReturnsSortedByTotalTime()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetAllStats_ReturnsSortedByTotalTime()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -508,8 +509,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal("Slow", allStats[0].Name);
     }
 
-    [Fact]
-    public void ProfileReport_GetTopOperations_ReturnsLimitedCount()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetTopOperations_ReturnsLimitedCount()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -524,8 +525,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(5, top5.Count);
     }
 
-    [Fact]
-    public void ProfileReport_GetSlowOperations_FiltersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetSlowOperations_FiltersCorrectly()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -539,8 +540,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal("Slow", slowOps[0].Name);
     }
 
-    [Fact]
-    public void ProfileReport_GetHotspots_ReturnsHottestOperations()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetHotspots_ReturnsHottestOperations()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -555,8 +556,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal("Hot", hotspots[0].Name);
     }
 
-    [Fact]
-    public void ProfileReport_ToJson_ReturnsValidJson()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_ToJson_ReturnsValidJson()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("JsonOp")) { Thread.Sleep(1); }
@@ -569,8 +570,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("\"JsonOp\"", json);
     }
 
-    [Fact]
-    public void ProfileReport_ToCsv_ReturnsValidCsv()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_ToCsv_ReturnsValidCsv()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("CsvOp")) { Thread.Sleep(1); }
@@ -582,8 +583,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("CsvOp", csv);
     }
 
-    [Fact]
-    public void ProfileReport_ToMarkdown_ReturnsValidMarkdown()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_ToMarkdown_ReturnsValidMarkdown()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("MarkdownOp")) { Thread.Sleep(1); }
@@ -596,8 +597,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("MarkdownOp", md);
     }
 
-    [Fact]
-    public void ProfileReport_ToDictionary_ReturnsValidDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_ToDictionary_ReturnsValidDictionary()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("DictOp")) { Thread.Sleep(1); }
@@ -611,8 +612,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("operations", dict.Keys);
     }
 
-    [Fact]
-    public void ProfileReport_GetStats_ReturnsStatsForOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetStats_ReturnsStatsForOperation()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("SpecificOp")) { Thread.Sleep(5); }
@@ -624,8 +625,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal("SpecificOp", stats.Name);
     }
 
-    [Fact]
-    public void ProfileReport_GetStats_ReturnsNullForUnknownOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_GetStats_ReturnsNullForUnknownOperation()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         var report = session.GetReport();
@@ -635,8 +636,8 @@ public class DiagnosticsIntegrationTests
         Assert.Null(stats);
     }
 
-    [Fact]
-    public void ProfileReport_CompareTo_DetectsRegressions()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_CompareTo_DetectsRegressions()
     {
         var session1 = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session1.Scope("CompareOp")) { Thread.Sleep(10); }
@@ -653,8 +654,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal("CompareOp", comparison.Regressions[0].OperationName);
     }
 
-    [Fact]
-    public void ProfileReport_CompareTo_DetectsImprovements()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_CompareTo_DetectsImprovements()
     {
         var session1 = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session1.Scope("ImproveOp")) { Thread.Sleep(50); }
@@ -669,8 +670,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(comparison.Improvements.Count > 0);
     }
 
-    [Fact]
-    public void ProfileReport_ToString_ContainsReportInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileReport_ToString_ContainsReportInfo()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("ToStringOp")) { Thread.Sleep(1); }
@@ -686,8 +687,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfilerStats Tests
 
-    [Fact]
-    public void ProfilerStats_OpsPerSecond_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerStats_OpsPerSecond_CalculatesCorrectly()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -701,8 +702,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(stats.OpsPerSecond > 0);
     }
 
-    [Fact]
-    public void ProfilerStats_ToString_ContainsName()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerStats_ToString_ContainsName()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session.Scope("StatsToString")) { Thread.Sleep(1); }
@@ -715,8 +716,8 @@ public class DiagnosticsIntegrationTests
         Assert.Contains("calls", str);
     }
 
-    [Fact]
-    public void ProfilerStats_Percentiles_AreCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerStats_Percentiles_AreCalculated()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -735,8 +736,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(stats.P99Ms >= stats.P95Ms);
     }
 
-    [Fact]
-    public void ProfilerStats_MinMax_AreTracked()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilerStats_MinMax_AreTracked()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -755,8 +756,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfileComparison Tests
 
-    [Fact]
-    public void ProfileComparison_ToString_ContainsComparisonInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ProfileComparison_ToString_ContainsComparisonInfo()
     {
         var session1 = new ProfilerSession(new ProfilingConfig { Enabled = true });
         using (session1.Scope("CompOp")) { Thread.Sleep(10); }
@@ -777,8 +778,8 @@ public class DiagnosticsIntegrationTests
 
     #region ProfilingConfig Tests
 
-    [Fact]
-    public void ProfilingConfig_DefaultValues_AreSet()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilingConfig_DefaultValues_AreSet()
     {
         var config = new ProfilingConfig();
 
@@ -790,8 +791,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(config.TrackCallHierarchy);
     }
 
-    [Fact]
-    public void ProfilingConfig_CustomValues_ArePreserved()
+    [Fact(Timeout = 120000)]
+    public async Task ProfilingConfig_CustomValues_ArePreserved()
     {
         var config = new ProfilingConfig
         {
@@ -815,8 +816,8 @@ public class DiagnosticsIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void Integration_MemoryAndProfiler_WorkTogether()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_MemoryAndProfiler_WorkTogether()
     {
         var session = new ProfilerSession(new ProfilingConfig
         {
@@ -835,8 +836,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(1, report.TotalOperations);
     }
 
-    [Fact]
-    public void Integration_NestedScopes_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_NestedScopes_WorkCorrectly()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -857,8 +858,8 @@ public class DiagnosticsIntegrationTests
         Assert.True(outerStats.TotalMs >= innerStats.TotalMs);
     }
 
-    [Fact]
-    public void Integration_SamplingRate_AffectsRecording()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_SamplingRate_AffectsRecording()
     {
         var session = new ProfilerSession(new ProfilingConfig
         {
@@ -875,8 +876,8 @@ public class DiagnosticsIntegrationTests
         Assert.Equal(0, session.OperationCount);
     }
 
-    [Fact]
-    public void Integration_ConcurrentProfiling_IsThreadSafe()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_ConcurrentProfiling_IsThreadSafe()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
         var tasks = new List<Task>();

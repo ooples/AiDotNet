@@ -6,13 +6,14 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Optimizers
 {
     public class AdamWOptimizerTests
     {
-        [Fact]
-        public void Constructor_WithDefaultOptions_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultOptions_InitializesCorrectly()
         {
             // Arrange & Act
             var optimizer = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -32,8 +33,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, options.WeightDecay);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_UsesProvidedOptions()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_UsesProvidedOptions()
         {
             // Arrange
             var customOptions = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -58,8 +59,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.05, options.WeightDecay);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -82,8 +83,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] > parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Vector_WithWeightDecay_AppliesDecoupledDecay()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Vector_WithWeightDecay_AppliesDecoupledDecay()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -132,8 +133,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void UpdateParameters_Matrix_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_Matrix_WorksCorrectly()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -166,8 +167,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]); // Negative gradient
         }
 
-        [Fact]
-        public void UpdateParameters_ConsecutiveCalls_BuildsMomentum()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_ConsecutiveCalls_BuildsMomentum()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(differences.Count == 5);
         }
 
-        [Fact]
-        public void AdamW_DifferentFromAdam_DueToDecoupledWeightDecay()
+        [Fact(Timeout = 60000)]
+        public async Task AdamW_DifferentFromAdam_DueToDecoupledWeightDecay()
         {
             // This test verifies the key difference between AdamW and Adam:
             // AdamW applies weight decay directly to parameters, not to gradients
@@ -225,8 +226,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(parameters[0] - updated[0] > 0.05); // Significant decrease
         }
 
-        [Fact]
-        public void Reset_ClearsOptimizerState()
+        [Fact(Timeout = 60000)]
+        public async Task Reset_ClearsOptimizerState()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -254,8 +255,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(updatedAfterReset);
         }
 
-        [Fact]
-        public void Serialize_Deserialize_PreservesState()
+        [Fact(Timeout = 60000)]
+        public async Task Serialize_Deserialize_PreservesState()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -289,8 +290,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
-        [Fact]
-        public void UpdateParameters_WithAMSGrad_UsesMaxSecondMoment()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_WithAMSGrad_UsesMaxSecondMoment()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -313,8 +314,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(afterSmallGrad);
         }
 
-        [Fact]
-        public void UpdateParameters_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<float, Vector<float>, Vector<float>>
@@ -337,8 +338,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
-        public void GetOptions_ReturnsCurrentOptions()
+        [Fact(Timeout = 60000)]
+        public async Task GetOptions_ReturnsCurrentOptions()
         {
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -361,8 +362,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.02, retrievedOptions.WeightDecay);
         }
 
-        [Fact]
-        public void UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
             var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };

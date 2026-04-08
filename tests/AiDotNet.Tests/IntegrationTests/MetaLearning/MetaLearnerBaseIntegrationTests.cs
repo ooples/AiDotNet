@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Data;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -71,8 +72,8 @@ public class MetaLearnerBaseIntegrationTests
         return new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
     }
 
-    [Fact]
-    public void Constructor_NullArguments_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NullArguments_Throws()
     {
         var options = new MetaLearnerOptionsBase<double>();
 
@@ -80,24 +81,24 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Throws<ArgumentNullException>(() => new TestMetaLearner(new LinearVectorModel(3), null!));
     }
 
-    [Fact]
-    public void Constructor_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_InvalidOptions_Throws()
     {
         var options = new MetaLearnerOptionsBase<double> { InnerLearningRate = 0 };
 
         Assert.Throws<ArgumentException>(() => new TestMetaLearner(new LinearVectorModel(3), options));
     }
 
-    [Fact]
-    public void Evaluate_NullBatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluate_NullBatch_Throws()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
         Assert.Throws<ArgumentNullException>(() => learner.Evaluate(null!));
     }
 
-    [Fact]
-    public void Evaluate_ComputesAverageLoss()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluate_ComputesAverageLoss()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var batch = CreateTaskBatch(2);
@@ -116,24 +117,24 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(expected, actual, precision: 6);
     }
 
-    [Fact]
-    public void MetaTrainStep_InvalidBatchSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrainStep_InvalidBatchSize_Throws()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => learner.MetaTrainStep(0));
     }
 
-    [Fact]
-    public void MetaTrainStep_WithoutDataLoader_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrainStep_WithoutDataLoader_Throws()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
         Assert.Throws<InvalidOperationException>(() => learner.MetaTrainStep(1));
     }
 
-    [Fact]
-    public void MetaTrainStep_WithDataLoader_IncrementsIteration()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrainStep_WithDataLoader_IncrementsIteration()
     {
         var tasks = new[] { CreateVectorTask(1) };
         var dataLoader = new TestEpisodicDataLoader<double, Matrix<double>, Vector<double>>(tasks, 2, 2, 2, 2);
@@ -146,16 +147,16 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(1, learner.CurrentIteration);
     }
 
-    [Fact]
-    public void Train_WithoutDataLoader_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Train_WithoutDataLoader_Throws()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
         Assert.Throws<InvalidOperationException>(() => learner.Train());
     }
 
-    [Fact]
-    public void Train_RunsConfiguredIterations()
+    [Fact(Timeout = 120000)]
+    public async Task Train_RunsConfiguredIterations()
     {
         var tasks = new[] { CreateVectorTask(2) };
         var dataLoader = new TestEpisodicDataLoader<double, Matrix<double>, Vector<double>>(tasks, 2, 2, 2, 2);
@@ -175,8 +176,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(3, learner.CurrentIteration);
     }
 
-    [Fact]
-    public void Evaluate_WithNumTasks_UsesDataLoader()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluate_WithNumTasks_UsesDataLoader()
     {
         var tasks = new[] { CreateVectorTask(3), CreateVectorTask(4) };
         var dataLoader = new TestEpisodicDataLoader<double, Matrix<double>, Vector<double>>(tasks, 2, 2, 2, 2);
@@ -189,8 +190,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(3, result.PerTaskLosses.Length);
     }
 
-    [Fact]
-    public void AdaptAndEvaluate_ReturnsMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptAndEvaluate_ReturnsMetrics()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var task = CreateVectorTask(5);
@@ -204,8 +205,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.InRange(result.SupportAccuracy, 0.0, 1.0);
     }
 
-    [Fact]
-    public void SetMetaModel_ResetsOptimizers()
+    [Fact(Timeout = 120000)]
+    public async Task SetMetaModel_ResetsOptimizers()
     {
         var metaOptimizer = new ResetTrackingOptimizer();
         var innerOptimizer = new ResetTrackingOptimizer();
@@ -221,8 +222,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(1, innerOptimizer.ResetCount);
     }
 
-    [Fact]
-    public void Reset_ClearsIteration()
+    [Fact(Timeout = 120000)]
+    public async Task Reset_ClearsIteration()
     {
         var tasks = new[] { CreateVectorTask(6) };
         var dataLoader = new TestEpisodicDataLoader<double, Matrix<double>, Vector<double>>(tasks, 2, 2, 2, 2);
@@ -235,8 +236,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(0, learner.CurrentIteration);
     }
 
-    [Fact]
-    public void ComputeAccuracy_HandlesOneHotAndClassIndexCases()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeAccuracy_HandlesOneHotAndClassIndexCases()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
@@ -253,8 +254,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(0.0, learner.CallComputeAccuracy(mismatchPred, mismatchLabel), precision: 6);
     }
 
-    [Fact]
-    public void ComputeLossFromOutput_ReturnsExpectedValue()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeLossFromOutput_ReturnsExpectedValue()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
@@ -265,8 +266,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(0.5, loss, precision: 6);
     }
 
-    [Fact]
-    public void ConvertToVector_ReturnsSameVector()
+    [Fact(Timeout = 120000)]
+    public async Task ConvertToVector_ReturnsSameVector()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var vector = new Vector<double>(new[] { 1.0, 2.0 });
@@ -279,8 +280,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(vector[1], converted[1]);
     }
 
-    [Fact]
-    public void ComputeMean_HandlesEmptyAndNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeMean_HandlesEmptyAndNonEmpty()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
@@ -288,8 +289,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(2.0, learner.CallComputeMean(new List<double> { 1.0, 2.0, 3.0 }), precision: 6);
     }
 
-    [Fact]
-    public void ApplyGradients_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ApplyGradients_UpdatesParameters()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(2), new MetaLearnerOptionsBase<double>());
         var parameters = new Vector<double>(new[] { 1.0, 2.0 });
@@ -301,8 +302,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(1.9, updated[1], precision: 6);
     }
 
-    [Fact]
-    public void ClipGradients_RespectsThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task ClipGradients_RespectsThreshold()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(2), new MetaLearnerOptionsBase<double>());
         var gradients = new Vector<double>(new[] { 3.0, 4.0 });
@@ -313,8 +314,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(2.0, clipped[1], precision: 6);
     }
 
-    [Fact]
-    public void CreateTaskBatch_WrapsTasks()
+    [Fact(Timeout = 120000)]
+    public async Task CreateTaskBatch_WrapsTasks()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var tasks = new List<MetaLearningTask<double, Matrix<double>, Vector<double>>>
@@ -331,8 +332,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(tasks[0].NumQueryPerClass, batch.NumQueryPerClass);
     }
 
-    [Fact]
-    public void ToMetaLearningTask_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task ToMetaLearningTask_PreservesData()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var task = CreateVectorTask(9);
@@ -345,8 +346,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(task.QuerySetY, wrapped.QueryOutput);
     }
 
-    [Fact]
-    public void CloneModel_ReturnsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CloneModel_ReturnsIndependentCopy()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
@@ -362,8 +363,8 @@ public class MetaLearnerBaseIntegrationTests
         }
     }
 
-    [Fact]
-    public void ComputeSecondOrderGradients_UsesSecondOrderModel()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeSecondOrderGradients_UsesSecondOrderModel()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var model = new SecondOrderMatrixModel(3);
@@ -384,8 +385,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Equal(0.05, gradients[0], precision: 6);
     }
 
-    [Fact]
-    public void ComputeSecondOrderGradients_FallsBackToFirstOrder()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeSecondOrderGradients_FallsBackToFirstOrder()
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
         var model = new LinearVectorModel(3);
@@ -407,8 +408,8 @@ public class MetaLearnerBaseIntegrationTests
         Assert.Contains(gradients, value => Math.Abs(value) > 1e-12);
     }
 
-    [Fact]
-    public void SaveAndLoad_RestoresIteration()
+    [Fact(Timeout = 120000)]
+    public async Task SaveAndLoad_RestoresIteration()
     {
         var task = CreateVectorTask(13);
         var dataLoader = new TestEpisodicDataLoader<double, Matrix<double>, Vector<double>>(new[] { task }, 2, 2, 2, 2);

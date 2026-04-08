@@ -8,12 +8,13 @@ using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ProgramControllerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_NullRequest_ReturnsBadRequest()
     {
         var controller = CreateController(
@@ -28,7 +29,7 @@ public sealed class ProgramControllerTests
         Assert.Equal(ProgramExecuteErrorCode.InvalidRequest, payload.ErrorCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_EmptySourceCode_ReturnsBadRequest()
     {
         var controller = CreateController(
@@ -43,7 +44,7 @@ public sealed class ProgramControllerTests
         Assert.Equal(ProgramExecuteErrorCode.SourceCodeRequired, payload.ErrorCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_Success_ReturnsOk()
     {
         var controller = CreateController(
@@ -65,7 +66,7 @@ public sealed class ProgramControllerTests
         Assert.Equal("hello", payload.StdOut);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_Timeout_Returns408()
     {
         var controller = CreateController(
@@ -86,7 +87,7 @@ public sealed class ProgramControllerTests
         Assert.Equal(ProgramExecuteErrorCode.TimeoutOrCanceled, payload.ErrorCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task EvaluateIo_NullRequest_ReturnsBadRequest()
     {
         var controller = CreateController(
@@ -100,7 +101,7 @@ public sealed class ProgramControllerTests
         Assert.False(payload.Success);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task EvaluateIo_Success_ReturnsOk()
     {
         var controller = CreateController(
@@ -119,7 +120,7 @@ public sealed class ProgramControllerTests
         Assert.True(payload.Success);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task EvaluateIo_Timeout_Returns408()
     {
         var controller = CreateController(

@@ -6,13 +6,14 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class ServingCodeTaskResultRedactorTests
 {
-    [Fact]
-    public void Redact_FreeTier_RedactsErrorsAndExecutionTelemetry()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_FreeTier_RedactsErrorsAndExecutionTelemetry()
     {
         var redactor = CreateRedactor(maxChars: 5, maxItems: 5);
 
@@ -34,8 +35,8 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Equal("12345", redacted.Summary);
     }
 
-    [Fact]
-    public void Redact_TruncatesCompletionCandidatesAndText()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_TruncatesCompletionCandidatesAndText()
     {
         var redactor = CreateRedactor(maxChars: 3, maxItems: 1);
         var ctx = new ServingRequestContext { Tier = ServingTier.Premium, IsAuthenticated = true };
@@ -56,8 +57,8 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Equal("abc", redacted.Candidates[0].CompletionText);
     }
 
-    [Fact]
-    public void Redact_BugFixing_TruncatesDiffAndIssues()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_BugFixing_TruncatesDiffAndIssues()
     {
         var redactor = CreateRedactor(maxChars: 4, maxItems: 1);
         var ctx = new ServingRequestContext { Tier = ServingTier.Premium, IsAuthenticated = true };
@@ -94,8 +95,8 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Equal("deta", redacted.FixedIssues[0].Details);
     }
 
-    [Fact]
-    public void Redact_Review_TruncatesFixSuggestionsAndPlan()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_Review_TruncatesFixSuggestionsAndPlan()
     {
         var redactor = CreateRedactor(maxChars: 4, maxItems: 1);
         var ctx = new ServingRequestContext { Tier = ServingTier.Premium, IsAuthenticated = true };
@@ -146,8 +147,8 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Equal("plan", redacted.PrioritizedPlan[0]);
     }
 
-    [Fact]
-    public void Redact_MaxItemsZero_ClearsLists()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_MaxItemsZero_ClearsLists()
     {
         var redactor = CreateRedactor(maxChars: 10, maxItems: 0);
         var ctx = new ServingRequestContext { Tier = ServingTier.Premium, IsAuthenticated = true };
@@ -163,8 +164,8 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Empty(redacted.Candidates);
     }
 
-    [Fact]
-    public void Redact_ThrowsForUnknownResultType()
+    [Fact(Timeout = 60000)]
+    public async Task Redact_ThrowsForUnknownResultType()
     {
         var redactor = CreateRedactor(maxChars: 10, maxItems: 10);
         var ctx = new ServingRequestContext { Tier = ServingTier.Premium, IsAuthenticated = true };

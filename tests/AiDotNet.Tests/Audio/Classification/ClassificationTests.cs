@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Audio.Classification;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Classification
 {
@@ -97,8 +98,8 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== GenreClassifier Tests ====================
 
-        [Fact]
-        public void GenreClassifier_Classify_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Classify_ReturnsResult()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -113,8 +114,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(result.Confidence >= 0 && result.Confidence <= 1);
         }
 
-        [Fact]
-        public void GenreClassifier_Classify_HasAllProbabilities()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Classify_HasAllProbabilities()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -132,8 +133,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(Math.Abs(sum - 1.0) < 0.01, $"Probabilities sum {sum} should be ~1");
         }
 
-        [Fact]
-        public void GenreClassifier_Classify_TopPredictionsAreOrdered()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Classify_TopPredictionsAreOrdered()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -153,8 +154,8 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
-        public void GenreClassifier_Genres_HasStandardGenres()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Genres_HasStandardGenres()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -167,8 +168,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Contains("classical", classifier.Genres);
         }
 
-        [Fact]
-        public void GenreClassifier_Features_AreExtracted()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Features_AreExtracted()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -186,8 +187,8 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== AudioEventDetector Tests ====================
 
-        [Fact]
-        public void AudioEventDetector_Detect_ReturnsEvents()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_Detect_ReturnsEvents()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -201,8 +202,8 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should detect at least something (the threshold is 0.3 by default)
         }
 
-        [Fact]
-        public void AudioEventDetector_Events_HaveValidTimestamps()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_Events_HaveValidTimestamps()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -223,8 +224,8 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
-        public void AudioEventDetector_DetectFrame_ReturnsScores()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_DetectFrame_ReturnsScores()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -244,8 +245,8 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
-        public void AudioEventDetector_DetectTopK_ReturnsCorrectCount()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_DetectTopK_ReturnsCorrectCount()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -259,8 +260,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(topK.Count <= 5);
         }
 
-        [Fact]
-        public void AudioEventDetector_EventLabels_HasCommonEvents()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_EventLabels_HasCommonEvents()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -273,8 +274,8 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== SceneClassifier Tests ====================
 
-        [Fact]
-        public void SceneClassifier_Classify_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_Classify_ReturnsResult()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -290,8 +291,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(result.Confidence >= 0 && result.Confidence <= 1);
         }
 
-        [Fact]
-        public void SceneClassifier_Classify_HasAllProbabilities()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_Classify_HasAllProbabilities()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -309,8 +310,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(Math.Abs(sum - 1.0) < 0.01, $"Probabilities sum {sum} should be ~1");
         }
 
-        [Fact]
-        public void SceneClassifier_ClassifyCategory_ReturnsCategory()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_ClassifyCategory_ReturnsCategory()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -324,8 +325,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(confidence >= 0 && confidence <= 1);
         }
 
-        [Fact]
-        public void SceneClassifier_Scenes_HasStandardScenes()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_Scenes_HasStandardScenes()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -335,8 +336,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(classifier.Scenes.Count >= 10);
         }
 
-        [Fact]
-        public void SceneClassifier_Features_AreExtracted()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_Features_AreExtracted()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -352,8 +353,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.NotNull(result.Features.BandEnergies);
         }
 
-        [Fact]
-        public void SceneClassifier_TopPredictions_AreOrdered()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_TopPredictions_AreOrdered()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -375,8 +376,8 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== Dispose Tests ====================
 
-        [Fact]
-        public void GenreClassifier_Dispose_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_Dispose_DoesNotThrow()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -386,8 +387,8 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
-        public void AudioEventDetector_Dispose_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_Dispose_DoesNotThrow()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -397,8 +398,8 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
-        public void SceneClassifier_Dispose_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_Dispose_DoesNotThrow()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();
@@ -408,8 +409,8 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
-        public void GenreClassifier_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task GenreClassifier_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var classifier = new GenreClassifier<float>();
@@ -420,8 +421,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Throws<ObjectDisposedException>(() => classifier.Classify(audio));
         }
 
-        [Fact]
-        public void AudioEventDetector_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task AudioEventDetector_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var detector = new AudioEventDetector<float>();
@@ -432,8 +433,8 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Throws<ObjectDisposedException>(() => detector.Detect(audio));
         }
 
-        [Fact]
-        public void SceneClassifier_AfterDispose_ThrowsObjectDisposedException()
+        [Fact(Timeout = 60000)]
+        public async Task SceneClassifier_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
             var classifier = new SceneClassifier<float>();

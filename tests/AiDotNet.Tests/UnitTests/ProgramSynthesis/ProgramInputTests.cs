@@ -1,6 +1,7 @@
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class ProgramInputTests
 {
-    [Fact]
-    public void Constructor_WithParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithParameters_CreatesInstance()
     {
         // Arrange
         const string description = "Create a function that sorts a list";
@@ -36,8 +37,8 @@ public class ProgramInputTests
         Assert.Single(input.Constraints ?? new List<string>());
     }
 
-    [Fact]
-    public void Constructor_DefaultConstructor_CreatesEmptyInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultConstructor_CreatesEmptyInstance()
     {
         // Act
         var input = new ProgramInput<double>();
@@ -49,8 +50,8 @@ public class ProgramInputTests
         Assert.Null(input.Examples);
     }
 
-    [Fact]
-    public void AddExample_AddsExampleCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddExample_AddsExampleCorrectly()
     {
         // Arrange
         var input = new ProgramInput<double>();
@@ -68,8 +69,8 @@ public class ProgramInputTests
         Assert.Equal("9", input.Examples[1].ExpectedOutput);
     }
 
-    [Fact]
-    public void AddTestCase_AddsTestCaseCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddTestCase_AddsTestCaseCorrectly()
     {
         // Arrange
         var input = new ProgramInput<double>();
@@ -87,8 +88,8 @@ public class ProgramInputTests
         Assert.Equal("3", input.TestCases[1].ExpectedOutput);
     }
 
-    [Fact]
-    public void AddConstraint_AddsConstraintCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddConstraint_AddsConstraintCorrectly()
     {
         // Arrange
         var input = new ProgramInput<double>();
@@ -104,8 +105,8 @@ public class ProgramInputTests
         Assert.Contains("Should be readable", input.Constraints);
     }
 
-    [Fact]
-    public void Properties_SettersAndGetters_WorkCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Properties_SettersAndGetters_WorkCorrectly()
     {
         // Arrange
         var input = new ProgramInput<double>();
@@ -125,8 +126,8 @@ public class ProgramInputTests
         Assert.Equal(5000, input.TimeoutMs);
     }
 
-    [Fact]
-    public void AddExample_MultipleTimesSeparately_MaintainsOrder()
+    [Fact(Timeout = 60000)]
+    public async Task AddExample_MultipleTimesSeparately_MaintainsOrder()
     {
         // Arrange
         var input = new ProgramInput<double>();

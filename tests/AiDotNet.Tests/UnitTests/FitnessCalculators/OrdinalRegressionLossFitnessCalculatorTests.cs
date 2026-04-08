@@ -6,13 +6,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class OrdinalRegressionLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 5);
@@ -33,8 +34,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithOffByOne_ReturnsModerateLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithOffByOne_ReturnsModerateLoss()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 5);
@@ -52,8 +53,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result < 5.0); // Should be moderate loss
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithLargeErrors_ReturnsHighLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithLargeErrors_ReturnsHighLoss()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 5);
@@ -70,8 +71,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result > 1.0); // Large errors should result in higher loss
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 3);
@@ -88,8 +89,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithoutNumberOfClasses_AutoDetects()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithoutNumberOfClasses_AutoDetects()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -106,8 +107,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -116,8 +117,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -129,8 +130,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -142,8 +143,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<float, Vector<float>, Vector<float>>(numberOfClassifications: 5);
@@ -162,8 +163,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -172,8 +173,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Training);
@@ -183,8 +184,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(dataSetType: DataSetType.Testing);
@@ -194,8 +195,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 2);
@@ -212,8 +213,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_ConsistentOrdering_SmallerLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_ConsistentOrdering_SmallerLoss()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 5);
@@ -240,8 +241,8 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result1 < result2);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithTenClasses_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithTenClasses_HandlesCorrectly()
     {
         // Arrange
         var calculator = new OrdinalRegressionLossFitnessCalculator<double, Vector<double>, Vector<double>>(numberOfClassifications: 10);

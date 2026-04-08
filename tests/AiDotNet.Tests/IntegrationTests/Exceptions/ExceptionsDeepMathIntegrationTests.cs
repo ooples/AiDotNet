@@ -3,6 +3,7 @@ using AiDotNet.Exceptions;
 using Xunit;
 
 using AiDotNetSerializationException = AiDotNet.Exceptions.SerializationException;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Exceptions;
 
@@ -17,8 +18,8 @@ public class ExceptionsDeepMathIntegrationTests
     // AiDotNetException Tests
     // ============================
 
-    [Fact]
-    public void AiDotNetException_DefaultConstructor_IsException()
+    [Fact(Timeout = 120000)]
+    public async Task AiDotNetException_DefaultConstructor_IsException()
     {
         var ex = new AiDotNetException();
 
@@ -26,16 +27,16 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.IsType<AiDotNetException>(ex);
     }
 
-    [Fact]
-    public void AiDotNetException_MessageConstructor_StoresMessage()
+    [Fact(Timeout = 120000)]
+    public async Task AiDotNetException_MessageConstructor_StoresMessage()
     {
         var ex = new AiDotNetException("test error");
 
         Assert.Equal("test error", ex.Message);
     }
 
-    [Fact]
-    public void AiDotNetException_InnerExceptionConstructor_ChainsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AiDotNetException_InnerExceptionConstructor_ChainsCorrectly()
     {
         var inner = new InvalidOperationException("inner");
         var ex = new AiDotNetException("outer", inner);
@@ -48,8 +49,8 @@ public class ExceptionsDeepMathIntegrationTests
     // TensorShapeMismatchException Tests
     // ============================
 
-    [Fact]
-    public void TensorShapeMismatch_DefaultConstructor_HasEmptyShapes()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_DefaultConstructor_HasEmptyShapes()
     {
         var ex = new TensorShapeMismatchException();
 
@@ -59,8 +60,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_MessageConstructor_HasEmptyShapes()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_MessageConstructor_HasEmptyShapes()
     {
         var ex = new TensorShapeMismatchException("custom message");
 
@@ -71,8 +72,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_FullConstructor_StoresAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_FullConstructor_StoresAllProperties()
     {
         var expected = new[] { 3, 4, 5 };
         var actual = new[] { 3, 4, 6 };
@@ -85,8 +86,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_FormatMessage_ContainsExpectedAndActualShapes()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_FormatMessage_ContainsExpectedAndActualShapes()
     {
         var expected = new[] { 10, 20 };
         var actual = new[] { 10, 30 };
@@ -101,8 +102,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("[10, 30]", ex.Message);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_FormatMessage_HandVerified()
     {
         var expected = new[] { 2, 3 };
         var actual = new[] { 4, 5 };
@@ -113,8 +114,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_ContextConstructor_UsesUnknownOperation()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_ContextConstructor_UsesUnknownOperation()
     {
         var expected = new[] { 5 };
         var actual = new[] { 10 };
@@ -125,8 +126,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_InnerExceptionConstructor_ChainsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_InnerExceptionConstructor_ChainsCorrectly()
     {
         var inner = new ArgumentException("bad arg");
         var expected = new[] { 1, 2, 3 };
@@ -141,8 +142,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Backward", ex.Operation);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_InheritsAiDotNetException()
     {
         var ex = new TensorShapeMismatchException();
 
@@ -150,8 +151,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.IsAssignableFrom<Exception>(ex);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_EmptyShapes_FormatMessageHandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_EmptyShapes_FormatMessageHandlesGracefully()
     {
         var expected = Array.Empty<int>();
         var actual = Array.Empty<int>();
@@ -162,8 +163,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("[]", ex.Message);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_SingleDimShapes_FormatMessageCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_SingleDimShapes_FormatMessageCorrect()
     {
         var expected = new[] { 100 };
         var actual = new[] { 200 };
@@ -178,8 +179,8 @@ public class ExceptionsDeepMathIntegrationTests
     // TensorRankException Tests
     // ============================
 
-    [Fact]
-    public void TensorRank_StoresExpectedAndActualRank()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_StoresExpectedAndActualRank()
     {
         var ex = new TensorRankException(3, 2, "Conv3D", "Forward");
 
@@ -189,8 +190,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
-    public void TensorRank_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_FormatMessage_HandVerified()
     {
         var ex = new TensorRankException(4, 2, "BatchNorm", "Validate");
 
@@ -198,16 +199,16 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void TensorRank_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_InheritsAiDotNetException()
     {
         var ex = new TensorRankException(1, 2, "Test", "Op");
 
         Assert.IsAssignableFrom<AiDotNetException>(ex);
     }
 
-    [Fact]
-    public void TensorRank_SameRank_StillCreatesException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_SameRank_StillCreatesException()
     {
         // Edge case: expected == actual (someone might construct this)
         var ex = new TensorRankException(3, 3, "Test", "Op");
@@ -217,8 +218,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("Expected rank 3, but got 3", ex.Message);
     }
 
-    [Fact]
-    public void TensorRank_ZeroRank_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_ZeroRank_HandledCorrectly()
     {
         var ex = new TensorRankException(0, 1, "Scalar", "Validate");
 
@@ -231,8 +232,8 @@ public class ExceptionsDeepMathIntegrationTests
     // TensorDimensionException Tests
     // ============================
 
-    [Fact]
-    public void TensorDimension_StoresAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TensorDimension_StoresAllProperties()
     {
         var ex = new TensorDimensionException(2, 100, 200, "Linear", "Forward");
 
@@ -243,8 +244,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
-    public void TensorDimension_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task TensorDimension_FormatMessage_HandVerified()
     {
         var ex = new TensorDimensionException(0, 32, 64, "Conv2D", "Forward");
 
@@ -252,16 +253,16 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void TensorDimension_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorDimension_InheritsAiDotNetException()
     {
         var ex = new TensorDimensionException(0, 1, 2, "Test", "Op");
 
         Assert.IsAssignableFrom<AiDotNetException>(ex);
     }
 
-    [Fact]
-    public void TensorDimension_HighDimensionIndex_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorDimension_HighDimensionIndex_HandledCorrectly()
     {
         var ex = new TensorDimensionException(5, 10, 20, "HighDim", "Check");
 
@@ -273,8 +274,8 @@ public class ExceptionsDeepMathIntegrationTests
     // VectorLengthMismatchException Tests
     // ============================
 
-    [Fact]
-    public void VectorLength_StoresExpectedAndActualLength()
+    [Fact(Timeout = 120000)]
+    public async Task VectorLength_StoresExpectedAndActualLength()
     {
         var ex = new VectorLengthMismatchException(100, 50, "DotProduct", "Compute");
 
@@ -284,8 +285,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Compute", ex.Operation);
     }
 
-    [Fact]
-    public void VectorLength_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task VectorLength_FormatMessage_HandVerified()
     {
         var ex = new VectorLengthMismatchException(10, 20, "Embedding", "Lookup");
 
@@ -293,16 +294,16 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void VectorLength_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task VectorLength_InheritsAiDotNetException()
     {
         var ex = new VectorLengthMismatchException(1, 2, "Test", "Op");
 
         Assert.IsAssignableFrom<AiDotNetException>(ex);
     }
 
-    [Fact]
-    public void VectorLength_ZeroLength_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task VectorLength_ZeroLength_HandledCorrectly()
     {
         var ex = new VectorLengthMismatchException(0, 5, "EmptyCheck", "Validate");
 
@@ -314,8 +315,8 @@ public class ExceptionsDeepMathIntegrationTests
     // ForwardPassRequiredException Tests
     // ============================
 
-    [Fact]
-    public void ForwardPass_TwoArgConstructor_StoresProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_TwoArgConstructor_StoresProperties()
     {
         var ex = new ForwardPassRequiredException("hidden1", "Dense");
 
@@ -324,8 +325,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("backward pass", ex.Operation);
     }
 
-    [Fact]
-    public void ForwardPass_TwoArgConstructor_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_TwoArgConstructor_FormatMessage_HandVerified()
     {
         var ex = new ForwardPassRequiredException("layer1", "Conv2D");
 
@@ -333,8 +334,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void ForwardPass_ThreeArgConstructor_StoresProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_ThreeArgConstructor_StoresProperties()
     {
         var ex = new ForwardPassRequiredException("encoder", "Transformer", "attention computation");
 
@@ -343,8 +344,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("attention computation", ex.Operation);
     }
 
-    [Fact]
-    public void ForwardPass_ThreeArgConstructor_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_ThreeArgConstructor_FormatMessage_HandVerified()
     {
         var ex = new ForwardPassRequiredException("decoder", "LSTM", "gradient calc");
 
@@ -352,8 +353,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void ForwardPass_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardPass_InheritsAiDotNetException()
     {
         var ex = new ForwardPassRequiredException("test", "Dense");
 
@@ -364,8 +365,8 @@ public class ExceptionsDeepMathIntegrationTests
     // InvalidDataValueException Tests
     // ============================
 
-    [Fact]
-    public void InvalidDataValue_DefaultConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_DefaultConstructor_HasUnknownComponents()
     {
         var ex = new InvalidDataValueException();
 
@@ -373,8 +374,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidDataValue_MessageConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_MessageConstructor_HasUnknownComponents()
     {
         var ex = new InvalidDataValueException("NaN detected");
 
@@ -383,8 +384,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidDataValue_ContextConstructor_StoresProperties()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_ContextConstructor_StoresProperties()
     {
         var ex = new InvalidDataValueException("Infinity found", "Normalizer", "Scale");
 
@@ -392,8 +393,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Scale", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidDataValue_ContextConstructor_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_ContextConstructor_FormatMessage_HandVerified()
     {
         var ex = new InvalidDataValueException("NaN detected", "Loss", "Compute");
 
@@ -401,8 +402,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void InvalidDataValue_InnerExceptionConstructor_ChainsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_InnerExceptionConstructor_ChainsCorrectly()
     {
         var inner = new DivideByZeroException();
         var ex = new InvalidDataValueException("divide by zero", inner);
@@ -411,8 +412,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
-    public void InvalidDataValue_FullConstructor_ChainsInnerException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_FullConstructor_ChainsInnerException()
     {
         var inner = new OverflowException("overflow");
         var ex = new InvalidDataValueException("value overflow", "Activator", "ReLU", inner);
@@ -423,8 +424,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("Invalid data value in Activator during ReLU: value overflow", ex.Message);
     }
 
-    [Fact]
-    public void InvalidDataValue_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_InheritsAiDotNetException()
     {
         var ex = new InvalidDataValueException();
 
@@ -435,8 +436,8 @@ public class ExceptionsDeepMathIntegrationTests
     // InvalidInputDimensionException Tests
     // ============================
 
-    [Fact]
-    public void InvalidInputDimension_DefaultConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_DefaultConstructor_HasUnknownComponents()
     {
         var ex = new InvalidInputDimensionException();
 
@@ -444,8 +445,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidInputDimension_MessageConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_MessageConstructor_HasUnknownComponents()
     {
         var ex = new InvalidInputDimensionException("wrong dim");
 
@@ -453,8 +454,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
-    public void InvalidInputDimension_ContextConstructor_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_ContextConstructor_FormatMessage_HandVerified()
     {
         var ex = new InvalidInputDimensionException("Expected 3D input", "Conv1D", "Forward");
 
@@ -464,8 +465,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidInputDimension_FullConstructor_ChainsInnerException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_FullConstructor_ChainsInnerException()
     {
         var inner = new ArgumentException("bad");
         var ex = new InvalidInputDimensionException("2D required", "Pool", "Check", inner);
@@ -475,8 +476,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Check", ex.Operation);
     }
 
-    [Fact]
-    public void InvalidInputDimension_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_InheritsAiDotNetException()
     {
         var ex = new InvalidInputDimensionException();
 
@@ -487,8 +488,8 @@ public class ExceptionsDeepMathIntegrationTests
     // InvalidInputTypeException Tests
     // ============================
 
-    [Fact]
-    public void InvalidInputType_StoresExpectedAndActualTypes()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputType_StoresExpectedAndActualTypes()
     {
         var ex = new InvalidInputTypeException(InputType.TwoDimensional, InputType.OneDimensional, "CNN");
 
@@ -497,8 +498,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("CNN", ex.NetworkType);
     }
 
-    [Fact]
-    public void InvalidInputType_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputType_FormatMessage_HandVerified()
     {
         var ex = new InvalidInputTypeException(InputType.ThreeDimensional, InputType.OneDimensional, "RNN");
 
@@ -506,8 +507,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal(expectedMessage, ex.Message);
     }
 
-    [Fact]
-    public void InvalidInputType_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputType_InheritsAiDotNetException()
     {
         var ex = new InvalidInputTypeException(InputType.OneDimensional, InputType.TwoDimensional, "Test");
 
@@ -518,8 +519,8 @@ public class ExceptionsDeepMathIntegrationTests
     // SerializationException Tests
     // ============================
 
-    [Fact]
-    public void Serialization_DefaultConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_DefaultConstructor_HasUnknownComponents()
     {
         var ex = new AiDotNetSerializationException();
 
@@ -527,8 +528,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
-    public void Serialization_MessageConstructor_HasUnknownComponents()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_MessageConstructor_HasUnknownComponents()
     {
         var ex = new AiDotNetSerializationException("bad format");
 
@@ -536,8 +537,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
-    public void Serialization_ContextConstructor_FormatMessage_HandVerified()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_ContextConstructor_FormatMessage_HandVerified()
     {
         var ex = new AiDotNetSerializationException("invalid json", "ModelSaver", "Save");
 
@@ -547,8 +548,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Save", ex.Operation);
     }
 
-    [Fact]
-    public void Serialization_InnerExceptionConstructor_ChainsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_InnerExceptionConstructor_ChainsCorrectly()
     {
         var inner = new FormatException("bad");
         var ex = new AiDotNetSerializationException("parse error", inner);
@@ -557,8 +558,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
-    public void Serialization_FullConstructor_ChainsInnerException()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_FullConstructor_ChainsInnerException()
     {
         var inner = new IOException("disk full");
         var ex = new AiDotNetSerializationException("write failed", "Checkpoint", "Export", inner);
@@ -568,8 +569,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Equal("Export", ex.Operation);
     }
 
-    [Fact]
-    public void Serialization_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_InheritsAiDotNetException()
     {
         var ex = new AiDotNetSerializationException();
 
@@ -580,24 +581,24 @@ public class ExceptionsDeepMathIntegrationTests
     // ModelTrainingException Tests
     // ============================
 
-    [Fact]
-    public void ModelTraining_DefaultConstructor_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task ModelTraining_DefaultConstructor_IsValid()
     {
         var ex = new ModelTrainingException();
 
         Assert.IsType<ModelTrainingException>(ex);
     }
 
-    [Fact]
-    public void ModelTraining_MessageConstructor_StoresMessage()
+    [Fact(Timeout = 120000)]
+    public async Task ModelTraining_MessageConstructor_StoresMessage()
     {
         var ex = new ModelTrainingException("training diverged");
 
         Assert.Equal("training diverged", ex.Message);
     }
 
-    [Fact]
-    public void ModelTraining_InnerExceptionConstructor_ChainsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModelTraining_InnerExceptionConstructor_ChainsCorrectly()
     {
         var inner = new ArithmeticException("NaN loss");
         var ex = new ModelTrainingException("training failed", inner);
@@ -606,8 +607,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Same(inner, ex.InnerException);
     }
 
-    [Fact]
-    public void ModelTraining_InheritsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task ModelTraining_InheritsAiDotNetException()
     {
         var ex = new ModelTrainingException();
 
@@ -618,8 +619,8 @@ public class ExceptionsDeepMathIntegrationTests
     // Cross-Exception Hierarchy Tests
     // ============================
 
-    [Fact]
-    public void AllCustomExceptions_InheritFromAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task AllCustomExceptions_InheritFromAiDotNetException()
     {
         // Verify the entire exception hierarchy
         Assert.IsAssignableFrom<AiDotNetException>(new TensorShapeMismatchException());
@@ -634,8 +635,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.IsAssignableFrom<AiDotNetException>(new ModelTrainingException());
     }
 
-    [Fact]
-    public void AllCustomExceptions_AreCatchableAsException()
+    [Fact(Timeout = 120000)]
+    public async Task AllCustomExceptions_AreCatchableAsException()
     {
         // All should be catchable as System.Exception
         Exception caught;
@@ -650,8 +651,8 @@ public class ExceptionsDeepMathIntegrationTests
         catch (Exception ex) { caught = ex; Assert.IsType<VectorLengthMismatchException>(caught); }
     }
 
-    [Fact]
-    public void AllCustomExceptions_CatchableAsAiDotNetException()
+    [Fact(Timeout = 120000)]
+    public async Task AllCustomExceptions_CatchableAsAiDotNetException()
     {
         AiDotNetException caught;
 
@@ -669,8 +670,8 @@ public class ExceptionsDeepMathIntegrationTests
     // Exception Message Format Consistency Tests
     // ============================
 
-    [Fact]
-    public void ShapeMismatch_MessageContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ShapeMismatch_MessageContainsComponentAndOperation()
     {
         var ex = new TensorShapeMismatchException(new[] { 1 }, new[] { 2 }, "MyComp", "MyOp");
 
@@ -678,8 +679,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void RankMismatch_MessageContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task RankMismatch_MessageContainsComponentAndOperation()
     {
         var ex = new TensorRankException(3, 4, "MyComp", "MyOp");
 
@@ -687,8 +688,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void DimensionMismatch_MessageContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task DimensionMismatch_MessageContainsComponentAndOperation()
     {
         var ex = new TensorDimensionException(1, 10, 20, "MyComp", "MyOp");
 
@@ -696,8 +697,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void VectorLengthMismatch_MessageContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task VectorLengthMismatch_MessageContainsComponentAndOperation()
     {
         var ex = new VectorLengthMismatchException(5, 10, "MyComp", "MyOp");
 
@@ -705,8 +706,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void InvalidDataValue_ContextMessage_ContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidDataValue_ContextMessage_ContainsComponentAndOperation()
     {
         var ex = new InvalidDataValueException("msg", "MyComp", "MyOp");
 
@@ -714,8 +715,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void InvalidInputDimension_ContextMessage_ContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidInputDimension_ContextMessage_ContainsComponentAndOperation()
     {
         var ex = new InvalidInputDimensionException("msg", "MyComp", "MyOp");
 
@@ -723,8 +724,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("MyOp", ex.Message);
     }
 
-    [Fact]
-    public void SerializationException_ContextMessage_ContainsComponentAndOperation()
+    [Fact(Timeout = 120000)]
+    public async Task SerializationException_ContextMessage_ContainsComponentAndOperation()
     {
         var ex = new AiDotNetSerializationException("msg", "MyComp", "MyOp");
 
@@ -736,8 +737,8 @@ public class ExceptionsDeepMathIntegrationTests
     // Large Shape/Dimension Tests
     // ============================
 
-    [Fact]
-    public void TensorShapeMismatch_4DShape_FormatCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_4DShape_FormatCorrectly()
     {
         // Common 4D tensor shape: [batch, channels, height, width]
         var expected = new[] { 32, 3, 224, 224 };
@@ -749,8 +750,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("[32, 3, 112, 112]", ex.Message);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_HighRankShape_FormatCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_HighRankShape_FormatCorrectly()
     {
         // 6D tensor: [batch, time, heads, seq, depth, features]
         var expected = new[] { 8, 10, 12, 64, 32, 16 };
@@ -762,8 +763,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.Contains("[8, 10, 12, 64, 32, 8]", ex.Message);
     }
 
-    [Fact]
-    public void TensorRank_HighRank_FormatCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRank_HighRank_FormatCorrectly()
     {
         var ex = new TensorRankException(6, 4, "MultiHead", "Reshape");
 
@@ -775,8 +776,8 @@ public class ExceptionsDeepMathIntegrationTests
     // Inner Exception Chain Depth Tests
     // ============================
 
-    [Fact]
-    public void Exception_MultiLevelChain_PreservesAll()
+    [Fact(Timeout = 120000)]
+    public async Task Exception_MultiLevelChain_PreservesAll()
     {
         var root = new DivideByZeroException("root cause");
         var mid = new InvalidDataValueException("intermediate", root);
@@ -788,8 +789,8 @@ public class ExceptionsDeepMathIntegrationTests
         Assert.IsType<DivideByZeroException>(outer.InnerException?.InnerException);
     }
 
-    [Fact]
-    public void TensorShapeMismatch_DeepChain_PreservesAll()
+    [Fact(Timeout = 120000)]
+    public async Task TensorShapeMismatch_DeepChain_PreservesAll()
     {
         var root = new ArgumentException("root");
         var mid = new AiDotNetException("mid", root);

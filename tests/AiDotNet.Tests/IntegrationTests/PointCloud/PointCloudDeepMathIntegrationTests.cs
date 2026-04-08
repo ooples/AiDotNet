@@ -3,6 +3,7 @@ using AiDotNet.PointCloud.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PointCloud;
 
@@ -19,8 +20,8 @@ public class PointCloudDeepMathIntegrationTests
     // PointConvolutionLayer Forward Tests
     // ============================
 
-    [Fact]
-    public void PointConvolution_Forward_OutputShapeCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_Forward_OutputShapeCorrect()
     {
         // Input: [N=4, C_in=3], Output should be [N=4, C_out=8]
         var layer = new PointConvolutionLayer<double>(3, 8);
@@ -33,8 +34,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(8, output.Shape[1]); // output channels
     }
 
-    [Fact]
-    public void PointConvolution_Forward_IsAffineTransform()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_Forward_IsAffineTransform()
     {
         // Forward: output = input * W + b (matrix multiply + bias)
         // For a single point, output[j] = sum_i(input[i] * W[i,j]) + b[j]
@@ -62,8 +63,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(6.5, outArr[1], Tolerance);
     }
 
-    [Fact]
-    public void PointConvolution_Forward_MultiplePoints_IndependentPerPoint()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_Forward_MultiplePoints_IndependentPerPoint()
     {
         // Each point is processed independently - same transform applied to each
         var layer = new PointConvolutionLayer<double>(2, 2);
@@ -89,8 +90,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(5.0, outArr[3], Tolerance);
     }
 
-    [Fact]
-    public void PointConvolution_ParameterCount_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_ParameterCount_IsCorrect()
     {
         // Parameters = inputChannels * outputChannels + outputChannels (weights + biases)
         var layer = new PointConvolutionLayer<double>(3, 64);
@@ -111,8 +112,8 @@ public class PointCloudDeepMathIntegrationTests
     // He Initialization Tests
     // ============================
 
-    [Fact]
-    public void PointConvolution_HeInitialization_WeightsHaveCorrectVariance()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_HeInitialization_WeightsHaveCorrectVariance()
     {
         // He initialization: var(W) ≈ 2/inputDim
         int inputChannels = 100;
@@ -139,8 +140,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.True(variance < expectedVariance * 3.0, $"Variance {variance} too large vs expected {expectedVariance}");
     }
 
-    [Fact]
-    public void PointConvolution_HeInitialization_BiasesAreZero()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_HeInitialization_BiasesAreZero()
     {
         int inputChannels = 10;
         int outputChannels = 10;
@@ -160,8 +161,8 @@ public class PointCloudDeepMathIntegrationTests
     // MaxPoolingLayer Tests
     // ============================
 
-    [Fact]
-    public void MaxPooling_Forward_SelectsMaxPerChannel()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_Forward_SelectsMaxPerChannel()
     {
         // Input: [3 points, 2 features]
         // Point 0: [1, 5]
@@ -180,8 +181,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(5.0, outArr[1], Tolerance); // max of [5, 2, 4]
     }
 
-    [Fact]
-    public void MaxPooling_Forward_SinglePoint_ReturnsItself()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_Forward_SinglePoint_ReturnsItself()
     {
         var layer = new MaxPoolingLayer<double>(3);
         var input = new Tensor<double>(new[] { 7.0, -3.0, 1.5 }, [1, 3]);
@@ -194,8 +195,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(1.5, outArr[2], Tolerance);
     }
 
-    [Fact]
-    public void MaxPooling_Forward_AllSameValues_ReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_Forward_AllSameValues_ReturnsValue()
     {
         var layer = new MaxPoolingLayer<double>(2);
         var input = new Tensor<double>(new[] { 4.0, 4.0, 4.0, 4.0, 4.0, 4.0 }, [3, 2]);
@@ -207,8 +208,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(4.0, outArr[1], Tolerance);
     }
 
-    [Fact]
-    public void MaxPooling_IsPermutationInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_IsPermutationInvariant()
     {
         // Reordering points should give same result - this is critical for point clouds
         var layer1 = new MaxPoolingLayer<double>(2);
@@ -228,8 +229,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(arr1[1], arr2[1], Tolerance);
     }
 
-    [Fact]
-    public void MaxPooling_HasNoTrainableParameters()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_HasNoTrainableParameters()
     {
         var layer = new MaxPoolingLayer<double>(10);
         Assert.Equal(0, layer.ParameterCount);
@@ -241,30 +242,30 @@ public class PointCloudDeepMathIntegrationTests
     // TNetLayer Tests
     // ============================
 
-    [Fact]
-    public void TNet_Constructor_ValidatesPositiveDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_Constructor_ValidatesPositiveDimensions()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TNetLayer<double>(0, 3));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TNetLayer<double>(3, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TNetLayer<double>(-1, 3));
     }
 
-    [Fact]
-    public void TNet_Constructor_TransformDimMustNotExceedFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_Constructor_TransformDimMustNotExceedFeatures()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TNetLayer<double>(5, 3));
     }
 
-    [Fact]
-    public void TNet_Constructor_ValidDimensions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_Constructor_ValidDimensions_Succeeds()
     {
         // Should not throw
         var layer = new TNetLayer<double>(3, 3);
         Assert.True(layer.ParameterCount > 0);
     }
 
-    [Fact]
-    public void TNet_Forward_OutputShapeMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_Forward_OutputShapeMatchesInput()
     {
         var layer = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
         var input = CreateRandomTensor(10, 3, 42);
@@ -276,8 +277,8 @@ public class PointCloudDeepMathIntegrationTests
     }
 
 
-    [Fact]
-    public void TNet_SupportsTraining()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_SupportsTraining()
     {
         var layer = new TNetLayer<double>(3, 3, new[] { 16 }, new[] { 8 });
         Assert.True(layer.SupportsTraining);
@@ -287,8 +288,8 @@ public class PointCloudDeepMathIntegrationTests
     // PointCloudData Tests
     // ============================
 
-    [Fact]
-    public void PointCloudData_Constructor_SetsCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_Constructor_SetsCorrectDimensions()
     {
         // 5 points with 3 features (XYZ)
         var tensor = new Tensor<double>(new double[5 * 3], [5, 3]);
@@ -299,8 +300,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Null(data.Labels);
     }
 
-    [Fact]
-    public void PointCloudData_GetCoordinates_ExtractsFirst3Channels()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_GetCoordinates_ExtractsFirst3Channels()
     {
         // 2 points with 6 features (XYZ + RGB)
         var values = new double[]
@@ -322,8 +323,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(4.0, coordArr[3], Tolerance); // X of point 1
     }
 
-    [Fact]
-    public void PointCloudData_GetFeatures_ExtractsNonCoordinateChannels()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_GetFeatures_ExtractsNonCoordinateChannels()
     {
         var values = new double[]
         {
@@ -345,8 +346,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(40.0, featArr[3], Tolerance);
     }
 
-    [Fact]
-    public void PointCloudData_GetFeatures_OnlyXYZ_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_GetFeatures_OnlyXYZ_ReturnsNull()
     {
         var tensor = new Tensor<double>(new double[3 * 3], [3, 3]);
         var data = new PointCloudData<double>(tensor);
@@ -355,8 +356,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Null(features);
     }
 
-    [Fact]
-    public void PointCloudData_GetCoordinates_OnlyXYZ_ReturnsSameTensor()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_GetCoordinates_OnlyXYZ_ReturnsSameTensor()
     {
         var values = new double[] { 1.0, 2.0, 3.0 };
         var tensor = new Tensor<double>(values, [1, 3]);
@@ -368,8 +369,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(tensor, coords);
     }
 
-    [Fact]
-    public void PointCloudData_WithLabels_StoresLabels()
+    [Fact(Timeout = 120000)]
+    public async Task PointCloudData_WithLabels_StoresLabels()
     {
         var tensor = new Tensor<double>(new double[3 * 3], [3, 3]);
         var labels = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -386,8 +387,8 @@ public class PointCloudDeepMathIntegrationTests
     // PointConvolution Update Parameters Tests
     // ============================
 
-    [Fact]
-    public void PointConvolution_UpdateParameters_ChangesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_UpdateParameters_ChangesOutput()
     {
         var layer = new PointConvolutionLayer<double>(2, 2);
         var input = new Tensor<double>(new[] { 1.0, 1.0 }, [1, 2]);
@@ -416,8 +417,8 @@ public class PointCloudDeepMathIntegrationTests
     // Mathematical Property Tests
     // ============================
 
-    [Fact]
-    public void MaxPooling_OutputBound_ByInputMax()
+    [Fact(Timeout = 120000)]
+    public async Task MaxPooling_OutputBound_ByInputMax()
     {
         // The max pooled output for each channel is exactly the max of that channel
         var layer = new MaxPoolingLayer<double>(3);
@@ -437,8 +438,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(7.0, outArr[2], Tolerance);  // max of [0, 7, 3, -4]
     }
 
-    [Fact]
-    public void PointConvolution_ZeroInput_OutputEqualsBias()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_ZeroInput_OutputEqualsBias()
     {
         // When input is all zeros, output = 0 * W + b = b
         var layer = new PointConvolutionLayer<double>(3, 2);
@@ -459,8 +460,8 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(-1.5, outArr[1], Tolerance);
     }
 
-    [Fact]
-    public void PointConvolution_InvalidParameterLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PointConvolution_InvalidParameterLength_Throws()
     {
         var layer = new PointConvolutionLayer<double>(3, 2);
         var wrongParams = new Vector<double>(5); // should be 3*2+2 = 8
@@ -471,8 +472,8 @@ public class PointCloudDeepMathIntegrationTests
     // TNet Transform Matrix Property Tests
     // ============================
 
-    [Fact]
-    public void TNet_InitialTransform_IsNearIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task TNet_InitialTransform_IsNearIdentity()
     {
         // TNet adds identity to the learned matrix: transform = predicted + I
         // At initialization with small weights, transform ≈ I

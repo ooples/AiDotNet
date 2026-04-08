@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -83,8 +84,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 1: Forward produces finite, non-empty output
     // =========================================================================
 
-    [Fact]
-    public void Forward_ShouldProduceFiniteOutput()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldProduceFiniteOutput()
     {
         var layer = CreateLayer();
         var primary = CreateRandomTensor(PrimaryInputShape);
@@ -106,8 +107,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 2: Forward is deterministic
     // =========================================================================
 
-    [Fact]
-    public void Forward_ShouldBeDeterministic()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldBeDeterministic()
     {
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
@@ -127,8 +128,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 3: Different primary inputs produce different outputs
     // =========================================================================
 
-    [Fact]
-    public void Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
+    [Fact(Timeout = 30000)]
+    public async Task Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
     {
         if (!ExpectsDifferentOutputForDifferentInputs) return;
 
@@ -164,8 +165,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 5: Parameter count consistency
     // =========================================================================
 
-    [Fact]
-    public void Parameters_CountShouldMatchVector()
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_CountShouldMatchVector()
     {
         var layer = CreateLayer();
         int count = layer.ParameterCount;
@@ -182,8 +183,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 6: SetParameters → GetParameters roundtrip
     // =========================================================================
 
-    [Fact]
-    public void Parameters_SetGet_Roundtrip()
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_SetGet_Roundtrip()
     {
         var layer = CreateLayer();
         if (layer.ParameterCount == 0) return;
@@ -207,8 +208,8 @@ public abstract class DualInputLayerTestBase
     // INVARIANT 8: ResetState doesn't break the layer
     // =========================================================================
 
-    [Fact]
-    public void ResetState_ShouldNotBreakForward()
+    [Fact(Timeout = 30000)]
+    public async Task ResetState_ShouldNotBreakForward()
     {
         var layer = CreateLayer();
         var primary = CreateRandomTensor(PrimaryInputShape);

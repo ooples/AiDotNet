@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -40,8 +41,8 @@ public class ColumnTransformerIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_DefaultRemainder_IsDrop()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DefaultRemainder_IsDrop()
     {
         // Act
         var transformer = new ColumnTransformer<double>();
@@ -51,8 +52,8 @@ public class ColumnTransformerIntegrationTests
         Assert.False(transformer.IsFitted);
     }
 
-    [Fact]
-    public void Constructor_WithPassthrough_SetsRemainder()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithPassthrough_SetsRemainder()
     {
         // Act
         var transformer = new ColumnTransformer<double>(ColumnTransformerRemainder.Passthrough);
@@ -65,8 +66,8 @@ public class ColumnTransformerIntegrationTests
 
     #region Add Tests
 
-    [Fact]
-    public void Add_WithValidParameters_AddsTransformer()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithValidParameters_AddsTransformer()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -80,8 +81,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Contains("scaler", names);
     }
 
-    [Fact]
-    public void Add_WithoutName_AddsWithAutomaticName()
+    [Fact(Timeout = 120000)]
+    public async Task Add_WithoutName_AddsWithAutomaticName()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -95,8 +96,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal("transformer_0", names[0]);
     }
 
-    [Fact]
-    public void Add_NullTransformer_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_NullTransformer_ThrowsArgumentNullException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -105,8 +106,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentNullException>(() => transformer.Add("test", null!, new[] { 0 }));
     }
 
-    [Fact]
-    public void Add_NullColumns_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_NullColumns_ThrowsArgumentException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -116,8 +117,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Add("test", scaler, null!));
     }
 
-    [Fact]
-    public void Add_EmptyColumns_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_EmptyColumns_ThrowsArgumentException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -127,8 +128,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Add("test", scaler, Array.Empty<int>()));
     }
 
-    [Fact]
-    public void Add_EmptyName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Add_EmptyName_ThrowsArgumentException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -138,8 +139,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Add("", scaler, new[] { 0 }));
     }
 
-    [Fact]
-    public void Add_ReturnsThisForChaining()
+    [Fact(Timeout = 120000)]
+    public async Task Add_ReturnsThisForChaining()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -156,8 +157,8 @@ public class ColumnTransformerIntegrationTests
 
     #region Fit Tests
 
-    [Fact]
-    public void Fit_InvalidColumnIndex_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_InvalidColumnIndex_ThrowsArgumentException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -168,8 +169,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Fit(data));
     }
 
-    [Fact]
-    public void Fit_NegativeColumnIndex_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_NegativeColumnIndex_ThrowsArgumentException()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -180,8 +181,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Throws<ArgumentException>(() => transformer.Fit(data));
     }
 
-    [Fact]
-    public void Fit_SetsFittedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task Fit_SetsFittedToTrue()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -199,8 +200,8 @@ public class ColumnTransformerIntegrationTests
 
     #region Transform Tests
 
-    [Fact]
-    public void Transform_SingleColumn_TransformsOnlySpecifiedColumn()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_SingleColumn_TransformsOnlySpecifiedColumn()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -219,8 +220,8 @@ public class ColumnTransformerIntegrationTests
         Assert.True(Math.Abs(mean) < 1e-10);
     }
 
-    [Fact]
-    public void Transform_MultipleTransformers_AppliesEachToSpecifiedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_MultipleTransformers_AppliesEachToSpecifiedColumns()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -245,8 +246,8 @@ public class ColumnTransformerIntegrationTests
         Assert.True(Math.Abs(result[2, 1] - 1.0) < 1e-10); // max maps to 1
     }
 
-    [Fact]
-    public void Transform_WithPassthrough_IncludesUnspecifiedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_WithPassthrough_IncludesUnspecifiedColumns()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>(ColumnTransformerRemainder.Passthrough);
@@ -271,8 +272,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal(2000, result[1, 2]);
     }
 
-    [Fact]
-    public void Transform_WithDrop_ExcludesUnspecifiedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_WithDrop_ExcludesUnspecifiedColumns()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>(ColumnTransformerRemainder.Drop);
@@ -287,8 +288,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal(1, result.Columns);
     }
 
-    [Fact]
-    public void Transform_OverlappingColumns_ProcessesBothTransformers()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_OverlappingColumns_ProcessesBothTransformers()
     {
         // Arrange - Note: Overlapping columns may have undefined behavior
         // This test documents the current behavior
@@ -310,8 +311,8 @@ public class ColumnTransformerIntegrationTests
 
     #region GetTransformer Tests
 
-    [Fact]
-    public void GetTransformer_ExistingName_ReturnsTransformer()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformer_ExistingName_ReturnsTransformer()
     {
         // Arrange
         var columnTransformer = new ColumnTransformer<double>();
@@ -325,8 +326,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Same(scaler, retrieved);
     }
 
-    [Fact]
-    public void GetTransformer_NonExistingName_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetTransformer_NonExistingName_ReturnsNull()
     {
         // Arrange
         var columnTransformer = new ColumnTransformer<double>();
@@ -343,8 +344,8 @@ public class ColumnTransformerIntegrationTests
 
     #region GetFeatureNamesOut Tests
 
-    [Fact]
-    public void GetFeatureNamesOut_WithInputNames_ReturnsTransformedNames()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_WithInputNames_ReturnsTransformedNames()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -364,8 +365,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal("feature_b", outputNames[1]);
     }
 
-    [Fact]
-    public void GetFeatureNamesOut_WithPassthrough_IncludesRemainderNames()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_WithPassthrough_IncludesRemainderNames()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>(ColumnTransformerRemainder.Passthrough);
@@ -386,8 +387,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Contains("col_2", outputNames); // Passthrough
     }
 
-    [Fact]
-    public void GetFeatureNamesOut_BeforeFit_ReturnsEmptyArray()
+    [Fact(Timeout = 120000)]
+    public async Task GetFeatureNamesOut_BeforeFit_ReturnsEmptyArray()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -404,8 +405,8 @@ public class ColumnTransformerIntegrationTests
 
     #region SupportsInverseTransform Tests
 
-    [Fact]
-    public void SupportsInverseTransform_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsInverseTransform_ReturnsFalse()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -418,8 +419,8 @@ public class ColumnTransformerIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void FitTransform_AllColumnsSpecified_ProcessesAllColumns()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_AllColumnsSpecified_ProcessesAllColumns()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -435,8 +436,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void FitTransform_NonContiguousColumns_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_NonContiguousColumns_WorksCorrectly()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -452,8 +453,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void FitTransform_ReversedColumnOrder_MaintainsOrder()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_ReversedColumnOrder_MaintainsOrder()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -469,8 +470,8 @@ public class ColumnTransformerIntegrationTests
         Assert.Equal(2, result.Columns);
     }
 
-    [Fact]
-    public void Transform_NewDataWithDifferentRows_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Transform_NewDataWithDifferentRows_WorksCorrectly()
     {
         // Arrange
         var transformer = new ColumnTransformer<double>();
@@ -491,8 +492,8 @@ public class ColumnTransformerIntegrationTests
         Assert.True(Math.Abs(result[0, 0]) < 1e-10);
     }
 
-    [Fact]
-    public void FitTransform_DuplicateColumnInSingleTransformer_ProcessesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FitTransform_DuplicateColumnInSingleTransformer_ProcessesCorrectly()
     {
         // Arrange - Duplicate column index
         var transformer = new ColumnTransformer<double>();

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Tools;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
@@ -39,16 +40,16 @@ public class ToolRegistryTests
         }
     }
 
-    [Fact]
-    public void Constructor_CreatesEmptyRegistry()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CreatesEmptyRegistry()
     {
         var registry = new ToolRegistry();
 
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact]
-    public void RegisterTool_AddsTool()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterTool_AddsTool()
     {
         var registry = new ToolRegistry();
         var tool = new MockTool("test_tool");
@@ -59,16 +60,16 @@ public class ToolRegistryTests
         Assert.True(registry.HasTool("test_tool"));
     }
 
-    [Fact]
-    public void RegisterTool_WithNullTool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterTool_WithNullTool_ThrowsArgumentNullException()
     {
         var registry = new ToolRegistry();
 
         Assert.Throws<ArgumentNullException>(() => registry.RegisterTool(null!));
     }
 
-    [Fact]
-    public void RegisterTool_WithDuplicateName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterTool_WithDuplicateName_ThrowsArgumentException()
     {
         var registry = new ToolRegistry();
         var tool1 = new MockTool("duplicate");
@@ -79,8 +80,8 @@ public class ToolRegistryTests
         Assert.Throws<ArgumentException>(() => registry.RegisterTool(tool2));
     }
 
-    [Fact]
-    public void GetTool_ReturnsRegisteredTool()
+    [Fact(Timeout = 60000)]
+    public async Task GetTool_ReturnsRegisteredTool()
     {
         var registry = new ToolRegistry();
         var tool = new MockTool("test_tool");
@@ -92,8 +93,8 @@ public class ToolRegistryTests
         Assert.Equal("test_tool", retrieved.Name);
     }
 
-    [Fact]
-    public void GetTool_WithNonExistentTool_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetTool_WithNonExistentTool_ReturnsNull()
     {
         var registry = new ToolRegistry();
 
@@ -102,8 +103,8 @@ public class ToolRegistryTests
         Assert.Null(retrieved);
     }
 
-    [Fact]
-    public void UnregisterTool_RemovesTool()
+    [Fact(Timeout = 60000)]
+    public async Task UnregisterTool_RemovesTool()
     {
         var registry = new ToolRegistry();
         var tool = new MockTool("test_tool");
@@ -116,8 +117,8 @@ public class ToolRegistryTests
         Assert.False(registry.HasTool("test_tool"));
     }
 
-    [Fact]
-    public void UnregisterTool_WithNonExistentTool_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UnregisterTool_WithNonExistentTool_ReturnsFalse()
     {
         var registry = new ToolRegistry();
 
@@ -126,8 +127,8 @@ public class ToolRegistryTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void GetAllTools_ReturnsAllRegisteredTools()
+    [Fact(Timeout = 60000)]
+    public async Task GetAllTools_ReturnsAllRegisteredTools()
     {
         var registry = new ToolRegistry();
         registry.RegisterTool(new MockTool("tool1"));
@@ -139,8 +140,8 @@ public class ToolRegistryTests
         Assert.Equal(3, tools.Count);
     }
 
-    [Fact]
-    public void ExecuteTool_ExecutesRegisteredTool()
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteTool_ExecutesRegisteredTool()
     {
         var registry = new ToolRegistry();
         var tool = new MockTool("test_tool");
@@ -152,8 +153,8 @@ public class ToolRegistryTests
         Assert.Equal("Executed test_tool", result);
     }
 
-    [Fact]
-    public void ExecuteTool_WithNonExistentTool_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteTool_WithNonExistentTool_ThrowsArgumentException()
     {
         var registry = new ToolRegistry();
         var args = JObject.Parse("""{"input": "test"}""");
@@ -161,8 +162,8 @@ public class ToolRegistryTests
         Assert.Throws<ArgumentException>(() => registry.ExecuteTool("nonexistent", args));
     }
 
-    [Fact]
-    public void Clear_RemovesAllTools()
+    [Fact(Timeout = 60000)]
+    public async Task Clear_RemovesAllTools()
     {
         var registry = new ToolRegistry();
         registry.RegisterTool(new MockTool("tool1"));
@@ -173,8 +174,8 @@ public class ToolRegistryTests
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact]
-    public void GenerateToolsDescription_CreatesFormattedDescription()
+    [Fact(Timeout = 60000)]
+    public async Task GenerateToolsDescription_CreatesFormattedDescription()
     {
         var registry = new ToolRegistry();
         registry.RegisterTool(new MockTool("tool1"));

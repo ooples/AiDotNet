@@ -4,12 +4,13 @@ using AiDotNet.Serving.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public sealed class ModelStartupServiceHashVerificationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task StartAsync_ThrowsWhenSha256DoesNotMatch()
     {
         var baseDir = AppContext.BaseDirectory;

@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Metrics.Regression;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -18,8 +19,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MSE / RMSE / MAE: Hand-calculated values
     // ========================================================================
 
-    [Fact]
-    public void MSE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_HandCalculated_MatchesExpected()
     {
         // actuals: [1, 2, 3, 4, 5], predictions: [1.5, 2.5, 3.0, 3.5, 5.5]
         // errors:   0.5  0.5  0.0  0.5  0.5
@@ -33,8 +34,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
-    public void RMSE_EqualsSquareRootOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_EqualsSquareRootOfMSE()
     {
         var mseMetric = new MSEMetric<double>();
         var rmseMetric = new RMSEMetric<double>();
@@ -46,8 +47,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(mse), rmse, Tol);
     }
 
-    [Fact]
-    public void MAE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_HandCalculated_MatchesExpected()
     {
         // actuals: [10, 20, 30], predictions: [12, 18, 33]
         // |errors|: 2, 2, 3
@@ -60,8 +61,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(7.0 / 3.0, result, Tol);
     }
 
-    [Fact]
-    public void MSE_GreaterThanOrEqual_MAE_Squared()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_GreaterThanOrEqual_MAE_Squared()
     {
         // By Jensen's inequality: MSE >= MAE² (equality iff all errors are equal)
         var mseMetric = new MSEMetric<double>();
@@ -74,8 +75,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(mse >= mae * mae - 1e-10, $"MSE={mse} should be >= MAE²={mae * mae}");
     }
 
-    [Fact]
-    public void MSE_Equals_MAE_Squared_WhenAllErrorsEqual()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Equals_MAE_Squared_WhenAllErrorsEqual()
     {
         // When all |errors| are equal, MSE = MAE² exactly
         // actuals: [0, 0, 0], preds: [2, 2, 2] => all errors = 2
@@ -94,8 +95,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // R² and related metrics
     // ========================================================================
 
-    [Fact]
-    public void R2_PerfectPredictions_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task R2_PerfectPredictions_Equals1()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] actuals = [1, 2, 3, 4, 5];
@@ -105,8 +106,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void R2_MeanPredictions_Equals0()
+    [Fact(Timeout = 120000)]
+    public async Task R2_MeanPredictions_Equals0()
     {
         // If predictions are always the mean, SS_res = SS_tot => R² = 0
         var r2 = new R2ScoreMetric<double>();
@@ -118,8 +119,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void R2_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task R2_HandCalculated_MatchesExpected()
     {
         // actuals: [3, -0.5, 2, 7], preds: [2.5, 0.0, 2, 8]
         // mean_actual = (3 - 0.5 + 2 + 7) / 4 = 11.5 / 4 = 2.875
@@ -136,8 +137,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void R2_WorseThanMean_IsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task R2_WorseThanMean_IsNegative()
     {
         // Predictions that are worse than always predicting the mean should give R² < 0
         var r2 = new R2ScoreMetric<double>();
@@ -149,8 +150,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(result < 0, $"R²={result} should be negative for predictions worse than mean");
     }
 
-    [Fact]
-    public void RSE_Plus_R2_Equals_1()
+    [Fact(Timeout = 120000)]
+    public async Task RSE_Plus_R2_Equals_1()
     {
         // RSE = 1 - R² by definition (RSE = SS_res / SS_tot, R² = 1 - SS_res / SS_tot)
         var r2 = new R2ScoreMetric<double>();
@@ -163,8 +164,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, r2Val + rseVal, Tol);
     }
 
-    [Fact]
-    public void NMSE_Equals_1MinusR2()
+    [Fact(Timeout = 120000)]
+    public async Task NMSE_Equals_1MinusR2()
     {
         // NMSE = MSE / Var(y) = (SS_res/n) / (SS_tot/n) = SS_res/SS_tot = 1 - R²
         var r2 = new R2ScoreMetric<double>();
@@ -177,8 +178,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0 - r2Val, nmseVal, Tol);
     }
 
-    [Fact]
-    public void AdjustedR2_LessThanOrEqual_R2()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_LessThanOrEqual_R2()
     {
         // Adjusted R² penalizes model complexity, so AdjR² <= R² for p >= 1
         var r2 = new R2ScoreMetric<double>();
@@ -191,8 +192,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(adjR2Val <= r2Val + 1e-10, $"AdjR²={adjR2Val} should be <= R²={r2Val}");
     }
 
-    [Fact]
-    public void AdjustedR2_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedR2_HandCalculated_MatchesExpected()
     {
         // With 10 samples, 2 predictors, R² = 0.95
         // AdjR² = 1 - (1-0.95)*(10-1)/(10-2-1) = 1 - 0.05*9/7 = 1 - 0.06428... = 0.93571...
@@ -220,8 +221,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Pearson and Spearman Correlation
     // ========================================================================
 
-    [Fact]
-    public void Pearson_PerfectLinear_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task Pearson_PerfectLinear_Equals1()
     {
         // Perfect positive linear: y = 2x + 1
         var pearson = new PearsonCorrelationMetric<double>();
@@ -232,8 +233,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void Pearson_PerfectNegativeLinear_EqualsMinus1()
+    [Fact(Timeout = 120000)]
+    public async Task Pearson_PerfectNegativeLinear_EqualsMinus1()
     {
         var pearson = new PearsonCorrelationMetric<double>();
         double[] actuals = [1, 2, 3, 4, 5];
@@ -243,8 +244,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
-    public void Pearson_Squared_Equals_R2_ForLinearFit()
+    [Fact(Timeout = 120000)]
+    public async Task Pearson_Squared_Equals_R2_ForLinearFit()
     {
         // For unbiased linear predictions: R² = r² (Pearson squared)
         // preds = a*actuals + b => R² = r²
@@ -264,8 +265,8 @@ public class RegressionMetricsDeepMathIntegrationTests
             $"r²={r * r} should be >= R²={r2Val} for any predictions");
     }
 
-    [Fact]
-    public void Pearson_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task Pearson_HandCalculated_MatchesExpected()
     {
         // preds: [1, 2, 3], actuals: [2, 4, 5]
         // mean_pred = 2, mean_actual = 11/3 = 3.666...
@@ -284,8 +285,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void Spearman_InvariantToMonotonicTransform()
+    [Fact(Timeout = 120000)]
+    public async Task Spearman_InvariantToMonotonicTransform()
     {
         // Spearman correlation should be identical before and after monotonic transform
         var spearman = new SpearmanCorrelationMetric<double>();
@@ -300,8 +301,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(rho1, rho2, Tol);
     }
 
-    [Fact]
-    public void Spearman_PerfectMonotonic_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task Spearman_PerfectMonotonic_Equals1()
     {
         // Even with non-linear relationship, if order is preserved, rho = 1
         var spearman = new SpearmanCorrelationMetric<double>();
@@ -312,8 +313,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void Spearman_HandCalculated_WithTies()
+    [Fact(Timeout = 120000)]
+    public async Task Spearman_HandCalculated_WithTies()
     {
         // Test tie handling: actuals have ties
         // actuals: [1, 2, 2, 4], preds: [10, 20, 30, 40]
@@ -339,8 +340,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Huber Loss
     // ========================================================================
 
-    [Fact]
-    public void HuberLoss_SmallErrors_EqualsMSEHalved()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_SmallErrors_EqualsMSEHalved()
     {
         // When all |errors| <= delta, Huber = 0.5 * MSE
         var huber = new HuberLossMetric<double>(delta: 10.0); // large delta
@@ -353,8 +354,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * mseVal, huberVal, Tol);
     }
 
-    [Fact]
-    public void HuberLoss_HandCalculated_MixedRegions()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_HandCalculated_MixedRegions()
     {
         // delta = 1.0
         // actuals: [0, 0, 0], preds: [0.5, 1.5, 3.0]
@@ -371,8 +372,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(3.625 / 3.0, result, Tol);
     }
 
-    [Fact]
-    public void HuberLoss_LargeErrors_ApproachesMAETimesDelta()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_LargeErrors_ApproachesMAETimesDelta()
     {
         // For very large errors >> delta, Huber(e) ≈ delta * (|e| - 0.5*delta)
         // When delta is small and errors are huge: Huber ≈ delta * |e| ≈ delta * MAE
@@ -389,8 +390,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expectedApprox, huberVal, 1e-6);
     }
 
-    [Fact]
-    public void HuberLoss_ContinuousAtDelta()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_ContinuousAtDelta()
     {
         // Huber should be continuous at the transition point
         // At |error| = delta: both formulas give 0.5 * delta²
@@ -411,8 +412,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Quantile Loss
     // ========================================================================
 
-    [Fact]
-    public void QuantileLoss_AtHalf_EqualsMAEHalved()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileLoss_AtHalf_EqualsMAEHalved()
     {
         // At τ=0.5: loss = 0.5*|error| for all errors => QuantileLoss = 0.5 * MAE
         var quantile = new QuantileLossMetric<double>(quantile: 0.5);
@@ -425,8 +426,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * maeVal, qLoss, Tol);
     }
 
-    [Fact]
-    public void QuantileLoss_HandCalculated_Asymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileLoss_HandCalculated_Asymmetric()
     {
         // τ = 0.9
         // actuals: [10, 10, 10], preds: [8, 12, 10]
@@ -443,8 +444,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tol);
     }
 
-    [Fact]
-    public void QuantileLoss_Symmetry_TauAndOneMinusTau()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileLoss_Symmetry_TauAndOneMinusTau()
     {
         // QuantileLoss(τ, preds, actuals) = QuantileLoss(1-τ, actuals, preds) -- swapped
         // More precisely: for a single point:
@@ -484,8 +485,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Log-Cosh Loss
     // ========================================================================
 
-    [Fact]
-    public void LogCosh_SmallErrors_ApproximatesMSEHalved()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_SmallErrors_ApproximatesMSEHalved()
     {
         // For small x: log(cosh(x)) ≈ x²/2
         // So LogCosh ≈ mean(x²/2) = MSE/2
@@ -500,8 +501,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * mseVal, logCoshVal, 1e-10);
     }
 
-    [Fact]
-    public void LogCosh_LargeErrors_ApproachesMAEMinusLog2()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_LargeErrors_ApproachesMAEMinusLog2()
     {
         // For large |x|: log(cosh(x)) ≈ |x| - log(2)
         // So LogCosh ≈ MAE - log(2)
@@ -515,8 +516,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(maeVal - Math.Log(2), logCoshVal, 1e-6);
     }
 
-    [Fact]
-    public void LogCosh_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_HandCalculated_MatchesExpected()
     {
         // actuals: [0], preds: [1]
         // log(cosh(1)) = log((e+e^-1)/2) = log(e+e^-1) - log(2)
@@ -529,8 +530,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void LogCosh_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_AlwaysNonNegative()
     {
         // log(cosh(x)) >= 0 since cosh(x) >= 1
         var logCosh = new LogCoshLossMetric<double>();
@@ -545,8 +546,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Mean Bias Error
     // ========================================================================
 
-    [Fact]
-    public void MBE_HandCalculated_OverPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task MBE_HandCalculated_OverPrediction()
     {
         // MBE = mean(pred - actual) = mean of signed errors
         // preds: [12, 22, 32], actuals: [10, 20, 30]
@@ -559,8 +560,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
-    public void MBE_BalancedErrors_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MBE_BalancedErrors_IsZero()
     {
         // If over and under-predictions cancel: MBE = 0
         var mbe = new MeanBiasErrorMetric<double>();
@@ -571,8 +572,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void MBE_CanBeNegative_UnderPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task MBE_CanBeNegative_UnderPrediction()
     {
         var mbe = new MeanBiasErrorMetric<double>();
         double[] preds = [8, 18, 28];
@@ -586,8 +587,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Explained Variance
     // ========================================================================
 
-    [Fact]
-    public void ExplainedVariance_PerfectPredictions_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task ExplainedVariance_PerfectPredictions_Equals1()
     {
         var ev = new ExplainedVarianceMetric<double>();
         double[] preds = [1, 2, 3, 4, 5];
@@ -597,8 +598,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void ExplainedVariance_WithBias_DiffersFromR2()
+    [Fact(Timeout = 120000)]
+    public async Task ExplainedVariance_WithBias_DiffersFromR2()
     {
         // EV = 1 - Var(residuals)/Var(actuals)
         // R² = 1 - SS_res/SS_tot
@@ -620,8 +621,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(r2Val < 0, $"R²={r2Val} should be negative for biased predictions");
     }
 
-    [Fact]
-    public void ExplainedVariance_EqualsR2_WhenUnbiased()
+    [Fact(Timeout = 120000)]
+    public async Task ExplainedVariance_EqualsR2_WhenUnbiased()
     {
         // When mean(residuals) = 0, EV = R²
         var ev = new ExplainedVarianceMetric<double>();
@@ -640,8 +641,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MAPE, sMAPE, wMAPE
     // ========================================================================
 
-    [Fact]
-    public void MAPE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_HandCalculated_MatchesExpected()
     {
         // actuals: [100, 200, 300], preds: [110, 190, 330]
         // |errors|/|actuals|: 10/100=0.1, 10/200=0.05, 30/300=0.1
@@ -654,8 +655,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(100.0 * 0.25 / 3.0, result, Tol);
     }
 
-    [Fact]
-    public void SMAPE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_HandCalculated_MatchesExpected()
     {
         // actuals: [100, 200], preds: [110, 180]
         // |100-110| / ((100+110)/2) = 10/105 = 0.0952380...
@@ -670,8 +671,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void SMAPE_IsSymmetric_SwappingPredsAndActuals()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_IsSymmetric_SwappingPredsAndActuals()
     {
         // sMAPE should be the same when swapping predictions and actuals
         // because the formula uses |y-yhat| / ((|y|+|yhat|)/2)
@@ -684,8 +685,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(smape1, smape2, Tol);
     }
 
-    [Fact]
-    public void WMAPE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task WMAPE_HandCalculated_MatchesExpected()
     {
         // wMAPE = 100 * Σ|y-yhat| / Σ|y|
         // actuals: [100, 200, 300], preds: [110, 190, 330]
@@ -700,8 +701,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(100.0 * 50.0 / 600.0, result, Tol);
     }
 
-    [Fact]
-    public void WMAPE_LargeActuals_WeighMoreHeavily()
+    [Fact(Timeout = 120000)]
+    public async Task WMAPE_LargeActuals_WeighMoreHeavily()
     {
         // The large actual value dominates wMAPE
         var wmape = new WeightedMAPEMetric<double>();
@@ -725,8 +726,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Relative Absolute Error
     // ========================================================================
 
-    [Fact]
-    public void RAE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task RAE_HandCalculated_MatchesExpected()
     {
         // actuals: [1, 2, 3, 4, 5], preds: [1.5, 2.5, 3.5, 4.5, 5.5]
         // mean = 3
@@ -745,8 +746,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MSLE (Mean Squared Log Error)
     // ========================================================================
 
-    [Fact]
-    public void MSLE_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task MSLE_HandCalculated_MatchesExpected()
     {
         // actuals: [3, 5, 2.5], preds: [2.5, 5, 4]
         // MSLE = mean[ (log(1+y) - log(1+yhat))² ]
@@ -763,8 +764,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void MSLE_PenalizesUnderPredictionMoreThanOver()
+    [Fact(Timeout = 120000)]
+    public async Task MSLE_PenalizesUnderPredictionMoreThanOver()
     {
         // MSLE uses log, so under-prediction of same absolute size is penalized more
         // actual=100, pred=50 (under by 50): (log(101)-log(51))²
@@ -782,8 +783,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Poisson Deviance
     // ========================================================================
 
-    [Fact]
-    public void PoissonDeviance_PerfectPredictions_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonDeviance_PerfectPredictions_IsZero()
     {
         // When y = mu: deviance = 2*(y*log(1) - 0) = 0
         var poisson = new PoissonDevianceMetric<double>();
@@ -794,8 +795,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void PoissonDeviance_HandCalculated_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonDeviance_HandCalculated_MatchesExpected()
     {
         // actual=5, pred=3: 2*(5*log(5/3) - (5-3)) = 2*(5*0.5108... - 2) = 2*(2.5541...-2) = 2*0.5541 = 1.1082...
         var poisson = new PoissonDevianceMetric<double>();
@@ -807,8 +808,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void PoissonDeviance_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonDeviance_AlwaysNonNegative()
     {
         // Poisson deviance >= 0, with equality at y = mu
         var poisson = new PoissonDevianceMetric<double>();
@@ -823,8 +824,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Tweedie Loss
     // ========================================================================
 
-    [Fact]
-    public void TweedieLoss_Power0_EqualsMSE()
+    [Fact(Timeout = 120000)]
+    public async Task TweedieLoss_Power0_EqualsMSE()
     {
         // Tweedie with p=0 should equal MSE (normal distribution)
         var tweedie = new TweedieLossMetric<double>(power: 0);
@@ -837,8 +838,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mseVal, tweedieVal, Tol);
     }
 
-    [Fact]
-    public void TweedieLoss_Power1_EqualsPoissonDeviance()
+    [Fact(Timeout = 120000)]
+    public async Task TweedieLoss_Power1_EqualsPoissonDeviance()
     {
         // Tweedie with p=1 should equal Poisson deviance
         var tweedie = new TweedieLossMetric<double>(power: 1);
@@ -851,8 +852,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(poissonVal, tweedieVal, Tol);
     }
 
-    [Fact]
-    public void TweedieLoss_Power2_EqualsGammaDeviance()
+    [Fact(Timeout = 120000)]
+    public async Task TweedieLoss_Power2_EqualsGammaDeviance()
     {
         // Tweedie p=2: Gamma deviance = 2*(-log(y/mu) + (y-mu)/mu)
         var tweedie = new TweedieLossMetric<double>(power: 2);
@@ -872,8 +873,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Cross-metric consistency: comprehensive data set
     // ========================================================================
 
-    [Fact]
-    public void AllMetrics_PerfectPredictions_OptimalValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_PerfectPredictions_OptimalValues()
     {
         // For perfect predictions, all loss metrics should be 0, all score metrics should be 1
         double[] actuals = [1, 2, 3, 4, 5];
@@ -902,8 +903,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, NumOps.ToDouble(new NormalizedMSEMetric<double>().Compute(preds, actuals)), Tol);
     }
 
-    [Fact]
-    public void RMSE_GreaterThanOrEqual_MAE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_GreaterThanOrEqual_MAE()
     {
         // By Cauchy-Schwarz: RMSE >= MAE, with equality iff all |errors| are equal
         var rmse = new RMSEMetric<double>();
@@ -921,8 +922,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Edge cases
     // ========================================================================
 
-    [Fact]
-    public void Metrics_SingleElement_HandleCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Metrics_SingleElement_HandleCorrectly()
     {
         double[] preds = [3.0];
         double[] actuals = [2.0];
@@ -937,8 +938,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, NumOps.ToDouble(new MeanBiasErrorMetric<double>().Compute(preds, actuals)), Tol);
     }
 
-    [Fact]
-    public void Metrics_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Metrics_EmptyInput_ReturnsZero()
     {
         double[] empty = [];
 
@@ -948,8 +949,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, NumOps.ToDouble(new R2ScoreMetric<double>().Compute(empty, empty)), Tol);
     }
 
-    [Fact]
-    public void Metrics_LengthMismatch_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Metrics_LengthMismatch_ThrowsArgumentException()
     {
         double[] preds = [1, 2, 3];
         double[] actuals = [1, 2];
@@ -960,8 +961,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new PearsonCorrelationMetric<double>().Compute(preds, actuals));
     }
 
-    [Fact]
-    public void R2_ConstantActuals_PerfectPrediction_Returns1()
+    [Fact(Timeout = 120000)]
+    public async Task R2_ConstantActuals_PerfectPrediction_Returns1()
     {
         var r2 = new R2ScoreMetric<double>();
         double[] actuals = [5, 5, 5, 5, 5];
@@ -971,8 +972,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void R2_ConstantActuals_ImperfectPrediction_Returns0()
+    [Fact(Timeout = 120000)]
+    public async Task R2_ConstantActuals_ImperfectPrediction_Returns0()
     {
         // When SS_tot = 0 and SS_res > 0, R² should be 0 per implementation
         var r2 = new R2ScoreMetric<double>();
@@ -983,8 +984,8 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void Pearson_ConstantInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Pearson_ConstantInput_ReturnsZero()
     {
         // Pearson is undefined for constant data; implementation returns 0
         var pearson = new PearsonCorrelationMetric<double>();
@@ -999,8 +1000,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Float type tests
     // ========================================================================
 
-    [Fact]
-    public void MSE_Float_MatchesDoubleWithReasonablePrecision()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Float_MatchesDoubleWithReasonablePrecision()
     {
         var mseFloat = new MSEMetric<float>();
         var mseDouble = new MSEMetric<double>();
@@ -1020,8 +1021,8 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Bootstrap CI validation
     // ========================================================================
 
-    [Fact]
-    public void MSE_BootstrapCI_ContainsPointEstimate()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_BootstrapCI_ContainsPointEstimate()
     {
         var mse = new MSEMetric<double>();
         double[] preds = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11];

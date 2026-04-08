@@ -7,6 +7,7 @@ using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.Sandboxing;
 
@@ -16,7 +17,7 @@ public sealed class DockerProgramSandboxExecutorTests
     private const string CompileEndMarker = "AIDOTNET_COMPILE_END";
     private const string RuntimeBeginMarker = "AIDOTNET_RUNTIME_BEGIN";
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_SourceRequired_ReturnsError()
     {
         var executor = CreateExecutor(new FakeDockerRunner(_ => new DockerCommandResult { ExitCode = 0, StdOut = string.Empty, StdErr = string.Empty }));
@@ -30,7 +31,7 @@ public sealed class DockerProgramSandboxExecutorTests
         Assert.Equal(ProgramExecuteErrorCode.SourceCodeRequired, response.ErrorCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_CompileSuccess_ExtractsStdOutAndCompilationInfo()
     {
         var docker = new FakeDockerRunner(_ => new DockerCommandResult
@@ -54,7 +55,7 @@ public sealed class DockerProgramSandboxExecutorTests
         Assert.NotEmpty(docker.Arguments);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteAsync_CompileFailure_ReturnsCompilationFailed()
     {
         var docker = new FakeDockerRunner(_ => new DockerCommandResult

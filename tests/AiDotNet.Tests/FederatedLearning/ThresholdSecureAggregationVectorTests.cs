@@ -1,18 +1,19 @@
 using AiDotNet.FederatedLearning.Privacy;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class ThresholdSecureAggregationVectorTests
 {
-    [Fact]
-    public void Constructor_ThrowsForNonPositiveParameterCount()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ThrowsForNonPositiveParameterCount()
     {
         Assert.Throws<ArgumentException>(() => new ThresholdSecureAggregationVector<double>(parameterCount: 0));
     }
 
-    [Fact]
-    public void InitializeRound_FiltersInvalidClientIds_AndComputesDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task InitializeRound_FiltersInvalidClientIds_AndComputesDefaults()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 2, randomSeed: 123);
         secureAggregation.InitializeRound(new List<int> { -1, 2, 2, 0, 1 });
@@ -21,8 +22,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Equal(2, secureAggregation.ReconstructionThreshold);
     }
 
-    [Fact]
-    public void MasksCancel_WithFullParticipation()
+    [Fact(Timeout = 60000)]
+    public async Task MasksCancel_WithFullParticipation()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 2, randomSeed: 123);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2 });
@@ -44,8 +45,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Equal(12.0, sum[1], precision: 12);
     }
 
-    [Fact]
-    public void AggregateSumSecurely_Succeeds_WithUploadDropout()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateSumSecurely_Succeeds_WithUploadDropout()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 1, randomSeed: 5);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2, 3 });
@@ -62,8 +63,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Equal(6.0, sum[0], precision: 12);
     }
 
-    [Fact]
-    public void AggregateSumSecurely_Succeeds_WithUnmaskingDropout_ByReconstructingSelfMask()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateSumSecurely_Succeeds_WithUnmaskingDropout_ByReconstructingSelfMask()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 1, randomSeed: 7);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2 });
@@ -80,8 +81,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Equal(6.0, sum[0], precision: 12);
     }
 
-    [Fact]
-    public void AggregateSumSecurely_Throws_WhenUnmaskersBelowThreshold()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateSumSecurely_Throws_WhenUnmaskersBelowThreshold()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 1, randomSeed: 11);
         secureAggregation.InitializeRound(new List<int> { 0, 1, 2 }, minimumUploaderCount: 3, reconstructionThreshold: 3);
@@ -99,8 +100,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Contains("unmasking", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void AggregateSecurely_ReturnsWeightedAverage()
+    [Fact(Timeout = 60000)]
+    public async Task AggregateSecurely_ReturnsWeightedAverage()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 2, randomSeed: 1);
         secureAggregation.InitializeRound(new List<int> { 0, 1 });
@@ -121,8 +122,8 @@ public class ThresholdSecureAggregationVectorTests
         Assert.Equal(13.0 / 3.0, averaged[1], precision: 12);
     }
 
-    [Fact]
-    public void Dispose_MakesInstanceUnusable()
+    [Fact(Timeout = 60000)]
+    public async Task Dispose_MakesInstanceUnusable()
     {
         var secureAggregation = new ThresholdSecureAggregationVector<double>(parameterCount: 1, randomSeed: 7);
         secureAggregation.Dispose();

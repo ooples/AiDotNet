@@ -2,6 +2,7 @@ using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Benchmarking;
 
@@ -13,8 +14,8 @@ public class BenchmarkingIntegrationTests
 {
     #region BenchmarkSuiteRegistry Tests
 
-    [Fact]
-    public void BenchmarkSuiteRegistry_GetAvailableSuites_ReturnsAllRegisteredSuites()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteRegistry_GetAvailableSuites_ReturnsAllRegisteredSuites()
     {
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -33,8 +34,8 @@ public class BenchmarkingIntegrationTests
         Assert.Contains(suites, s => s.Suite == BenchmarkSuite.LEAF);
     }
 
-    [Fact]
-    public void BenchmarkSuiteRegistry_GetAvailableSuites_SuitesAreOrderedByKindThenName()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteRegistry_GetAvailableSuites_SuitesAreOrderedByKindThenName()
     {
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -61,8 +62,8 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
-    public void BenchmarkSuiteRegistry_GetAvailableSuites_AllDescriptorsHaveRequiredFields()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteRegistry_GetAvailableSuites_AllDescriptorsHaveRequiredFields()
     {
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -143,8 +144,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(expectedName, name);
     }
 
-    [Fact]
-    public void BenchmarkSuiteRegistry_GetSuiteKind_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteRegistry_GetSuiteKind_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var invalidSuite = (BenchmarkSuite)9999;
@@ -153,8 +154,8 @@ public class BenchmarkingIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => BenchmarkSuiteRegistry.GetSuiteKind(invalidSuite));
     }
 
-    [Fact]
-    public void BenchmarkSuiteRegistry_GetDisplayName_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteRegistry_GetDisplayName_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var invalidSuite = (BenchmarkSuite)9999;
@@ -167,8 +168,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkReport Tests
 
-    [Fact]
-    public void BenchmarkReport_TotalDuration_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_TotalDuration_CalculatesCorrectly()
     {
         // Arrange
         var startTime = DateTimeOffset.UtcNow;
@@ -186,8 +187,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(TimeSpan.FromMinutes(5), duration);
     }
 
-    [Fact]
-    public void BenchmarkReport_OverallStatus_WithNoSuites_ReturnsSkipped()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_OverallStatus_WithNoSuites_ReturnsSkipped()
     {
         // Arrange
         var report = new BenchmarkReport();
@@ -200,8 +201,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Skipped, status);
     }
 
-    [Fact]
-    public void BenchmarkReport_OverallStatus_WithAllSucceeded_ReturnsSucceeded()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_OverallStatus_WithAllSucceeded_ReturnsSucceeded()
     {
         // Arrange
         var suiteReports = new[]
@@ -220,8 +221,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Succeeded, status);
     }
 
-    [Fact]
-    public void BenchmarkReport_OverallStatus_WithOneFailed_ReturnsFailed()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_OverallStatus_WithOneFailed_ReturnsFailed()
     {
         // Arrange
         var suiteReports = new[]
@@ -240,8 +241,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Failed, status);
     }
 
-    [Fact]
-    public void BenchmarkReport_OverallStatus_WithAllSkipped_ReturnsSkipped()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_OverallStatus_WithAllSkipped_ReturnsSkipped()
     {
         // Arrange
         var suiteReports = new[]
@@ -260,8 +261,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Skipped, status);
     }
 
-    [Fact]
-    public void BenchmarkReport_OverallStatus_WithMixedSuccessAndSkipped_ReturnsSucceeded()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_OverallStatus_WithMixedSuccessAndSkipped_ReturnsSucceeded()
     {
         // Arrange
         var suiteReports = new[]
@@ -284,8 +285,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteReport Tests
 
-    [Fact]
-    public void BenchmarkSuiteReport_Duration_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteReport_Duration_CalculatesCorrectly()
     {
         // Arrange
         var startTime = DateTimeOffset.UtcNow;
@@ -302,8 +303,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(TimeSpan.FromSeconds(30), duration);
     }
 
-    [Fact]
-    public void BenchmarkSuiteReport_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteReport_DefaultValues_AreCorrect()
     {
         // Act
         var report = new BenchmarkSuiteReport();
@@ -316,8 +317,8 @@ public class BenchmarkingIntegrationTests
         Assert.Null(report.DataSelection);
     }
 
-    [Fact]
-    public void BenchmarkSuiteReport_WithMetrics_StoresMetricsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteReport_WithMetrics_StoresMetricsCorrectly()
     {
         // Arrange
         var metrics = new[]
@@ -335,8 +336,8 @@ public class BenchmarkingIntegrationTests
         Assert.Contains(report.Metrics, m => m.Metric == BenchmarkMetric.TotalEvaluated && Math.Abs(m.Value - 100) < 0.001);
     }
 
-    [Fact]
-    public void BenchmarkSuiteReport_WithCategoryAccuracies_StoresCategoriesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteReport_WithCategoryAccuracies_StoresCategoriesCorrectly()
     {
         // Arrange
         var categories = new[]
@@ -353,8 +354,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(2, report.CategoryAccuracies.Count);
     }
 
-    [Fact]
-    public void BenchmarkSuiteReport_WithDataSelection_StoresDataSelectionCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteReport_WithDataSelection_StoresDataSelectionCorrectly()
     {
         // Arrange
         var dataSelection = new BenchmarkDataSelectionSummary
@@ -409,8 +410,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteDescriptor Tests
 
-    [Fact]
-    public void BenchmarkSuiteDescriptor_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteDescriptor_DefaultValues_AreCorrect()
     {
         // Act
         var descriptor = new BenchmarkSuiteDescriptor();
@@ -420,8 +421,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(string.Empty, descriptor.Description);
     }
 
-    [Fact]
-    public void BenchmarkSuiteDescriptor_AllDescriptorsInRegistry_HaveValidProperties()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteDescriptor_AllDescriptorsInRegistry_HaveValidProperties()
     {
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -447,8 +448,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkCategoryResult Tests
 
-    [Fact]
-    public void BenchmarkCategoryResult_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkCategoryResult_DefaultValues_AreCorrect()
     {
         // Act
         var result = new BenchmarkCategoryResult();
@@ -473,8 +474,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(accuracy, result.Accuracy, precision: 5);
     }
 
-    [Fact]
-    public void BenchmarkCategoryResult_AccuracyBoundaries_HandlesEdgeCases()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkCategoryResult_AccuracyBoundaries_HandlesEdgeCases()
     {
         // Arrange & Act
         var resultZero = new BenchmarkCategoryResult { Category = "Test", Accuracy = 0.0 };
@@ -489,8 +490,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkDataSelectionSummary Tests
 
-    [Fact]
-    public void BenchmarkDataSelectionSummary_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkDataSelectionSummary_DefaultValues_AreCorrect()
     {
         // Act
         var summary = new BenchmarkDataSelectionSummary();
@@ -505,8 +506,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(0, summary.MaxSamplesPerUser);
     }
 
-    [Fact]
-    public void BenchmarkDataSelectionSummary_AllProperties_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkDataSelectionSummary_AllProperties_CanBeSet()
     {
         // Arrange & Act
         var summary = new BenchmarkDataSelectionSummary
@@ -534,8 +535,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuite Enum Coverage Tests
 
-    [Fact]
-    public void BenchmarkSuite_AllReasoningSuites_AreRegistered()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuite_AllReasoningSuites_AreRegistered()
     {
         // Arrange
         var reasoningSuites = new[]
@@ -568,8 +569,8 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
-    public void BenchmarkSuite_AllDatasetSuites_AreRegistered()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuite_AllDatasetSuites_AreRegistered()
     {
         // Arrange
         var datasetSuites = new[]
@@ -597,8 +598,8 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
-    public void BenchmarkSuite_TotalRegisteredCount_MatchesExpected()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuite_TotalRegisteredCount_MatchesExpected()
     {
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
@@ -611,8 +612,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkMetric Enum Coverage Tests
 
-    [Fact]
-    public void BenchmarkMetric_AllValues_AreValid()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkMetric_AllValues_AreValid()
     {
         // Act
         var metrics = (BenchmarkMetric[])Enum.GetValues(typeof(BenchmarkMetric));
@@ -634,8 +635,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkExecutionStatus Enum Tests
 
-    [Fact]
-    public void BenchmarkExecutionStatus_AllValues_AreValid()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkExecutionStatus_AllValues_AreValid()
     {
         // Act
         var statuses = (BenchmarkExecutionStatus[])Enum.GetValues(typeof(BenchmarkExecutionStatus));
@@ -652,8 +653,8 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteKind Enum Tests
 
-    [Fact]
-    public void BenchmarkSuiteKind_AllValues_AreValid()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkSuiteKind_AllValues_AreValid()
     {
         // Act
         var kinds = (BenchmarkSuiteKind[])Enum.GetValues(typeof(BenchmarkSuiteKind));
@@ -670,8 +671,8 @@ public class BenchmarkingIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void BenchmarkReport_CompleteScenario_AllPropertiesWork()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_CompleteScenario_AllPropertiesWork()
     {
         // Arrange - Create a complete benchmark report scenario
         var startTime = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero);
@@ -733,8 +734,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(0.85, accuracyMetric.Value, precision: 2);
     }
 
-    [Fact]
-    public void BenchmarkReport_FailureScenario_HandlesFailuresCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkReport_FailureScenario_HandlesFailuresCorrectly()
     {
         // Arrange
         var startTime = DateTimeOffset.UtcNow;

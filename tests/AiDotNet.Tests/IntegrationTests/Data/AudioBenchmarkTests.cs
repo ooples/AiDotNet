@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class AudioBenchmarkTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Esc50Loader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -70,7 +70,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task UrbanSound8kLoader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -118,7 +118,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Musdb18Loader_LoadsSyntheticTracks()
     {
         string tempDir = CreateTempDirectory();
@@ -167,7 +167,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MaestroLoader_LoadsSyntheticCsv()
     {
         string tempDir = CreateTempDirectory();
@@ -225,7 +225,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AudioSetLoader_LoadsSyntheticMultiLabel()
     {
         string tempDir = CreateTempDirectory();
@@ -282,7 +282,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Esc50Loader_SplitReturnsThreeSets()
     {
         string tempDir = CreateTempDirectory();
@@ -333,8 +333,8 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
-    public void SpectrogramTransform_TypeExists()
+    [Fact(Timeout = 120000)]
+    public async Task SpectrogramTransform_TypeExists()
     {
         // SpectrogramTransform wraps MelSpectrogram which requires engine initialization.
         // Verify the type is accessible and constructable.
@@ -343,8 +343,8 @@ public class AudioBenchmarkTests
         Assert.True(type.GetInterfaces().Length > 0, "SpectrogramTransform should implement ITransform.");
     }
 
-    [Fact]
-    public void SpecAugmentTransform_MasksSpectrogram()
+    [Fact(Timeout = 120000)]
+    public async Task SpecAugmentTransform_MasksSpectrogram()
     {
         int timeFrames = 100;
         int freqBins = 80;
@@ -389,8 +389,8 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
-    public void LibriSpeechOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task LibriSpeechOptions_DefaultValues()
     {
         var options = new LibriSpeechDataLoaderOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -399,8 +399,8 @@ public class AudioBenchmarkTests
         Assert.True(options.AutoDownload);
     }
 
-    [Fact]
-    public void CommonVoiceOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CommonVoiceOptions_DefaultValues()
     {
         var options = new CommonVoiceDataLoaderOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -408,8 +408,8 @@ public class AudioBenchmarkTests
         Assert.Equal(10.0, options.MaxDurationSeconds);
     }
 
-    [Fact]
-    public void VoxPopuliOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task VoxPopuliOptions_DefaultValues()
     {
         var options = new VoxPopuliDataLoaderOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -418,8 +418,8 @@ public class AudioBenchmarkTests
         Assert.False(options.AutoDownload);
     }
 
-    [Fact]
-    public void FleursOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task FleursOptions_DefaultValues()
     {
         var options = new FleursDataLoaderOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -427,8 +427,8 @@ public class AudioBenchmarkTests
         Assert.Equal("en_us", options.Language);
     }
 
-    [Fact]
-    public void Musdb18Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Musdb18Options_DefaultValues()
     {
         var options = new Musdb18DataLoaderOptions();
         Assert.Equal(44100, options.SampleRate);
@@ -436,8 +436,8 @@ public class AudioBenchmarkTests
         Assert.False(options.AutoDownload);
     }
 
-    [Fact]
-    public void MaestroOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task MaestroOptions_DefaultValues()
     {
         var options = new MaestroDataLoaderOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -519,8 +519,8 @@ public class AudioBenchmarkTests
         return midi.ToArray();
     }
 
-    [Fact]
-    public void FlacDecoder_DecodesAudioSamples()
+    [Fact(Timeout = 120000)]
+    public async Task FlacDecoder_DecodesAudioSamples()
     {
         // Test that LoadAudioSamples auto-detects FLAC and produces non-zero output.
         // Create a minimal FLAC file with VERBATIM subframe.
@@ -550,8 +550,8 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
-    public void AudioLoaderHelper_AutoDetectsWavVsFlac()
+    [Fact(Timeout = 120000)]
+    public async Task AudioLoaderHelper_AutoDetectsWavVsFlac()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
 

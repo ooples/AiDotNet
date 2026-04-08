@@ -7,6 +7,7 @@ using AiDotNet.Regularization;
 using AiDotNet.TransferLearning.Algorithms;
 using AiDotNet.TransferLearning.FeatureMapping;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TransferLearning;
 
@@ -21,8 +22,8 @@ public class TransferLearningAlgorithmsIntegrationTests
 
     #region TransferNeuralNetwork Tests
 
-    [Fact]
-    public void TransferNeuralNetwork_Transfer_SameDomain_ReturnsTrainedModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_Transfer_SameDomain_ReturnsTrainedModel()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -55,8 +56,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.NotSame(sourceModel, result);
     }
 
-    [Fact]
-    public void TransferNeuralNetwork_Transfer_CrossDomain_WithFeatureMapper_ReturnsTrainedModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_Transfer_CrossDomain_WithFeatureMapper_ReturnsTrainedModel()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -88,8 +89,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.True(featureMapper.IsTrained, "Feature mapper should be trained during cross-domain transfer");
     }
 
-    [Fact]
-    public void TransferNeuralNetwork_Transfer_CrossDomain_WithoutFeatureMapper_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_Transfer_CrossDomain_WithoutFeatureMapper_ThrowsException()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -113,8 +114,8 @@ public class TransferLearningAlgorithmsIntegrationTests
             transfer.Transfer(sourceModel, sourceData, targetData, targetLabels));
     }
 
-    [Fact]
-    public void TransferNeuralNetwork_SetFeatureMapper_StoresMapper()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_SetFeatureMapper_StoresMapper()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -143,8 +144,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void TransferNeuralNetwork_SetDomainAdapter_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_SetDomainAdapter_DoesNotThrow()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -159,8 +160,8 @@ public class TransferLearningAlgorithmsIntegrationTests
 
     #region TransferRandomForest Tests
 
-    [Fact]
-    public void TransferRandomForest_Transfer_SameDomain_ReturnsTrainedModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransferRandomForest_Transfer_SameDomain_ReturnsTrainedModel()
     {
         // Arrange
         var options = new RandomForestRegressionOptions
@@ -194,8 +195,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void TransferRandomForest_Transfer_CrossDomain_WithFeatureMapper_ReturnsWrappedModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransferRandomForest_Transfer_CrossDomain_WithFeatureMapper_ReturnsWrappedModel()
     {
         // Arrange
         var options = new RandomForestRegressionOptions
@@ -235,8 +236,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.True(featureMapper.IsTrained, "Feature mapper should be trained");
     }
 
-    [Fact]
-    public void TransferRandomForest_Transfer_CrossDomain_WithoutFeatureMapper_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TransferRandomForest_Transfer_CrossDomain_WithoutFeatureMapper_ThrowsException()
     {
         // Arrange
         var options = new RandomForestRegressionOptions
@@ -265,8 +266,8 @@ public class TransferLearningAlgorithmsIntegrationTests
             transfer.Transfer(sourceModel, sourceData, targetData, targetLabels));
     }
 
-    [Fact]
-    public void TransferRandomForest_WithRegularization_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task TransferRandomForest_WithRegularization_CreatesModel()
     {
         // Arrange
         var options = new RandomForestRegressionOptions
@@ -307,8 +308,8 @@ public class TransferLearningAlgorithmsIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void TransferNeuralNetwork_Transfer_MinimalData_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_Transfer_MinimalData_HandlesGracefully()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
@@ -332,8 +333,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void TransferRandomForest_Transfer_MinimalData_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task TransferRandomForest_Transfer_MinimalData_HandlesGracefully()
     {
         // Arrange - Random Forest needs at least 2 samples for tree building (MinSamplesSplit=2)
         var options = new RandomForestRegressionOptions
@@ -363,8 +364,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void TransferNeuralNetwork_Transfer_LargeDimensionMismatch_HandlesWithMapper()
+    [Fact(Timeout = 120000)]
+    public async Task TransferNeuralNetwork_Transfer_LargeDimensionMismatch_HandlesWithMapper()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();

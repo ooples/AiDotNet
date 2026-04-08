@@ -1,5 +1,6 @@
 using AiDotNet.Data.Collation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Data;
 
@@ -14,8 +15,8 @@ public class DataCollationIntegrationTests
 
     #region DefaultCollateFunction
 
-    [Fact]
-    public void DefaultCollate_StacksSameSizeSamples()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_StacksSameSizeSamples()
     {
         var collate = new DefaultCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -32,8 +33,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(6.0, batch[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void DefaultCollate_2DSamples_StacksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_2DSamples_StacksCorrectly()
     {
         var collate = new DefaultCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -47,8 +48,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(new[] { 2, 2, 2 }, batch.Shape.ToArray());
     }
 
-    [Fact]
-    public void DefaultCollate_SingleSample_Works()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_SingleSample_Works()
     {
         var collate = new DefaultCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -62,16 +63,16 @@ public class DataCollationIntegrationTests
         Assert.Equal(1.0, batch[0, 0], Tolerance);
     }
 
-    [Fact]
-    public void DefaultCollate_EmptyList_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_EmptyList_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
         Assert.Throws<ArgumentException>(() =>
             collate.Collate(new List<Tensor<double>>()));
     }
 
-    [Fact]
-    public void DefaultCollate_MismatchedRanks_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_MismatchedRanks_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -83,8 +84,8 @@ public class DataCollationIntegrationTests
         Assert.Throws<ArgumentException>(() => collate.Collate(samples));
     }
 
-    [Fact]
-    public void DefaultCollate_MismatchedShapes_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCollate_MismatchedShapes_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -100,8 +101,8 @@ public class DataCollationIntegrationTests
 
     #region PaddingCollateFunction
 
-    [Fact]
-    public void PaddingCollate_PadsToMaxLength()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingCollate_PadsToMaxLength()
     {
         var collate = new PaddingCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -122,8 +123,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(8.0, batch[1, 4], Tolerance);
     }
 
-    [Fact]
-    public void PaddingCollate_WithCustomPadValue()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingCollate_WithCustomPadValue()
     {
         var collate = new PaddingCollateFunction<double>(-1.0);
         var samples = new List<Tensor<double>>
@@ -139,8 +140,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(-1.0, batch[0, 3], Tolerance); // custom pad
     }
 
-    [Fact]
-    public void PaddingCollate_WithMaxLength_Truncates()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingCollate_WithMaxLength_Truncates()
     {
         var collate = new PaddingCollateFunction<double>(maxLength: 3);
         var samples = new List<Tensor<double>>
@@ -157,8 +158,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(3.0, batch[0, 2], Tolerance);
     }
 
-    [Fact]
-    public void PaddingCollate_SameLengthSamples_NoPadding()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingCollate_SameLengthSamples_NoPadding()
     {
         var collate = new PaddingCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -174,8 +175,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(6.0, batch[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void PaddingCollate_EmptyList_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingCollate_EmptyList_Throws()
     {
         var collate = new PaddingCollateFunction<double>();
         Assert.Throws<ArgumentException>(() =>
@@ -186,8 +187,8 @@ public class DataCollationIntegrationTests
 
     #region PackedSequenceCollateFunction
 
-    [Fact]
-    public void PackedSequence_PacksSequences()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequence_PacksSequences()
     {
         var collate = new PackedSequenceCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -207,8 +208,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(2, batch.Lengths[2]); // shortest last
     }
 
-    [Fact]
-    public void PackedSequence_SortedIndices_MapCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequence_SortedIndices_MapCorrectly()
     {
         var collate = new PackedSequenceCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -226,8 +227,8 @@ public class DataCollationIntegrationTests
         Assert.Equal(0, batch.SortedIndices[2]);
     }
 
-    [Fact]
-    public void PackedSequence_WithoutSort_PreservesOrder()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequence_WithoutSort_PreservesOrder()
     {
         var collate = new PackedSequenceCollateFunction<double>(sortByLength: false);
         var samples = new List<Tensor<double>>
@@ -244,16 +245,16 @@ public class DataCollationIntegrationTests
         Assert.Equal(4, batch.Lengths[1]);
     }
 
-    [Fact]
-    public void PackedSequence_EmptyList_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequence_EmptyList_Throws()
     {
         var collate = new PackedSequenceCollateFunction<double>();
         Assert.Throws<ArgumentException>(() =>
             collate.Collate(new List<Tensor<double>>()));
     }
 
-    [Fact]
-    public void PackedSequence_SingleSample_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequence_SingleSample_Works()
     {
         var collate = new PackedSequenceCollateFunction<double>();
         var samples = new List<Tensor<double>>
@@ -272,8 +273,8 @@ public class DataCollationIntegrationTests
 
     #region PackedSequenceBatch
 
-    [Fact]
-    public void PackedSequenceBatch_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task PackedSequenceBatch_Properties()
     {
         var data = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
         var lengths = new[] { 3, 2, 1 };

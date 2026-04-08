@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class S4DLayerTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
         int modelDim = 64;
@@ -24,8 +25,8 @@ public class S4DLayerTests
         Assert.Equal(modelDim * expandFactor, layer.InnerDimension);
     }
 
-    [Fact]
-    public void Constructor_DefaultParameters_UsesCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var layer = new S4DLayer<float>(16);
 
@@ -34,22 +35,22 @@ public class S4DLayerTests
         Assert.Equal(256, layer.InnerDimension); // 256 * 1 (expandFactor=1)
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenModelDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new S4DLayer<float>(16, modelDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenStateDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new S4DLayer<float>(16, modelDimension: 64, stateDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenExpandFactorNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenExpandFactorNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new S4DLayer<float>(16, modelDimension: 64, expandFactor: 0));
@@ -91,8 +92,8 @@ public class S4DLayerTests
 
 
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -114,8 +115,8 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
-    public void SetParameters_ThrowsOnWrongLength()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
         var wrongParams = new Vector<float>(10);
@@ -123,8 +124,8 @@ public class S4DLayerTests
         Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
     }
 
-    [Fact]
-    public void ResetState_ClearsInternalState()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsInternalState()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
@@ -146,8 +147,8 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
-    public void Forward_DeterministicWithSameParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -172,15 +173,15 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
         Assert.False(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void GetMetadata_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetadata_ContainsExpectedKeys()
     {
         var layer = new S4DLayer<float>(8, 64, 16, expandFactor: 2);
 
@@ -194,8 +195,8 @@ public class S4DLayerTests
         Assert.Equal("128", metadata["InnerDimension"]);
     }
 
-    [Fact]
-    public void Forward_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int modelDim = 32;

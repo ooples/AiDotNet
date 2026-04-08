@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Data.Sampling;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Data.Sampling
 {
@@ -14,8 +15,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
     {
         #region RandomSampler Tests
 
-        [Fact]
-        public void RandomSampler_Constructor_WithValidSize_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_Constructor_WithValidSize_Succeeds()
         {
             // Arrange & Act
             var sampler = new RandomSampler(100);
@@ -25,22 +26,22 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(100, sampler.Length);
         }
 
-        [Fact]
-        public void RandomSampler_Constructor_WithZeroSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_Constructor_WithZeroSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() => new RandomSampler(0));
         }
 
-        [Fact]
-        public void RandomSampler_Constructor_WithNegativeSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_Constructor_WithNegativeSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() => new RandomSampler(-1));
         }
 
-        [Fact]
-        public void RandomSampler_GetIndices_ReturnsAllIndicesOnce()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_GetIndices_ReturnsAllIndicesOnce()
         {
             // Arrange
             var sampler = new RandomSampler(50, seed: 42);
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.True(indices.All(i => i >= 0 && i < 50)); // All in range
         }
 
-        [Fact]
-        public void RandomSampler_GetIndices_ShufflesData()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_GetIndices_ShufflesData()
         {
             // Arrange
             var sampler = new RandomSampler(100, seed: 42);
@@ -68,8 +69,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.NotEqual(sequential, indices);
         }
 
-        [Fact]
-        public void RandomSampler_WithSameSeed_ProducesReproducibleResults()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_WithSameSeed_ProducesReproducibleResults()
         {
             // Arrange
             var sampler1 = new RandomSampler(100, seed: 12345);
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(indices1, indices2);
         }
 
-        [Fact]
-        public void RandomSampler_WithDifferentSeeds_ProducesDifferentResults()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_WithDifferentSeeds_ProducesDifferentResults()
         {
             // Arrange
             var sampler1 = new RandomSampler(100, seed: 1);
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.NotEqual(indices1, indices2);
         }
 
-        [Fact]
-        public void RandomSampler_SetSeed_ChangesRandomization()
+        [Fact(Timeout = 60000)]
+        public async Task RandomSampler_SetSeed_ChangesRandomization()
         {
             // Arrange
             var sampler = new RandomSampler(100, seed: 42);
@@ -117,8 +118,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region SequentialSampler Tests
 
-        [Fact]
-        public void SequentialSampler_Constructor_WithValidSize_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task SequentialSampler_Constructor_WithValidSize_Succeeds()
         {
             // Arrange & Act
             var sampler = new SequentialSampler(100);
@@ -128,15 +129,15 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(100, sampler.Length);
         }
 
-        [Fact]
-        public void SequentialSampler_Constructor_WithZeroSize_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task SequentialSampler_Constructor_WithZeroSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() => new SequentialSampler(0));
         }
 
-        [Fact]
-        public void SequentialSampler_GetIndices_ReturnsSequentialOrder()
+        [Fact(Timeout = 60000)]
+        public async Task SequentialSampler_GetIndices_ReturnsSequentialOrder()
         {
             // Arrange
             var sampler = new SequentialSampler(20);
@@ -148,8 +149,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(Enumerable.Range(0, 20).ToList(), indices);
         }
 
-        [Fact]
-        public void SequentialSampler_GetIndices_AlwaysReturnsSameOrder()
+        [Fact(Timeout = 60000)]
+        public async Task SequentialSampler_GetIndices_AlwaysReturnsSameOrder()
         {
             // Arrange
             var sampler = new SequentialSampler(50);
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region SubsetSampler Tests
 
-        [Fact]
-        public void SubsetSampler_Constructor_WithValidIndices_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task SubsetSampler_Constructor_WithValidIndices_Succeeds()
         {
             // Arrange
             var indices = new[] { 0, 5, 10, 15, 20 };
@@ -182,15 +183,15 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(5, sampler.Length);
         }
 
-        [Fact]
-        public void SubsetSampler_Constructor_WithNullIndices_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task SubsetSampler_Constructor_WithNullIndices_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() => new SubsetSampler(null!));
         }
 
-        [Fact]
-        public void SubsetSampler_GetIndices_WithoutShuffle_ReturnsOriginalOrder()
+        [Fact(Timeout = 60000)]
+        public async Task SubsetSampler_GetIndices_WithoutShuffle_ReturnsOriginalOrder()
         {
             // Arrange
             var originalIndices = new[] { 10, 20, 30, 40, 50 };
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(originalIndices.ToList(), result);
         }
 
-        [Fact]
-        public void SubsetSampler_GetIndices_WithShuffle_ShufflesIndices()
+        [Fact(Timeout = 60000)]
+        public async Task SubsetSampler_GetIndices_WithShuffle_ShufflesIndices()
         {
             // Arrange
             var originalIndices = Enumerable.Range(0, 50).ToArray();
@@ -219,8 +220,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.NotEqual(originalIndices.ToList(), result); // Should be shuffled
         }
 
-        [Fact]
-        public void SubsetSampler_Shuffle_PropertyCanBeChanged()
+        [Fact(Timeout = 60000)]
+        public async Task SubsetSampler_Shuffle_PropertyCanBeChanged()
         {
             // Arrange
             var indices = new[] { 1, 2, 3, 4, 5 };
@@ -236,8 +237,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region CurriculumSampler Tests
 
-        [Fact]
-        public void CurriculumSampler_Constructor_WithValidParameters_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_Constructor_WithValidParameters_Succeeds()
         {
             // Arrange
             var difficulties = new[] { 0.1, 0.3, 0.5, 0.7, 0.9 };
@@ -250,16 +251,16 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(5, sampler.Length);
         }
 
-        [Fact]
-        public void CurriculumSampler_Constructor_WithNullDifficulties_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_Constructor_WithNullDifficulties_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new CurriculumSampler<double>(null!, totalEpochs: 10));
         }
 
-        [Fact]
-        public void CurriculumSampler_Constructor_WithZeroEpochs_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_Constructor_WithZeroEpochs_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var difficulties = new[] { 0.1, 0.5, 0.9 };
@@ -269,8 +270,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
                 new CurriculumSampler<double>(difficulties, totalEpochs: 0));
         }
 
-        [Fact]
-        public void CurriculumSampler_LinearStrategy_ProgressesFromEasyToHard()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_LinearStrategy_ProgressesFromEasyToHard()
         {
             // Arrange
             // Create samples with varying difficulty: 0=easiest, 1=hardest
@@ -291,8 +292,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
                 $"Early epoch should have fewer samples ({earlyIndices.Count}) than late epoch ({lateIndices.Count})");
         }
 
-        [Fact]
-        public void CurriculumSampler_CurrentDifficultyThreshold_IncreasesWithEpoch()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_CurrentDifficultyThreshold_IncreasesWithEpoch()
         {
             // Arrange
             var difficulties = new double[] { 0.1, 0.5, 0.9 };
@@ -330,8 +331,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(20, indices.Count);
         }
 
-        [Fact]
-        public void CurriculumSampler_CompetenceBased_RespectsSetCompetence()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_CompetenceBased_RespectsSetCompetence()
         {
             // Arrange
             var difficulties = new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
@@ -352,8 +353,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.True(lowCompetenceIndices.Count < highCompetenceIndices.Count);
         }
 
-        [Fact]
-        public void CurriculumSampler_SetCompetence_ClampsValueToValidRange()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_SetCompetence_ClampsValueToValidRange()
         {
             // Arrange
             var difficulties = new double[] { 0.5 };
@@ -368,8 +369,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(0.0, sampler.CurrentDifficultyThreshold, precision: 5);
         }
 
-        [Fact]
-        public void CurriculumSampler_WhenThresholdTooLow_IncludesEasiestSamples()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_WhenThresholdTooLow_IncludesEasiestSamples()
         {
             // Arrange - All samples have difficulty > 0.5
             var difficulties = new double[] { 0.6, 0.7, 0.8, 0.9, 1.0 };
@@ -389,8 +390,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region SelfPacedSampler Tests
 
-        [Fact]
-        public void SelfPacedSampler_Constructor_WithValidParameters_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task SelfPacedSampler_Constructor_WithValidParameters_Succeeds()
         {
             // Arrange & Act
             var sampler = new SelfPacedSampler<double>(
@@ -405,8 +406,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(0.1, sampler.Lambda);
         }
 
-        [Fact]
-        public void SelfPacedSampler_UpdateLoss_UpdatesSampleLoss()
+        [Fact(Timeout = 60000)]
+        public async Task SelfPacedSampler_UpdateLoss_UpdatesSampleLoss()
         {
             // Arrange
             var sampler = new SelfPacedSampler<double>(
@@ -424,8 +425,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             // Index 5 may or may not be included depending on whether 0.9 <= lambda
         }
 
-        [Fact]
-        public void SelfPacedSampler_UpdateLosses_BatchUpdatesWork()
+        [Fact(Timeout = 60000)]
+        public async Task SelfPacedSampler_UpdateLosses_BatchUpdatesWork()
         {
             // Arrange
             var sampler = new SelfPacedSampler<double>(
@@ -446,8 +447,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Contains(2, result);
         }
 
-        [Fact]
-        public void SelfPacedSampler_OnEpochStart_IncreasesLambda()
+        [Fact(Timeout = 60000)]
+        public async Task SelfPacedSampler_OnEpochStart_IncreasesLambda()
         {
             // Arrange
             var sampler = new SelfPacedSampler<double>(
@@ -465,8 +466,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(initialLambda + 0.1, newLambda, precision: 5);
         }
 
-        [Fact]
-        public void SelfPacedSampler_WithAllHighLosses_ReturnsAtLeast10Percent()
+        [Fact(Timeout = 60000)]
+        public async Task SelfPacedSampler_WithAllHighLosses_ReturnsAtLeast10Percent()
         {
             // Arrange
             var sampler = new SelfPacedSampler<double>(
@@ -491,8 +492,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region WeightedSampler Tests
 
-        [Fact]
-        public void WeightedSampler_Constructor_WithValidWeights_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_Constructor_WithValidWeights_Succeeds()
         {
             // Arrange
             var weights = new[] { 1.0, 2.0, 3.0, 4.0 };
@@ -505,24 +506,24 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(100, sampler.Length);
         }
 
-        [Fact]
-        public void WeightedSampler_Constructor_WithNullWeights_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_Constructor_WithNullWeights_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new WeightedSampler<double>(null!, numSamples: 100));
         }
 
-        [Fact]
-        public void WeightedSampler_Constructor_WithEmptyWeights_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_Constructor_WithEmptyWeights_ThrowsArgumentException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new WeightedSampler<double>(Array.Empty<double>(), numSamples: 100));
         }
 
-        [Fact]
-        public void WeightedSampler_Constructor_WithNegativeWeight_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_Constructor_WithNegativeWeight_ThrowsArgumentException()
         {
             // Arrange
             var weights = new[] { 1.0, -2.0, 3.0 };
@@ -532,8 +533,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
                 new WeightedSampler<double>(weights, numSamples: 100));
         }
 
-        [Fact]
-        public void WeightedSampler_Constructor_WithZeroTotalWeight_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_Constructor_WithZeroTotalWeight_ThrowsArgumentException()
         {
             // Arrange
             var weights = new[] { 0.0, 0.0, 0.0 };
@@ -543,8 +544,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
                 new WeightedSampler<double>(weights, numSamples: 100));
         }
 
-        [Fact]
-        public void WeightedSampler_GetIndices_SamplesWithReplacement_CanRepeatIndices()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_GetIndices_SamplesWithReplacement_CanRepeatIndices()
         {
             // Arrange - Only 4 samples but sample 100 times with replacement
             var weights = new[] { 1.0, 1.0, 1.0, 1.0 };
@@ -559,8 +560,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.True(indices.Distinct().Count() < 100);
         }
 
-        [Fact]
-        public void WeightedSampler_GetIndices_SamplesWithoutReplacement_NoRepeats()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_GetIndices_SamplesWithoutReplacement_NoRepeats()
         {
             // Arrange
             var weights = new[] { 1.0, 1.0, 1.0, 1.0 };
@@ -574,8 +575,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.Equal(4, indices.Distinct().Count()); // No repeats
         }
 
-        [Fact]
-        public void WeightedSampler_HigherWeights_SelectedMoreOften()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_HigherWeights_SelectedMoreOften()
         {
             // Arrange - One weight much higher than others
             var weights = new[] { 1.0, 1.0, 100.0, 1.0 };
@@ -593,8 +594,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
                 $"High weight index should be selected more often. Got {highWeightCount} vs {otherCounts}");
         }
 
-        [Fact]
-        public void WeightedSampler_CreateBalancedWeights_CreatesCorrectWeights()
+        [Fact(Timeout = 60000)]
+        public async Task WeightedSampler_CreateBalancedWeights_CreatesCorrectWeights()
         {
             // Arrange - Imbalanced classes: class 0 has 10, class 1 has 90
             var labels = Enumerable.Repeat(0, 10).Concat(Enumerable.Repeat(1, 90)).ToList();
@@ -617,8 +618,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
 
         #region Edge Cases and Integration Tests
 
-        [Fact]
-        public void DataSamplerBase_OnEpochStart_UpdatesCurrentEpoch()
+        [Fact(Timeout = 60000)]
+        public async Task DataSamplerBase_OnEpochStart_UpdatesCurrentEpoch()
         {
             // Arrange
             var sampler = new RandomSampler(100);
@@ -631,8 +632,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             Assert.NotNull(sampler.GetIndices().ToList());
         }
 
-        [Fact]
-        public void AllSamplers_CanBeIteratedMultipleTimes()
+        [Fact(Timeout = 60000)]
+        public async Task AllSamplers_CanBeIteratedMultipleTimes()
         {
             // Arrange
             var randomSampler = new RandomSampler(50, seed: 42);
@@ -652,8 +653,8 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
             }
         }
 
-        [Fact]
-        public void Samplers_WithSingleElement_WorkCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Samplers_WithSingleElement_WorkCorrectly()
         {
             // Arrange
             var randomSampler = new RandomSampler(1);

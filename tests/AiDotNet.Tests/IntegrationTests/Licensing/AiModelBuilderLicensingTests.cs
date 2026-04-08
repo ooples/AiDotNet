@@ -6,6 +6,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -76,8 +77,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         return result;
     }
 
-    [Fact]
-    public void SerializeModel_WithLicenseKey_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeModel_WithLicenseKey_Succeeds()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
@@ -89,8 +90,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.True(data.Length > 0);
     }
 
-    [Fact]
-    public void DeserializeModel_WithLicenseKey_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DeserializeModel_WithLicenseKey_Succeeds()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
@@ -101,8 +102,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.NotNull(restored);
     }
 
-    [Fact]
-    public void SerializeModel_WithoutLicense_CountsOneTrialOperation()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeModel_WithoutLicense_CountsOneTrialOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -124,8 +125,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.Equal(before + 1, after);
     }
 
-    [Fact]
-    public void DeserializeModel_WithoutLicense_CountsOneTrialOperation()
+    [Fact(Timeout = 120000)]
+    public async Task DeserializeModel_WithoutLicense_CountsOneTrialOperation()
     {
         // Serialize with license key
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
@@ -146,8 +147,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.Equal(before + 1, after);
     }
 
-    [Fact]
-    public void SerializeModel_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeModel_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -166,8 +167,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => builder.SerializeModel(result));
     }
 
-    [Fact]
-    public void DeserializeModel_ExhaustedTrial_ThrowsLicenseRequiredException()
+    [Fact(Timeout = 120000)]
+    public async Task DeserializeModel_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         // Serialize with license key
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
@@ -188,8 +189,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => builder.DeserializeModel(data));
     }
 
-    [Fact]
-    public void DirectSerialize_WithoutLicense_CountsTrialOperation()
+    [Fact(Timeout = 120000)]
+    public async Task DirectSerialize_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
         ResetDefaultTrial();
@@ -207,8 +208,8 @@ public class AiModelBuilderLicensingTests : IDisposable
         Assert.True(after > before, "Direct Serialize should count a trial operation");
     }
 
-    [Fact]
-    public void TrainingDoesNotCountTrialOperations()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingDoesNotCountTrialOperations()
     {
         // Reset trial to a known state
         ClearAllLicenseSources();

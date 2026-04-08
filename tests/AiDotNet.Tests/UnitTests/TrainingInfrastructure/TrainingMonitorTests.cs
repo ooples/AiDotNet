@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.TrainingMonitoring;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TrainingInfrastructure;
 
@@ -37,8 +38,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Session Management Tests
 
-    [Fact]
-    public void StartSession_WithValidName_ReturnsSessionId()
+    [Fact(Timeout = 60000)]
+    public async Task StartSession_WithValidName_ReturnsSessionId()
     {
         // Arrange & Act
         var sessionId = _monitor.StartSession("test-session");
@@ -48,8 +49,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotEmpty(sessionId);
     }
 
-    [Fact]
-    public void StartSession_WithMetadata_StoresMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task StartSession_WithMetadata_StoresMetadata()
     {
         // Arrange
         var metadata = new Dictionary<string, object>
@@ -65,22 +66,22 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotNull(sessionId);
     }
 
-    [Fact]
-    public void StartSession_WithNullName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task StartSession_WithNullName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _monitor.StartSession(null!));
     }
 
-    [Fact]
-    public void StartSession_WithEmptyName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task StartSession_WithEmptyName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _monitor.StartSession(""));
     }
 
-    [Fact]
-    public void EndSession_WithValidId_CompletesSession()
+    [Fact(Timeout = 60000)]
+    public async Task EndSession_WithValidId_CompletesSession()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -93,8 +94,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotNull(metrics);
     }
 
-    [Fact]
-    public void EndSession_WithInvalidId_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task EndSession_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _monitor.EndSession("nonexistent-session"));
@@ -104,8 +105,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Metric Logging Tests
 
-    [Fact]
-    public void LogMetric_StoresMetricValue()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetric_StoresMetricValue()
     {
         // Arrange
         var sessionId = _monitor.StartSession("metric-test");
@@ -119,8 +120,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.5, currentMetrics["loss"]);
     }
 
-    [Fact]
-    public void LogMetric_WithMultipleSteps_StoresHistory()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetric_WithMultipleSteps_StoresHistory()
     {
         // Arrange
         var sessionId = _monitor.StartSession("metric-history-test");
@@ -138,8 +139,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.1, history[2].Value);
     }
 
-    [Fact]
-    public void LogMetric_WithNullName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetric_WithNullName_ThrowsArgumentException()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -148,8 +149,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.LogMetric(sessionId, null!, 0.5, step: 1));
     }
 
-    [Fact]
-    public void LogMetrics_StoresMultipleMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetrics_StoresMultipleMetrics()
     {
         // Arrange
         var sessionId = _monitor.StartSession("multi-metric-test");
@@ -171,8 +172,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.78, currentMetrics["f1_score"]);
     }
 
-    [Fact]
-    public void LogMetrics_WithNullDictionary_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetrics_WithNullDictionary_ThrowsArgumentNullException()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -181,8 +182,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => _monitor.LogMetrics(sessionId, null!, step: 1));
     }
 
-    [Fact]
-    public void GetMetricHistory_WithNonexistentMetric_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task GetMetricHistory_WithNonexistentMetric_ReturnsEmptyList()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -198,8 +199,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Resource Usage Tests
 
-    [Fact]
-    public void LogResourceUsage_StoresResourceSnapshot()
+    [Fact(Timeout = 60000)]
+    public async Task LogResourceUsage_StoresResourceSnapshot()
     {
         // Arrange
         var sessionId = _monitor.StartSession("resource-test");
@@ -213,8 +214,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(8192, resourceUsage.MemoryUsageMB);
     }
 
-    [Fact]
-    public void LogResourceUsage_WithGpu_StoresGpuMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task LogResourceUsage_WithGpu_StoresGpuMetrics()
     {
         // Arrange
         var sessionId = _monitor.StartSession("gpu-test");
@@ -232,8 +233,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Progress Tracking Tests
 
-    [Fact]
-    public void UpdateProgress_StoresProgressInfo()
+    [Fact(Timeout = 60000)]
+    public async Task UpdateProgress_StoresProgressInfo()
     {
         // Arrange
         var sessionId = _monitor.StartSession("progress-test");
@@ -247,8 +248,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(1000, speedStats.TotalIterations);
     }
 
-    [Fact]
-    public void GetSpeedStats_CalculatesIterationsPerSecond()
+    [Fact(Timeout = 60000)]
+    public async Task GetSpeedStats_CalculatesIterationsPerSecond()
     {
         // Arrange
         var sessionId = _monitor.StartSession("speed-test");
@@ -266,8 +267,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Message Logging Tests
 
-    [Fact]
-    public void LogMessage_StoresMessage()
+    [Fact(Timeout = 60000)]
+    public async Task LogMessage_StoresMessage()
     {
         // Arrange
         var sessionId = _monitor.StartSession("message-test");
@@ -278,8 +279,8 @@ public class TrainingMonitorTests : IDisposable
         // Assert - Message logged successfully (no exception thrown)
     }
 
-    [Fact]
-    public void LogMessage_WithEmptyMessage_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task LogMessage_WithEmptyMessage_ThrowsArgumentException()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -288,8 +289,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.LogMessage(sessionId, LogLevel.Info, ""));
     }
 
-    [Fact]
-    public void LogMessage_WithDifferentLevels_StoresAllLevels()
+    [Fact(Timeout = 60000)]
+    public async Task LogMessage_WithDifferentLevels_StoresAllLevels()
     {
         // Arrange
         var sessionId = _monitor.StartSession("levels-test");
@@ -307,8 +308,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Epoch Tracking Tests
 
-    [Fact]
-    public void OnEpochStart_RecordsEpochStart()
+    [Fact(Timeout = 60000)]
+    public async Task OnEpochStart_RecordsEpochStart()
     {
         // Arrange
         var sessionId = _monitor.StartSession("epoch-start-test");
@@ -319,8 +320,8 @@ public class TrainingMonitorTests : IDisposable
         // Assert - Epoch start recorded (no exception thrown)
     }
 
-    [Fact]
-    public void OnEpochEnd_RecordsEpochEnd()
+    [Fact(Timeout = 60000)]
+    public async Task OnEpochEnd_RecordsEpochEnd()
     {
         // Arrange
         var sessionId = _monitor.StartSession("epoch-end-test");
@@ -341,8 +342,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Issue Detection Tests
 
-    [Fact]
-    public void CheckForIssues_WithNoIssues_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task CheckForIssues_WithNoIssues_ReturnsEmptyList()
     {
         // Arrange
         var sessionId = _monitor.StartSession("no-issues-test");
@@ -355,8 +356,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Empty(issues);
     }
 
-    [Fact]
-    public void CheckForIssues_WithRecentErrors_ReportsIssue()
+    [Fact(Timeout = 60000)]
+    public async Task CheckForIssues_WithRecentErrors_ReportsIssue()
     {
         // Arrange
         var sessionId = _monitor.StartSession("error-test");
@@ -374,8 +375,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Export Tests
 
-    [Fact]
-    public void ExportData_ToJson_CreatesFile()
+    [Fact(Timeout = 60000)]
+    public async Task ExportData_ToJson_CreatesFile()
     {
         // Arrange
         var sessionId = _monitor.StartSession("export-json-test");
@@ -391,8 +392,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("loss", content);
     }
 
-    [Fact]
-    public void ExportData_ToCsv_CreatesFile()
+    [Fact(Timeout = 60000)]
+    public async Task ExportData_ToCsv_CreatesFile()
     {
         // Arrange
         var sessionId = _monitor.StartSession("export-csv-test");
@@ -410,8 +411,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("accuracy", content);
     }
 
-    [Fact]
-    public void ExportData_WithInvalidFormat_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ExportData_WithInvalidFormat_ThrowsArgumentException()
     {
         // Arrange
         var sessionId = _monitor.StartSession("export-format-test");
@@ -421,8 +422,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.ExportData(sessionId, exportPath, "xyz"));
     }
 
-    [Fact]
-    public void CreateVisualization_CreatesVisualizationFile()
+    [Fact(Timeout = 60000)]
+    public async Task CreateVisualization_CreatesVisualizationFile()
     {
         // Arrange
         var sessionId = _monitor.StartSession("visualization-test");
@@ -440,8 +441,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("visualization-test", content);
     }
 
-    [Fact]
-    public void CreateVisualization_WithEmptyMetricList_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateVisualization_WithEmptyMetricList_ThrowsArgumentException()
     {
         // Arrange
         var sessionId = _monitor.StartSession("test-session");
@@ -455,8 +456,8 @@ public class TrainingMonitorTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void LogMetric_FromMultipleThreads_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task LogMetric_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
         var sessionId = _monitor.StartSession("concurrent-metric-test");
@@ -477,8 +478,8 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(metricCount, history.Count);
     }
 
-    [Fact]
-    public void StartSession_FromMultipleThreads_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task StartSession_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
         var tasks = new List<Task<string>>();

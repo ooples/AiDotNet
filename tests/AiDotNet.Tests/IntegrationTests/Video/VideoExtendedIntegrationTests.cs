@@ -17,6 +17,7 @@ using AiDotNet.Video.Stabilization;
 using AiDotNet.Video.Tracking;
 using AiDotNet.Video.Understanding;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Video;
 
@@ -35,8 +36,8 @@ public class VideoExtendedIntegrationTests
 
     #region VideoModelOptions
 
-    [Fact]
-    public void VideoModelOptions_DefaultsAreNull()
+    [Fact(Timeout = 120000)]
+    public async Task VideoModelOptions_DefaultsAreNull()
     {
         var opts = new VideoModelOptions<double>();
 
@@ -58,8 +59,8 @@ public class VideoExtendedIntegrationTests
         Assert.Null(opts.RandomSeed);
     }
 
-    [Fact]
-    public void VideoModelOptions_SetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task VideoModelOptions_SetAllProperties()
     {
         var opts = new VideoModelOptions<double>
         {
@@ -103,8 +104,8 @@ public class VideoExtendedIntegrationTests
 
     #region VideoEnhancementOptions
 
-    [Fact]
-    public void VideoEnhancementOptions_DefaultsAreNull()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_DefaultsAreNull()
     {
         var opts = new VideoEnhancementOptions<double>();
 
@@ -124,8 +125,8 @@ public class VideoExtendedIntegrationTests
         Assert.Null(opts.UseBidirectional);
     }
 
-    [Fact]
-    public void VideoEnhancementOptions_SetCustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_SetCustomValues()
     {
         var opts = new VideoEnhancementOptions<double>
         {
@@ -161,8 +162,8 @@ public class VideoExtendedIntegrationTests
         Assert.False(opts.UseBidirectional);
     }
 
-    [Fact]
-    public void VideoEnhancementOptions_InheritsFromVideoModelOptions()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementOptions_InheritsFromVideoModelOptions()
     {
         var opts = new VideoEnhancementOptions<double>
         {
@@ -178,8 +179,8 @@ public class VideoExtendedIntegrationTests
 
     #region Enums
 
-    [Fact]
-    public void VideoEnhancementType_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task VideoEnhancementType_HasExpectedValues()
     {
         Assert.Equal(0, (int)VideoEnhancementType.SuperResolution);
         Assert.Equal(1, (int)VideoEnhancementType.Denoising);
@@ -187,8 +188,8 @@ public class VideoExtendedIntegrationTests
         Assert.Equal(3, (int)VideoEnhancementType.FrameInterpolation);
     }
 
-    [Fact]
-    public void SAM2ModelSize_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task SAM2ModelSize_HasExpectedValues()
     {
         Assert.Equal(0, (int)SAM2ModelSize.Tiny);
         Assert.Equal(1, (int)SAM2ModelSize.Small);
@@ -196,8 +197,8 @@ public class VideoExtendedIntegrationTests
         Assert.Equal(3, (int)SAM2ModelSize.Large);
     }
 
-    [Fact]
-    public void AttentionType_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionType_HasExpectedValues()
     {
         Assert.Equal(0, (int)AttentionType.JointSpaceTime);
         Assert.Equal(1, (int)AttentionType.DividedSpaceTime);
@@ -207,8 +208,8 @@ public class VideoExtendedIntegrationTests
 
     #region SlowFast - Action Recognition
 
-    [Fact]
-    public void SlowFast_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_Construction_DefaultParams()
     {
         var arch = CreateArch();
         var model = new SlowFast<double>(arch);
@@ -220,8 +221,8 @@ public class VideoExtendedIntegrationTests
         Assert.Equal(8, model.Alpha);
     }
 
-    [Fact]
-    public void SlowFast_Construction_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_Construction_CustomParams()
     {
         var arch = CreateArch();
         var model = new SlowFast<double>(arch, numClasses: 200, slowFrames: 8, alpha: 4);
@@ -232,32 +233,32 @@ public class VideoExtendedIntegrationTests
         Assert.Equal(4, model.Alpha);
     }
 
-    [Fact]
-    public void SlowFast_InvalidNumClasses_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_InvalidNumClasses_Throws()
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SlowFast<double>(arch, numClasses: 0));
     }
 
-    [Fact]
-    public void SlowFast_InvalidSlowFrames_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_InvalidSlowFrames_Throws()
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SlowFast<double>(arch, slowFrames: 0));
     }
 
-    [Fact]
-    public void SlowFast_InvalidAlpha_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_InvalidAlpha_Throws()
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SlowFast<double>(arch, alpha: 0));
     }
 
-    [Fact]
-    public void SlowFast_Predict_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_Predict_ProducesOutput()
     {
         var arch = CreateArch();
         var model = new SlowFast<double>(arch, numClasses: 10);
@@ -268,8 +269,8 @@ public class VideoExtendedIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SlowFast_GetModelMetadata_ContainsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_GetModelMetadata_ContainsCorrectInfo()
     {
         var arch = CreateArch();
         var model = new SlowFast<double>(arch, numClasses: 100);
@@ -284,240 +285,240 @@ public class VideoExtendedIntegrationTests
 
     #region Model Construction Tests (Lightweight)
 
-    [Fact]
-    public void RAFT_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task RAFT_Construction()
     {
         var arch = CreateArch();
         var model = new RAFT<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void RAFT_InputChannels_DefaultsToThree()
+    [Fact(Timeout = 120000)]
+    public async Task RAFT_InputChannels_DefaultsToThree()
     {
         var arch = CreateArch();
         var model = new RAFT<double>(arch);
         Assert.Equal(3, model.InputChannels);
     }
 
-    [Fact]
-    public void GMFlow_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task GMFlow_Construction()
     {
         var arch = CreateArch();
         var model = new GMFlow<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void FlowFormer_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task FlowFormer_Construction()
     {
         var arch = CreateArch();
         var model = new FlowFormer<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void FILM_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task FILM_Construction()
     {
         var arch = CreateArch();
         var model = new FILM<double>(arch, numScales: 3, numFeatures: 32);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void RIFE_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task RIFE_Construction()
     {
         var arch = CreateArch();
         var model = new RIFE<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void FLAVR_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task FLAVR_Construction()
     {
         var arch = CreateArch();
         var model = new FLAVR<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void VRT_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task VRT_Construction()
     {
         var arch = CreateArch();
         var model = new VRT<double>(arch, embedDim: 64, numFrames: 4, scaleFactor: 2);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void BasicVSRPlusPlus_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task BasicVSRPlusPlus_Construction()
     {
         var arch = CreateArch();
         var model = new BasicVSRPlusPlus<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void EDVR_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task EDVR_Construction()
     {
         var arch = CreateArch();
         var model = new EDVR<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void FastDVDNet_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task FastDVDNet_Construction()
     {
         var arch = CreateArch();
         var model = new FastDVDNet<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DepthAnythingV2_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DepthAnythingV2_Construction()
     {
         var arch = CreateArch();
         var model = new DepthAnythingV2<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MiDaS_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task MiDaS_Construction()
     {
         var arch = CreateArch();
         var model = new MiDaS<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void AnimateDiff_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task AnimateDiff_Construction()
     {
         var arch = CreateArch();
         var model = new AnimateDiff<double>(arch, numLayers: 2, numFrames: 4);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void CogVideo_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task CogVideo_Construction()
     {
         var arch = CreateArch(height: 64, width: 64);
         var model = new CogVideo<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void OpenSora_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task OpenSora_Construction()
     {
         var arch = CreateArch();
         var model = new OpenSora<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void StableVideoDiffusion_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task StableVideoDiffusion_Construction()
     {
         var arch = CreateArch(height: 64, width: 64);
         var model = new StableVideoDiffusion<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void E2FGVI_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task E2FGVI_Construction()
     {
         var arch = CreateArch();
         var model = new E2FGVI<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void ProPainter_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task ProPainter_Construction()
     {
         var arch = CreateArch();
         var model = new ProPainter<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void RVM_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task RVM_Construction()
     {
         var arch = CreateArch();
         var model = new RVM<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SAM2_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task SAM2_Construction_DefaultParams()
     {
         var arch = CreateArch(height: 64, width: 64);
         var model = new SAM2<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SAM2_Construction_CustomModelSize()
+    [Fact(Timeout = 120000)]
+    public async Task SAM2_Construction_CustomModelSize()
     {
         var arch = CreateArch(height: 64, width: 64);
         var model = new SAM2<double>(arch, modelSize: SAM2ModelSize.Small);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void Cutie_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task Cutie_Construction()
     {
         var arch = CreateArch();
         var model = new Cutie<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void XMem_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task XMem_Construction()
     {
         var arch = CreateArch();
         var model = new XMem<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void DIFRINT_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task DIFRINT_Construction()
     {
         var arch = CreateArch();
         var model = new DIFRINT<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void ByteTrack_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task ByteTrack_Construction()
     {
         var arch = CreateArch(height: 64, width: 64);
         var model = new ByteTrack<double>(arch, numFeatures: 64);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void InternVideo2_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task InternVideo2_Construction()
     {
         var arch = CreateArch();
         var model = new InternVideo2<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void VideoCLIP_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task VideoCLIP_Construction()
     {
         var arch = CreateArch();
         var model = new VideoCLIP<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void TimeSformer_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSformer_Construction()
     {
         var arch = CreateArch();
         var model = new TimeSformer<double>(arch, numClasses: 10, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void VideoMAE_Construction()
+    [Fact(Timeout = 120000)]
+    public async Task VideoMAE_Construction()
     {
         var arch = CreateArch();
         var model = new VideoMAE<double>(arch, numClasses: 10, numFrames: 4, numFeatures: 64);
@@ -528,8 +529,8 @@ public class VideoExtendedIntegrationTests
 
     #region Model Metadata Tests
 
-    [Fact]
-    public void SlowFast_Metadata_HasVideoActionRecognitionType()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_Metadata_HasVideoActionRecognitionType()
     {
         var arch = CreateArch();
         var model = new SlowFast<double>(arch);
@@ -537,24 +538,24 @@ public class VideoExtendedIntegrationTests
 
     }
 
-    [Fact]
-    public void RAFT_Metadata_NotNull()
+    [Fact(Timeout = 120000)]
+    public async Task RAFT_Metadata_NotNull()
     {
         var arch = CreateArch();
         var model = new RAFT<double>(arch);
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
-    public void FILM_Metadata_NotNull()
+    [Fact(Timeout = 120000)]
+    public async Task FILM_Metadata_NotNull()
     {
         var arch = CreateArch();
         var model = new FILM<double>(arch, numScales: 3, numFeatures: 32);
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
-    public void VRT_Metadata_NotNull()
+    [Fact(Timeout = 120000)]
+    public async Task VRT_Metadata_NotNull()
     {
         var arch = CreateArch();
         var model = new VRT<double>(arch, embedDim: 64, numFrames: 4, scaleFactor: 2);
@@ -565,204 +566,204 @@ public class VideoExtendedIntegrationTests
 
     #region Options Classes
 
-    [Fact]
-    public void SlowFastOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task SlowFastOptions_IsNeuralNetworkOptions()
     {
         var opts = new SlowFastOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void TimeSformerOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task TimeSformerOptions_IsNeuralNetworkOptions()
     {
         var opts = new TimeSformerOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void VideoMAEOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task VideoMAEOptions_IsNeuralNetworkOptions()
     {
         var opts = new VideoMAEOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void RAFTOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task RAFTOptions_IsNeuralNetworkOptions()
     {
         var opts = new RAFTOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void RIFEOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task RIFEOptions_IsNeuralNetworkOptions()
     {
         var opts = new RIFEOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void FILMOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FILMOptions_IsNeuralNetworkOptions()
     {
         var opts = new FILMOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void FLAVROptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FLAVROptions_IsNeuralNetworkOptions()
     {
         var opts = new FLAVROptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void SAM2Options_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task SAM2Options_IsNeuralNetworkOptions()
     {
         var opts = new SAM2Options();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void ByteTrackOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ByteTrackOptions_IsNeuralNetworkOptions()
     {
         var opts = new ByteTrackOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void VRTOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task VRTOptions_IsNeuralNetworkOptions()
     {
         var opts = new VRTOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void AnimateDiffOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task AnimateDiffOptions_IsNeuralNetworkOptions()
     {
         var opts = new AnimateDiffOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void CogVideoOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task CogVideoOptions_IsNeuralNetworkOptions()
     {
         var opts = new CogVideoOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void OpenSoraOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task OpenSoraOptions_IsNeuralNetworkOptions()
     {
         var opts = new OpenSoraOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void StableVideoDiffusionOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task StableVideoDiffusionOptions_IsNeuralNetworkOptions()
     {
         var opts = new StableVideoDiffusionOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void BasicVSRPlusPlusOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task BasicVSRPlusPlusOptions_IsNeuralNetworkOptions()
     {
         var opts = new BasicVSRPlusPlusOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void EDVROptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task EDVROptions_IsNeuralNetworkOptions()
     {
         var opts = new EDVROptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void FastDVDNetOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FastDVDNetOptions_IsNeuralNetworkOptions()
     {
         var opts = new FastDVDNetOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void DepthAnythingV2Options_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task DepthAnythingV2Options_IsNeuralNetworkOptions()
     {
         var opts = new DepthAnythingV2Options();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void MiDaSOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MiDaSOptions_IsNeuralNetworkOptions()
     {
         var opts = new MiDaSOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void E2FGVIOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task E2FGVIOptions_IsNeuralNetworkOptions()
     {
         var opts = new E2FGVIOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void ProPainterOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ProPainterOptions_IsNeuralNetworkOptions()
     {
         var opts = new ProPainterOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void RVMOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task RVMOptions_IsNeuralNetworkOptions()
     {
         var opts = new RVMOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void DIFRINTOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task DIFRINTOptions_IsNeuralNetworkOptions()
     {
         var opts = new DIFRINTOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void CutieOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task CutieOptions_IsNeuralNetworkOptions()
     {
         var opts = new CutieOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void XMemOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task XMemOptions_IsNeuralNetworkOptions()
     {
         var opts = new XMemOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void InternVideo2Options_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task InternVideo2Options_IsNeuralNetworkOptions()
     {
         var opts = new InternVideo2Options();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void VideoCLIPVideoOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task VideoCLIPVideoOptions_IsNeuralNetworkOptions()
     {
         var opts = new VideoCLIPVideoOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void FlowFormerOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FlowFormerOptions_IsNeuralNetworkOptions()
     {
         var opts = new FlowFormerOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 
-    [Fact]
-    public void GMFlowOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task GMFlowOptions_IsNeuralNetworkOptions()
     {
         var opts = new GMFlowOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);

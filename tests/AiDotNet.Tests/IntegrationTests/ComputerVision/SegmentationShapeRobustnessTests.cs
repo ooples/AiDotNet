@@ -16,6 +16,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -529,8 +530,8 @@ public class SegmentationShapeRobustnessTests
 
     #region Single-Channel Inputs
 
-    [Fact]
-    public void SegFormer_Predict_SingleChannel_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SegFormer_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new SegFormer<double>(Arch(32, 32, 1), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var output = model.Predict(Rand(1, 1, 32, 32));
@@ -538,8 +539,8 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void NnUNet_Predict_SingleChannel_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NnUNet_Predict_SingleChannel_ReturnsOutput()
     {
         // Medical images are often single-channel (grayscale CT/MRI)
         var model = new NnUNet<double>(Arch(32, 32, 1), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
@@ -548,8 +549,8 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void TransUNet_Predict_SingleChannel_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TransUNet_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new TransUNet<double>(Arch(32, 32, 1), numClasses: 5, modelSize: TransUNetModelSize.Base);
         var output = model.Predict(Rand(1, 1, 32, 32));
@@ -557,8 +558,8 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MedSAM_Predict_SingleChannel_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSAM_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new MedSAM<double>(Arch(32, 32, 1), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
         var output = model.Predict(Rand(1, 1, 32, 32));

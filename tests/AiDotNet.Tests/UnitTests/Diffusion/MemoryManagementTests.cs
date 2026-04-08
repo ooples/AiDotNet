@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion;
 
@@ -14,8 +15,8 @@ public class MemoryManagementTests
 {
     #region ActivationPool Tests
 
-    [Fact]
-    public void ActivationPool_Rent_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_Rent_ReturnsCorrectShape()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -32,8 +33,8 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
-    public void ActivationPool_RentAndReturn_ReusesBuffer()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_RentAndReturn_ReusesBuffer()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -48,8 +49,8 @@ public class MemoryManagementTests
         Assert.True(pool.Stats.CacheHits >= 1, "Should have cache hit after return");
     }
 
-    [Fact]
-    public void ActivationPool_Stats_TracksMissesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_Stats_TracksMissesCorrectly()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -62,8 +63,8 @@ public class MemoryManagementTests
         Assert.Equal(2, pool.Stats.CacheMisses);
     }
 
-    [Fact]
-    public void ActivationPool_Return_IncreasesReturnCount()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_Return_IncreasesReturnCount()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -76,8 +77,8 @@ public class MemoryManagementTests
         Assert.Equal(1, pool.Stats.Returns);
     }
 
-    [Fact]
-    public void ActivationPool_Clear_ResetsPool()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_Clear_ResetsPool()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -91,8 +92,8 @@ public class MemoryManagementTests
         Assert.Equal(0, pool.GetMemoryUsage());
     }
 
-    [Fact]
-    public void ActivationPool_GetMemoryUsage_ReflectsAllocations()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_GetMemoryUsage_ReflectsAllocations()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 1000);
@@ -106,8 +107,8 @@ public class MemoryManagementTests
         Assert.True(afterRent > initialMemory, "Memory should increase after rent");
     }
 
-    [Fact]
-    public void ActivationPool_HitRatio_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_HitRatio_ComputesCorrectly()
     {
         // Arrange
         using var pool = new ActivationPool<float>(maxMemoryMB: 100);
@@ -127,8 +128,8 @@ public class MemoryManagementTests
             "Hit ratio should be between 0 and 1");
     }
 
-    [Fact]
-    public void ActivationPool_RentNull_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_RentNull_ThrowsException()
     {
         // Arrange
         using var pool = new ActivationPool<float>();
@@ -137,8 +138,8 @@ public class MemoryManagementTests
         Assert.Throws<ArgumentException>(() => pool.Rent(null!));
     }
 
-    [Fact]
-    public void ActivationPool_RentEmpty_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_RentEmpty_ThrowsException()
     {
         // Arrange
         using var pool = new ActivationPool<float>();
@@ -147,8 +148,8 @@ public class MemoryManagementTests
         Assert.Throws<ArgumentException>(() => pool.Rent(Array.Empty<int>()));
     }
 
-    [Fact]
-    public void ActivationPool_ReturnNull_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_ReturnNull_DoesNotThrow()
     {
         // Arrange
         using var pool = new ActivationPool<float>();
@@ -157,8 +158,8 @@ public class MemoryManagementTests
         pool.Return(null!);
     }
 
-    [Fact]
-    public void ActivationPool_Dispose_IsIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationPool_Dispose_IsIdempotent()
     {
         // Arrange
         var pool = new ActivationPool<float>();
@@ -173,8 +174,8 @@ public class MemoryManagementTests
 
     #region ModelShard Tests
 
-    [Fact]
-    public void ModelShard_Constructor_DistributesLayersEvenly()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_Constructor_DistributesLayersEvenly()
     {
         // Arrange
         var layers = CreateSimpleLayers(12);
@@ -189,8 +190,8 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
-    public void ModelShard_Constructor_HandlesUnevenDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_Constructor_HandlesUnevenDistribution()
     {
         // Arrange
         var layers = CreateSimpleLayers(10);
@@ -207,8 +208,8 @@ public class MemoryManagementTests
         Assert.Equal(10, total);
     }
 
-    [Fact]
-    public void ModelShard_GetLayerDevice_ReturnsCorrectDevice()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_GetLayerDevice_ReturnsCorrectDevice()
     {
         // Arrange
         var layers = CreateSimpleLayers(8);
@@ -225,8 +226,8 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
-    public void ModelShard_GetDeviceMemoryUsage_ReturnsAllDevices()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_GetDeviceMemoryUsage_ReturnsAllDevices()
     {
         // Arrange
         var layers = CreateSimpleLayers(6);
@@ -242,8 +243,8 @@ public class MemoryManagementTests
         Assert.True(memoryUsage.ContainsKey(2));
     }
 
-    [Fact]
-    public void ModelShard_Constructor_InvalidDeviceCount_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_Constructor_InvalidDeviceCount_Throws()
     {
         // Arrange
         var layers = CreateSimpleLayers(4);
@@ -253,8 +254,8 @@ public class MemoryManagementTests
             new ModelShard<float>(layers, numDevices: 0));
     }
 
-    [Fact]
-    public void ModelShard_GetDeviceLayers_InvalidDevice_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_GetDeviceLayers_InvalidDevice_Throws()
     {
         // Arrange
         var layers = CreateSimpleLayers(4);
@@ -265,8 +266,8 @@ public class MemoryManagementTests
             shard.GetDeviceLayers(5));
     }
 
-    [Fact]
-    public void ModelShard_GetLayerDevice_UnknownLayer_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_GetLayerDevice_UnknownLayer_Throws()
     {
         // Arrange
         var layers = CreateSimpleLayers(4);
@@ -278,8 +279,8 @@ public class MemoryManagementTests
             shard.GetLayerDevice(unknownLayer));
     }
 
-    [Fact]
-    public void ModelShard_ToString_ContainsDeviceInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_ToString_ContainsDeviceInfo()
     {
         // Arrange
         var layers = CreateSimpleLayers(6);
@@ -294,8 +295,8 @@ public class MemoryManagementTests
         Assert.Contains("layers", str.ToLower());
     }
 
-    [Fact]
-    public void ModelShard_EmptyLayers_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_EmptyLayers_DoesNotThrow()
     {
         // Arrange & Act
         var shard = new ModelShard<float>(Array.Empty<ILayer<float>>(), numDevices: 2);
@@ -305,8 +306,8 @@ public class MemoryManagementTests
         Assert.Empty(shard.GetDeviceLayers(1));
     }
 
-    [Fact]
-    public void ModelShard_SingleDevice_GetsAllLayers()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_SingleDevice_GetsAllLayers()
     {
         // Arrange
         var layers = CreateSimpleLayers(10);
@@ -318,8 +319,8 @@ public class MemoryManagementTests
         Assert.Equal(10, shard.GetDeviceLayers(0).Count);
     }
 
-    [Fact]
-    public void ModelShard_Forward_ProcessesAllLayers()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_Forward_ProcessesAllLayers()
     {
         // Arrange
         var layers = CreateSimpleLayers(4);
@@ -343,8 +344,8 @@ public class MemoryManagementTests
 
     #region ShardingConfig Tests
 
-    [Fact]
-    public void ShardingConfig_DefaultStrategy_IsEvenSplit()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfig_DefaultStrategy_IsEvenSplit()
     {
         // Arrange & Act
         var config = new ShardingConfig();
@@ -353,8 +354,8 @@ public class MemoryManagementTests
         Assert.Equal(ShardingStrategy.EvenSplit, config.Strategy);
     }
 
-    [Fact]
-    public void ShardingConfig_CustomAssignments_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfig_CustomAssignments_CanBeSet()
     {
         // Arrange & Act
         var config = new ShardingConfig
@@ -369,8 +370,8 @@ public class MemoryManagementTests
         Assert.Equal(6, config.CustomDeviceAssignments.Length);
     }
 
-    [Fact]
-    public void ModelShard_CustomStrategy_UsesAssignments()
+    [Fact(Timeout = 120000)]
+    public async Task ModelShard_CustomStrategy_UsesAssignments()
     {
         // Arrange
         var layers = CreateSimpleLayers(4);

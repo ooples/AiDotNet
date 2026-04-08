@@ -7,6 +7,7 @@ using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LoRA;
 
@@ -25,8 +26,8 @@ public class LoRAIntegrationTests
 
     #region LoRALayer Tests
 
-    [Fact]
-    public void LoRALayer_Initialize_CreatesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_Initialize_CreatesCorrectDimensions()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
 
@@ -39,16 +40,16 @@ public class LoRAIntegrationTests
         Assert.Equal(expectedParams, layer.ParameterCount);
     }
 
-    [Fact]
-    public void LoRALayer_Initialize_InvalidRank_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_Initialize_InvalidRank_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(InputSize, OutputSize, 0, Alpha));
         Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(InputSize, OutputSize, -1, Alpha));
         Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 10, 20, Alpha)); // rank > min(in, out)
     }
 
-    [Fact]
-    public void LoRALayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_Forward_ProducesCorrectOutputShape()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
@@ -60,8 +61,8 @@ public class LoRAIntegrationTests
         Assert.Equal(OutputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void LoRALayer_Forward_BatchInput_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_Forward_BatchInput_ProducesCorrectOutputShape()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
         int batchSize = 4;
@@ -76,8 +77,8 @@ public class LoRAIntegrationTests
 
 
 
-    [Fact]
-    public void LoRALayer_MergeWeights_ProducesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_MergeWeights_ProducesCorrectDimensions()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
 
@@ -87,8 +88,8 @@ public class LoRAIntegrationTests
         Assert.Equal(OutputSize, mergedWeights.Columns);
     }
 
-    [Fact]
-    public void LoRALayer_GetSetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_GetSetParameters_RoundTrip()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
 
@@ -105,8 +106,8 @@ public class LoRAIntegrationTests
     }
 
 
-    [Fact]
-    public void LoRALayer_SupportsJitCompilation_ReturnsTrueWhenInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_SupportsJitCompilation_ReturnsTrueWhenInitialized()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
 
@@ -117,8 +118,8 @@ public class LoRAIntegrationTests
 
     #region StandardLoRAAdapter Tests
 
-    [Fact]
-    public void StandardLoRAAdapter_WrapsDenseLayer_Correctly()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_WrapsDenseLayer_Correctly()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -129,8 +130,8 @@ public class LoRAIntegrationTests
         Assert.True(adapter.IsBaseLayerFrozen);
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_Forward_CombinesBaseAndLoRA()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_Forward_CombinesBaseAndLoRA()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -150,8 +151,8 @@ public class LoRAIntegrationTests
         }
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_FrozenBaseLayer_OnlyTrainsLoRA()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_FrozenBaseLayer_OnlyTrainsLoRA()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: true);
@@ -161,8 +162,8 @@ public class LoRAIntegrationTests
         Assert.Equal(loraParamCount, adapter.ParameterCount);
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_UnfrozenBaseLayer_TrainsBoth()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_UnfrozenBaseLayer_TrainsBoth()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: false);
@@ -173,8 +174,8 @@ public class LoRAIntegrationTests
         Assert.Equal(baseParamCount + loraParamCount, adapter.ParameterCount);
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_MergeToOriginalLayer_ProducesFunctionalLayer()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_MergeToOriginalLayer_ProducesFunctionalLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -201,8 +202,8 @@ public class LoRAIntegrationTests
 
     #region LoRA Adapter Variants Tests
 
-    [Fact]
-    public void QLoRAAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task QLoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new QLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -211,8 +212,8 @@ public class LoRAIntegrationTests
         Assert.Equal(Rank, adapter.Rank);
     }
 
-    [Fact]
-    public void QLoRAAdapter_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task QLoRAAdapter_Forward_ProducesValidOutput()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new QLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -224,8 +225,8 @@ public class LoRAIntegrationTests
         AssertTensorFinite(output);
     }
 
-    [Fact]
-    public void DoRAAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task DoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -234,8 +235,8 @@ public class LoRAIntegrationTests
         Assert.Equal(Rank, adapter.Rank);
     }
 
-    [Fact]
-    public void DoRAAdapter_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DoRAAdapter_Forward_ProducesValidOutput()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -247,8 +248,8 @@ public class LoRAIntegrationTests
         AssertTensorFinite(output);
     }
 
-    [Fact]
-    public void AdaLoRAAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task AdaLoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new AdaLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -257,8 +258,8 @@ public class LoRAIntegrationTests
         Assert.Equal(Rank, adapter.Rank);
     }
 
-    [Fact]
-    public void AdaLoRAAdapter_Forward_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AdaLoRAAdapter_Forward_ProducesValidOutput()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new AdaLoRAAdapter<double>(baseLayer, Rank, Alpha);
@@ -270,8 +271,8 @@ public class LoRAIntegrationTests
         AssertTensorFinite(output);
     }
 
-    [Fact]
-    public void VeRAAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task VeRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
         // VeRA requires shared matrices to be initialized first
         VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
@@ -282,8 +283,8 @@ public class LoRAIntegrationTests
         Assert.Same(baseLayer, adapter.BaseLayer);
     }
 
-    [Fact]
-    public void LoKrAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task LoKrAdapter_Initialize_CorrectlyWrapsLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new LoKrAdapter<double>(baseLayer, Rank, Alpha);
@@ -291,8 +292,8 @@ public class LoRAIntegrationTests
         Assert.Same(baseLayer, adapter.BaseLayer);
     }
 
-    [Fact]
-    public void LoHaAdapter_Initialize_CorrectlyWrapsLayer()
+    [Fact(Timeout = 120000)]
+    public async Task LoHaAdapter_Initialize_CorrectlyWrapsLayer()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var adapter = new LoHaAdapter<double>(baseLayer, Rank, Alpha);
@@ -304,8 +305,8 @@ public class LoRAIntegrationTests
 
     #region Parameter Efficiency Tests
 
-    [Fact]
-    public void LoRA_ParameterReduction_SignificantForLargeLayers()
+    [Fact(Timeout = 120000)]
+    public async Task LoRA_ParameterReduction_SignificantForLargeLayers()
     {
         int largeInputSize = 1024;
         int largeOutputSize = 1024;
@@ -322,8 +323,8 @@ public class LoRAIntegrationTests
         Assert.True(reductionRatio < 0.05, $"LoRA should reduce parameters by >95%, but ratio was {reductionRatio:P2}");
     }
 
-    [Fact]
-    public void LoRA_ParameterCount_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task LoRA_ParameterCount_MatchesFormula()
     {
         int inputSize = 512;
         int outputSize = 256;
@@ -345,8 +346,8 @@ public class LoRAIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
-    public void LoRALayer_VerySmallRank_StillWorks()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_VerySmallRank_StillWorks()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, rank: 1, Alpha);
         var input = CreateTensor(1, InputSize);
@@ -357,8 +358,8 @@ public class LoRAIntegrationTests
         AssertTensorFinite(output);
     }
 
-    [Fact]
-    public void LoRALayer_RankEqualsMinDimension_Works()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_RankEqualsMinDimension_Works()
     {
         int small = 8;
         int large = 64;
@@ -372,8 +373,8 @@ public class LoRAIntegrationTests
         Assert.Equal(small, output.Shape[1]);
     }
 
-    [Fact]
-    public void LoRALayer_LargeBatch_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_LargeBatch_HandlesCorrectly()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
         int batchSize = 128;
@@ -385,15 +386,15 @@ public class LoRAIntegrationTests
         Assert.Equal(OutputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void StandardLoRAAdapter_NullBaseLayer_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StandardLoRAAdapter_NullBaseLayer_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new StandardLoRAAdapter<double>(null!, Rank, Alpha));
     }
 
-    [Fact]
-    public void LoRALayer_DefaultAlpha_EqualsRank()
+    [Fact(Timeout = 120000)]
+    public async Task LoRALayer_DefaultAlpha_EqualsRank()
     {
         var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, alpha: -1);
 
@@ -405,8 +406,8 @@ public class LoRAIntegrationTests
 
     #region Multiple Adapter Variants Forward Pass Tests
 
-    [Fact]
-    public void AllAdapters_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AllAdapters_ForwardPass_ProducesValidOutput()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
 

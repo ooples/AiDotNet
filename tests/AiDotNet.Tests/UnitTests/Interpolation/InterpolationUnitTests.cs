@@ -1,6 +1,7 @@
 using AiDotNet.Interpolation;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Interpolation;
 
@@ -14,8 +15,8 @@ public class InterpolationUnitTests
 
     #region Linear Interpolation Tests
 
-    [Fact]
-    public void LinearInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -23,16 +24,16 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void LinearInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
         Assert.Throws<ArgumentException>(() => new LinearInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void LinearInterpolation_Constructor_SinglePoint_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Constructor_SinglePoint_Succeeds()
     {
         // Linear interpolation allows single point (returns constant)
         var x = new Vector<double>(new[] { 0.0 });
@@ -41,8 +42,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void LinearInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 2.0, 4.0 });
@@ -53,8 +54,8 @@ public class InterpolationUnitTests
         Assert.Equal(4.0, interp.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void LinearInterpolation_Interpolate_BetweenPoints_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Interpolate_BetweenPoints_ReturnsCorrectValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 2.0, 4.0 });
@@ -64,8 +65,8 @@ public class InterpolationUnitTests
         Assert.Equal(3.0, interp.Interpolate(1.5), Tolerance);
     }
 
-    [Fact]
-    public void LinearInterpolation_Interpolate_BeforeFirstPoint_Extrapolates()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Interpolate_BeforeFirstPoint_Extrapolates()
     {
         var x = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -75,8 +76,8 @@ public class InterpolationUnitTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
-    public void LinearInterpolation_Interpolate_AfterLastPoint_Extrapolates()
+    [Fact(Timeout = 60000)]
+    public async Task LinearInterpolation_Interpolate_AfterLastPoint_Extrapolates()
     {
         var x = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -90,8 +91,8 @@ public class InterpolationUnitTests
 
     #region Cubic Spline Interpolation Tests
 
-    [Fact]
-    public void CubicSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task CubicSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -99,8 +100,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void CubicSplineInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task CubicSplineInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -112,8 +113,8 @@ public class InterpolationUnitTests
         }
     }
 
-    [Fact]
-    public void CubicSplineInterpolation_Interpolate_BetweenPoints_ReturnsSmooth()
+    [Fact(Timeout = 60000)]
+    public async Task CubicSplineInterpolation_Interpolate_BetweenPoints_ReturnsSmooth()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -128,8 +129,8 @@ public class InterpolationUnitTests
 
     #region Akima Interpolation Tests
 
-    [Fact]
-    public void AkimaInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task AkimaInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
@@ -137,24 +138,24 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void AkimaInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AkimaInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0 });
         Assert.Throws<ArgumentException>(() => new AkimaInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void AkimaInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task AkimaInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         Assert.Throws<ArgumentException>(() => new AkimaInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void AkimaInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task AkimaInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0, 1.0 });
@@ -166,8 +167,8 @@ public class InterpolationUnitTests
         }
     }
 
-    [Fact]
-    public void AkimaInterpolation_Interpolate_EqualWeights_UsesMiddleSlope()
+    [Fact(Timeout = 60000)]
+    public async Task AkimaInterpolation_Interpolate_EqualWeights_UsesMiddleSlope()
     {
         // Create data where w1 == w2 == 0 to hit the special case
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -183,8 +184,8 @@ public class InterpolationUnitTests
 
     #region Monotone Cubic Interpolation Tests
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -192,24 +193,24 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
         Assert.Throws<ArgumentException>(() => new MonotoneCubicInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0 });
         var y = new Vector<double>(new[] { 0.0 });
         Assert.Throws<ArgumentException>(() => new MonotoneCubicInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Interpolate_IncreasingData_PreservesMonotonicity()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Interpolate_IncreasingData_PreservesMonotonicity()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -224,8 +225,8 @@ public class InterpolationUnitTests
         }
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Interpolate_LocalExtremum_SetsZeroSlope()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Interpolate_LocalExtremum_SetsZeroSlope()
     {
         // Data with a local maximum at x=1
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -237,8 +238,8 @@ public class InterpolationUnitTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Interpolate_FlatSection_HandlesZeroSecant()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Interpolate_FlatSection_HandlesZeroSecant()
     {
         // Data with a flat section (delta[i] = 0)
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -249,8 +250,8 @@ public class InterpolationUnitTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_Interpolate_LargeSlopes_ConstrainsToMaintainMonotonicity()
+    [Fact(Timeout = 60000)]
+    public async Task MonotoneCubicInterpolation_Interpolate_LargeSlopes_ConstrainsToMaintainMonotonicity()
     {
         // Data that would produce large slopes needing constraint
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -271,8 +272,8 @@ public class InterpolationUnitTests
 
     #region Catmull-Rom Spline Interpolation Tests
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -280,24 +281,24 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Constructor_DifferentLengths_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
         Assert.Throws<ArgumentException>(() => new CatmullRomSplineInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Constructor_TooFewPoints_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         Assert.Throws<ArgumentException>(() => new CatmullRomSplineInterpolation<double>(x, y));
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Constructor_CustomTension_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Constructor_CustomTension_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -305,8 +306,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Interpolate_AtExactPoint_ReturnsExactValue()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Interpolate_AtExactPoint_ReturnsExactValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
@@ -317,8 +318,8 @@ public class InterpolationUnitTests
         Assert.Equal(0.0, interp.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Interpolate_BetweenPoints_ReturnsSmooth()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Interpolate_BetweenPoints_ReturnsSmooth()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -328,8 +329,8 @@ public class InterpolationUnitTests
         Assert.Equal(1.5, result, 0.1); // Linear data should give ~linear result
     }
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_Interpolate_LastInterval_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task CatmullRomSplineInterpolation_Interpolate_LastInterval_ReturnsCorrectValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -343,8 +344,8 @@ public class InterpolationUnitTests
 
     #region PCHIP Interpolation Tests
 
-    [Fact]
-    public void PchipInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task PchipInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -352,8 +353,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void PchipInterpolation_Interpolate_PreservesMonotonicity()
+    [Fact(Timeout = 60000)]
+    public async Task PchipInterpolation_Interpolate_PreservesMonotonicity()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -372,8 +373,8 @@ public class InterpolationUnitTests
 
     #region Lagrange Polynomial Interpolation Tests
 
-    [Fact]
-    public void LagrangePolynomialInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task LagrangePolynomialInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 });
@@ -381,8 +382,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void LagrangePolynomialInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task LagrangePolynomialInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 }); // y = x^2
@@ -397,8 +398,8 @@ public class InterpolationUnitTests
 
     #region Newton Divided Difference Interpolation Tests
 
-    [Fact]
-    public void NewtonDividedDifferenceInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task NewtonDividedDifferenceInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 });
@@ -406,8 +407,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void NewtonDividedDifferenceInterpolation_Interpolate_Quadratic_ReturnsCorrectValues()
+    [Fact(Timeout = 60000)]
+    public async Task NewtonDividedDifferenceInterpolation_Interpolate_Quadratic_ReturnsCorrectValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 }); // y = x^2
@@ -421,8 +422,8 @@ public class InterpolationUnitTests
 
     #region Hermite Interpolation Tests
 
-    [Fact]
-    public void HermiteInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task HermiteInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 });
@@ -431,8 +432,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void HermiteInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task HermiteInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 4.0 }); // y = x^2
@@ -448,8 +449,8 @@ public class InterpolationUnitTests
 
     #region Nearest Neighbor Interpolation Tests
 
-    [Fact]
-    public void NearestNeighborInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task NearestNeighborInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -457,8 +458,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void NearestNeighborInterpolation_Interpolate_ReturnsNearestValue()
+    [Fact(Timeout = 60000)]
+    public async Task NearestNeighborInterpolation_Interpolate_ReturnsNearestValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
         var y = new Vector<double>(new[] { 0.0, 10.0, 20.0 });
@@ -474,8 +475,8 @@ public class InterpolationUnitTests
 
     #region Barycentric Rational Interpolation Tests
 
-    [Fact]
-    public void BarycentricRationalInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task BarycentricRationalInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -483,8 +484,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void BarycentricRationalInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task BarycentricRationalInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.5, 1.0 });
@@ -500,8 +501,8 @@ public class InterpolationUnitTests
 
     #region Lanczos Interpolation Tests
 
-    [Fact]
-    public void LanczosInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task LanczosInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0, 1.0 });
@@ -509,8 +510,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void LanczosInterpolation_Constructor_CustomA_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task LanczosInterpolation_Constructor_CustomA_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0, 1.0 });
@@ -522,8 +523,8 @@ public class InterpolationUnitTests
 
     #region Sinc Interpolation Tests
 
-    [Fact]
-    public void SincInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task SincInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -535,8 +536,8 @@ public class InterpolationUnitTests
 
     #region Trigonometric Interpolation Tests
 
-    [Fact]
-    public void TrigonometricInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task TrigonometricInterpolation_Constructor_ValidInput_Succeeds()
     {
         // Trigonometric interpolation requires odd number of points
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -545,8 +546,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void TrigonometricInterpolation_Constructor_EvenPoints_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task TrigonometricInterpolation_Constructor_EvenPoints_ThrowsArgumentException()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, -1.0 });
@@ -557,8 +558,8 @@ public class InterpolationUnitTests
 
     #region Natural Spline Interpolation Tests
 
-    [Fact]
-    public void NaturalSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task NaturalSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -566,8 +567,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void NaturalSplineInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task NaturalSplineInterpolation_Interpolate_AtKnownPoints_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -583,8 +584,8 @@ public class InterpolationUnitTests
 
     #region Clamped Spline Interpolation Tests
 
-    [Fact]
-    public void ClampedSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task ClampedSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -596,8 +597,8 @@ public class InterpolationUnitTests
 
     #region Not-A-Knot Spline Interpolation Tests
 
-    [Fact]
-    public void NotAKnotSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task NotAKnotSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -609,8 +610,8 @@ public class InterpolationUnitTests
 
     #region Adaptive Cubic Spline Interpolation Tests
 
-    [Fact]
-    public void AdaptiveCubicSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task AdaptiveCubicSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -622,8 +623,8 @@ public class InterpolationUnitTests
 
     #region Cubic B-Spline Interpolation Tests
 
-    [Fact]
-    public void CubicBSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task CubicBSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -635,8 +636,8 @@ public class InterpolationUnitTests
 
     #region Cubic Convolution Interpolation Tests
 
-    [Fact]
-    public void CubicConvolutionInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task CubicConvolutionInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -652,8 +653,8 @@ public class InterpolationUnitTests
 
     #region Kochanek-Bartels Spline Interpolation Tests
 
-    [Fact]
-    public void KochanekBartelsSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task KochanekBartelsSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -661,8 +662,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void KochanekBartelsSplineInterpolation_Constructor_CustomParameters_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task KochanekBartelsSplineInterpolation_Constructor_CustomParameters_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -674,8 +675,8 @@ public class InterpolationUnitTests
 
     #region Whittaker-Shannon Interpolation Tests
 
-    [Fact]
-    public void WhittakerShannonInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task WhittakerShannonInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -687,8 +688,8 @@ public class InterpolationUnitTests
 
     #region Gaussian Process Interpolation Tests
 
-    [Fact]
-    public void GaussianProcessInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task GaussianProcessInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -700,8 +701,8 @@ public class InterpolationUnitTests
 
     #region Radial Basis Function Interpolation Tests
 
-    [Fact]
-    public void RadialBasisFunctionInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task RadialBasisFunctionInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -714,8 +715,8 @@ public class InterpolationUnitTests
 
     #region Multiquadric Interpolation Tests
 
-    [Fact]
-    public void MultiquadricInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task MultiquadricInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -728,8 +729,8 @@ public class InterpolationUnitTests
 
     #region Moving Least Squares Interpolation Tests
 
-    [Fact]
-    public void MovingLeastSquaresInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task MovingLeastSquaresInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -742,8 +743,8 @@ public class InterpolationUnitTests
 
     #region Kriging Interpolation Tests
 
-    [Fact]
-    public void KrigingInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task KrigingInterpolation_Constructor_ValidInput_Succeeds()
     {
         // Kriging needs more points for variogram estimation
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 0.0, 1.0, 2.0, 0.0, 1.0, 2.0 });
@@ -757,8 +758,8 @@ public class InterpolationUnitTests
 
     #region 2D Interpolation Tests
 
-    [Fact]
-    public void BilinearInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task BilinearInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
@@ -767,8 +768,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void BilinearInterpolation_Interpolate_AtCorners_ReturnsExactValues()
+    [Fact(Timeout = 60000)]
+    public async Task BilinearInterpolation_Interpolate_AtCorners_ReturnsExactValues()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
@@ -781,8 +782,8 @@ public class InterpolationUnitTests
         Assert.Equal(3.0, interp.Interpolate(1.0, 1.0), Tolerance);
     }
 
-    [Fact]
-    public void BilinearInterpolation_Interpolate_AtCenter_ReturnsAverage()
+    [Fact(Timeout = 60000)]
+    public async Task BilinearInterpolation_Interpolate_AtCenter_ReturnsAverage()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0 });
@@ -792,8 +793,8 @@ public class InterpolationUnitTests
         Assert.Equal(2.0, interp.Interpolate(0.5, 0.5), Tolerance);
     }
 
-    [Fact]
-    public void BicubicInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task BicubicInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
         var y = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -805,8 +806,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void ShepardsMethodInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task ShepardsMethodInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -815,8 +816,8 @@ public class InterpolationUnitTests
         Assert.NotNull(interp);
     }
 
-    [Fact]
-    public void ShepardsMethodInterpolation_Interpolate_AtKnownPoint_ReturnsExactValue()
+    [Fact(Timeout = 60000)]
+    public async Task ShepardsMethodInterpolation_Interpolate_AtKnownPoint_ReturnsExactValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -827,8 +828,8 @@ public class InterpolationUnitTests
         Assert.Equal(2.0, interp.Interpolate(1.0, 1.0), Tolerance);
     }
 
-    [Fact]
-    public void ThinPlateSplineInterpolation_Constructor_ValidInput_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task ThinPlateSplineInterpolation_Constructor_ValidInput_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -841,8 +842,8 @@ public class InterpolationUnitTests
 
     #region Interpolation2DTo1DAdapter Tests
 
-    [Fact]
-    public void Interpolation2DTo1DAdapter_Constructor_FixedY_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task Interpolation2DTo1DAdapter_Constructor_FixedY_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -852,8 +853,8 @@ public class InterpolationUnitTests
         Assert.NotNull(adapter);
     }
 
-    [Fact]
-    public void Interpolation2DTo1DAdapter_Constructor_FixedX_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task Interpolation2DTo1DAdapter_Constructor_FixedX_Succeeds()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -863,8 +864,8 @@ public class InterpolationUnitTests
         Assert.NotNull(adapter);
     }
 
-    [Fact]
-    public void Interpolation2DTo1DAdapter_Interpolate_FixedY_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task Interpolation2DTo1DAdapter_Interpolate_FixedY_ReturnsCorrectValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -877,8 +878,8 @@ public class InterpolationUnitTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
-    public void Interpolation2DTo1DAdapter_Interpolate_FixedX_ReturnsCorrectValue()
+    [Fact(Timeout = 60000)]
+    public async Task Interpolation2DTo1DAdapter_Interpolate_FixedX_ReturnsCorrectValue()
     {
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
         var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });

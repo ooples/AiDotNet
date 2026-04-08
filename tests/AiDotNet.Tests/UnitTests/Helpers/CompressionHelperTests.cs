@@ -4,13 +4,14 @@ using AiDotNet.Deployment.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
     public class CompressionHelperTests
     {
-        [Fact]
-        public void Compress_WithNullData_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullData_ThrowsArgumentNullException()
         {
             // Arrange
             var config = new CompressionConfig();
@@ -19,8 +20,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(null!, config));
         }
 
-        [Fact]
-        public void Compress_WithNullConfig_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullConfig_ThrowsArgumentNullException()
         {
             // Arrange
             var data = new byte[] { 1, 2, 3, 4, 5 };
@@ -29,8 +30,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(data, null!));
         }
 
-        [Fact]
-        public void Compress_WithNoneMode_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNoneMode_ReturnsOriginalData()
         {
             // Arrange
             var data = new byte[] { 1, 2, 3, 4, 5 };
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(data, result);
         }
 
-        [Fact]
-        public void Compress_WithAutomaticMode_CompressesData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithAutomaticMode_CompressesData()
         {
             // Arrange
             var data = Encoding.UTF8.GetBytes(new string('a', 1000)); // Repetitive data compresses well
@@ -58,15 +59,15 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(CompressionHelper.IsCompressedData(result));
         }
 
-        [Fact]
-        public void DecompressIfNeeded_WithNullData_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task DecompressIfNeeded_WithNullData_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => CompressionHelper.DecompressIfNeeded(null!));
         }
 
-        [Fact]
-        public void DecompressIfNeeded_WithUncompressedData_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task DecompressIfNeeded_WithUncompressedData_ReturnsOriginalData()
         {
             // Arrange
             var data = new byte[] { 1, 2, 3, 4, 5 };
@@ -78,8 +79,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(data, result);
         }
 
-        [Fact]
-        public void CompressAndDecompress_RoundTrip_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_RoundTrip_ReturnsOriginalData()
         {
             // Arrange
             var originalData = Encoding.UTF8.GetBytes("Test data for compression round trip testing");
@@ -93,8 +94,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(originalData, decompressedData);
         }
 
-        [Fact]
-        public void CompressAndDecompress_LargeData_RoundTrip_ReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_LargeData_RoundTrip_ReturnsOriginalData()
         {
             // Arrange
             var random = RandomHelper.CreateSeededRandom(42);
@@ -110,8 +111,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(originalData, decompressedData);
         }
 
-        [Fact]
-        public void IsCompressedData_WithCompressedData_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsCompressedData_WithCompressedData_ReturnsTrue()
         {
             // Arrange
             var data = Encoding.UTF8.GetBytes("Test data");
@@ -125,8 +126,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(result);
         }
 
-        [Fact]
-        public void IsCompressedData_WithUncompressedData_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsCompressedData_WithUncompressedData_ReturnsFalse()
         {
             // Arrange
             var data = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
@@ -138,8 +139,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.False(result);
         }
 
-        [Fact]
-        public void IsCompressedData_WithNullData_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsCompressedData_WithNullData_ReturnsFalse()
         {
             // Act
             var result = CompressionHelper.IsCompressedData(null!);
@@ -148,8 +149,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.False(result);
         }
 
-        [Fact]
-        public void IsCompressedData_WithTooShortData_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsCompressedData_WithTooShortData_ReturnsFalse()
         {
             // Arrange
             var data = new byte[] { 1, 2, 3 };
@@ -183,8 +184,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(data, decompressedData);
         }
 
-        [Fact]
-        public void GetCompressionStats_ReturnsCorrectStatistics()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressionStats_ReturnsCorrectStatistics()
         {
             // Arrange
             var originalData = Encoding.UTF8.GetBytes(new string('a', 1000));
@@ -201,8 +202,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(stats.savedPercent > 0); // Should save space
         }
 
-        [Fact]
-        public void GetCompressionStats_WithNullData_ReturnsZeros()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressionStats_WithNullData_ReturnsZeros()
         {
             // Act
             var stats = CompressionHelper.GetCompressionStats(null!, null!);
@@ -214,8 +215,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(0.0, stats.savedPercent);
         }
 
-        [Fact]
-        public void Compress_WithWeightsOnlyMode_CompressesData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithWeightsOnlyMode_CompressesData()
         {
             // Arrange
             var data = Encoding.UTF8.GetBytes(new string('w', 1000));
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(CompressionHelper.IsCompressedData(result));
         }
 
-        [Fact]
-        public void Compress_AchievesSignificantCompression_ForRepetitiveData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_AchievesSignificantCompression_ForRepetitiveData()
         {
             // Arrange
             var repetitiveData = Encoding.UTF8.GetBytes(new string('z', 10000));

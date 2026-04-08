@@ -1,5 +1,6 @@
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Tools;
 
@@ -8,8 +9,8 @@ namespace AiDotNetTests.UnitTests.Tools;
 /// </summary>
 public class CalculatorToolTests
 {
-    [Fact]
-    public void Name_ReturnsCalculator()
+    [Fact(Timeout = 60000)]
+    public async Task Name_ReturnsCalculator()
     {
         // Arrange
         var calculator = new CalculatorTool();
@@ -21,8 +22,8 @@ public class CalculatorToolTests
         Assert.Equal("Calculator", name);
     }
 
-    [Fact]
-    public void Description_ReturnsNonEmptyString()
+    [Fact(Timeout = 60000)]
+    public async Task Description_ReturnsNonEmptyString()
     {
         // Arrange
         var calculator = new CalculatorTool();
@@ -85,8 +86,8 @@ public class CalculatorToolTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
-    public void Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_EmptyInput_ReturnsError()
     {
         // Arrange
         var calculator = new CalculatorTool();
@@ -99,8 +100,8 @@ public class CalculatorToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_WhitespaceInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WhitespaceInput_ReturnsError()
     {
         // Arrange
         var calculator = new CalculatorTool();
@@ -191,8 +192,8 @@ public class CalculatorToolTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
-    public void Execute_LargeNumbers_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_LargeNumbers_HandlesCorrectly()
     {
         // Arrange
         var calculator = new CalculatorTool();

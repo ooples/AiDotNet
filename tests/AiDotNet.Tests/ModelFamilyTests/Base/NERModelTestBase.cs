@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -18,8 +19,8 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // should be related to input length (same or proportional).
     // =====================================================
 
-    [Fact]
-    public void OutputLength_RelatedToInput()
+    [Fact(Timeout = 120000)]
+    public async Task OutputLength_RelatedToInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -39,8 +40,8 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // Negative label indices are invalid.
     // =====================================================
 
-    [Fact]
-    public void LabelValues_ShouldBeNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LabelValues_ShouldBeNonNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -61,8 +62,8 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // An empty/padding-only input is a valid edge case.
     // =====================================================
 
-    [Fact]
-    public void EmptyInput_ShouldNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
@@ -83,8 +84,8 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // the same is degenerate.
     // =====================================================
 
-    [Fact]
-    public void DifferentInputs_DifferentLabels()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentInputs_DifferentLabels()
     {
         var network = CreateNetwork();
 

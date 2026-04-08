@@ -12,6 +12,7 @@ using AiDotNet.Clustering.Spectral;
 using AiDotNet.Clustering.Subspace;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
@@ -19,8 +20,8 @@ public class PartitioningClusteringIntegrationTests
 {
     private const double Tolerance = 1e-3;
 
-    [Fact]
-    public void KMeans_FitPredict_AssignsExpectedClusters()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_FitPredict_AssignsExpectedClusters()
     {
         var dataset = ClusteringTestData.CreateThreeClusterBlobs();
         var options = new KMeansOptions<double>
@@ -41,8 +42,8 @@ public class PartitioningClusteringIntegrationTests
         ClusteringTestHelpers.AssertPairwiseAgreement(dataset.Labels, labels);
     }
 
-    [Fact]
-    public void KMeans_Centroids_CloseToExpectedMeans()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_Centroids_CloseToExpectedMeans()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMeansOptions<double>
@@ -72,8 +73,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(10.3, centerList[1].Y, Tolerance);
     }
 
-    [Fact]
-    public void KMeans_ReproducibleWithFixedSeed()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_ReproducibleWithFixedSeed()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMeansOptions<double>
@@ -97,8 +98,8 @@ public class PartitioningClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void KMeans_Transform_ReturnsExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_Transform_ReturnsExpectedShape()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var kmeans = new KMeans<double>(new KMeansOptions<double>
@@ -116,8 +117,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(2, distances.Columns);
     }
 
-    [Fact]
-    public void KMeans_DifferentDistanceMetrics_RunSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_DifferentDistanceMetrics_RunSuccessfully()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMeansOptions<double>
@@ -150,8 +151,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(dataset.Data.Rows, manhattanLabels.Length);
     }
 
-    [Fact]
-    public void KMeans_InitializationMethods_RunSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_InitializationMethods_RunSuccessfully()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var randomOptions = new KMeansOptions<double>
@@ -182,8 +183,8 @@ public class PartitioningClusteringIntegrationTests
         _ = ClusteringTestHelpers.RequireNotNull(plusModel.ClusterCenters, "ClusterCenters");
     }
 
-    [Fact]
-    public void KMeans_Wcss_DecreasesWithMoreClusters()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_Wcss_DecreasesWithMoreClusters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
 
@@ -237,8 +238,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.True(!double.IsNaN(inertia) && !double.IsInfinity(inertia));
     }
 
-    [Fact]
-    public void MiniBatchKMeans_Train_ProducesValidLabels()
+    [Fact(Timeout = 120000)]
+    public async Task MiniBatchKMeans_Train_ProducesValidLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new MiniBatchKMeansOptions<double>
@@ -258,8 +259,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(2, miniBatch.NumClusters);
     }
 
-    [Fact]
-    public void MiniBatchKMeans_PartialFit_InitializesCenters()
+    [Fact(Timeout = 120000)]
+    public async Task MiniBatchKMeans_PartialFit_InitializesCenters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new MiniBatchKMeansOptions<double>
@@ -278,8 +279,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(2, centers.Rows);
     }
 
-    [Fact]
-    public void OnlineKMeans_Train_TracksPointsSeen()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineKMeans_Train_TracksPointsSeen()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new OnlineKMeansOptions<double>
@@ -297,8 +298,8 @@ public class PartitioningClusteringIntegrationTests
         _ = ClusteringTestHelpers.RequireNotNull(online.ClusterCenters, "ClusterCenters");
     }
 
-    [Fact]
-    public void OnlineKMeans_PartialFit_UpdatesCounts()
+    [Fact(Timeout = 120000)]
+    public async Task OnlineKMeans_PartialFit_UpdatesCounts()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new OnlineKMeansOptions<double>
@@ -320,8 +321,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(before + 1, online.TotalPointsSeen);
     }
 
-    [Fact]
-    public void KMedoids_MedoidIndices_ReferToOriginalPoints()
+    [Fact(Timeout = 120000)]
+    public async Task KMedoids_MedoidIndices_ReferToOriginalPoints()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMedoidsOptions<double>
@@ -345,8 +346,8 @@ public class PartitioningClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void FuzzyCMeans_MembershipRowsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task FuzzyCMeans_MembershipRowsSumToOne()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new FuzzyCMeansOptions<double>
@@ -372,8 +373,8 @@ public class PartitioningClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void SeededKMeans_RespectsSeedsWhenConstrained()
+    [Fact(Timeout = 120000)]
+    public async Task SeededKMeans_RespectsSeedsWhenConstrained()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var seeds = new Dictionary<int, int>
@@ -398,8 +399,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(1.0, labels[4], Tolerance);
     }
 
-    [Fact]
-    public void COPKMeans_RespectsMustAndCannotLink()
+    [Fact(Timeout = 120000)]
+    public async Task COPKMeans_RespectsMustAndCannotLink()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new COPKMeansOptions<double>
@@ -420,8 +421,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.NotEqual(labels[0], labels[4]);
     }
 
-    [Fact]
-    public void GMeans_DetectsTwoClusters()
+    [Fact(Timeout = 120000)]
+    public async Task GMeans_DetectsTwoClusters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 12, spacing: 12.0);
         var options = new GMeansOptions<double>
@@ -438,8 +439,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(2, gmeans.NumClusters);
     }
 
-    [Fact]
-    public void XMeans_DetectsTwoClusters()
+    [Fact(Timeout = 120000)]
+    public async Task XMeans_DetectsTwoClusters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 12, spacing: 12.0);
         var options = new XMeansOptions<double>
@@ -455,8 +456,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.Equal(2, xmeans.NumClusters);
     }
 
-    [Fact]
-    public void BisectingKMeans_BuildsHierarchy()
+    [Fact(Timeout = 120000)]
+    public async Task BisectingKMeans_BuildsHierarchy()
     {
         var dataset = ClusteringTestData.CreateThreeClusterBlobs();
         var options = new BisectingKMeansOptions<double>
@@ -475,8 +476,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.True(hierarchy.Count >= 1);
     }
 
-    [Fact]
-    public void CLARANS_ProducesMedoids()
+    [Fact(Timeout = 120000)]
+    public async Task CLARANS_ProducesMedoids()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new CLARANSOptions<double>
@@ -494,8 +495,8 @@ public class PartitioningClusteringIntegrationTests
         Assert.True(clarans.BestCost > 0);
     }
 
-    [Fact]
-    public void KMeans_SerializeDeserialize_PreservesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_SerializeDeserialize_PreservesPredictions()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMeansOptions<double>
@@ -523,8 +524,8 @@ public class PartitioningClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void KMeans_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_Clone_ProducesSamePredictions()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new KMeansOptions<double>
@@ -552,8 +553,8 @@ public class PartitioningClusteringIntegrationTests
 
 public class DensityClusteringIntegrationTests
 {
-    [Fact]
-    public void DBSCAN_FindsClustersAndNoise()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_FindsClustersAndNoise()
     {
         var dataset = ClusteringTestData.CreateWithOutlier();
         var options = new DBSCANOptions<double>
@@ -571,8 +572,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(dbscan.GetNoiseCount() >= 1);
     }
 
-    [Fact]
-    public void DBSCAN_Epsilon_ControlsNoiseCount()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_Epsilon_ControlsNoiseCount()
     {
         var dataset = ClusteringTestData.CreateWithOutlier();
         var tight = new DBSCAN<double>(new DBSCANOptions<double>
@@ -598,8 +599,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(tightNoise >= looseNoise);
     }
 
-    [Fact]
-    public void DBSCAN_CoreSampleIndices_NotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_CoreSampleIndices_NotEmpty()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new DBSCANOptions<double>
@@ -616,8 +617,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(cores.Length > 0);
     }
 
-    [Fact]
-    public void DBSCAN_Circles_ProducesLabels()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_Circles_ProducesLabels()
     {
         var dataset = ClusteringTestData.CreateCircles(pointsPerCircle: 8);
         var options = new DBSCANOptions<double>
@@ -634,8 +635,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(dbscan.NumClusters >= 1);
     }
 
-    [Fact]
-    public void HDBSCAN_ProducesProbabilitiesAndOutlierScores()
+    [Fact(Timeout = 120000)]
+    public async Task HDBSCAN_ProducesProbabilitiesAndOutlierScores()
     {
         var dataset = ClusteringTestData.CreateWithOutlier();
         var options = new HDBSCANOptions<double>
@@ -658,8 +659,8 @@ public class DensityClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void OPTICS_OrderingAndReachabilityLengths()
+    [Fact(Timeout = 120000)]
+    public async Task OPTICS_OrderingAndReachabilityLengths()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new OPTICSOptions<double>
@@ -681,8 +682,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(optics.NumClusters >= 1);
     }
 
-    [Fact]
-    public void OPTICS_ExtractClustersAtEpsilon_ProducesLabels()
+    [Fact(Timeout = 120000)]
+    public async Task OPTICS_ExtractClustersAtEpsilon_ProducesLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new OPTICSOptions<double>
@@ -701,8 +702,8 @@ public class DensityClusteringIntegrationTests
         Assert.Equal(dataset.Data.Rows, labels.Length);
     }
 
-    [Fact]
-    public void Denclue_FindsAttractors()
+    [Fact(Timeout = 120000)]
+    public async Task Denclue_FindsAttractors()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new DenclueOptions<double>
@@ -721,8 +722,8 @@ public class DensityClusteringIntegrationTests
         Assert.True(attractors.Length > 0);
     }
 
-    [Fact]
-    public void MeanShift_FindsCenters()
+    [Fact(Timeout = 120000)]
+    public async Task MeanShift_FindsCenters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new MeanShiftOptions<double>
@@ -764,8 +765,8 @@ public class HierarchicalClusteringIntegrationTests
         Assert.NotNull(agg.Dendrogram);
     }
 
-    [Fact]
-    public void AgglomerativeClustering_GetLabelsForNClusters_ReturnsExpectedCount()
+    [Fact(Timeout = 120000)]
+    public async Task AgglomerativeClustering_GetLabelsForNClusters_ReturnsExpectedCount()
     {
         var dataset = ClusteringTestData.CreateThreeClusterBlobs();
         var options = new HierarchicalOptions<double>
@@ -781,8 +782,8 @@ public class HierarchicalClusteringIntegrationTests
         Assert.Equal(3, ClusteringTestHelpers.CountClusters(labels, ignoreNoise: false));
     }
 
-    [Fact]
-    public void BIRCH_ComputesLeafEntriesAndCenters()
+    [Fact(Timeout = 120000)]
+    public async Task BIRCH_ComputesLeafEntriesAndCenters()
     {
         var dataset = ClusteringTestData.CreateThreeClusterBlobs();
         var options = new BIRCHOptions<double>
@@ -801,8 +802,8 @@ public class HierarchicalClusteringIntegrationTests
         Assert.NotNull(birch.ClusterCenters);
     }
 
-    [Fact]
-    public void CURE_ProducesClusters()
+    [Fact(Timeout = 120000)]
+    public async Task CURE_ProducesClusters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new CUREOptions<double>
@@ -823,8 +824,8 @@ public class HierarchicalClusteringIntegrationTests
 
 public class SpectralSubspaceClusteringIntegrationTests
 {
-    [Fact]
-    public void SpectralClustering_RbfAffinity_ClustersMoons()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralClustering_RbfAffinity_ClustersMoons()
     {
         var dataset = ClusteringTestData.CreateMoons(pointsPerMoon: 10);
         var options = new SpectralOptions<double>
@@ -845,8 +846,8 @@ public class SpectralSubspaceClusteringIntegrationTests
         Assert.NotNull(spectral.Embedding);
     }
 
-    [Fact]
-    public void SpectralClustering_PrecomputedAffinity_Clusters()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralClustering_PrecomputedAffinity_Clusters()
     {
         var affinity = new Matrix<double>(4, 4);
         for (int i = 0; i < 4; i++)
@@ -877,8 +878,8 @@ public class SpectralSubspaceClusteringIntegrationTests
         Assert.NotNull(spectral.AffinityMatrix);
     }
 
-    [Fact]
-    public void CLIQUE_FindsClustersInGrid()
+    [Fact(Timeout = 120000)]
+    public async Task CLIQUE_FindsClustersInGrid()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new CLIQUEOptions<double>
@@ -895,8 +896,8 @@ public class SpectralSubspaceClusteringIntegrationTests
         Assert.NotNull(clique.ClusterCenters);
     }
 
-    [Fact]
-    public void SUBCLU_FindsClusters()
+    [Fact(Timeout = 120000)]
+    public async Task SUBCLU_FindsClusters()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new SUBCLUOptions<double>
@@ -917,8 +918,8 @@ public class SpectralSubspaceClusteringIntegrationTests
 
 public class ProbabilisticClusteringIntegrationTests
 {
-    [Fact]
-    public void GaussianMixtureModel_ProbabilitiesSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianMixtureModel_ProbabilitiesSumToOne()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new GMMOptions<double>
@@ -944,8 +945,8 @@ public class ProbabilisticClusteringIntegrationTests
         }
     }
 
-    [Fact]
-    public void GaussianMixtureModel_WeightsSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianMixtureModel_WeightsSumToOne()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new GMMOptions<double>
@@ -969,8 +970,8 @@ public class ProbabilisticClusteringIntegrationTests
         Assert.True(!double.IsNaN(gmm.LowerBound) && !double.IsInfinity(gmm.LowerBound));
     }
 
-    [Fact]
-    public void AffinityPropagation_ProducesExemplars()
+    [Fact(Timeout = 120000)]
+    public async Task AffinityPropagation_ProducesExemplars()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new AffinityPropagationOptions<double>
@@ -991,8 +992,8 @@ public class ProbabilisticClusteringIntegrationTests
 
 public class EnsembleNeuralClusteringIntegrationTests
 {
-    [Fact]
-    public void ConsensusClustering_ProducesCoAssociationMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task ConsensusClustering_ProducesCoAssociationMatrix()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new ConsensusClusteringOptions<double>
@@ -1009,8 +1010,8 @@ public class EnsembleNeuralClusteringIntegrationTests
         Assert.Equal(2, consensus.NumClusters);
     }
 
-    [Fact]
-    public void SelfOrganizingMap_ProducesUmatAndLabels()
+    [Fact(Timeout = 120000)]
+    public async Task SelfOrganizingMap_ProducesUmatAndLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs();
         var options = new SOMOptions<double>
@@ -1034,8 +1035,8 @@ public class EnsembleNeuralClusteringIntegrationTests
 
 public class ClusteringEdgeCaseIntegrationTests
 {
-    [Fact]
-    public void KMeans_SinglePoint_Works()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_SinglePoint_Works()
     {
         var dataset = ClusteringTestData.CreateSinglePoint();
         var options = new KMeansOptions<double>
@@ -1053,8 +1054,8 @@ public class ClusteringEdgeCaseIntegrationTests
         _ = ClusteringTestHelpers.RequireNotNull(kmeans.ClusterCenters, "ClusterCenters");
     }
 
-    [Fact]
-    public void KMeans_HighDimensionalData_ProducesLabels()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_HighDimensionalData_ProducesLabels()
     {
         var dataset = ClusteringTestData.CreateHighDimensional(pointsPerCluster: 4, dimensions: 30);
         var options = new KMeansOptions<double>
@@ -1072,8 +1073,8 @@ public class ClusteringEdgeCaseIntegrationTests
         Assert.Equal(dataset.Data.Rows, labels.Length);
     }
 
-    [Fact]
-    public void KMeans_ImbalancedClusters_AssignsAllPoints()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_ImbalancedClusters_AssignsAllPoints()
     {
         var dataset = ClusteringTestData.CreateImbalancedClusters(largeClusterSize: 10, smallClusterSize: 2);
         var options = new KMeansOptions<double>
@@ -1091,8 +1092,8 @@ public class ClusteringEdgeCaseIntegrationTests
         Assert.Equal(2, ClusteringTestHelpers.CountClusters(labels));
     }
 
-    [Fact]
-    public void KMeans_LargeValueRange_ProducesLabels()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_LargeValueRange_ProducesLabels()
     {
         var data = new Matrix<double>(4, 2);
         data[0, 0] = 1e-9; data[0, 1] = 1e-9;
@@ -1115,8 +1116,8 @@ public class ClusteringEdgeCaseIntegrationTests
         Assert.Equal(data.Rows, labels.Length);
     }
 
-    [Fact]
-    public void DBSCAN_AllIdenticalPoints_OneCluster()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_AllIdenticalPoints_OneCluster()
     {
         var dataset = ClusteringTestData.CreateIdenticalPoints(count: 5);
         var options = new DBSCANOptions<double>
@@ -1133,8 +1134,8 @@ public class ClusteringEdgeCaseIntegrationTests
         Assert.Equal(0, dbscan.GetNoiseCount());
     }
 
-    [Fact]
-    public void KMeans_WithNaN_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_WithNaN_ThrowsArgumentException()
     {
         var data = new Matrix<double>(2, 2);
         data[0, 0] = 0.0; data[0, 1] = 0.0;

@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 
@@ -18,8 +19,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region AdamW + Scheduler Tests
 
-    [Fact]
-    public void AdamWOptimizer_WithStepLRScheduler_LearningRateDecays()
+    [Fact(Timeout = 120000)]
+    public async Task AdamWOptimizer_WithStepLRScheduler_LearningRateDecays()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.01, stepSize: 2, gamma: 0.5);
@@ -46,8 +47,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.005, scheduler.CurrentLearningRate, Tolerance); // 0.01 * 0.5
     }
 
-    [Fact]
-    public void AdamWOptimizer_WithCosineScheduler_LearningRateAnneals()
+    [Fact(Timeout = 120000)]
+    public async Task AdamWOptimizer_WithCosineScheduler_LearningRateAnneals()
     {
         // Arrange
         var scheduler = new CosineAnnealingLRScheduler(
@@ -85,8 +86,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.True(learningRates[^1] <= 0.01);
     }
 
-    [Fact]
-    public void AdamWOptimizer_WithLinearWarmupScheduler_LearningRateWarmsUp()
+    [Fact(Timeout = 120000)]
+    public async Task AdamWOptimizer_WithLinearWarmupScheduler_LearningRateWarmsUp()
     {
         // Arrange
         var scheduler = new LinearWarmupScheduler(baseLearningRate: 0.1, warmupSteps: 5);
@@ -127,8 +128,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Adam + Scheduler Tests
 
-    [Fact]
-    public void AdamOptimizer_WithExponentialScheduler_LearningRateDecays()
+    [Fact(Timeout = 120000)]
+    public async Task AdamOptimizer_WithExponentialScheduler_LearningRateDecays()
     {
         // Arrange
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.01, gamma: 0.9);
@@ -154,8 +155,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.009, lrAfterStep, Tolerance); // 0.01 * 0.9
     }
 
-    [Fact]
-    public void AdamOptimizer_WithPolynomialScheduler_LearningRateDecays()
+    [Fact(Timeout = 120000)]
+    public async Task AdamOptimizer_WithPolynomialScheduler_LearningRateDecays()
     {
         // Arrange
         var scheduler = new PolynomialLRScheduler(
@@ -186,8 +187,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Lion + Scheduler Tests
 
-    [Fact]
-    public void LionOptimizer_WithCosineScheduler_LearningRateAnneals()
+    [Fact(Timeout = 120000)]
+    public async Task LionOptimizer_WithCosineScheduler_LearningRateAnneals()
     {
         // Arrange
         var scheduler = new CosineAnnealingLRScheduler(
@@ -221,8 +222,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Scheduler Step Mode Tests
 
-    [Fact]
-    public void Optimizer_StepPerBatch_StepsOnEveryBatch()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_StepPerBatch_StepsOnEveryBatch()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.1, stepSize: 3, gamma: 0.5);
@@ -248,8 +249,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.05, scheduler.CurrentLearningRate, Tolerance); // 0.1 * 0.5
     }
 
-    [Fact]
-    public void Optimizer_StepPerEpoch_OnlyStepsOnEpochEnd()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_StepPerEpoch_OnlyStepsOnEpochEnd()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.1, stepSize: 2, gamma: 0.5);
@@ -282,8 +283,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Optimizer_Reset_ResetsLearningRate()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_Reset_ResetsLearningRate()
     {
         // Arrange
         var scheduler = new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.9);
@@ -320,8 +321,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Null Scheduler Tests
 
-    [Fact]
-    public void Optimizer_WithNullScheduler_UsesConstantLearningRate()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_WithNullScheduler_UsesConstantLearningRate()
     {
         // Arrange - No scheduler provided
         var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -351,8 +352,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Multiple Optimizer Types Tests
 
-    [Fact]
-    public void AdamOptimizer_WorksWithStepScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task AdamOptimizer_WorksWithStepScheduler()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.01, stepSize: 2, gamma: 0.5);
@@ -383,8 +384,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.005, lrAfter, Tolerance); // After 2 steps with stepSize=2
     }
 
-    [Fact]
-    public void AdamWOptimizer_WorksWithStepScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task AdamWOptimizer_WorksWithStepScheduler()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.01, stepSize: 2, gamma: 0.5);
@@ -415,8 +416,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.005, lrAfter, Tolerance);
     }
 
-    [Fact]
-    public void LionOptimizer_WorksWithStepScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task LionOptimizer_WorksWithStepScheduler()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.01, stepSize: 2, gamma: 0.5);
@@ -451,8 +452,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region OneCycle Scheduler Tests
 
-    [Fact]
-    public void AdamWOptimizer_WithOneCycleScheduler_CompletesFullCycle()
+    [Fact(Timeout = 120000)]
+    public async Task AdamWOptimizer_WithOneCycleScheduler_CompletesFullCycle()
     {
         // Arrange
         var scheduler = new OneCycleLRScheduler(
@@ -494,8 +495,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region Cyclic LR Scheduler Tests
 
-    [Fact]
-    public void AdamOptimizer_WithCyclicScheduler_LearningRateCycles()
+    [Fact(Timeout = 120000)]
+    public async Task AdamOptimizer_WithCyclicScheduler_LearningRateCycles()
     {
         // Arrange
         var scheduler = new CyclicLRScheduler(
@@ -532,8 +533,8 @@ public class OptimizerSchedulerIntegrationTests
 
     #region GetCurrentLearningRate Tests
 
-    [Fact]
-    public void Optimizer_GetCurrentLearningRate_ReturnsSchedulerControlledRate()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_GetCurrentLearningRate_ReturnsSchedulerControlledRate()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.1, stepSize: 1, gamma: 0.5);
@@ -555,8 +556,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.05, afterStepLR, Tolerance);
     }
 
-    [Fact]
-    public void Optimizer_OnEpochEnd_StepsSchedulerInEpochMode()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_OnEpochEnd_StepsSchedulerInEpochMode()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.1, stepSize: 1, gamma: 0.5);
@@ -578,8 +579,8 @@ public class OptimizerSchedulerIntegrationTests
         Assert.Equal(0.05, lrAfterEpochEnd, Tolerance);
     }
 
-    [Fact]
-    public void Optimizer_OnBatchEnd_StepsSchedulerInBatchMode()
+    [Fact(Timeout = 120000)]
+    public async Task Optimizer_OnBatchEnd_StepsSchedulerInBatchMode()
     {
         // Arrange
         var scheduler = new StepLRScheduler(baseLearningRate: 0.1, stepSize: 1, gamma: 0.5);

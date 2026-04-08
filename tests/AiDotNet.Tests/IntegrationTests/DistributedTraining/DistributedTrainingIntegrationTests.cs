@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Enums;
 using AiDotNet.Autodiff;
 using AiDotNet.LossFunctions;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 
@@ -18,8 +19,8 @@ public class DistributedTrainingIntegrationTests
 {
     #region ReductionOperation Tests
 
-    [Fact]
-    public void ReductionOperation_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ReductionOperation_HasExpectedValues()
     {
         // Assert
         var values = (ReductionOperation[])Enum.GetValues(typeof(ReductionOperation));
@@ -30,8 +31,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Contains(ReductionOperation.Average, values);
     }
 
-    [Fact]
-    public void ReductionOperation_Sum_HasCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task ReductionOperation_Sum_HasCorrectValue()
     {
         // Assert
         Assert.Equal(0, (int)ReductionOperation.Sum);
@@ -41,8 +42,8 @@ public class DistributedTrainingIntegrationTests
 
     #region InMemoryCommunicationBackend Constructor Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ValidConstruction()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -56,8 +57,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(backend.IsInitialized);
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_InvalidRank_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_InvalidRank_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -67,8 +68,8 @@ public class DistributedTrainingIntegrationTests
             new InMemoryCommunicationBackend<double>(rank: -1, worldSize: 4, environmentId: envId));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_RankGreaterThanWorldSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_RankGreaterThanWorldSize_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -78,8 +79,8 @@ public class DistributedTrainingIntegrationTests
             new InMemoryCommunicationBackend<double>(rank: 4, worldSize: 4, environmentId: envId));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_InvalidWorldSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_InvalidWorldSize_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -89,16 +90,16 @@ public class DistributedTrainingIntegrationTests
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 0, environmentId: envId));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_EmptyEnvironmentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_EmptyEnvironmentId_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: ""));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_SingleProcess_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_SingleProcess_ValidConstruction()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -115,8 +116,8 @@ public class DistributedTrainingIntegrationTests
 
     #region InMemoryCommunicationBackend Initialize/Shutdown Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Initialize_SetsIsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Initialize_SetsIsInitialized()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -132,8 +133,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Shutdown_ClearsIsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Shutdown_ClearsIsInitialized()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -147,8 +148,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(backend.IsInitialized);
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_ClearEnvironment_StaticCleanup()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ClearEnvironment_StaticCleanup()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -166,8 +167,8 @@ public class DistributedTrainingIntegrationTests
 
     #region InMemoryCommunicationBackend SingleProcess Operations Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_AllReduce_SingleProcess_NoChange()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllReduce_SingleProcess_NoChange()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -191,8 +192,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_AllGather_SingleProcess_ReturnsCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllGather_SingleProcess_ReturnsCopy()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -217,8 +218,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Broadcast_SingleProcess_ReturnsCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Broadcast_SingleProcess_ReturnsCopy()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -241,8 +242,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Scatter_SingleProcess_ReturnsCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Scatter_SingleProcess_ReturnsCopy()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -265,8 +266,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_ReduceScatter_SingleProcess_ReturnsCopy()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ReduceScatter_SingleProcess_ReturnsCopy()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -288,8 +289,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Barrier_SingleProcess_NoBlock()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Barrier_SingleProcess_NoBlock()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -314,8 +315,8 @@ public class DistributedTrainingIntegrationTests
 
     #region InMemoryCommunicationBackend Validation Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_AllReduce_NullData_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllReduce_NullData_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -334,8 +335,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_AllGather_NullData_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllGather_NullData_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -354,8 +355,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Broadcast_InvalidRoot_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Broadcast_InvalidRoot_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -374,8 +375,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Scatter_InvalidRoot_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Scatter_InvalidRoot_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -398,8 +399,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ShardingConfiguration Tests
 
-    [Fact]
-    public void ShardingConfiguration_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_ValidConstruction()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -415,8 +416,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Same(backend, config.CommunicationBackend);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CustomLearningRate()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CustomLearningRate()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -429,16 +430,16 @@ public class DistributedTrainingIntegrationTests
         Assert.Equal(0.001, config.LearningRate);
     }
 
-    [Fact]
-    public void ShardingConfiguration_NullBackend_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_NullBackend_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new ShardingConfiguration<double>(null!));
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateDefault_ReturnsDefaultConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateDefault_ReturnsDefaultConfig()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -453,8 +454,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(config.EnableGradientCompression);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForHighBandwidth_ReturnsOptimizedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateForHighBandwidth_ReturnsOptimizedConfig()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -469,8 +470,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(config.EnableGradientCompression);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForLowBandwidth_ReturnsOptimizedConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateForLowBandwidth_ReturnsOptimizedConfig()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -485,8 +486,8 @@ public class DistributedTrainingIntegrationTests
         Assert.True(config.EnableGradientCompression);
     }
 
-    [Fact]
-    public void ShardingConfiguration_MutableProperties_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_MutableProperties_CanBeSet()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -508,8 +509,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer Constructor Tests
 
-    [Fact]
-    public void ParameterAnalyzer_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidConstruction()
     {
         // Act
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 1024, worldSize: 4);
@@ -518,8 +519,8 @@ public class DistributedTrainingIntegrationTests
         Assert.NotNull(analyzer);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_DefaultConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_DefaultConstruction()
     {
         // Act
         var analyzer = new ParameterAnalyzer<double>();
@@ -528,16 +529,16 @@ public class DistributedTrainingIntegrationTests
         Assert.NotNull(analyzer);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_InvalidMinimumGroupSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_InvalidMinimumGroupSize_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             new ParameterAnalyzer<double>(minimumGroupSize: 0));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_InvalidWorldSize_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_InvalidWorldSize_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -548,8 +549,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer.ParameterGroup Tests
 
-    [Fact]
-    public void ParameterGroup_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterGroup_DefaultValues()
     {
         // Arrange & Act
         var group = new ParameterAnalyzer<double>.ParameterGroup();
@@ -561,8 +562,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(group.IsMerged);
     }
 
-    [Fact]
-    public void ParameterGroup_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterGroup_SetProperties()
     {
         // Arrange & Act
         var group = new ParameterAnalyzer<double>.ParameterGroup
@@ -584,8 +585,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer AnalyzeParameters Tests
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeParameters_EmptyVector_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_EmptyVector_ReturnsEmptyList()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -598,8 +599,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Empty(groups);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeParameters_NullVector_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_NullVector_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -609,8 +610,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.AnalyzeParameters(null!));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeParameters_SmallVector_ReturnsSingleGroup()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_SmallVector_ReturnsSingleGroup()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 1024);
@@ -625,8 +626,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Equal(100, groups[0].Size);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeParameters_ExactMultiple_ReturnsCorrectGroups()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_ExactMultiple_ReturnsCorrectGroups()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100);
@@ -645,8 +646,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Equal(100, groups[2].Size);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeParameters_GroupsHaveNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_GroupsHaveNames()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100);
@@ -664,8 +665,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer AnalyzeForDistribution Tests
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeForDistribution_EmptyVector_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_EmptyVector_ReturnsEmptyList()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
@@ -678,8 +679,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Empty(groups);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeForDistribution_NullVector_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_NullVector_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
@@ -689,8 +690,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.AnalyzeForDistribution(null!));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeForDistribution_CreatesDistributedGroups()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_CreatesDistributedGroups()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
@@ -706,8 +707,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Equal(10000, totalSize);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_AnalyzeForDistribution_GroupsHaveDistributedNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_GroupsHaveDistributedNames()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 2);
@@ -724,8 +725,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer CalculateDistributionStats Tests
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_EmptyList_ReturnsEmptyDict()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_EmptyList_ReturnsEmptyDict()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -738,8 +739,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Empty(stats);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_NullList_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_NullList_ThrowsArgumentNullException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -748,8 +749,8 @@ public class DistributedTrainingIntegrationTests
         Assert.Throws<ArgumentNullException>(() => analyzer.CalculateDistributionStats(null));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_ValidGroups_ReturnsStats()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_ValidGroups_ReturnsStats()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
@@ -775,8 +776,8 @@ public class DistributedTrainingIntegrationTests
         Assert.True(stats.ContainsKey("GroupSizeStdDev"));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_UnevenGroups_ReturnsCorrectStats()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_UnevenGroups_ReturnsCorrectStats()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -804,8 +805,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ParameterAnalyzer ValidateGrouping Tests
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_ValidGroups_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_ValidGroups_ReturnsTrue()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -823,8 +824,8 @@ public class DistributedTrainingIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_EmptyGroups_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_EmptyGroups_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -835,8 +836,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(groups, totalParameterCount: 100));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_NullGroups_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_NullGroups_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -846,8 +847,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(null!, totalParameterCount: 100));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_GroupNotStartingAtZero_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupNotStartingAtZero_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -861,8 +862,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(groups, totalParameterCount: 110));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_GroupWithGap_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupWithGap_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -877,8 +878,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(groups, totalParameterCount: 250));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_GroupWithOverlap_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupWithOverlap_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -893,8 +894,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(groups, totalParameterCount: 150));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_IncompleteParameterCoverage_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_IncompleteParameterCoverage_ThrowsException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -908,8 +909,8 @@ public class DistributedTrainingIntegrationTests
             analyzer.ValidateGrouping(groups, totalParameterCount: 200));
     }
 
-    [Fact]
-    public void ParameterAnalyzer_ValidateGrouping_UnsortedGroups_StillValidates()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_UnsortedGroups_StillValidates()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
@@ -931,8 +932,8 @@ public class DistributedTrainingIntegrationTests
 
     #region CommunicationManager Tests
 
-    [Fact]
-    public void CommunicationManager_IsInitialized_InitiallyFalse()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_IsInitialized_InitiallyFalse()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -944,8 +945,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(CommunicationManager.IsInitialized);
     }
 
-    [Fact]
-    public void CommunicationManager_Initialize_SetsIsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_SetsIsInitialized()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -971,8 +972,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_Shutdown_ClearsIsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Shutdown_ClearsIsInitialized()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -992,8 +993,8 @@ public class DistributedTrainingIntegrationTests
         Assert.False(CommunicationManager.IsInitialized);
     }
 
-    [Fact]
-    public void CommunicationManager_Initialize_NullBackend_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_NullBackend_ThrowsException()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1006,8 +1007,8 @@ public class DistributedTrainingIntegrationTests
             CommunicationManager.Initialize<double>(null!));
     }
 
-    [Fact]
-    public void CommunicationManager_Initialize_AlreadyInitialized_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_AlreadyInitialized_ThrowsException()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1035,8 +1036,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_GetRank_WhenInitialized_ReturnsRank()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetRank_WhenInitialized_ReturnsRank()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1064,8 +1065,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_GetWorldSize_WhenInitialized_ReturnsWorldSize()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetWorldSize_WhenInitialized_ReturnsWorldSize()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1093,8 +1094,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_GetRank_WhenNotInitialized_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetRank_WhenNotInitialized_ThrowsException()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1107,8 +1108,8 @@ public class DistributedTrainingIntegrationTests
             CommunicationManager.GetRank<double>());
     }
 
-    [Fact]
-    public void CommunicationManager_AllReduce_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllReduce_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1139,8 +1140,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_AllReduce_NullData_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllReduce_NullData_ThrowsException()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1166,8 +1167,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_AllGather_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllGather_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1196,8 +1197,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_Broadcast_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Broadcast_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1226,8 +1227,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_Scatter_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Scatter_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1256,8 +1257,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_Barrier_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Barrier_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1285,8 +1286,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void CommunicationManager_ReduceScatter_WhenInitialized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_ReduceScatter_WhenInitialized_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1319,8 +1320,8 @@ public class DistributedTrainingIntegrationTests
 
     #region Float Backend Tests
 
-    [Fact]
-    public void CommunicationManager_Initialize_FloatBackend_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_FloatBackend_Works()
     {
         // Ensure clean state
         if (CommunicationManager.IsInitialized)
@@ -1348,8 +1349,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Float_SingleProcess_Operations()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Float_SingleProcess_Operations()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1381,8 +1382,8 @@ public class DistributedTrainingIntegrationTests
 
     #region Send/Receive Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Send_NullData_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_NullData_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1401,8 +1402,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Send_InvalidDestinationRank_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_InvalidDestinationRank_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1421,8 +1422,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Send_NegativeTag_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_NegativeTag_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1441,8 +1442,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Receive_InvalidSourceRank_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_InvalidSourceRank_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1461,8 +1462,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Receive_InvalidCount_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_InvalidCount_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1481,8 +1482,8 @@ public class DistributedTrainingIntegrationTests
         }
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Receive_NegativeTag_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_NegativeTag_ThrowsException()
     {
         // Arrange
         var envId = Guid.NewGuid().ToString();
@@ -1505,8 +1506,8 @@ public class DistributedTrainingIntegrationTests
 
     #region DDPModel Tests
 
-    [Fact]
-    public void DDPModel_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1523,8 +1524,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_GetModelMetadata_IncludesDistributedInfo()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_GetModelMetadata_IncludesDistributedInfo()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1544,8 +1545,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_LocalParameterShard_ContainsFullParameters()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_LocalParameterShard_ContainsFullParameters()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1561,8 +1562,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_GatherFullParameters_ReturnsSameAsLocal()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_GatherFullParameters_ReturnsSameAsLocal()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1580,8 +1581,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_Clone_CreatesNewInstance()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Clone_CreatesNewInstance()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1599,8 +1600,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_WithParameters_CreatesNewModel()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_WithParameters_CreatesNewModel()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1618,8 +1619,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void DDPModel_Serialize_Deserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Serialize_Deserialize_PreservesState()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1645,8 +1646,8 @@ public class DistributedTrainingIntegrationTests
 
     #region FSDPModel Tests
 
-    [Fact]
-    public void FSDPModel_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1663,8 +1664,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void FSDPModel_LocalParameterShard_ContainsPartialParameters()
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_LocalParameterShard_ContainsPartialParameters()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1681,8 +1682,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void FSDPModel_GetModelMetadata_IncludesDistributedInfo()
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_GetModelMetadata_IncludesDistributedInfo()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1701,8 +1702,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void FSDPModel_Clone_CreatesNewInstance()
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Clone_CreatesNewInstance()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
@@ -1724,8 +1725,8 @@ public class DistributedTrainingIntegrationTests
 
     #region ZeRO Models Tests
 
-    [Fact]
-    public void ZeRO1Model_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1Model_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1741,8 +1742,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO1Model_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1Model_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1760,8 +1761,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO2Model_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO2Model_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1777,8 +1778,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO2Model_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO2Model_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1796,8 +1797,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO3Model_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1813,8 +1814,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO3Model_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1832,8 +1833,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ZeRO3Model_LocalParameterShard_IsSharded()
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_LocalParameterShard_IsSharded()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1853,8 +1854,8 @@ public class DistributedTrainingIntegrationTests
 
     #region PipelineParallelModel Tests
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineParallelModel_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1870,8 +1871,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task PipelineParallelModel_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1893,8 +1894,8 @@ public class DistributedTrainingIntegrationTests
 
     #region TensorParallelModel Tests
 
-    [Fact]
-    public void TensorParallelModel_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelModel_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1910,8 +1911,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void TensorParallelModel_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelModel_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1933,8 +1934,8 @@ public class DistributedTrainingIntegrationTests
 
     #region HybridShardedModel Tests
 
-    [Fact]
-    public void HybridShardedModel_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task HybridShardedModel_Constructor_InitializesCorrectly()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1950,8 +1951,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_GetModelMetadata_IncludesStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task HybridShardedModel_GetModelMetadata_IncludesStrategy()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -1973,8 +1974,8 @@ public class DistributedTrainingIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
-    public void InMemoryBackend_MultipleEnvironments_AreIsolated()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_MultipleEnvironments_AreIsolated()
     {
         var envId1 = Guid.NewGuid().ToString();
         var envId2 = Guid.NewGuid().ToString();
@@ -1999,8 +2000,8 @@ public class DistributedTrainingIntegrationTests
         backend2.Shutdown();
     }
 
-    [Fact]
-    public void ShardedModel_Constructor_ThrowsOnNullModel()
+    [Fact(Timeout = 120000)]
+    public async Task ShardedModel_Constructor_ThrowsOnNullModel()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
@@ -2013,8 +2014,8 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void ShardedModel_Constructor_ThrowsOnNullConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ShardedModel_Constructor_ThrowsOnNullConfig()
     {
         var model = new MockDistributedModel(8);
 
@@ -2022,8 +2023,8 @@ public class DistributedTrainingIntegrationTests
             new DDPModel<double, Vector<double>, Vector<double>>(model, null!));
     }
 
-    [Fact]
-    public void DDPModel_Deserialize_ThrowsOnWorldSizeMismatch()
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Deserialize_ThrowsOnWorldSizeMismatch()
     {
         var envId1 = Guid.NewGuid().ToString();
         var envId2 = Guid.NewGuid().ToString();
@@ -2049,8 +2050,8 @@ public class DistributedTrainingIntegrationTests
         backend2.Shutdown();
     }
 
-    [Fact]
-    public void AllDistributedStrategies_HaveUniqueMetadataStrategies()
+    [Fact(Timeout = 120000)]
+    public async Task AllDistributedStrategies_HaveUniqueMetadataStrategies()
     {
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);

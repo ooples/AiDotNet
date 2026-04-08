@@ -9,6 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.ActiveLearning;
 
@@ -70,8 +71,8 @@ public class ActiveLearningIntegrationTests
 
     #region EntropySampling Tests
 
-    [Fact]
-    public void EntropySampling_SelectSamples_ReturnsCorrectBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_SelectSamples_ReturnsCorrectBatchSize()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -88,8 +89,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count()); // No duplicates
     }
 
-    [Fact]
-    public void EntropySampling_SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -104,8 +105,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(5, selected.Length); // Should return all available samples
     }
 
-    [Fact]
-    public void EntropySampling_SelectSamples_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -115,8 +116,8 @@ public class ActiveLearningIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null!, pool, 5));
     }
 
-    [Fact]
-    public void EntropySampling_SelectSamples_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -126,8 +127,8 @@ public class ActiveLearningIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null!, 5));
     }
 
-    [Fact]
-    public void EntropySampling_ComputeInformativenessScores_HighEntropyForUncertainSamples()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_ComputeInformativenessScores_HighEntropyForUncertainSamples()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -143,8 +144,8 @@ public class ActiveLearningIntegrationTests
         Assert.True(scores[9] > scores[0], $"Expected entropy[9]={scores[9]} > entropy[0]={scores[0]}");
     }
 
-    [Fact]
-    public void EntropySampling_GetSelectionStatistics_ReturnsValidStats()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_GetSelectionStatistics_ReturnsValidStats()
     {
         // Arrange
         var strategy = new EntropySampling<double>();
@@ -163,8 +164,8 @@ public class ActiveLearningIntegrationTests
         Assert.True(stats["MeanScore"] <= stats["MaxScore"]);
     }
 
-    [Fact]
-    public void EntropySampling_WithBatchDiversity_SelectsDiverseSamples()
+    [Fact(Timeout = 120000)]
+    public async Task EntropySampling_WithBatchDiversity_SelectsDiverseSamples()
     {
         // Arrange
         var strategyWithDiversity = new EntropySampling<double> { UseBatchDiversity = true };
@@ -231,8 +232,8 @@ public class ActiveLearningIntegrationTests
         Assert.All(selected, idx => Assert.InRange(idx, 0, 49));
     }
 
-    [Fact]
-    public void UncertaintySampling_LeastConfidence_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UncertaintySampling_LeastConfidence_CalculatesCorrectly()
     {
         // For a confident prediction like [0.9, 0.05, 0.05], least confidence = 1 - 0.9 = 0.1
         // For uncertain prediction [0.33, 0.33, 0.34], least confidence = 1 - 0.34 ≈ 0.66
@@ -249,8 +250,8 @@ public class ActiveLearningIntegrationTests
                 $"Least confidence {scores[i]} should be in [0, 1]"));
     }
 
-    [Fact]
-    public void UncertaintySampling_MarginSampling_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UncertaintySampling_MarginSampling_CalculatesCorrectly()
     {
         // For confident [0.9, 0.05, 0.05], margin = 0.9 - 0.05 = 0.85, uncertainty = 1 - 0.85 = 0.15
         // For uncertain [0.4, 0.35, 0.25], margin = 0.4 - 0.35 = 0.05, uncertainty = 1 - 0.05 = 0.95
@@ -267,8 +268,8 @@ public class ActiveLearningIntegrationTests
                 $"Margin uncertainty {scores[i]} should be in [0, 1]"));
     }
 
-    [Fact]
-    public void UncertaintySampling_Name_IncludesMeasure()
+    [Fact(Timeout = 120000)]
+    public async Task UncertaintySampling_Name_IncludesMeasure()
     {
         var lcStrategy = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.LeastConfidence);
         var msStrategy = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.MarginSampling);
@@ -283,8 +284,8 @@ public class ActiveLearningIntegrationTests
 
     #region BALD Tests
 
-    [Fact]
-    public void BALD_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task BALD_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new BALD<double>(numMcSamples: 5, dropoutRate: 0.3);
@@ -299,8 +300,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void BALD_ComputeInformativenessScores_ReturnsNonNegativeScores()
+    [Fact(Timeout = 120000)]
+    public async Task BALD_ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // BALD score = H(y|x) - E[H(y|x,θ)] should be non-negative (epistemic uncertainty)
         var strategy = new BALD<double>(numMcSamples: 10);
@@ -334,8 +335,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(3, selected.Length);
     }
 
-    [Fact]
-    public void BALD_Name_IncludesMcSampleCount()
+    [Fact(Timeout = 120000)]
+    public async Task BALD_Name_IncludesMcSampleCount()
     {
         var strategy = new BALD<double>(numMcSamples: 15);
         Assert.Contains("MC15", strategy.Name);
@@ -345,8 +346,8 @@ public class ActiveLearningIntegrationTests
 
     #region RandomSampling Tests
 
-    [Fact]
-    public void RandomSampling_SelectSamples_ReturnsRandomSelection()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSampling_SelectSamples_ReturnsRandomSelection()
     {
         // Arrange
         var strategy = new RandomSampling<double>(seed: 42);
@@ -366,8 +367,8 @@ public class ActiveLearningIntegrationTests
         // Note: There's a tiny chance they could be equal, but extremely unlikely with 100 samples
     }
 
-    [Fact]
-    public void RandomSampling_WithSameSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSampling_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
         var pool = CreateUnlabeledPool(50, 5);
@@ -384,8 +385,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected1, selected2);
     }
 
-    [Fact]
-    public void RandomSampling_InformativenessScores_AreUniform()
+    [Fact(Timeout = 120000)]
+    public async Task RandomSampling_InformativenessScores_AreUniform()
     {
         // Random sampling should assign uniform scores (all equal)
         var strategy = new RandomSampling<double>();
@@ -408,8 +409,8 @@ public class ActiveLearningIntegrationTests
 
     #region MarginSampling Tests
 
-    [Fact]
-    public void MarginSampling_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task MarginSampling_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new MarginSampling<double>();
         var model = CreateMockModel(4);
@@ -421,8 +422,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void MarginSampling_ScoresAreInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task MarginSampling_ScoresAreInValidRange()
     {
         var strategy = new MarginSampling<double>();
         var model = CreateMockModel(3);
@@ -440,8 +441,8 @@ public class ActiveLearningIntegrationTests
 
     #region LeastConfidenceSampling Tests
 
-    [Fact]
-    public void LeastConfidenceSampling_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task LeastConfidenceSampling_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new LeastConfidenceSampling<double>();
         var model = CreateMockModel(5);
@@ -453,8 +454,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void LeastConfidenceSampling_ScoresAreInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task LeastConfidenceSampling_ScoresAreInValidRange()
     {
         var strategy = new LeastConfidenceSampling<double>();
         var model = CreateMockModel(3);
@@ -472,8 +473,8 @@ public class ActiveLearningIntegrationTests
 
     #region VariationRatios Tests
 
-    [Fact]
-    public void VariationRatios_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task VariationRatios_SelectSamples_ReturnsValidSelection()
     {
         var strategy = new VariationRatios<double>();
         var model = CreateMockModel(3);
@@ -485,8 +486,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void VariationRatios_ScoresAreInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task VariationRatios_ScoresAreInValidRange()
     {
         var strategy = new VariationRatios<double>();
         var model = CreateMockModel(4);
@@ -504,8 +505,8 @@ public class ActiveLearningIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void AllStrategies_SingleSamplePool_ReturnsOneSample()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_SingleSamplePool_ReturnsOneSample()
     {
         var strategies = new object[]
         {
@@ -532,8 +533,8 @@ public class ActiveLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllStrategies_ZeroBatchSize_ReturnsEmptyArray()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_ZeroBatchSize_ReturnsEmptyArray()
     {
         var strategy = new EntropySampling<double>();
         var model = CreateMockModel(3);
@@ -544,8 +545,8 @@ public class ActiveLearningIntegrationTests
         Assert.Empty(selected);
     }
 
-    [Fact]
-    public void AllStrategies_LargeBatchSize_ClampedToPoolSize()
+    [Fact(Timeout = 120000)]
+    public async Task AllStrategies_LargeBatchSize_ClampedToPoolSize()
     {
         var strategy = new BALD<double>();
         var model = CreateMockModel(3);
@@ -560,8 +561,8 @@ public class ActiveLearningIntegrationTests
 
     #region Mathematical Validation
 
-    [Fact]
-    public void Entropy_UniformDistribution_EqualsLogK()
+    [Fact(Timeout = 120000)]
+    public async Task Entropy_UniformDistribution_EqualsLogK()
     {
         // For uniform distribution over k classes, entropy = log(k)
         // We test this indirectly through the model
@@ -577,8 +578,8 @@ public class ActiveLearningIntegrationTests
                 $"Entropy for uniform distribution should be close to log(4)={expectedMaxEntropy}, got {scores[i]}"));
     }
 
-    [Fact]
-    public void Entropy_CertainPrediction_EqualsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Entropy_CertainPrediction_EqualsZero()
     {
         // For certain prediction (all probability on one class), entropy = 0
         var strategy = new EntropySampling<double>();
@@ -635,8 +636,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void DiversitySampling_CoverageRadius_IsComputed()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampling_CoverageRadius_IsComputed()
     {
         // Arrange
         var strategy = new DiversitySampling<double>();
@@ -651,8 +652,8 @@ public class ActiveLearningIntegrationTests
         Assert.True(coverageRadius >= 0, "Coverage radius should be non-negative");
     }
 
-    [Fact]
-    public void DiversitySampling_FarthestFirst_SelectsDiverseSamples()
+    [Fact(Timeout = 120000)]
+    public async Task DiversitySampling_FarthestFirst_SelectsDiverseSamples()
     {
         // Arrange - Create a pool with clearly separated clusters
         var poolData = new double[20 * 2]; // 20 samples, 2 features
@@ -689,8 +690,8 @@ public class ActiveLearningIntegrationTests
 
     #region CoreSetSelection Tests
 
-    [Fact]
-    public void CoreSetSelection_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task CoreSetSelection_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new CoreSetSelection<double>();
@@ -705,8 +706,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void CoreSetSelection_ComputeInformativenessScores_ReturnsValidScores()
+    [Fact(Timeout = 120000)]
+    public async Task CoreSetSelection_ComputeInformativenessScores_ReturnsValidScores()
     {
         // Arrange
         var strategy = new CoreSetSelection<double>();
@@ -727,8 +728,8 @@ public class ActiveLearningIntegrationTests
 
     #region HybridSampling Tests
 
-    [Fact]
-    public void HybridSampling_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task HybridSampling_SelectSamples_ReturnsValidSelection()
     {
         // Arrange - Use factory method to create hybrid strategy
         var strategy = HybridSampling<double>.CreateUncertaintyDiversity();
@@ -743,8 +744,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void HybridSampling_ComputeInformativenessScores_CombinesStrategies()
+    [Fact(Timeout = 120000)]
+    public async Task HybridSampling_ComputeInformativenessScores_CombinesStrategies()
     {
         // Arrange - Create a hybrid strategy with entropy and diversity
         var strategies = new List<(IActiveLearningStrategy<double>, double)>
@@ -793,8 +794,8 @@ public class ActiveLearningIntegrationTests
 
     #region InformationDensity Tests
 
-    [Fact]
-    public void InformationDensity_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task InformationDensity_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new InformationDensity<double>();
@@ -809,8 +810,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void InformationDensity_BalancesInformativenessAndDensity()
+    [Fact(Timeout = 120000)]
+    public async Task InformationDensity_BalancesInformativenessAndDensity()
     {
         // Arrange
         var strategy = new InformationDensity<double>();
@@ -831,8 +832,8 @@ public class ActiveLearningIntegrationTests
 
     #region DensityWeightedSampling Tests
 
-    [Fact]
-    public void DensityWeightedSampling_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task DensityWeightedSampling_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new DensityWeightedSampling<double>();
@@ -851,8 +852,8 @@ public class ActiveLearningIntegrationTests
 
     #region ExpectedModelChange Tests
 
-    [Fact]
-    public void ExpectedModelChange_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task ExpectedModelChange_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new ExpectedModelChange<double>();
@@ -867,8 +868,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void ExpectedModelChange_Scores_AreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task ExpectedModelChange_Scores_AreNonNegative()
     {
         // Expected model change measures gradient magnitude which is always >= 0
         var strategy = new ExpectedModelChange<double>();
@@ -885,8 +886,8 @@ public class ActiveLearningIntegrationTests
 
     #region BatchBALD Tests
 
-    [Fact]
-    public void BatchBALD_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task BatchBALD_SelectSamples_ReturnsValidSelection()
     {
         // Arrange
         var strategy = new BatchBALD<double>(numMcSamples: 5);
@@ -901,8 +902,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void BatchBALD_WithDifferentMcSamples_Works()
+    [Fact(Timeout = 120000)]
+    public async Task BatchBALD_WithDifferentMcSamples_Works()
     {
         // Arrange
         var strategy3 = new BatchBALD<double>(numMcSamples: 3);
@@ -923,8 +924,8 @@ public class ActiveLearningIntegrationTests
 
     #region QueryByCommittee Tests
 
-    [Fact]
-    public void QueryByCommittee_SelectSamples_ReturnsValidSelection()
+    [Fact(Timeout = 120000)]
+    public async Task QueryByCommittee_SelectSamples_ReturnsValidSelection()
     {
         // Arrange - Create a committee of models
         var committee = new List<IFullModel<double, Tensor<double>, Tensor<double>>>
@@ -944,8 +945,8 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected.Length, selected.Distinct().Count());
     }
 
-    [Fact]
-    public void QueryByCommittee_DisagreementScores_AreValid()
+    [Fact(Timeout = 120000)]
+    public async Task QueryByCommittee_DisagreementScores_AreValid()
     {
         // Arrange
         var committee = new List<IFullModel<double, Tensor<double>, Tensor<double>>>

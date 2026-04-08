@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -56,41 +57,41 @@ internal sealed class StubModelSerializer : IModelSerializer, IModelShape
 
 public class ModelFileHeaderTests
 {
-    [Fact]
-    public void WrapWithHeader_ThrowsOnNullPayload()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeader_ThrowsOnNullPayload()
     {
         var model = new StubModelSerializer();
         Assert.Throws<ArgumentNullException>(() =>
             ModelFileHeader.WrapWithHeader(null, model, Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
     }
 
-    [Fact]
-    public void WrapWithHeader_ThrowsOnNullModel()
+    [Fact(Timeout = 60000)]
+    public async Task WrapWithHeader_ThrowsOnNullModel()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelFileHeader.WrapWithHeader(new byte[] { 1, 2, 3 }, null, Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
     }
 
-    [Fact]
-    public void HasHeader_ReturnsFalseForNull()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_ReturnsFalseForNull()
     {
         Assert.False(ModelFileHeader.HasHeader((byte[])null));
     }
 
-    [Fact]
-    public void HasHeader_ReturnsFalseForTooShort()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_ReturnsFalseForTooShort()
     {
         Assert.False(ModelFileHeader.HasHeader(new byte[] { 0x41, 0x49 }));
     }
 
-    [Fact]
-    public void HasHeader_ReturnsFalseForRandomData()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_ReturnsFalseForRandomData()
     {
         Assert.False(ModelFileHeader.HasHeader(new byte[] { 0x00, 0x00, 0x00, 0x00, 0xFF }));
     }
 
-    [Fact]
-    public void HasHeader_ReturnsTrueForAimfMagic()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_ReturnsTrueForAimfMagic()
     {
         // AIMF magic: 0x41494D46 in little-endian = bytes 0x46 0x4D 0x49 0x41
         var data = BitConverter.GetBytes(ModelFileHeader.AimfMagic);
@@ -98,8 +99,8 @@ public class ModelFileHeaderTests
         Assert.True(ModelFileHeader.HasHeader(data));
     }
 
-    [Fact]
-    public void WrapAndReadHeader_RoundTrip_PreservesMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task WrapAndReadHeader_RoundTrip_PreservesMetadata()
     {
         var model = new StubModelSerializer
         {
@@ -125,8 +126,8 @@ public class ModelFileHeaderTests
         Assert.True(info.HeaderLength > 0);
     }
 
-    [Fact]
-    public void WrapAndExtractPayload_RoundTrip_PreservesPayload()
+    [Fact(Timeout = 60000)]
+    public async Task WrapAndExtractPayload_RoundTrip_PreservesPayload()
     {
         var originalPayload = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF, 0x42, 0x00, 0xFF };
         var model = new StubModelSerializer { Payload = originalPayload };
@@ -139,8 +140,8 @@ public class ModelFileHeaderTests
         Assert.Equal(originalPayload, extracted);
     }
 
-    [Fact]
-    public void WrapAndExtractPayload_EmptyPayload_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task WrapAndExtractPayload_EmptyPayload_RoundTrip()
     {
         var model = new StubModelSerializer { Payload = Array.Empty<byte>() };
 
@@ -153,8 +154,8 @@ public class ModelFileHeaderTests
         Assert.Empty(extracted);
     }
 
-    [Fact]
-    public void WrapAndExtractPayload_LargePayload_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task WrapAndExtractPayload_LargePayload_RoundTrip()
     {
         // 1 MB payload
         var payload = new byte[1024 * 1024];
@@ -175,28 +176,28 @@ public class ModelFileHeaderTests
         Assert.Equal(payload, extracted);
     }
 
-    [Fact]
-    public void ReadHeader_ThrowsOnNull()
+    [Fact(Timeout = 60000)]
+    public async Task ReadHeader_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ReadHeader(null));
     }
 
-    [Fact]
-    public void ReadHeader_ThrowsOnNonAimfData()
+    [Fact(Timeout = 60000)]
+    public async Task ReadHeader_ThrowsOnNonAimfData()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ModelFileHeader.ReadHeader(new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 }));
         Assert.Contains("AIMF", ex.Message);
     }
 
-    [Fact]
-    public void ExtractPayload_ThrowsOnNull()
+    [Fact(Timeout = 60000)]
+    public async Task ExtractPayload_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ExtractPayload(null));
     }
 
-    [Fact]
-    public void SerializationFormat_AllFormats_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task SerializationFormat_AllFormats_RoundTrip()
     {
         var payload = new byte[] { 1, 2, 3 };
         var model = new StubModelSerializer { Payload = payload };
@@ -214,20 +215,20 @@ public class ModelFileHeaderTests
         }
     }
 
-    [Fact]
-    public void HasHeader_FileOverload_ReturnsFalseForMissingFile()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_FileOverload_ReturnsFalseForMissingFile()
     {
         Assert.False(ModelFileHeader.HasHeader("nonexistent_path_12345.bin"));
     }
 
-    [Fact]
-    public void HasHeader_FileOverload_ReturnsFalseForEmptyPath()
+    [Fact(Timeout = 60000)]
+    public async Task HasHeader_FileOverload_ReturnsFalseForEmptyPath()
     {
         Assert.False(ModelFileHeader.HasHeader(string.Empty));
     }
 
-    [Fact]
-    public void SaveModel_LoadModel_FileRoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_LoadModel_FileRoundTrip()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_test_{Guid.NewGuid():N}.bin");
         try
@@ -260,8 +261,8 @@ public class ModelFileHeaderTests
         }
     }
 
-    [Fact]
-    public void LoadModel_NonAimfFile_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_NonAimfFile_Throws()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"non_aimf_test_{Guid.NewGuid():N}.bin");
         try
@@ -286,8 +287,8 @@ public class ModelFileHeaderTests
         }
     }
 
-    [Fact]
-    public void MultiDimensionalShapes_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task MultiDimensionalShapes_RoundTrip()
     {
         var model = new StubModelSerializer
         {
@@ -306,8 +307,8 @@ public class ModelFileHeaderTests
         Assert.Equal(SerializationFormat.HybridBinary, info.Format);
     }
 
-    [Fact]
-    public void EmptyShapes_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task EmptyShapes_RoundTrip()
     {
         var model = new StubModelSerializer
         {
@@ -325,8 +326,8 @@ public class ModelFileHeaderTests
         Assert.Empty(info.OutputShape);
     }
 
-    [Fact]
-    public void NullShapes_TreatedAsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task NullShapes_TreatedAsEmpty()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 0x01 } };
 
@@ -339,8 +340,8 @@ public class ModelFileHeaderTests
         Assert.Empty(info.OutputShape);
     }
 
-    [Fact]
-    public void HeaderLength_IsPositive()
+    [Fact(Timeout = 60000)]
+    public async Task HeaderLength_IsPositive()
     {
         var model = new StubModelSerializer { Payload = new byte[] { 0x01 } };
 
@@ -353,8 +354,8 @@ public class ModelFileHeaderTests
         Assert.Equal(wrapped.Length, info.HeaderLength + info.PayloadLength);
     }
 
-    [Fact]
-    public void ExtractPayload_WithPreParsedInfo_MatchesDirect()
+    [Fact(Timeout = 60000)]
+    public async Task ExtractPayload_WithPreParsedInfo_MatchesDirect()
     {
         var payload = new byte[] { 10, 20, 30, 40, 50 };
         var model = new StubModelSerializer { Payload = payload };

@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class GroupedQueryAttentionLayerTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
         int embDim = 64;
@@ -28,36 +29,36 @@ public class GroupedQueryAttentionLayerTests
         Assert.Equal(AttentionVariant.GroupedQuery, layer.Variant);
     }
 
-    [Fact]
-    public void Variant_MHA_WhenKVHeadsEqualsHeads()
+    [Fact(Timeout = 120000)]
+    public async Task Variant_MHA_WhenKVHeadsEqualsHeads()
     {
         var layer = new GroupedQueryAttentionLayer<float>(16, 64, 8, 8);
         Assert.Equal(AttentionVariant.MultiHead, layer.Variant);
     }
 
-    [Fact]
-    public void Variant_MQA_WhenKVHeadsIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Variant_MQA_WhenKVHeadsIsOne()
     {
         var layer = new GroupedQueryAttentionLayer<float>(16, 64, 8, 1);
         Assert.Equal(AttentionVariant.MultiQuery, layer.Variant);
     }
 
-    [Fact]
-    public void Variant_GQA_WhenKVHeadsBetween()
+    [Fact(Timeout = 120000)]
+    public async Task Variant_GQA_WhenKVHeadsBetween()
     {
         var layer = new GroupedQueryAttentionLayer<float>(16, 64, 8, 2);
         Assert.Equal(AttentionVariant.GroupedQuery, layer.Variant);
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenEmbDimNotDivisibleByHeads()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenEmbDimNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
             new GroupedQueryAttentionLayer<float>(16, 63, 8, 4));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenHeadsNotDivisibleByKVHeads()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenHeadsNotDivisibleByKVHeads()
     {
         Assert.Throws<ArgumentException>(() =>
             new GroupedQueryAttentionLayer<float>(16, 64, 8, 3));
@@ -100,8 +101,8 @@ public class GroupedQueryAttentionLayerTests
     }
 
 
-    [Fact]
-    public void ParameterCount_ReflectsReducedKVWeights()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_ReflectsReducedKVWeights()
     {
         int embDim = 64;
         int numHeads = 8;
@@ -120,8 +121,8 @@ public class GroupedQueryAttentionLayerTests
             $"GQA params ({gqaParams}) should be less than MHA params ({mhaParams})");
     }
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 8;
         int embDim = 32;
@@ -139,8 +140,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.Equal(params1.Length, params2.Length);
     }
 
-    [Fact]
-    public void ConfigurePositionalEncoding_RoPE_SetsProperty()
+    [Fact(Timeout = 120000)]
+    public async Task ConfigurePositionalEncoding_RoPE_SetsProperty()
     {
         var layer = new GroupedQueryAttentionLayer<float>(16, 64, 8, 4);
 
@@ -149,8 +150,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.Equal(PositionalEncodingType.Rotary, layer.PositionalEncoding);
     }
 
-    [Fact]
-    public void ConfigurePositionalEncoding_ALiBi_SetsProperty()
+    [Fact(Timeout = 120000)]
+    public async Task ConfigurePositionalEncoding_ALiBi_SetsProperty()
     {
         var layer = new GroupedQueryAttentionLayer<float>(16, 64, 8, 4);
 
@@ -159,8 +160,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.Equal(PositionalEncodingType.ALiBi, layer.PositionalEncoding);
     }
 
-    [Fact]
-    public void Forward_WithRoPE_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_WithRoPE_ProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -174,8 +175,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Forward_WithALiBi_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_WithALiBi_ProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -189,8 +190,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void ResetState_ClearsInternalState()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsInternalState()
     {
         var layer = new GroupedQueryAttentionLayer<float>(8, 32, 4, 2);
         var input = CreateRandomTensor(new[] { 1, 8, 32 });
@@ -202,8 +203,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void GQA_WithKVHeadsEqualsHeads_MatchesMHAStructure()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithKVHeadsEqualsHeads_MatchesMHAStructure()
     {
         // When numKVHeads == numHeads, GQA is equivalent to MHA
         int seqLen = 4;
@@ -221,8 +222,8 @@ public class GroupedQueryAttentionLayerTests
         Assert.Equal(qWeights.Shape[1], vWeights.Shape[1]);
     }
 
-    [Fact]
-    public void GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA()
     {
         // When numKVHeads == numHeads, GQA must produce numerically identical output to standard MHA
         int seqLen = 4;
@@ -255,8 +256,8 @@ public class GroupedQueryAttentionLayerTests
         }
     }
 
-    [Fact]
-    public void GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA_2D()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA_2D()
     {
         // Test 2D input path (no batch dimension)
         int seqLen = 4;
@@ -283,8 +284,8 @@ public class GroupedQueryAttentionLayerTests
         }
     }
 
-    [Fact]
-    public void GQA_ReducedKVDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_ReducedKVDimensions()
     {
         int embDim = 64;
         int numHeads = 8;

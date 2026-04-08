@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -15,8 +16,8 @@ public class StatisticsIntegrationTests
 
     #region Quartile Tests
 
-    [Fact]
-    public void Quartile_SimpleData_CalculatesCorrectQuartiles()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_SimpleData_CalculatesCorrectQuartiles()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -32,8 +33,8 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q3 > 5.0 && quartile.Q3 < 7.0);
     }
 
-    [Fact]
-    public void Quartile_EvenData_CalculatesCorrectMedian()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_EvenData_CalculatesCorrectMedian()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -45,8 +46,8 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q2 >= 3.0 && quartile.Q2 <= 4.0);
     }
 
-    [Fact]
-    public void Quartile_UnorderedData_SortsAndCalculates()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_UnorderedData_SortsAndCalculates()
     {
         // Arrange
         var data = new Vector<double>(new[] { 5.0, 2.0, 8.0, 1.0, 9.0, 3.0, 7.0 });
@@ -58,8 +59,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(5.0, quartile.Q2, Tolerance);
     }
 
-    [Fact]
-    public void Quartile_AllSameValues_ReturnsConstantQuartiles()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_AllSameValues_ReturnsConstantQuartiles()
     {
         // Arrange
         var data = new Vector<double>(new[] { 5.0, 5.0, 5.0, 5.0, 5.0 });
@@ -73,8 +74,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(5.0, quartile.Q3, Tolerance);
     }
 
-    [Fact]
-    public void Quartile_LargeDataset_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_LargeDataset_CalculatesCorrectly()
     {
         // Arrange - Create data from 1 to 100
         var values = new double[100];
@@ -95,8 +96,8 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q3 >= 74.0 && quartile.Q3 <= 77.0);
     }
 
-    [Fact]
-    public void Quartile_SmallDataset_ThreeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_SmallDataset_ThreeValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -108,8 +109,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(2.0, quartile.Q2, Tolerance);
     }
 
-    [Fact]
-    public void Quartile_QuartileRelationship_Q1LessThanQ2LessThanQ3()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_QuartileRelationship_Q1LessThanQ2LessThanQ3()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0 });
@@ -122,8 +123,8 @@ public class StatisticsIntegrationTests
         Assert.True(quartile.Q2 <= quartile.Q3);
     }
 
-    [Fact]
-    public void Quartile_NegativeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_NegativeValues_HandlesCorrectly()
     {
         // Arrange
         var data = new Vector<double>(new[] { -5.0, -3.0, -1.0, 1.0, 3.0, 5.0, 7.0 });
@@ -135,8 +136,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(1.0, quartile.Q2, Tolerance);
     }
 
-    [Fact]
-    public void Quartile_FloatType_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_FloatType_CalculatesCorrectly()
     {
         // Arrange
         var data = new Vector<float>(new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f });
@@ -152,8 +153,8 @@ public class StatisticsIntegrationTests
 
     #region BasicStats Empty Tests
 
-    [Fact]
-    public void BasicStats_Empty_ReturnsValidInstance()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Empty_ReturnsValidInstance()
     {
         // Act
         var stats = BasicStats<double>.Empty();
@@ -164,8 +165,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0, stats.N);
     }
 
-    [Fact]
-    public void BasicStats_Empty_Float_ReturnsValidInstance()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Empty_Float_ReturnsValidInstance()
     {
         // Act
         var stats = BasicStats<float>.Empty();
@@ -179,8 +180,8 @@ public class StatisticsIntegrationTests
 
     #region ErrorStats Empty Tests
 
-    [Fact]
-    public void ErrorStats_Empty_ReturnsValidInstance()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Empty_ReturnsValidInstance()
     {
         // Act
         var stats = ErrorStats<double>.Empty();
@@ -192,8 +193,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, stats.RMSE, Tolerance);
     }
 
-    [Fact]
-    public void ErrorStats_Empty_HasMetric_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
         var stats = ErrorStats<double>.Empty();
@@ -204,8 +205,8 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.RMSE));
     }
 
-    [Fact]
-    public void ErrorStats_Empty_GetMetric_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
         var stats = ErrorStats<double>.Empty();
@@ -221,8 +222,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, rmse, Tolerance);
     }
 
-    [Fact]
-    public void ErrorStats_Empty_ErrorList_IsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_Empty_ErrorList_IsEmpty()
     {
         // Arrange
         var stats = ErrorStats<double>.Empty();
@@ -236,8 +237,8 @@ public class StatisticsIntegrationTests
 
     #region PredictionStats Empty Tests
 
-    [Fact]
-    public void PredictionStats_Empty_ReturnsValidInstance()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_Empty_ReturnsValidInstance()
     {
         // Act
         var stats = PredictionStats<double>.Empty();
@@ -248,8 +249,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, stats.AdjustedR2, Tolerance);
     }
 
-    [Fact]
-    public void PredictionStats_Empty_HasMetric_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
         var stats = PredictionStats<double>.Empty();
@@ -260,8 +261,8 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.Accuracy));
     }
 
-    [Fact]
-    public void PredictionStats_Empty_GetMetric_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
         var stats = PredictionStats<double>.Empty();
@@ -273,8 +274,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, r2, Tolerance);
     }
 
-    [Fact]
-    public void PredictionStats_Empty_Intervals_AreZero()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_Empty_Intervals_AreZero()
     {
         // Arrange
         var stats = PredictionStats<double>.Empty();
@@ -290,8 +291,8 @@ public class StatisticsIntegrationTests
 
     #region ModelStats Empty Tests
 
-    [Fact]
-    public void ModelStats_Empty_ReturnsValidInstance()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStats_Empty_ReturnsValidInstance()
     {
         // Act
         var stats = ModelStats<double, Matrix<double>, Vector<double>>.Empty();
@@ -301,8 +302,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0, stats.FeatureCount);
     }
 
-    [Fact]
-    public void ModelStats_Empty_HasMetric_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStats_Empty_HasMetric_ReturnsTrue()
     {
         // Arrange
         var stats = ModelStats<double, Matrix<double>, Vector<double>>.Empty();
@@ -313,8 +314,8 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.CosineSimilarity));
     }
 
-    [Fact]
-    public void ModelStats_Empty_GetMetric_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStats_Empty_GetMetric_ReturnsZero()
     {
         // Arrange
         var stats = ModelStats<double, Matrix<double>, Vector<double>>.Empty();
@@ -328,8 +329,8 @@ public class StatisticsIntegrationTests
         Assert.Equal(0.0, manhattan, Tolerance);
     }
 
-    [Fact]
-    public void ModelStats_Empty_Matrices_AreEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task ModelStats_Empty_Matrices_AreEmpty()
     {
         // Arrange
         var stats = ModelStats<double, Matrix<double>, Vector<double>>.Empty();
@@ -343,8 +344,8 @@ public class StatisticsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void AllStatsEmptyMethods_DoNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task AllStatsEmptyMethods_DoNotThrow()
     {
         // Act & Assert - ensure Empty() methods don't throw
         var basicStats = BasicStats<double>.Empty();
@@ -358,8 +359,8 @@ public class StatisticsIntegrationTests
         Assert.NotNull(modelStats);
     }
 
-    [Fact]
-    public void ErrorStats_HasMetric_UnsupportedMetric_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_HasMetric_UnsupportedMetric_ReturnsFalse()
     {
         // Arrange
         var stats = ErrorStats<double>.Empty();
@@ -369,8 +370,8 @@ public class StatisticsIntegrationTests
         Assert.True(stats.HasMetric(MetricType.MAE));
     }
 
-    [Fact]
-    public void PredictionStats_BestDistributionFit_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_BestDistributionFit_IsInitialized()
     {
         // Arrange
         var stats = PredictionStats<double>.Empty();
@@ -379,8 +380,8 @@ public class StatisticsIntegrationTests
         Assert.NotNull(stats.BestDistributionFit);
     }
 
-    [Fact]
-    public void PredictionStats_LearningCurve_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_LearningCurve_IsInitialized()
     {
         // Arrange
         var stats = PredictionStats<double>.Empty();

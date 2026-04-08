@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class RotaryPositionalEncodingLayerTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesLayer()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesLayer()
     {
         var layer = new RotaryPositionalEncodingLayer<float>(128, 64);
 
@@ -35,8 +36,8 @@ public class RotaryPositionalEncodingLayerTests
     }
 
 
-    [Fact]
-    public void ApplyRoPE_RotatesQueriesAndKeys()
+    [Fact(Timeout = 120000)]
+    public async Task ApplyRoPE_RotatesQueriesAndKeys()
     {
         int headDim = 8;
         var layer = new RotaryPositionalEncodingLayer<float>(64, headDim);
@@ -57,8 +58,8 @@ public class RotaryPositionalEncodingLayerTests
         Assert.False(TensorsEqual(keys, rotK));
     }
 
-    [Fact]
-    public void ApplyRoPE_WithStartPosition_ProducesDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task ApplyRoPE_WithStartPosition_ProducesDifferentResults()
     {
         int headDim = 8;
         var layer = new RotaryPositionalEncodingLayer<float>(64, headDim);
@@ -73,8 +74,8 @@ public class RotaryPositionalEncodingLayerTests
         Assert.False(TensorsEqual(rotQ0, rotQ5));
     }
 
-    [Fact]
-    public void ApplyRoPE_CacheExtendsForLongSequences()
+    [Fact(Timeout = 120000)]
+    public async Task ApplyRoPE_CacheExtendsForLongSequences()
     {
         int headDim = 8;
         int initialMaxSeq = 16;
@@ -91,8 +92,8 @@ public class RotaryPositionalEncodingLayerTests
         Assert.False(ContainsNaN(rotK));
     }
 
-    [Fact]
-    public void GetParameters_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_ReturnsEmpty()
     {
         var layer = new RotaryPositionalEncodingLayer<float>(64, 32);
         var params1 = layer.GetParameters();
@@ -100,15 +101,15 @@ public class RotaryPositionalEncodingLayerTests
         Assert.Equal(0, params1.Length);
     }
 
-    [Fact]
-    public void ResetState_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_DoesNotThrow()
     {
         var layer = new RotaryPositionalEncodingLayer<float>(64, 32);
         layer.ResetState();
     }
 
-    [Fact]
-    public void RoPE_RotationFormula_CorrectForTrivialCase()
+    [Fact(Timeout = 120000)]
+    public async Task RoPE_RotationFormula_CorrectForTrivialCase()
     {
         // Test that cos/sin rotation works correctly for dimension 2
         int headDim = 2;

@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -13,8 +14,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class QuantizedAttentionTests
 {
-    [Fact]
-    public void QuantizedAttention_MHA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -30,8 +31,8 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void QuantizedAttention_GQA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -48,8 +49,8 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void QuantizedAttention_MHA_WithinToleranceOfFP32()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_MHA_WithinToleranceOfFP32()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -69,8 +70,8 @@ public class QuantizedAttentionTests
             $"INT8 quantized attention relative error ({relativeError:F4}) exceeds 10% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_2D_Input_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_2D_Input_ProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -85,8 +86,8 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void QuantizedAttention_IsInferenceOnly()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_IsInferenceOnly()
     {
         var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
         var quantized = new QuantizedAttentionLayer(mha);
@@ -99,8 +100,8 @@ public class QuantizedAttentionTests
     }
 
 
-    [Fact]
-    public void QuantizedAttention_UpdateParameters_ThrowsNotSupported()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_UpdateParameters_ThrowsNotSupported()
     {
         var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
         var quantized = new QuantizedAttentionLayer(mha);
@@ -108,8 +109,8 @@ public class QuantizedAttentionTests
         Assert.Throws<NotSupportedException>(() => quantized.UpdateParameters(0.01f));
     }
 
-    [Fact]
-    public void QuantizedAttention_PreservesProperties()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_PreservesProperties()
     {
         int numHeads = 8;
         int numKVHeads = 2;
@@ -124,8 +125,8 @@ public class QuantizedAttentionTests
         Assert.Equal(PositionalEncodingType.Rotary, quantized.PositionalEncoding);
     }
 
-    [Fact]
-    public void InferenceQuantizationMode_None_DisablesQuantization()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceQuantizationMode_None_DisablesQuantization()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -135,8 +136,8 @@ public class QuantizedAttentionTests
         Assert.False(config.EnableWeightOnlyQuantization);
     }
 
-    [Fact]
-    public void InferenceQuantizationMode_Int8_EnablesQuantization()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceQuantizationMode_Int8_EnablesQuantization()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -146,8 +147,8 @@ public class QuantizedAttentionTests
         Assert.True(config.EnableWeightOnlyQuantization);
     }
 
-    [Fact]
-    public void EnableWeightOnlyQuantization_BackwardCompatible()
+    [Fact(Timeout = 60000)]
+    public async Task EnableWeightOnlyQuantization_BackwardCompatible()
     {
         var config = new InferenceOptimizationConfig();
 
@@ -159,8 +160,8 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.None, config.InferenceQuantization);
     }
 
-    [Fact]
-    public void InferenceQuantizationMode_FP8_AvailableInConfig()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceQuantizationMode_FP8_AvailableInConfig()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -171,8 +172,8 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyFP8, config.InferenceQuantization);
     }
 
-    [Fact]
-    public void InferenceQuantizationMode_NF4_AvailableInConfig()
+    [Fact(Timeout = 60000)]
+    public async Task InferenceQuantizationMode_NF4_AvailableInConfig()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -183,8 +184,8 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyNF4, config.InferenceQuantization);
     }
 
-    [Fact]
-    public void FP8WeightOnlyQuantization_QuantizePerRow_Roundtrips()
+    [Fact(Timeout = 60000)]
+    public async Task FP8WeightOnlyQuantization_QuantizePerRow_Roundtrips()
     {
         int rows = 4;
         int cols = 8;
@@ -218,8 +219,8 @@ public class QuantizedAttentionTests
         }
     }
 
-    [Fact]
-    public void NF4WeightOnlyQuantization_QuantizePerGroup_Roundtrips()
+    [Fact(Timeout = 60000)]
+    public async Task NF4WeightOnlyQuantization_QuantizePerGroup_Roundtrips()
     {
         int rows = 4;
         int cols = 16;
@@ -251,8 +252,8 @@ public class QuantizedAttentionTests
         }
     }
 
-    [Fact]
-    public void QuantizedAttention_FP8_MHA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_FP8_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -269,8 +270,8 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyFP8, quantized.QuantizationFormat);
     }
 
-    [Fact]
-    public void QuantizedAttention_FP8_WithinToleranceOfFP32()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_FP8_WithinToleranceOfFP32()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -290,8 +291,8 @@ public class QuantizedAttentionTests
             $"FP8 quantized attention relative error ({relativeError:F4}) exceeds 75% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_NF4_MHA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_NF4_MHA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -308,8 +309,8 @@ public class QuantizedAttentionTests
         Assert.Equal(InferenceQuantizationMode.WeightOnlyNF4, quantized.QuantizationFormat);
     }
 
-    [Fact]
-    public void QuantizedAttention_NF4_WithinToleranceOfFP32()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_NF4_WithinToleranceOfFP32()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -328,8 +329,8 @@ public class QuantizedAttentionTests
             $"NF4 quantized attention relative error ({relativeError:F4}) exceeds 50% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_FP8_GQA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_FP8_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -346,8 +347,8 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void QuantizedAttention_NF4_GQA_ForwardProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_NF4_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;
         int embDim = 32;
@@ -364,8 +365,8 @@ public class QuantizedAttentionTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Int8WeightQuantization_PerRow_Roundtrip_UnderOnePercent()
+    [Fact(Timeout = 60000)]
+    public async Task Int8WeightQuantization_PerRow_Roundtrip_UnderOnePercent()
     {
         // Test that INT8 per-row weight quantization achieves < 1% relative error
         // on individual weight matrices with realistic magnitudes (larger than Xavier tiny-dim init)
@@ -405,8 +406,8 @@ public class QuantizedAttentionTests
             $"INT8 per-row weight quantization relative error ({relativeError:F6}) exceeds 1% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_INT8_LargerDimension_TighterTolerance()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_INT8_LargerDimension_TighterTolerance()
     {
         // Larger dimensions = more accumulation points per matmul, but per-element error stays small
         // This tests end-to-end attention with 128-dim embeddings and 8 heads
@@ -427,8 +428,8 @@ public class QuantizedAttentionTests
             $"INT8 attention (embDim=128) relative error ({relativeError:F4}) exceeds 5% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_FP8_LargerDimension_TighterTolerance()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_FP8_LargerDimension_TighterTolerance()
     {
         int seqLen = 4;
         int embDim = 128;
@@ -450,8 +451,8 @@ public class QuantizedAttentionTests
             $"FP8 attention (embDim=128) relative error ({relativeError:F4}) exceeds 55% tolerance");
     }
 
-    [Fact]
-    public void QuantizedAttention_NF4_LargerDimension_TighterTolerance()
+    [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_NF4_LargerDimension_TighterTolerance()
     {
         int seqLen = 4;
         int embDim = 128;
@@ -470,8 +471,8 @@ public class QuantizedAttentionTests
             $"NF4 attention (embDim=128) relative error ({relativeError:F4}) exceeds 35% tolerance");
     }
 
-    [Fact]
-    public void DefaultConfig_PreservesExistingPresets()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultConfig_PreservesExistingPresets()
     {
         // Verify Default and HighPerformance presets still work unchanged
         var defaultConfig = InferenceOptimizationConfig.Default;

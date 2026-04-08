@@ -6,6 +6,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -58,8 +59,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Community License via Environment Variable ───
 
-    [Fact]
-    public void E2E_CommunityLicense_EnvVar_TrainSerializeDeserializePredict()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_CommunityLicense_EnvVar_TrainSerializeDeserializePredict()
     {
         // Step 1: Simulate receiving a community license key from the register-community-license
         // Edge Function. The response shape is: { success: true, license_key: "aidn.xxx.yyy", tier: "community" }
@@ -101,8 +102,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Community License via File ───
 
-    [Fact]
-    public void E2E_CommunityLicense_File_TrainSerializeDeserializePredict()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_CommunityLicense_File_TrainSerializeDeserializePredict()
     {
         ClearAllLicenseSources();
 
@@ -137,8 +138,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Explicit License Key Object ───
 
-    [Fact]
-    public void E2E_ExplicitLicenseKey_TrainSerializeDeserializePredict()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_ExplicitLicenseKey_TrainSerializeDeserializePredict()
     {
         ClearAllLicenseSources();
 
@@ -173,8 +174,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Trial Lifecycle ───
 
-    [Fact]
-    public void E2E_TrialLifecycle_TrainFreeSerializeWithTrialExhaustThenLicense()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_TrialLifecycle_TrainFreeSerializeWithTrialExhaustThenLicense()
     {
         ClearAllLicenseSources();
 
@@ -234,8 +235,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: License Key Format Validation ───
 
-    [Fact]
-    public void E2E_InvalidKeyFormat_RejectedByOfflineValidator()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_InvalidKeyFormat_RejectedByOfflineValidator()
     {
         // Keys that don't match aidn.X.Y format should be rejected
         var invalidKeys = new[]
@@ -265,8 +266,8 @@ public class LicenseE2ETests : IDisposable
         }
     }
 
-    [Fact]
-    public void E2E_ValidKeyFormat_AcceptedByOfflineValidator()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_ValidKeyFormat_AcceptedByOfflineValidator()
     {
         var validKeys = new[]
         {
@@ -287,8 +288,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: License Key Resolver Chain ───
 
-    [Fact]
-    public void E2E_ResolverChain_ExplicitKeyTakesPriority()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_ResolverChain_ExplicitKeyTakesPriority()
     {
         // Set env var
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.envvarkey123.abcdefghijklmnop");
@@ -300,8 +301,8 @@ public class LicenseE2ETests : IDisposable
         Assert.Equal("aidn.explicitkey1.zyxwvutsrqponmlk", resolved);
     }
 
-    [Fact]
-    public void E2E_ResolverChain_EnvVarFallsBackToFile()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_ResolverChain_EnvVarFallsBackToFile()
     {
         ClearAllLicenseSources();
 
@@ -325,8 +326,8 @@ public class LicenseE2ETests : IDisposable
         Assert.Equal("aidn.envvarkey123.abcdefghijklmnop", resolved);
     }
 
-    [Fact]
-    public void E2E_ResolverChain_NoSources_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_ResolverChain_NoSources_ReturnsNull()
     {
         ClearAllLicenseSources();
 
@@ -336,8 +337,8 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Unreachable Server Graceful Fallback ───
 
-    [Fact]
-    public void E2E_UnreachableServer_FallsBackToOffline()
+    [Fact(Timeout = 120000)]
+    public async Task E2E_UnreachableServer_FallsBackToOffline()
     {
         // Simulate a key with a non-existent server — should not crash
         var key = new AiDotNetLicenseKey("aidn.servertest12.abcdefghijklmnop")

@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DecompositionMethods;
 
@@ -25,8 +26,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region LU Decomposition
 
-    [Fact]
-    public void LU_PA_Equals_LU_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task LU_PA_Equals_LU_2x2()
     {
         // Verify P*A = L*U for a hand-calculated example
         var A = Create2x2();
@@ -52,8 +53,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(PA[i, j], LU[i, j], Tolerance);
     }
 
-    [Fact]
-    public void LU_PA_Equals_LU_3x3()
+    [Fact(Timeout = 120000)]
+    public async Task LU_PA_Equals_LU_3x3()
     {
         var A = Create3x3();
         var lu = new LuDecomposition<double>(A);
@@ -73,8 +74,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(PA[i, j], LU[i, j], Tolerance);
     }
 
-    [Fact]
-    public void LU_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LU_L_IsLowerTriangular()
     {
         var A = Create3x3();
         var lu = new LuDecomposition<double>(A);
@@ -85,8 +86,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, L[i, j], Tolerance);
     }
 
-    [Fact]
-    public void LU_U_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LU_U_IsUpperTriangular()
     {
         var A = Create3x3();
         var lu = new LuDecomposition<double>(A);
@@ -97,8 +98,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, U[i, j], Tolerance);
     }
 
-    [Fact]
-    public void LU_L_DiagonalIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task LU_L_DiagonalIsOne()
     {
         var A = Create3x3();
         var lu = new LuDecomposition<double>(A);
@@ -108,8 +109,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.Equal(1.0, L[i, i], Tolerance);
     }
 
-    [Fact]
-    public void LU_Identity_GivesIdentityFactors()
+    [Fact(Timeout = 120000)]
+    public async Task LU_Identity_GivesIdentityFactors()
     {
         var I = CreateIdentity3();
         var lu = new LuDecomposition<double>(I);
@@ -121,8 +122,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LU_HandCalculated_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task LU_HandCalculated_2x2()
     {
         // A = [[4,3],[6,3]]. With partial pivoting, pivot row 1 (6>4):
         // P = [1,0], PA = [[6,3],[4,3]]
@@ -149,8 +150,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region QR Decomposition
 
-    [Fact]
-    public void QR_A_Equals_QR_3x3()
+    [Fact(Timeout = 120000)]
+    public async Task QR_A_Equals_QR_3x3()
     {
         var A = Create3x3();
         var qr = new QrDecomposition<double>(A);
@@ -161,8 +162,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QR[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void QR_Q_IsOrthogonal_QtQ_EqualsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task QR_Q_IsOrthogonal_QtQ_EqualsIdentity()
     {
         var A = Create3x3();
         var qr = new QrDecomposition<double>(A);
@@ -176,8 +177,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void QR_R_IsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task QR_R_IsUpperTriangular()
     {
         var A = Create3x3();
         var qr = new QrDecomposition<double>(A);
@@ -187,8 +188,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, qr.R[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void QR_Q_ColumnsHaveUnitNorm()
+    [Fact(Timeout = 120000)]
+    public async Task QR_Q_ColumnsHaveUnitNorm()
     {
         var A = Create3x3();
         var qr = new QrDecomposition<double>(A);
@@ -202,8 +203,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void QR_Identity_Q_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task QR_Identity_Q_IsIdentity()
     {
         var I = CreateIdentity3();
         var qr = new QrDecomposition<double>(I);
@@ -216,8 +217,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void QR_A_Equals_QR_SPD()
+    [Fact(Timeout = 120000)]
+    public async Task QR_A_Equals_QR_SPD()
     {
         var A = CreateSPD3x3();
         var qr = new QrDecomposition<double>(A);
@@ -232,8 +233,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Cholesky Decomposition
 
-    [Fact]
-    public void Cholesky_A_Equals_LLt()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_A_Equals_LLt()
     {
         // A = L * L^T for symmetric positive definite matrix
         var A = CreateSPD3x3();
@@ -245,8 +246,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], LLt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Cholesky_L_IsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_L_IsLowerTriangular()
     {
         var A = CreateSPD3x3();
         var chol = new CholeskyDecomposition<double>(A);
@@ -256,8 +257,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, chol.L[i, j], Tolerance);
     }
 
-    [Fact]
-    public void Cholesky_L_DiagonalIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_L_DiagonalIsPositive()
     {
         var A = CreateSPD3x3();
         var chol = new CholeskyDecomposition<double>(A);
@@ -266,8 +267,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.True(chol.L[i, i] > 0, $"L[{i},{i}] = {chol.L[i, i]} should be positive");
     }
 
-    [Fact]
-    public void Cholesky_Identity_L_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_Identity_L_IsIdentity()
     {
         var I = CreateIdentity3();
         var chol = new CholeskyDecomposition<double>(I);
@@ -280,8 +281,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void Cholesky_HandCalculated_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task Cholesky_HandCalculated_2x2()
     {
         // A = [[4,2],[2,5]], L = [[2,0],[1,2]], L*L^T = [[4,2],[2,5]]
         var A = new Matrix<double>(new double[,] { { 4, 2 }, { 2, 5 } });
@@ -297,8 +298,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region SVD Decomposition
 
-    [Fact]
-    public void SVD_A_Equals_USVt()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_A_Equals_USVt()
     {
         var A = Create3x3();
         var svd = new SvdDecomposition<double>(A);
@@ -317,8 +318,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], reconstructed[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void SVD_U_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_U_IsOrthogonal()
     {
         var A = Create3x3();
         var svd = new SvdDecomposition<double>(A);
@@ -332,8 +333,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void SVD_V_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_V_IsOrthogonal()
     {
         var A = Create3x3();
         var svd = new SvdDecomposition<double>(A);
@@ -347,8 +348,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void SVD_SingularValues_AreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_SingularValues_AreNonNegative()
     {
         var A = Create3x3();
         var svd = new SvdDecomposition<double>(A);
@@ -357,8 +358,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.True(svd.S[i] >= -Tolerance, $"S[{i}] = {svd.S[i]} should be >= 0");
     }
 
-    [Fact]
-    public void SVD_SingularValues_AreDescending()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_SingularValues_AreDescending()
     {
         var A = Create3x3();
         var svd = new SvdDecomposition<double>(A);
@@ -368,8 +369,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 $"S[{i}]={svd.S[i]} should >= S[{i + 1}]={svd.S[i + 1]}");
     }
 
-    [Fact]
-    public void SVD_Identity_SingularValues_AllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_Identity_SingularValues_AllOnes()
     {
         var I = CreateIdentity3();
         var svd = new SvdDecomposition<double>(I);
@@ -378,8 +379,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.Equal(1.0, svd.S[i], LooseTolerance);
     }
 
-    [Fact]
-    public void SVD_Symmetric_SingularValues_AreAbsEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task SVD_Symmetric_SingularValues_AreAbsEigenvalues()
     {
         // For symmetric matrices, singular values = |eigenvalues|
         var A = Create3x3();
@@ -407,8 +408,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Eigen Decomposition
 
-    [Fact]
-    public void Eigen_Av_Equals_LambdaV()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_Av_Equals_LambdaV()
     {
         // A*v = λ*v for each eigenpair
         var A = Create3x3();
@@ -434,8 +435,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Eigen_Symmetric_EigenvaluesAreReal()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_Symmetric_EigenvaluesAreReal()
     {
         // Symmetric matrix always has real eigenvalues
         var A = Create3x3();
@@ -449,8 +450,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Eigen_TraceEqualsSumOfEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_TraceEqualsSumOfEigenvalues()
     {
         // tr(A) = sum of eigenvalues
         var A = Create3x3();
@@ -465,8 +466,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         Assert.Equal(trace, eigenSum, LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_HandCalculated_2x2_Diagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_HandCalculated_2x2_Diagonal()
     {
         // Diagonal matrix [[3,0],[0,5]] has eigenvalues 3 and 5
         var A = new Matrix<double>(new double[,] { { 3, 0 }, { 0, 5 } });
@@ -480,8 +481,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
         Assert.Equal(5.0, eigenvals[1], LooseTolerance);
     }
 
-    [Fact]
-    public void Eigen_SPD_AllEigenvaluesPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_SPD_AllEigenvaluesPositive()
     {
         var A = CreateSPD3x3();
         var eigen = new EigenDecomposition<double>(A);
@@ -491,8 +492,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 $"SPD eigenvalue {i} = {eigen.EigenValues[i]} should be positive");
     }
 
-    [Fact]
-    public void Eigen_Identity_AllEigenvaluesOne()
+    [Fact(Timeout = 120000)]
+    public async Task Eigen_Identity_AllEigenvaluesOne()
     {
         var I = CreateIdentity3();
         var eigen = new EigenDecomposition<double>(I);
@@ -505,8 +506,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region LDL Decomposition
 
-    [Fact]
-    public void LDL_A_Equals_LDLt()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_A_Equals_LDLt()
     {
         var A = CreateSPD3x3();
         var ldl = new LdlDecomposition<double>(A);
@@ -525,8 +526,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], LDLt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void LDL_L_IsUnitLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_L_IsUnitLowerTriangular()
     {
         var A = CreateSPD3x3();
         var ldl = new LdlDecomposition<double>(A);
@@ -541,8 +542,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, ldl.L[i, j], Tolerance);
     }
 
-    [Fact]
-    public void LDL_SPD_DiagonalIsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_SPD_DiagonalIsPositive()
     {
         var A = CreateSPD3x3();
         var ldl = new LdlDecomposition<double>(A);
@@ -551,8 +552,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.True(ldl.D[i] > 0, $"D[{i}] = {ldl.D[i]} should be positive for SPD matrix");
     }
 
-    [Fact]
-    public void LDL_Identity_D_AllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_Identity_D_AllOnes()
     {
         var I = CreateIdentity3();
         var ldl = new LdlDecomposition<double>(I);
@@ -561,8 +562,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             Assert.Equal(1.0, ldl.D[i], Tolerance);
     }
 
-    [Fact]
-    public void LDL_HandCalculated_2x2()
+    [Fact(Timeout = 120000)]
+    public async Task LDL_HandCalculated_2x2()
     {
         // A = [[4,2],[2,5]]
         // L = [[1,0],[0.5,1]], D = [4, 4]  since D[0]=4, L[1,0]=2/4=0.5, D[1]=5-0.5*2=4
@@ -578,8 +579,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Gram-Schmidt Decomposition
 
-    [Fact]
-    public void GramSchmidt_A_Equals_QR()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_A_Equals_QR()
     {
         var A = Create3x3();
         var gs = new GramSchmidtDecomposition<double>(A);
@@ -590,8 +591,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QR[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void GramSchmidt_Q_ColumnsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_Q_ColumnsOrthogonal()
     {
         var A = Create3x3();
         var gs = new GramSchmidtDecomposition<double>(A);
@@ -609,8 +610,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Hessenberg Decomposition
 
-    [Fact]
-    public void Hessenberg_A_Equals_QHQt()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_A_Equals_QHQt()
     {
         var A = Create3x3();
         var hess = new HessenbergDecomposition<double>(A);
@@ -621,8 +622,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QHQt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Hessenberg_H_IsUpperHessenberg()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_H_IsUpperHessenberg()
     {
         // H should have zeros below the first subdiagonal
         var A = Create3x3();
@@ -633,8 +634,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(0.0, hess.HessenbergMatrix[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Hessenberg_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Hessenberg_Q_IsOrthogonal()
     {
         var A = Create3x3();
         var hess = new HessenbergDecomposition<double>(A);
@@ -652,8 +653,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Schur Decomposition
 
-    [Fact]
-    public void Schur_A_Equals_QTQt()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_A_Equals_QTQt()
     {
         var A = Create3x3();
         var schur = new SchurDecomposition<double>(A);
@@ -664,8 +665,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QTQt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Schur_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_Q_IsOrthogonal()
     {
         var A = Create3x3();
         var schur = new SchurDecomposition<double>(A);
@@ -679,8 +680,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void Schur_T_DiagonalContainsEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task Schur_T_DiagonalContainsEigenvalues()
     {
         // For real symmetric matrices, Schur form T is diagonal with eigenvalues
         var A = Create3x3();
@@ -703,8 +704,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Polar Decomposition
 
-    [Fact]
-    public void Polar_A_Equals_UP()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_A_Equals_UP()
     {
         // Polar: A = U * P where U is orthogonal and P is symmetric positive semi-definite
         var A = Create3x3();
@@ -716,8 +717,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], UP[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Polar_U_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_U_IsOrthogonal()
     {
         var A = Create3x3();
         var polar = new PolarDecomposition<double>(A);
@@ -731,8 +732,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void Polar_P_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Polar_P_IsSymmetric()
     {
         var A = Create3x3();
         var polar = new PolarDecomposition<double>(A);
@@ -746,8 +747,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region Tridiagonal Decomposition
 
-    [Fact]
-    public void Tridiagonal_A_Equals_QTQt()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_A_Equals_QTQt()
     {
         var A = CreateSPD3x3();
         var tri = new TridiagonalDecomposition<double>(A);
@@ -758,8 +759,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], QTQt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Tridiagonal_T_IsTridiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_T_IsTridiagonal()
     {
         var A = CreateSPD3x3();
         var tri = new TridiagonalDecomposition<double>(A);
@@ -771,8 +772,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                     Assert.Equal(0.0, tri.TMatrix[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void Tridiagonal_Q_IsOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task Tridiagonal_Q_IsOrthogonal()
     {
         var A = CreateSPD3x3();
         var tri = new TridiagonalDecomposition<double>(A);
@@ -790,8 +791,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
 
     #region UDU Decomposition
 
-    [Fact]
-    public void UDU_A_Equals_UDUt()
+    [Fact(Timeout = 120000)]
+    public async Task UDU_A_Equals_UDUt()
     {
         var A = CreateSPD3x3();
         var udu = new UduDecomposition<double>(A);
@@ -806,8 +807,8 @@ public class MatrixDecompositionDeepMathIntegrationTests
                 Assert.Equal(A[i, j], UDUt[i, j], LooseTolerance);
     }
 
-    [Fact]
-    public void UDU_U_IsUnitUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task UDU_U_IsUnitUpperTriangular()
     {
         var A = CreateSPD3x3();
         var udu = new UduDecomposition<double>(A);

@@ -3,13 +3,14 @@ using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
     public class SerializationHelperTests
     {
-        [Fact]
-        public void SerializeNode_WithNullNode_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeNode_WithNullNode_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.False(reader.ReadBoolean());
         }
 
-        [Fact]
-        public void SerializeNode_WithLeafNode_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeNode_WithLeafNode_WritesCorrectly()
         {
             // Arrange
             var node = new DecisionTreeNode<double>
@@ -47,8 +48,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42.0, reader.ReadDouble());
         }
 
-        [Fact]
-        public void DeserializeNode_WithNullNode_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeNode_WithNullNode_ReturnsNull()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Null(result);
         }
 
-        [Fact]
-        public void DeserializeNode_WithLeafNode_ReturnsCorrectNode()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeNode_WithLeafNode_ReturnsCorrectNode()
         {
             // Arrange
             var original = new DecisionTreeNode<double>
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3.14, result.Prediction);
         }
 
-        [Fact]
-        public void SerializeDeserializeNode_WithComplexTree_PreservesStructure()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeDeserializeNode_WithComplexTree_PreservesStructure()
         {
             // Arrange
             var root = new DecisionTreeNode<double>
@@ -122,8 +123,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(2.0, result.Right.Prediction);
         }
 
-        [Fact]
-        public void WriteValue_WithDouble_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task WriteValue_WithDouble_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -138,8 +139,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123.456, reader.ReadDouble());
         }
 
-        [Fact]
-        public void ReadValue_WithDouble_ReadsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReadValue_WithDouble_ReadsCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -155,8 +156,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(789.012, result);
         }
 
-        [Fact]
-        public void WriteValue_WithFloat_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task WriteValue_WithFloat_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -171,8 +172,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(12.34f, reader.ReadSingle());
         }
 
-        [Fact]
-        public void ReadValue_WithFloat_ReadsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReadValue_WithFloat_ReadsCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -188,8 +189,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(56.78f, result);
         }
 
-        [Fact]
-        public void WriteValue_WithInt_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task WriteValue_WithInt_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42, reader.ReadInt32());
         }
 
-        [Fact]
-        public void ReadValue_WithInt_ReadsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReadValue_WithInt_ReadsCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -221,8 +222,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(99, result);
         }
 
-        [Fact]
-        public void SerializeMatrix_WithSmallMatrix_SerializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeMatrix_WithSmallMatrix_SerializesCorrectly()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 3);
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, reader.ReadInt32()); // columns
         }
 
-        [Fact]
-        public void DeserializeMatrix_WithValidData_ReturnsCorrectMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeMatrix_WithValidData_ReturnsCorrectMatrix()
         {
             // Arrange
             var original = new Matrix<double>(2, 2);
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[1, 1]);
         }
 
-        [Fact]
-        public void DeserializeMatrix_WithWrongDimensions_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeMatrix_WithWrongDimensions_ThrowsException()
         {
             // Arrange
             var original = new Matrix<double>(2, 2);
@@ -288,8 +289,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 SerializationHelper<double>.DeserializeMatrix(reader, 3, 3));
         }
 
-        [Fact]
-        public void SerializeMatrix_ToByteArray_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeMatrix_ToByteArray_WorksCorrectly()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 2);
@@ -306,8 +307,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotEmpty(bytes);
         }
 
-        [Fact]
-        public void DeserializeMatrix_FromByteArray_ReturnsCorrectMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeMatrix_FromByteArray_ReturnsCorrectMatrix()
         {
             // Arrange
             var original = new Matrix<double>(3, 2);
@@ -333,8 +334,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(6.0, result[2, 1]);
         }
 
-        [Fact]
-        public void SerializeVector_WithSmallVector_SerializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeVector_WithSmallVector_SerializesCorrectly()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -350,8 +351,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, reader.ReadInt32()); // length
         }
 
-        [Fact]
-        public void DeserializeVector_WithValidData_ReturnsCorrectVector()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeVector_WithValidData_ReturnsCorrectVector()
         {
             // Arrange
             var original = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
@@ -372,8 +373,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[3]);
         }
 
-        [Fact]
-        public void DeserializeVector_WithWrongLength_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeVector_WithWrongLength_ThrowsException()
         {
             // Arrange
             var original = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -388,8 +389,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 SerializationHelper<double>.DeserializeVector(reader, 5));
         }
 
-        [Fact]
-        public void SerializeVector_ToByteArray_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeVector_ToByteArray_WorksCorrectly()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -402,8 +403,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotEmpty(bytes);
         }
 
-        [Fact]
-        public void DeserializeVector_FromByteArray_ReturnsCorrectVector()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeVector_FromByteArray_ReturnsCorrectVector()
         {
             // Arrange
             var original = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f });
@@ -421,8 +422,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5.0f, result[4]);
         }
 
-        [Fact]
-        public void SerializeTensor_WithSmallTensor_SerializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeTensor_WithSmallTensor_SerializesCorrectly()
         {
             // Arrange - use 1D tensor for simple index access
             var tensor = new Tensor<double>(new int[] { 6 });
@@ -440,8 +441,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(1, reader.ReadInt32()); // rank (1D tensor)
         }
 
-        [Fact]
-        public void DeserializeTensor_WithValidData_ReturnsCorrectTensor()
+        [Fact(Timeout = 60000)]
+        public async Task DeserializeTensor_WithValidData_ReturnsCorrectTensor()
         {
             // Arrange - use 1D tensor for simple index access
             var original = new Tensor<double>(new int[] { 4 });
@@ -467,8 +468,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[3]);
         }
 
-        [Fact]
-        public void SerializeInterface_WithNullInstance_WritesEmptyString()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeInterface_WithNullInstance_WritesEmptyString()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -483,8 +484,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(string.Empty, reader.ReadString());
         }
 
-        [Fact]
-        public void SerializeInterface_WithNonNullInstance_WritesTypeName()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeInterface_WithNonNullInstance_WritesTypeName()
         {
             // Arrange
             var instance = "test string";
@@ -501,8 +502,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("String", typeName);
         }
 
-        [Fact]
-        public void SerializeDeserialize_Matrix_RoundTrip_PreservesData()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeDeserialize_Matrix_RoundTrip_PreservesData()
         {
             // Arrange
             var original = new Matrix<int>(3, 3);
@@ -522,8 +523,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                     Assert.Equal(original[i, j], result[i, j]);
         }
 
-        [Fact]
-        public void SerializeDeserialize_Vector_RoundTrip_PreservesData()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeDeserialize_Vector_RoundTrip_PreservesData()
         {
             // Arrange
             var original = new Vector<double>(new double[] { 1.1, 2.2, 3.3, 4.4, 5.5 });
@@ -538,8 +539,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 Assert.Equal(original[i], result[i]);
         }
 
-        [Fact]
-        public void SerializeDeserialize_Tensor_RoundTrip_PreservesData()
+        [Fact(Timeout = 60000)]
+        public async Task SerializeDeserialize_Tensor_RoundTrip_PreservesData()
         {
             // Arrange - use 1D tensor for simple index access
             var original = new Tensor<float>(new int[] { 12 }); // 2*3*2 = 12 elements in 1D
@@ -561,8 +562,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 Assert.Equal(original[i], result[i]);
         }
 
-        [Fact]
-        public void WriteValue_WithDecimal_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task WriteValue_WithDecimal_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -577,8 +578,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123.456m, reader.ReadDecimal());
         }
 
-        [Fact]
-        public void ReadValue_WithDecimal_ReadsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReadValue_WithDecimal_ReadsCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -594,8 +595,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(789.012m, result);
         }
 
-        [Fact]
-        public void WriteValue_WithLong_WritesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task WriteValue_WithLong_WritesCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();
@@ -610,8 +611,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123456789L, reader.ReadInt64());
         }
 
-        [Fact]
-        public void ReadValue_WithLong_ReadsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ReadValue_WithLong_ReadsCorrectly()
         {
             // Arrange
             using var ms = new MemoryStream();

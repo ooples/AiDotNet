@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -25,7 +26,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
   }
 }";
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithTabularNonIidBenchmarking_AttachesBenchmarkReport()
     {
         // Training data must match the benchmark's FeatureCount (3 features in this test)
@@ -71,7 +72,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
         Assert.Equal(2, suite.DataSelection!.ClientsUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithFemnistBenchmarking_AttachesBenchmarkReport()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"femnist_train_{Guid.NewGuid():N}.json");
@@ -129,7 +130,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithCifar10Benchmarking_AttachesBenchmarkReport()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"cifar10_{Guid.NewGuid():N}");
@@ -192,7 +193,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithCifar100Benchmarking_AttachesBenchmarkReport()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"cifar100_{Guid.NewGuid():N}");

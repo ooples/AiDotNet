@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Tasks.Graph;
 using AiDotNet.Tensors;
 using AiDotNet.Tokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -47,8 +48,8 @@ public class MissingModelsIntegrationTests
         return adjacency;
     }
 
-    [Fact]
-    public void ClipNeuralNetwork_InvalidOnnxModels_ThrowsOnConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ClipNeuralNetwork_InvalidOnnxModels_ThrowsOnConstruction()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -99,8 +100,8 @@ public class MissingModelsIntegrationTests
         }
     }
 
-    [Fact]
-    public void DDPMModel_Generate_ReturnsExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMModel_Generate_ReturnsExpectedShape()
     {
         var model = new DDPMModel<float>();
         var output = model.Generate(new[] { 1, 2 }, numInferenceSteps: 2);
@@ -108,8 +109,8 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { 1, 2 }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void DDPMModel_PredictNoise_ReturnsExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task DDPMModel_PredictNoise_ReturnsExpectedShape()
     {
         var model = new DDPMModel<float>();
         var input = CreateRandomTensor(new[] { 1, 3 }, 17);
@@ -119,8 +120,8 @@ public class MissingModelsIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void GraphClassificationModel_Predict_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task GraphClassificationModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 4;
         int inputFeatures = 3;
@@ -147,8 +148,8 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { 1, 6 }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void LinkPredictionModel_Predict_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task LinkPredictionModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 5;
         int inputFeatures = 4;
@@ -175,8 +176,8 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { numNodes, embeddingDim }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void NodeClassificationModel_Predict_ProducesExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task NodeClassificationModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 4;
         int inputFeatures = 3;
@@ -202,8 +203,8 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { numNodes, numClasses }, output.Shape.ToArray());
     }
 
-    [Fact]
-    public void GraphModels_RequireAdjacencyMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task GraphModels_RequireAdjacencyMatrix()
     {
         int numNodes = 3;
         int inputFeatures = 2;
@@ -226,8 +227,8 @@ public class MissingModelsIntegrationTests
         Assert.Throws<InvalidOperationException>(() => nodeModel.Predict(nodeFeatures));
     }
 
-    [Fact]
-    public void NeuralNetwork_PredictAndTrain_ProduceExpectedShape()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetwork_PredictAndTrain_ProduceExpectedShape()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,

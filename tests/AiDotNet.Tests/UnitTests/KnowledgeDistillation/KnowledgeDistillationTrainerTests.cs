@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
@@ -37,8 +38,8 @@ public class KnowledgeDistillationTrainerTests
         }
     }
 
-    [Fact]
-    public void Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -51,8 +52,8 @@ public class KnowledgeDistillationTrainerTests
         Assert.NotNull(trainer);
     }
 
-    [Fact]
-    public void Constructor_WithNullTeacher_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullTeacher_ThrowsArgumentNullException()
     {
         // Arrange
         var distillationLoss = new DistillationLoss<double>();
@@ -62,8 +63,8 @@ public class KnowledgeDistillationTrainerTests
             new KnowledgeDistillationTrainer<double>(null!, distillationLoss));
     }
 
-    [Fact]
-    public void Constructor_WithNullDistillationStrategy_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullDistillationStrategy_ThrowsArgumentNullException()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -73,8 +74,8 @@ public class KnowledgeDistillationTrainerTests
             new KnowledgeDistillationTrainer<double>(teacher, null!));
     }
 
-    [Fact]
-    public void TrainBatch_WithValidInputs_ReturnsPositiveLoss()
+    [Fact(Timeout = 60000)]
+    public async Task TrainBatch_WithValidInputs_ReturnsPositiveLoss()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -109,8 +110,8 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(inputs.Length, backwardCalls); // Should call backward for each sample
     }
 
-    [Fact]
-    public void TrainBatch_WithNullInputs_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task TrainBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -126,8 +127,8 @@ public class KnowledgeDistillationTrainerTests
             trainer.TrainBatch(studentForward, studentBackward, null!, null));
     }
 
-    [Fact]
-    public void TrainBatch_WithEmptyInputs_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task TrainBatch_WithEmptyInputs_ThrowsArgumentException()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -143,8 +144,8 @@ public class KnowledgeDistillationTrainerTests
             trainer.TrainBatch(studentForward, studentBackward, new Vector<Vector<double>>(0), null));
     }
 
-    [Fact]
-    public void Train_WithValidParameters_CompletesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithValidParameters_CompletesSuccessfully()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -189,8 +190,8 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(2, epochsCompleted);
     }
 
-    [Fact]
-    public void Train_WithInvalidEpochs_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithInvalidEpochs_ThrowsArgumentException()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -211,8 +212,8 @@ public class KnowledgeDistillationTrainerTests
             trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: -1, batchSize: 1, null, null, null, null));
     }
 
-    [Fact]
-    public void Evaluate_ReturnsAccuracyBetweenZeroAndOne()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_ReturnsAccuracyBetweenZeroAndOne()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -243,8 +244,8 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(0.5, accuracy); // Should get 1 out of 2 correct (predicts class 1, second is class 1)
     }
 
-    [Fact]
-    public void Evaluate_WithPerfectPredictions_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_WithPerfectPredictions_ReturnsOne()
     {
         // Arrange
         var teacher = new MockTeacher();
@@ -274,8 +275,8 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(1.0, accuracy);
     }
 
-    [Fact]
-    public void Evaluate_WithNoCorrectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_WithNoCorrectPredictions_ReturnsZero()
     {
         // Arrange
         var teacher = new MockTeacher();

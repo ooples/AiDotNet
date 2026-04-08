@@ -1,5 +1,6 @@
 using AiDotNet.LanguageModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LanguageModels;
 
@@ -18,8 +19,8 @@ public class LanguageModelsDeepMathIntegrationTests
     // OpenAIChatModel: Construction
     // ============================
 
-    [Fact]
-    public void OpenAIChatModel_DefaultModelName()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_DefaultModelName()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.Equal("gpt-3.5-turbo", model.ModelName);
@@ -35,34 +36,34 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(modelName, model.ModelName);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_Positive()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_Positive()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.True(model.MaxContextTokens > 0, "MaxContextTokens should be positive");
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxGenerationTokens_Positive()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxGenerationTokens_Positive()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.True(model.MaxGenerationTokens > 0, "MaxGenerationTokens should be positive");
     }
 
-    [Fact]
-    public void OpenAIChatModel_NullApiKey_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_NullApiKey_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new OpenAIChatModel<double>(null!));
     }
 
-    [Fact]
-    public void OpenAIChatModel_EmptyApiKey_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_EmptyApiKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>(""));
     }
 
-    [Fact]
-    public void OpenAIChatModel_WhitespaceApiKey_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_WhitespaceApiKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>("   "));
     }
@@ -71,8 +72,8 @@ public class LanguageModelsDeepMathIntegrationTests
     // AzureOpenAIChatModel: Construction
     // ============================
 
-    [Fact]
-    public void AzureOpenAIChatModel_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_ValidConstruction()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidApiKey,
@@ -81,15 +82,15 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_NullEndpoint_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_NullEndpoint_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new AzureOpenAIChatModel<double>(ValidApiKey, null!, "deployment"));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_NullDeploymentName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_NullDeploymentName_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidApiKey, "https://test.openai.azure.com", null!));
@@ -136,8 +137,8 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(expectedCost, cost, 1e-3);
     }
 
-    [Fact]
-    public void LLMMath_CostScaling_BatchVsSingle()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_CostScaling_BatchVsSingle()
     {
         // Batch processing should cost the same as individual calls (same token count)
         int totalPromptTokens = 10000;
@@ -206,8 +207,8 @@ public class LanguageModelsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LLMMath_TemperatureSampling_LowTempMoreFocused()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_TemperatureSampling_LowTempMoreFocused()
     {
         double[] logits = { 2.0, 1.0, 0.5, 0.1 };
 
@@ -225,8 +226,8 @@ public class LanguageModelsDeepMathIntegrationTests
             "High temperature should have higher entropy");
     }
 
-    [Fact]
-    public void LLMMath_TemperatureZero_ApproachesArgmax()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_TemperatureZero_ApproachesArgmax()
     {
         double[] logits = { 2.0, 1.0, 0.5, 0.1 };
 
@@ -313,8 +314,8 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(expectedPerplexity, perplexity, 1e-2);
     }
 
-    [Fact]
-    public void LLMMath_Perplexity_PerfectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_Perplexity_PerfectPrediction()
     {
         // If the model always predicts with probability 1 (log_prob = 0), perplexity = 1
         double[] logProbs = { 0.0, 0.0, 0.0, 0.0 };
@@ -322,8 +323,8 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(1.0, perplexity, 1e-10);
     }
 
-    [Fact]
-    public void LLMMath_Perplexity_LowerIsBetter()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_Perplexity_LowerIsBetter()
     {
         double[] goodLogProbs = { -0.1, -0.2, -0.1, -0.15 };
         double[] badLogProbs = { -2.0, -3.0, -1.5, -2.5 };
@@ -339,8 +340,8 @@ public class LanguageModelsDeepMathIntegrationTests
     // LLM Math: Attention Mechanism
     // ============================
 
-    [Fact]
-    public void LLMMath_ScaledDotProductAttention()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_ScaledDotProductAttention()
     {
         // Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) * V
         int dK = 64; // Key dimension
@@ -394,8 +395,8 @@ public class LanguageModelsDeepMathIntegrationTests
     // LLM Math: Positional Encoding
     // ============================
 
-    [Fact]
-    public void LLMMath_SinusoidalPositionalEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task LLMMath_SinusoidalPositionalEncoding()
     {
         // PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
         // PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))

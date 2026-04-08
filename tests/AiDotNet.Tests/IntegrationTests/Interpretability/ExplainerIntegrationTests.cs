@@ -6,6 +6,7 @@ using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Interpretability;
 
@@ -133,8 +134,8 @@ public class ExplainerIntegrationTests
 
     #region IntegratedGradientsExplainer Tests
 
-    [Fact]
-    public void IntegratedGradientsExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradientsExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -150,8 +151,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void IntegratedGradientsExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradientsExplainer_Explain_ReturnsValidExplanation()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new IntegratedGradientsExplainer<double>(
@@ -169,8 +170,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(50, explanation.NumSteps);
     }
 
-    [Fact]
-    public void IntegratedGradientsExplainer_CompletenessProperty_HoldsApproximately()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradientsExplainer_CompletenessProperty_HoldsApproximately()
     {
         // Integrated Gradients should satisfy completeness:
         // sum(attributions) approximately equals output(input) - output(baseline)
@@ -196,8 +197,8 @@ public class ExplainerIntegrationTests
             $"Convergence delta {explanation.ConvergenceDelta} should be small");
     }
 
-    [Fact]
-    public void IntegratedGradientsExplainer_ExplainBatch_ReturnsMultipleExplanations()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradientsExplainer_ExplainBatch_ReturnsMultipleExplanations()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new IntegratedGradientsExplainer<double>(
@@ -236,8 +237,8 @@ public class ExplainerIntegrationTests
 
     #region DeepLIFTExplainer Tests
 
-    [Fact]
-    public void DeepLIFTExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -251,8 +252,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void DeepLIFTExplainer_Explain_RescaleRule_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_Explain_RescaleRule_ReturnsValidExplanation()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new DeepLIFTExplainer<double>(
@@ -269,8 +270,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(DeepLIFTRule.Rescale, explanation.Rule);
     }
 
-    [Fact]
-    public void DeepLIFTExplainer_Explain_RevealCancelRule_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_Explain_RevealCancelRule_ReturnsValidExplanation()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new DeepLIFTExplainer<double>(
@@ -285,8 +286,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(DeepLIFTRule.RevealCancel, explanation.Rule);
     }
 
-    [Fact]
-    public void DeepLIFTExplainer_CompletenessProperty_AttributionsSumToOutputDiff()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_CompletenessProperty_AttributionsSumToOutputDiff()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new DeepLIFTExplainer<double>(
@@ -301,8 +302,8 @@ public class ExplainerIntegrationTests
             $"Completeness error {explanation.CompletenessError} should be small");
     }
 
-    [Fact]
-    public void DeepLIFTExplainer_GetSortedAttributions_ReturnsOrderedByAbsoluteValue()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_GetSortedAttributions_ReturnsOrderedByAbsoluteValue()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new DeepLIFTExplainer<double>(
@@ -323,8 +324,8 @@ public class ExplainerIntegrationTests
 
     #region SaliencyMapExplainer Tests
 
-    [Fact]
-    public void SaliencyMapExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SaliencyMapExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -360,8 +361,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(method, explanation.Method);
     }
 
-    [Fact]
-    public void SaliencyMapExplainer_SmoothGrad_ReducesNoise()
+    [Fact(Timeout = 120000)]
+    public async Task SaliencyMapExplainer_SmoothGrad_ReducesNoise()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -390,8 +391,8 @@ public class ExplainerIntegrationTests
 
     #region AccumulatedLocalEffectsExplainer Tests
 
-    [Fact]
-    public void AccumulatedLocalEffectsExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AccumulatedLocalEffectsExplainer_Construction_Succeeds()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(100);
@@ -407,8 +408,8 @@ public class ExplainerIntegrationTests
         Assert.True(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void AccumulatedLocalEffectsExplainer_ComputeForFeature_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task AccumulatedLocalEffectsExplainer_ComputeForFeature_ReturnsValidResult()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(100);
@@ -426,8 +427,8 @@ public class ExplainerIntegrationTests
         Assert.True(result.ALEValues.ContainsKey(0));
     }
 
-    [Fact]
-    public void AccumulatedLocalEffectsExplainer_ComputeForMultipleFeatures_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task AccumulatedLocalEffectsExplainer_ComputeForMultipleFeatures_ReturnsValidResult()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(100);
@@ -450,8 +451,8 @@ public class ExplainerIntegrationTests
 
     #region FeatureInteractionExplainer Tests
 
-    [Fact]
-    public void FeatureInteractionExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureInteractionExplainer_Construction_Succeeds()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(100);
@@ -467,8 +468,8 @@ public class ExplainerIntegrationTests
         Assert.True(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void FeatureInteractionExplainer_GetTopInteractions_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureInteractionExplainer_GetTopInteractions_ReturnsValidResult()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(50);
@@ -489,8 +490,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureInteractionExplainer_ComputePairwiseHStatistic_ReturnsValidHStatistic()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureInteractionExplainer_ComputePairwiseHStatistic_ReturnsValidHStatistic()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var data = CreateTestData(50);
@@ -510,8 +511,8 @@ public class ExplainerIntegrationTests
 
     #region GradientSHAPExplainer Tests
 
-    [Fact]
-    public void GradientSHAPExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GradientSHAPExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateLinearPredictFunction();
         var backgroundData = CreateTestData(50);
@@ -528,8 +529,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void GradientSHAPExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task GradientSHAPExplainer_Explain_ReturnsValidExplanation()
     {
         var predictFunc = CreateLinearPredictFunction();
         var backgroundData = CreateTestData(50);
@@ -553,8 +554,8 @@ public class ExplainerIntegrationTests
 
     #region LRPExplainer Tests
 
-    [Fact]
-    public void LRPExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LRPExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -590,8 +591,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(rule, explanation.Rule);
     }
 
-    [Fact]
-    public void LRPExplainer_ConservationProperty_RelevancesSumToOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LRPExplainer_ConservationProperty_RelevancesSumToOutput()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new LayerwiseRelevancePropagationExplainer<double>(
@@ -615,8 +616,8 @@ public class ExplainerIntegrationTests
 
     #region PrototypeExplainer Tests
 
-    [Fact]
-    public void PrototypeExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PrototypeExplainer_Construction_Succeeds()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var prototypes = CreateTestData(20);
@@ -656,8 +657,8 @@ public class ExplainerIntegrationTests
         Assert.True(explanation.NearestPrototypes.Count <= 5);
     }
 
-    [Fact]
-    public void PrototypeExplainer_NearestPrototypes_AreOrderedByDistance()
+    [Fact(Timeout = 120000)]
+    public async Task PrototypeExplainer_NearestPrototypes_AreOrderedByDistance()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var prototypes = CreateTestData(20);
@@ -683,8 +684,8 @@ public class ExplainerIntegrationTests
 
     #region ContrastiveExplainer Tests
 
-    [Fact]
-    public void ContrastiveExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ContrastiveExplainer_Construction_Succeeds()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -698,8 +699,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void ContrastiveExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task ContrastiveExplainer_Explain_ReturnsValidExplanation()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -720,8 +721,8 @@ public class ExplainerIntegrationTests
 
     #region GradCAMExplainer Tests
 
-    [Fact]
-    public void GradCAMExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GradCAMExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateTensorPredictFunction();
         var inputShape = new[] { 1, 8, 8, 3 }; // Batch, Height, Width, Channels
@@ -740,8 +741,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void GradCAMExplainer_Explain_ReturnsValidHeatmap()
+    [Fact(Timeout = 120000)]
+    public async Task GradCAMExplainer_Explain_ReturnsValidHeatmap()
     {
         var predictFunc = CreateTensorPredictFunction();
         var inputShape = new[] { 1, 8, 8, 3 };
@@ -787,8 +788,8 @@ public class ExplainerIntegrationTests
 
     #region AttentionVisualizationExplainer Tests
 
-    [Fact]
-    public void AttentionVisualizationExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionVisualizationExplainer_Construction_Succeeds()
     {
         var predictFunc = CreateTensorPredictFunction();
         var getAttentionWeights = CreateMockAttentionWeightsFunction();
@@ -806,8 +807,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void AttentionVisualizationExplainer_Explain_ReturnsValidAttentionWeights()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionVisualizationExplainer_Explain_ReturnsValidAttentionWeights()
     {
         var predictFunc = CreateTensorPredictFunction();
         var getAttentionWeights = CreateMockAttentionWeightsFunction();
@@ -846,8 +847,8 @@ public class ExplainerIntegrationTests
 
     #region PartialDependenceExplainer Tests
 
-    [Fact]
-    public void PartialDependenceExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PartialDependenceExplainer_Construction_Succeeds()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var backgroundData = CreateTestData(100);
@@ -863,8 +864,8 @@ public class ExplainerIntegrationTests
         Assert.True(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void PartialDependenceExplainer_ComputeForFeature_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task PartialDependenceExplainer_ComputeForFeature_ReturnsValidResult()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var backgroundData = CreateTestData(100);
@@ -883,8 +884,8 @@ public class ExplainerIntegrationTests
         Assert.True(result.PartialDependence.ContainsKey(0));
     }
 
-    [Fact]
-    public void PartialDependenceExplainer_ComputeForFeatures_WithICE_ReturnsICECurves()
+    [Fact(Timeout = 120000)]
+    public async Task PartialDependenceExplainer_ComputeForFeatures_WithICE_ReturnsICECurves()
     {
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
         var backgroundData = CreateTestData(50);
@@ -907,8 +908,8 @@ public class ExplainerIntegrationTests
 
     #region CounterfactualExplainer Tests
 
-    [Fact]
-    public void CounterfactualExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task CounterfactualExplainer_Construction_Succeeds()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -922,8 +923,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void CounterfactualExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task CounterfactualExplainer_Explain_ReturnsValidExplanation()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -946,8 +947,8 @@ public class ExplainerIntegrationTests
 
     #region AnchorExplainer Tests
 
-    [Fact]
-    public void AnchorExplainer_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorExplainer_Construction_Succeeds()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -961,8 +962,8 @@ public class ExplainerIntegrationTests
         Assert.False(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void AnchorExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task AnchorExplainer_Explain_ReturnsValidExplanation()
     {
         var classifyFunc = CreateBatchClassificationFunction(3);
 
@@ -1070,8 +1071,8 @@ public class ExplainerIntegrationTests
         return root;
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_SingleTree_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_SingleTree_Succeeds()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1086,8 +1087,8 @@ public class ExplainerIntegrationTests
         Assert.True(explainer.SupportsGlobalExplanations);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_Ensemble_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_Ensemble_Succeeds()
     {
         var trees = new List<DecisionTreeNode<double>>
         {
@@ -1104,8 +1105,8 @@ public class ExplainerIntegrationTests
         Assert.Equal("TreeSHAP", explainer.MethodName);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_WithFeatureNames_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_WithFeatureNames_Succeeds()
     {
         var tree = CreateSimpleTestTree();
         var featureNames = new[] { "Feature_A", "Feature_B", "Feature_C" };
@@ -1119,8 +1120,8 @@ public class ExplainerIntegrationTests
         Assert.NotNull(explainer);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_NullTree_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_NullTree_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TreeSHAPExplainer<double>(
@@ -1129,8 +1130,8 @@ public class ExplainerIntegrationTests
                 expectedValue: 15.0));
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_EmptyEnsemble_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_EmptyEnsemble_ThrowsException()
     {
         Assert.Throws<ArgumentException>(() =>
             new TreeSHAPExplainer<double>(
@@ -1139,8 +1140,8 @@ public class ExplainerIntegrationTests
                 expectedValue: 15.0));
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_ZeroFeatures_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_ZeroFeatures_ThrowsException()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1151,8 +1152,8 @@ public class ExplainerIntegrationTests
                 expectedValue: 15.0));
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Construction_NegativeFeatures_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Construction_NegativeFeatures_ThrowsException()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1163,8 +1164,8 @@ public class ExplainerIntegrationTests
                 expectedValue: 15.0));
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Explain_ReturnsValidExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Explain_ReturnsValidExplanation()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1183,8 +1184,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(10.0, explanation.Prediction); // Left leaf predicts 10
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Explain_LeftBranch_CorrectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Explain_LeftBranch_CorrectPrediction()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1199,8 +1200,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(10.0, explanation.Prediction);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Explain_RightBranch_CorrectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Explain_RightBranch_CorrectPrediction()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1215,8 +1216,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(20.0, explanation.Prediction);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Explain_WrongFeatureCount_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Explain_WrongFeatureCount_ThrowsException()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1230,8 +1231,8 @@ public class ExplainerIntegrationTests
         Assert.Throws<ArgumentException>(() => explainer.Explain(wrongInstance));
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_ExplainBatch_ReturnsMultipleExplanations()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_ExplainBatch_ReturnsMultipleExplanations()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1257,8 +1258,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(20.0, explanations[3].Prediction); // 5.1 > 5, goes right
     }
 
-    [Fact]
-    public void TreeSHAPExplanation_GetSortedAttributions_ReturnsOrderedByAbsoluteValue()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplanation_GetSortedAttributions_ReturnsOrderedByAbsoluteValue()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1281,8 +1282,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void TreeSHAPExplanation_GetPositiveContributions_ReturnsOnlyPositive()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplanation_GetPositiveContributions_ReturnsOnlyPositive()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1302,8 +1303,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void TreeSHAPExplanation_GetNegativeContributions_ReturnsOnlyNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplanation_GetNegativeContributions_ReturnsOnlyNegative()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1323,8 +1324,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void TreeSHAPExplanation_GetSumError_IsSmall()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplanation_GetSumError_IsSmall()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1344,8 +1345,8 @@ public class ExplainerIntegrationTests
             $"Sum error {sumError} should be small for TreeSHAP (completeness property)");
     }
 
-    [Fact]
-    public void TreeSHAPExplanation_ToString_ReturnsValidString()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplanation_ToString_ReturnsValidString()
     {
         var tree = CreateSimpleTestTree();
         var featureNames = new[] { "Feature_A", "Feature_B", "Feature_C" };
@@ -1367,8 +1368,8 @@ public class ExplainerIntegrationTests
         Assert.Contains("Prediction", str);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_ComplexTree_CorrectPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_ComplexTree_CorrectPredictions()
     {
         var tree = CreateComplexTestTree();
 
@@ -1391,8 +1392,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(25.0, explainer.Explain(instanceR).Prediction);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_Ensemble_AveragesPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_Ensemble_AveragesPredictions()
     {
         // Create two trees with different predictions
         var tree1 = CreateSimpleTestTree(); // Left: 10, Right: 20
@@ -1419,8 +1420,8 @@ public class ExplainerIntegrationTests
         Assert.Equal(21.0, rightExplanation.Prediction);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_FeatureNames_PropagateToExplanation()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_FeatureNames_PropagateToExplanation()
     {
         var tree = CreateSimpleTestTree();
         var featureNames = new[] { "Temperature", "Humidity", "WindSpeed" };
@@ -1438,8 +1439,8 @@ public class ExplainerIntegrationTests
         Assert.Equal("Temperature", explanation.FeatureNames[0]);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_NoFeatureNames_UsesDefaultNames()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_NoFeatureNames_UsesDefaultNames()
     {
         var tree = CreateSimpleTestTree();
 
@@ -1457,8 +1458,8 @@ public class ExplainerIntegrationTests
         Assert.Equal("Feature 2", explanation.FeatureNames[2]);
     }
 
-    [Fact]
-    public void TreeSHAPExplainer_SplitFeatureHasHighestAttribution()
+    [Fact(Timeout = 120000)]
+    public async Task TreeSHAPExplainer_SplitFeatureHasHighestAttribution()
     {
         // For a simple tree that only splits on feature 0,
         // feature 0 should have the highest attribution
@@ -1483,8 +1484,8 @@ public class ExplainerIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void Explainers_NullPredictFunction_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Explainers_NullPredictFunction_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new IntegratedGradientsExplainer<double>(null!, null, _numFeatures));
@@ -1496,8 +1497,8 @@ public class ExplainerIntegrationTests
             new SaliencyMapExplainer<double>(null!, numFeatures: _numFeatures));
     }
 
-    [Fact]
-    public void IntegratedGradientsExplainer_InstanceSizeMismatch_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradientsExplainer_InstanceSizeMismatch_ThrowsException()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new IntegratedGradientsExplainer<double>(
@@ -1511,8 +1512,8 @@ public class ExplainerIntegrationTests
         Assert.Throws<ArgumentException>(() => explainer.Explain(wrongInstance));
     }
 
-    [Fact]
-    public void DeepLIFTExplainer_NegativeNumFeatures_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFTExplainer_NegativeNumFeatures_ThrowsException()
     {
         var predictFunc = CreateLinearPredictFunction();
 
@@ -1524,8 +1525,8 @@ public class ExplainerIntegrationTests
 
     #region Edge Case Bug Detection Tests
 
-    [Fact]
-    public void IntegratedGradients_NegativeWeights_AttributionsHaveCorrectSign()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradients_NegativeWeights_AttributionsHaveCorrectSign()
     {
         // Test that negative weights produce negative attributions
         var weights = new[] { -0.5, 0.3, -0.2, 0.1, -0.4 };
@@ -1553,8 +1554,8 @@ public class ExplainerIntegrationTests
         Assert.True(explanation.Attributions[2] < 0, "Feature 2 (negative weight) should have negative attribution");
     }
 
-    [Fact]
-    public void IntegratedGradients_ZeroBaseline_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradients_ZeroBaseline_DoesNotThrow()
     {
         var predictFunc = CreateLinearPredictFunction();
         var explainer = new IntegratedGradientsExplainer<double>(
@@ -1575,8 +1576,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void DeepLIFT_VerySmallInput_NoNaN()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFT_VerySmallInput_NoNaN()
     {
         // Test that very small inputs don't produce NaN due to division by zero
         var predictFunc = CreateLinearPredictFunction();
@@ -1594,8 +1595,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void LRP_AllPositiveInputs_AllRelevancesHaveSameSign()
+    [Fact(Timeout = 120000)]
+    public async Task LRP_AllPositiveInputs_AllRelevancesHaveSameSign()
     {
         // For a linear model with all positive weights and positive inputs,
         // all relevances should be positive
@@ -1623,8 +1624,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SaliencyMap_VanillaGradient_AllFeaturesSameSign()
+    [Fact(Timeout = 120000)]
+    public async Task SaliencyMap_VanillaGradient_AllFeaturesSameSign()
     {
         // For a linear model, vanilla gradient should be the weights (all same output sign)
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1652,8 +1653,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void PartialDependence_SingleDataPoint_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task PartialDependence_SingleDataPoint_DoesNotCrash()
     {
         // Edge case: single data point in background data
         var batchPredictFunc = CreateBatchPredictFunction(CreateLinearPredictFunction());
@@ -1670,8 +1671,8 @@ public class ExplainerIntegrationTests
         Assert.True(result.PartialDependence.ContainsKey(0));
     }
 
-    [Fact]
-    public void ALE_ConstantFeature_ReturnsZeroEffect()
+    [Fact(Timeout = 120000)]
+    public async Task ALE_ConstantFeature_ReturnsZeroEffect()
     {
         // If a feature has constant value across all data, ALE should be flat (zero variation)
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1719,8 +1720,8 @@ public class ExplainerIntegrationTests
 
     #region Mathematical Correctness Tests
 
-    [Fact]
-    public void IntegratedGradients_LinearModel_AttributionsMatchWeights()
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedGradients_LinearModel_AttributionsMatchWeights()
     {
         // For a linear model f(x) = sum(x * w), the attributions should be approximately
         // (x - baseline) * w / (sum of attributions) * (f(x) - f(baseline))
@@ -1761,8 +1762,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void DeepLIFT_CompletenessPropertyViolation_DetectsBug()
+    [Fact(Timeout = 120000)]
+    public async Task DeepLIFT_CompletenessPropertyViolation_DetectsBug()
     {
         // DeepLIFT should satisfy completeness: sum(attributions) = f(x) - f(baseline)
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1790,8 +1791,8 @@ public class ExplainerIntegrationTests
             $"DeepLIFT completeness violated: sum={attributionSum}, expected={expectedOutput}");
     }
 
-    [Fact]
-    public void GradientSHAP_CompletenessProperty_AttributionsSumToOutputDiff()
+    [Fact(Timeout = 120000)]
+    public async Task GradientSHAP_CompletenessProperty_AttributionsSumToOutputDiff()
     {
         // GradientSHAP attributions should sum to f(x) - E[f(baseline)]
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1829,8 +1830,8 @@ public class ExplainerIntegrationTests
             $"GradientSHAP attribution sum {attrSum} is unreasonable");
     }
 
-    [Fact]
-    public void LRP_ConservationProperty_RelevancesSumToOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LRP_ConservationProperty_RelevancesSumToOutput()
     {
         // LRP conservation property: relevances should sum to the output value
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1858,8 +1859,8 @@ public class ExplainerIntegrationTests
             $"LRP conservation violated: relevance sum={relevanceSum}, output={output}");
     }
 
-    [Fact]
-    public void FeatureInteraction_LinearModel_NoInteraction()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureInteraction_LinearModel_NoInteraction()
     {
         // For a purely linear model, H-statistic should be close to 0 (no interactions)
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1895,8 +1896,8 @@ public class ExplainerIntegrationTests
             $"Linear model should have no interaction, but H-statistic={hStatistic}");
     }
 
-    [Fact]
-    public void PartialDependence_LinearModel_ProducesLinearCurve()
+    [Fact(Timeout = 120000)]
+    public async Task PartialDependence_LinearModel_ProducesLinearCurve()
     {
         // For a linear model, PDP should produce a linear relationship
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1943,8 +1944,8 @@ public class ExplainerIntegrationTests
             "PDP for feature with positive weight should be monotonically increasing");
     }
 
-    [Fact]
-    public void SaliencyMap_GradientTimesInput_ReflectsWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SaliencyMap_GradientTimesInput_ReflectsWeights()
     {
         // For a linear model, gradient × input should be approximately x * weight
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };
@@ -1977,8 +1978,8 @@ public class ExplainerIntegrationTests
         }
     }
 
-    [Fact]
-    public void ALE_LinearModel_EffectsAreLinear()
+    [Fact(Timeout = 120000)]
+    public async Task ALE_LinearModel_EffectsAreLinear()
     {
         // For a linear model, ALE should produce linear effects
         var weights = new[] { 0.1, 0.2, 0.3, 0.4, 0.5 };

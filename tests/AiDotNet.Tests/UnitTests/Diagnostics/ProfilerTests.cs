@@ -1,6 +1,7 @@
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Diagnostics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diagnostics;
 
@@ -11,8 +12,8 @@ public class ProfilerSessionTests
 {
     private readonly string _testId = Guid.NewGuid().ToString("N")[..8];
 
-    [Fact]
-    public void ProfilerSession_EnableDisable_Works()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_EnableDisable_Works()
     {
         // Arrange - explicitly disable AutoEnableInDebug to test disabled state
         var config = new ProfilingConfig { Enabled = false, AutoEnableInDebug = false };
@@ -26,8 +27,8 @@ public class ProfilerSessionTests
         Assert.False(session.IsEnabled);
     }
 
-    [Fact]
-    public void ProfilerSession_DefaultConfig_UsesDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_DefaultConfig_UsesDefaults()
     {
         // Arrange & Act
         var session = new ProfilerSession();
@@ -39,8 +40,8 @@ public class ProfilerSessionTests
         Assert.Equal(10000, session.Config.MaxOperations);
     }
 
-    [Fact]
-    public void ProfilerSessionScope_RecordsTiming()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSessionScope_RecordsTiming()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -60,8 +61,8 @@ public class ProfilerSessionTests
         Assert.True(stats.MeanMs >= 40, $"Expected >= 40ms but got {stats.MeanMs}ms"); // Allow some variance
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_RecordsTiming()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSessionTimer_RecordsTiming()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -80,8 +81,8 @@ public class ProfilerSessionTests
         Assert.True(stats.MeanMs >= 20, $"Expected >= 20ms but got {stats.MeanMs}ms");
     }
 
-    [Fact]
-    public void ProfilerSession_MultipleSamples_CalculatesStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_MultipleSamples_CalculatesStatistics()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -108,8 +109,8 @@ public class ProfilerSessionTests
         Assert.True(stats.P95Ms >= stats.P50Ms);
     }
 
-    [Fact]
-    public void ProfilerSession_Reset_ClearsData()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_Reset_ClearsData()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -127,8 +128,8 @@ public class ProfilerSessionTests
         Assert.Null(stats);
     }
 
-    [Fact]
-    public void ProfilerSession_WhenDisabled_DoesNotRecord()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_WhenDisabled_DoesNotRecord()
     {
         // Arrange - profiler is disabled, explicitly disable AutoEnableInDebug for testing
         var config = new ProfilingConfig { Enabled = false, AutoEnableInDebug = false };
@@ -146,8 +147,8 @@ public class ProfilerSessionTests
         Assert.Null(stats);
     }
 
-    [Fact]
-    public void ProfilerSession_SamplingRate_RespectsRate()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_SamplingRate_RespectsRate()
     {
         // Arrange - 10% sampling rate
         var config = new ProfilingConfig { Enabled = true, SamplingRate = 0.1 };
@@ -171,8 +172,8 @@ public class ProfilerSessionTests
         }
     }
 
-    [Fact]
-    public void ProfileReport_GeneratesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_GeneratesCorrectly()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -197,8 +198,8 @@ public class ProfilerSessionTests
         Assert.Equal(2, op1Stats.Count);
     }
 
-    [Fact]
-    public void ProfileReport_ToJson_ProducesValidJson()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_ToJson_ProducesValidJson()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -215,8 +216,8 @@ public class ProfilerSessionTests
         Assert.Contains("operationCount", json);
     }
 
-    [Fact]
-    public void ProfileReport_ToCsv_ProducesValidCsv()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_ToCsv_ProducesValidCsv()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -233,8 +234,8 @@ public class ProfilerSessionTests
         Assert.Contains("Name,Count,TotalMs", csv);
     }
 
-    [Fact]
-    public void ProfileReport_ToMarkdown_ProducesValidMarkdown()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_ToMarkdown_ProducesValidMarkdown()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -251,8 +252,8 @@ public class ProfilerSessionTests
         Assert.Contains("MarkdownTest", markdown);
     }
 
-    [Fact]
-    public void ProfileReport_GetHotspots_OrdersByTotalTime()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_GetHotspots_OrdersByTotalTime()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -274,8 +275,8 @@ public class ProfilerSessionTests
         Assert.Equal("Slow", hotspots[0].Name); // Slow should be first (most total time)
     }
 
-    [Fact]
-    public void ProfilerStats_OpsPerSecond_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerStats_OpsPerSecond_CalculatesCorrectly()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -299,8 +300,8 @@ public class ProfilerSessionTests
             $"Expected ops/sec between 10 and 500, but got {stats.OpsPerSecond}");
     }
 
-    [Fact]
-    public void ProfileReport_CompareTo_DetectsRegression()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_CompareTo_DetectsRegression()
     {
         // Arrange - Create baseline session and report
         var config = new ProfilingConfig { Enabled = true };
@@ -324,8 +325,8 @@ public class ProfilerSessionTests
         Assert.True(comparison.HasRegressions);
     }
 
-    [Fact]
-    public void ProfileReport_CompareTo_DetectsImprovement()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_CompareTo_DetectsImprovement()
     {
         // Arrange - Create baseline session with slow operation
         var config = new ProfilingConfig { Enabled = true };
@@ -349,8 +350,8 @@ public class ProfilerSessionTests
         Assert.False(comparison.HasRegressions);
     }
 
-    [Fact]
-    public void ProfilerSession_HierarchyTracking_RecordsParentChild()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_HierarchyTracking_RecordsParentChild()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true, TrackCallHierarchy = true };
@@ -372,8 +373,8 @@ public class ProfilerSessionTests
         Assert.Contains("Parent", childStats.Parents);
     }
 
-    [Fact]
-    public void ProfilerSession_MaxOperations_LimitsTracking()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_MaxOperations_LimitsTracking()
     {
         // Arrange - Limit to 5 operations
         var config = new ProfilingConfig { Enabled = true, MaxOperations = 5 };
@@ -389,8 +390,8 @@ public class ProfilerSessionTests
         Assert.True(session.OperationCount <= 5);
     }
 
-    [Fact]
-    public void ProfilerSession_CustomTags_IncludedInReport()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_CustomTags_IncludedInReport()
     {
         // Arrange
         var config = new ProfilingConfig
@@ -414,8 +415,8 @@ public class ProfilerSessionTests
         Assert.Equal("test123", report.Tags["experiment"]);
     }
 
-    [Fact]
-    public void ProfilerSession_GetOperationNames_ReturnsAllNames()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_GetOperationNames_ReturnsAllNames()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -434,8 +435,8 @@ public class ProfilerSessionTests
         Assert.Contains("Op3", names);
     }
 
-    [Fact]
-    public void ProfileReport_ToDictionary_ReturnsSerializableData()
+    [Fact(Timeout = 60000)]
+    public async Task ProfileReport_ToDictionary_ReturnsSerializableData()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -453,8 +454,8 @@ public class ProfilerSessionTests
         Assert.True(dict.ContainsKey("operations"));
     }
 
-    [Fact]
-    public void ProfilerSession_ElapsedTime_TracksRuntime()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSession_ElapsedTime_TracksRuntime()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -468,8 +469,8 @@ public class ProfilerSessionTests
         Assert.True(elapsed.TotalMilliseconds >= 40);
     }
 
-    [Fact]
-    public void ProfilerSessionTimer_Elapsed_TracksTime()
+    [Fact(Timeout = 60000)]
+    public async Task ProfilerSessionTimer_Elapsed_TracksTime()
     {
         // Arrange
         var config = new ProfilingConfig { Enabled = true };
@@ -503,8 +504,8 @@ public class MemoryTrackerTests : IDisposable
         MemoryTracker.Reset();
     }
 
-    [Fact]
-    public void MemoryTracker_Snapshot_ReturnsValidData()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_Snapshot_ReturnsValidData()
     {
         // Act
         var snapshot = MemoryTracker.Snapshot("Test");
@@ -516,8 +517,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.True(snapshot.Timestamp <= DateTime.UtcNow);
     }
 
-    [Fact]
-    public void MemorySnapshot_CompareTo_CalculatesDiff()
+    [Fact(Timeout = 60000)]
+    public async Task MemorySnapshot_CompareTo_CalculatesDiff()
     {
         // Arrange
         var before = MemoryTracker.Snapshot("before");
@@ -537,8 +538,8 @@ public class MemoryTrackerTests : IDisposable
         // Note: Memory diff might be negative due to GC, so we just check it calculated
     }
 
-    [Fact]
-    public void MemoryTracker_GetPressureLevel_ReturnsValidLevel()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_GetPressureLevel_ReturnsValidLevel()
     {
         // Act
         var level = MemoryTracker.GetPressureLevel();
@@ -547,8 +548,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.True(Enum.IsDefined(typeof(MemoryPressureLevel), level));
     }
 
-    [Fact]
-    public void MemoryTracker_EstimateTensorMemory_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_EstimateTensorMemory_CalculatesCorrectly()
     {
         // Arrange
         int[] shape = { 2, 3, 4, 5 }; // 2*3*4*5 = 120 elements
@@ -561,8 +562,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.Equal(120 * 4, estimate); // 480 bytes
     }
 
-    [Fact]
-    public void MemoryTracker_EstimateKVCacheMemory_CalculatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_EstimateKVCacheMemory_CalculatesCorrectly()
     {
         // Arrange - Small model config
         int numLayers = 12;
@@ -583,8 +584,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.Equal(expected, estimate);
     }
 
-    [Fact]
-    public void MemoryTracker_History_RecordsWhenEnabled()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryTracker_History_RecordsWhenEnabled()
     {
         // Arrange
         MemoryTracker.Enable();
@@ -601,8 +602,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.Equal("snap2", history[1].Label);
     }
 
-    [Fact]
-    public void MemoryScope_TracksMemory()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryScope_TracksMemory()
     {
         // Arrange
         MemoryTracker.Enable();
@@ -621,8 +622,8 @@ public class MemoryTrackerTests : IDisposable
         Assert.True(history.Count >= 2);
     }
 
-    [Fact]
-    public void MemoryScope_WithProfilerSession_RecordsToSession()
+    [Fact(Timeout = 60000)]
+    public async Task MemoryScope_WithProfilerSession_RecordsToSession()
     {
         // Arrange
         MemoryTracker.Enable();

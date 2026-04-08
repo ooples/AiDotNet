@@ -3,6 +3,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 
@@ -17,8 +18,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// Tests that the optimizer can minimize a simple quadratic function f(x) = x^2.
     /// The minimum is at x = 0.
     /// </summary>
-    [Fact]
-    public void Optimize_SimpleQuadratic_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_SimpleQuadratic_ConvergesToMinimum()
     {
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -46,8 +47,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization of a 2D quadratic function f(x,y) = x^2 + y^2.
     /// </summary>
-    [Fact]
-    public void Optimize_2DQuadratic_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_2DQuadratic_ConvergesToMinimum()
     {
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -78,8 +79,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// f(x,y) = (a-x)^2 + b*(y-x^2)^2, with a=1, b=100
     /// Minimum at (1, 1).
     /// </summary>
-    [Fact]
-    public void Optimize_RosenbrockFunction_MovesTowardsMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_RosenbrockFunction_MovesTowardsMinimum()
     {
         // Arrange
         const double a = 1.0;
@@ -122,8 +123,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that 8-bit Adam produces similar results to standard Adam on a simple problem.
     /// </summary>
-    [Fact]
-    public void Optimize_ComparesWithStandardAdam_SimilarResults()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_ComparesWithStandardAdam_SimilarResults()
     {
         // Arrange
         var adam8BitOptions = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -180,8 +181,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with a large number of parameters to verify memory efficiency.
     /// </summary>
-    [Fact]
-    public void Optimize_LargeParameterCount_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_LargeParameterCount_WorksCorrectly()
     {
         // Arrange
         const int paramCount = 10000;
@@ -230,8 +231,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests memory statistics are correctly computed for various configurations.
     /// </summary>
-    [Fact]
-    public void GetMemoryUsage_VariousConfigurations_ReturnsCorrectStats()
+    [Fact(Timeout = 120000)]
+    public async Task GetMemoryUsage_VariousConfigurations_ReturnsCorrectStats()
     {
         // Test with different block sizes
         var blockSizes = new[] { 64, 256, 1024, 2048 };
@@ -274,8 +275,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with zero gradients doesn't cause issues.
     /// </summary>
-    [Fact]
-    public void Optimize_ZeroGradients_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_ZeroGradients_HandledCorrectly()
     {
         // Arrange
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null);
@@ -296,8 +297,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with very large gradients (gradient explosion scenario).
     /// </summary>
-    [Fact]
-    public void Optimize_LargeGradients_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_LargeGradients_HandledCorrectly()
     {
         // Arrange
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null);
@@ -318,8 +319,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with very small gradients (vanishing gradient scenario).
     /// </summary>
-    [Fact]
-    public void Optimize_VerySmallGradients_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_VerySmallGradients_HandledCorrectly()
     {
         // Arrange
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null);
@@ -340,8 +341,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests optimization with mixed positive and negative values.
     /// </summary>
-    [Fact]
-    public void Optimize_MixedSignGradients_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_MixedSignGradients_HandledCorrectly()
     {
         // Arrange
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null);
@@ -366,8 +367,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that serialization and deserialization preserves optimizer state correctly.
     /// </summary>
-    [Fact]
-    public void SerializeDeserialize_PreservesOptimizationState()
+    [Fact(Timeout = 120000)]
+    public async Task SerializeDeserialize_PreservesOptimizationState()
     {
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -497,8 +498,8 @@ public class Adam8BitOptimizerIntegrationTests
     /// <summary>
     /// Tests that float type works correctly end-to-end.
     /// </summary>
-    [Fact]
-    public void Optimize_FloatType_ConvergesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Optimize_FloatType_ConvergesCorrectly()
     {
         // Arrange
         var options = new Adam8BitOptimizerOptions<float, Matrix<float>, Vector<float>>

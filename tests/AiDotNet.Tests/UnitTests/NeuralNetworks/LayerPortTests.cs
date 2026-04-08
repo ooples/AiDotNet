@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -10,24 +11,24 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class LayerPortTests
 {
-    [Fact]
-    public void DenseLayer_HasSingleInputPort()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_HasSingleInputPort()
     {
         var layer = new DenseLayer<double>(4, 8);
         Assert.Single(layer.InputPorts);
         Assert.Equal("input", layer.InputPorts[0].Name);
     }
 
-    [Fact]
-    public void DenseLayer_HasSingleOutputPort()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_HasSingleOutputPort()
     {
         var layer = new DenseLayer<double>(4, 8);
         Assert.Single(layer.OutputPorts);
         Assert.Equal("output", layer.OutputPorts[0].Name);
     }
 
-    [Fact]
-    public void DenseLayer_MultiInputForward_DelegatesToSingleInput()
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_MultiInputForward_DelegatesToSingleInput()
     {
         var layer = new DenseLayer<double>(4, 2);
         var input = new Tensor<double>([1, 4]);
@@ -50,8 +51,8 @@ public class LayerPortTests
         }
     }
 
-    [Fact]
-    public void AddLayer_HasTwoInputPorts()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_HasTwoInputPorts()
     {
         var layer = new AddLayer<double>(new int[][] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         Assert.Equal(2, layer.InputPorts.Count);
@@ -59,8 +60,8 @@ public class LayerPortTests
         Assert.Equal("input_b", layer.InputPorts[1].Name);
     }
 
-    [Fact]
-    public void AddLayer_MultiInputForward_AddsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_MultiInputForward_AddsCorrectly()
     {
         var layer = new AddLayer<double>(new int[][] { new[] { 3 }, new[] { 3 } }, (IActivationFunction<double>?)null);
         var a = new Tensor<double>([3], new Vector<double>([1.0, 2.0, 3.0]));
@@ -77,8 +78,8 @@ public class LayerPortTests
         Assert.Equal(9.0, result[2], 10);
     }
 
-    [Fact]
-    public void DiffusionResBlock_HasTimeEmbedPort_WhenConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionResBlock_HasTimeEmbedPort_WhenConfigured()
     {
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
             inChannels: 4, outChannels: 4, spatialSize: 8, timeEmbedDim: 64);
@@ -89,8 +90,8 @@ public class LayerPortTests
         Assert.Equal(64, block.InputPorts[1].Shape[0]);
     }
 
-    [Fact]
-    public void DiffusionResBlock_SinglePort_WhenNoTimeEmbed()
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionResBlock_SinglePort_WhenNoTimeEmbed()
     {
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
             inChannels: 4, outChannels: 4, spatialSize: 8, timeEmbedDim: 0);
@@ -99,8 +100,8 @@ public class LayerPortTests
         Assert.Equal("input", block.InputPorts[0].Name);
     }
 
-    [Fact]
-    public void LayerPort_Record_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPort_Record_HasCorrectProperties()
     {
         var port = new LayerPort("query", [8, 64], Required: true);
 
@@ -111,15 +112,15 @@ public class LayerPortTests
         Assert.True(port.Required);
     }
 
-    [Fact]
-    public void LayerPort_OptionalPort()
+    [Fact(Timeout = 120000)]
+    public async Task LayerPort_OptionalPort()
     {
         var port = new LayerPort("mask", [8, 8], Required: false);
         Assert.False(port.Required);
     }
 
-    [Fact]
-    public void DiffusionResBlock_MultiInputForward_IncludesTimeConditioning()
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionResBlock_MultiInputForward_IncludesTimeConditioning()
     {
         int channels = 4;
         int spatial = 8;
@@ -156,8 +157,8 @@ public class LayerPortTests
         }
     }
 
-    [Fact]
-    public void LayerBase_ForwardGpu_ThrowsOnEmptyArgs()
+    [Fact(Timeout = 120000)]
+    public async Task LayerBase_ForwardGpu_ThrowsOnEmptyArgs()
     {
         var layer = new DenseLayer<double>(4, 2);
         // 0 args → throws
@@ -166,8 +167,8 @@ public class LayerPortTests
 
     // BackwardGpuMulti test removed — Backward deleted in tape-based autodiff migration
 
-    [Fact]
-    public void SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
+    [Fact(Timeout = 120000)]
+    public async Task SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
     {
         var layer = new DenseLayer<double>(4, 2);
         var input = new Tensor<double>([1, 4]);

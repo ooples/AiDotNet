@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.TimeSeries;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -65,15 +66,15 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region MovingAverageDetector Tests
 
-    [Fact]
-    public void MovingAverage_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task MovingAverage_Construction_NotFittedByDefault()
     {
         var detector = new MovingAverageDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void MovingAverage_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task MovingAverage_OutlierGetsHighestScore()
     {
         var detector = new MovingAverageDetector<double>(windowSize: 5);
         var data = CreateTimeSeriesData();
@@ -84,8 +85,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void MovingAverage_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MovingAverage_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new MovingAverageDetector<double>(windowSize: 5);
         var data = CreateTimeSeriesData();
@@ -98,8 +99,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region ARIMADetector Tests
 
-    [Fact]
-    public void ARIMA_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMA_OutlierGetsHighestScore()
     {
         var detector = new ARIMADetector<double>(p: 1, d: 0, q: 0);
         var data = CreateTimeSeriesData();
@@ -109,8 +110,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void ARIMA_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMA_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new ARIMADetector<double>(p: 1, d: 0, q: 0);
         var data = CreateTimeSeriesData();
@@ -123,8 +124,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region STLDetector Tests
 
-    [Fact]
-    public void STL_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task STL_OutlierGetsHighestScore()
     {
         var detector = new STLDetector<double>(seasonLength: 12);
         var data = CreateTimeSeriesData();
@@ -134,8 +135,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void STL_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task STL_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new STLDetector<double>(seasonLength: 12);
         var data = CreateTimeSeriesData();
@@ -148,8 +149,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region MatrixProfileDetector Tests
 
-    [Fact]
-    public void MatrixProfile_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixProfile_OutlierGetsHighestScore()
     {
         var detector = new MatrixProfileDetector<double>(subsequenceLength: 5);
         var data = CreateTimeSeriesData();
@@ -159,8 +160,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void MatrixProfile_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixProfile_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new MatrixProfileDetector<double>(subsequenceLength: 5);
         var data = CreateTimeSeriesData();
@@ -173,8 +174,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region SpectralResidualDetector Tests
 
-    [Fact]
-    public void SpectralResidual_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralResidual_OutlierGetsHighestScore()
     {
         var detector = new SpectralResidualDetector<double>();
         var data = CreateTimeSeriesData();
@@ -184,8 +185,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void SpectralResidual_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralResidual_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new SpectralResidualDetector<double>();
         var data = CreateTimeSeriesData();
@@ -198,8 +199,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region SeasonalHybridESDDetector Tests
 
-    [Fact]
-    public void SeasonalHybridESD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalHybridESD_OutlierGetsHighestScore()
     {
         var detector = new SeasonalHybridESDDetector<double>(seasonLength: 12);
         var data = CreateTimeSeriesData();
@@ -209,8 +210,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void SeasonalHybridESD_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SeasonalHybridESD_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new SeasonalHybridESDDetector<double>(seasonLength: 12);
         var data = CreateTimeSeriesData();
@@ -223,8 +224,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region LSTMDetector Tests
 
-    [Fact]
-    public void LSTM_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LSTM_OutlierGetsHighestScore()
     {
         var detector = new LSTMDetector<double>(seqLength: 5, epochs: 5);
         var data = CreateTimeSeriesData();
@@ -234,8 +235,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void LSTM_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LSTM_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new LSTMDetector<double>(seqLength: 5, epochs: 5);
         var data = CreateTimeSeriesData();
@@ -248,8 +249,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region NBEATSDetector Tests
 
-    [Fact]
-    public void NBEATS_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task NBEATS_OutlierGetsHighestScore()
     {
         var detector = new NBEATSDetector<double>(epochs: 5);
         var data = CreateTimeSeriesData();
@@ -259,8 +260,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void NBEATS_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NBEATS_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new NBEATSDetector<double>(epochs: 5);
         var data = CreateTimeSeriesData();
@@ -273,8 +274,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region AnomalyTransformerDetector Tests
 
-    [Fact]
-    public void AnomalyTransformer_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyTransformer_OutlierGetsHighestScore()
     {
         var detector = new AnomalyTransformerDetector<double>(seqLength: 10, epochs: 5);
         var data = CreateTimeSeriesData();
@@ -284,8 +285,8 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
-    public void AnomalyTransformer_PredictClassifiesAnomalyCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyTransformer_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new AnomalyTransformerDetector<double>(seqLength: 10, epochs: 5);
         var data = CreateTimeSeriesData();
@@ -298,8 +299,8 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllTimeSeriesDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllTimeSeriesDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

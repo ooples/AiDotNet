@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.ClusterBased;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -60,15 +61,15 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region KMeansDetector Tests
 
-    [Fact]
-    public void KMeans_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_Construction_NotFittedByDefault()
     {
         var detector = new KMeansDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void KMeans_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_OutlierGetsHighestScore()
     {
         var detector = new KMeansDetector<double>(k: 3);
         var data = CreateTestData();
@@ -79,8 +80,8 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void KMeans_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KMeansDetector<double>(k: 3);
         var data = CreateTestData();
@@ -93,8 +94,8 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region DBSCANDetector Tests
 
-    [Fact]
-    public void DBSCAN_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_OutlierGetsHighestScore()
     {
         var detector = new DBSCANDetector<double>();
         var data = CreateTestData();
@@ -104,8 +105,8 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void DBSCAN_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DBSCANDetector<double>();
         var data = CreateTestData();
@@ -118,8 +119,8 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region HDBSCANDetector Tests
 
-    [Fact]
-    public void HDBSCAN_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task HDBSCAN_OutlierGetsHighestScore()
     {
         var detector = new HDBSCANDetector<double>();
         var data = CreateTestData();
@@ -129,8 +130,8 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void HDBSCAN_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task HDBSCAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new HDBSCANDetector<double>();
         var data = CreateTestData();
@@ -143,8 +144,8 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region CBLOFDetector Tests
 
-    [Fact]
-    public void CBLOF_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task CBLOF_OutlierGetsHighestScore()
     {
         var detector = new CBLOFDetector<double>();
         var data = CreateTestData();
@@ -154,8 +155,8 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void CBLOF_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task CBLOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new CBLOFDetector<double>();
         var data = CreateTestData();
@@ -168,8 +169,8 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllClusterDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllClusterDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

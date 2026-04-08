@@ -1,14 +1,15 @@
 using System;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
 public class ExplorationStrategiesIntegrationTests
 {
-    [Fact]
-    public void NoExploration_ReturnsPolicyAction()
+    [Fact(Timeout = 120000)]
+    public async Task NoExploration_ReturnsPolicyAction()
     {
         var strategy = new NoExploration<double>();
         var policyAction = CreateVector(3, 0.2);
@@ -18,8 +19,8 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Same(policyAction, action);
     }
 
-    [Fact]
-    public void EpsilonGreedyExploration_UpdateAndReset_AdjustsEpsilon()
+    [Fact(Timeout = 120000)]
+    public async Task EpsilonGreedyExploration_UpdateAndReset_AdjustsEpsilon()
     {
         var strategy = new EpsilonGreedyExploration<double>(epsilonStart: 1.0, epsilonEnd: 0.1, epsilonDecay: 0.5);
         var policyAction = CreateOneHotAction(3, 2);
@@ -36,8 +37,8 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Equal(1.0, strategy.CurrentEpsilon, precision: 12);
     }
 
-    [Fact]
-    public void BoltzmannExploration_HandlesDiscreteAndContinuousActions()
+    [Fact(Timeout = 120000)]
+    public async Task BoltzmannExploration_HandlesDiscreteAndContinuousActions()
     {
         var strategy = new BoltzmannExploration<double>(temperatureStart: 1.0, temperatureEnd: 0.1, temperatureDecay: 1.0);
         var discreteAction = CreateOneHotAction(3, 1);
@@ -53,8 +54,8 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Reset();
     }
 
-    [Fact]
-    public void GaussianNoiseExploration_ZeroNoise_KeepsAction()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseExploration_ZeroNoise_KeepsAction()
     {
         var strategy = new GaussianNoiseExploration<double>(initialStdDev: 0.0, noiseDecay: 1.0, minNoise: 0.0);
         var policyAction = CreateVector(2, 0.3);
@@ -70,8 +71,8 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Update();
     }
 
-    [Fact]
-    public void OrnsteinUhlenbeckNoise_ValidatesActionSizeAndResets()
+    [Fact(Timeout = 120000)]
+    public async Task OrnsteinUhlenbeckNoise_ValidatesActionSizeAndResets()
     {
         var strategy = new OrnsteinUhlenbeckNoise<double>(actionSize: 2);
         var policyAction = CreateVector(2, 0.1);
@@ -84,8 +85,8 @@ public class ExplorationStrategiesIntegrationTests
         strategy.Reset();
     }
 
-    [Fact]
-    public void UpperConfidenceBoundExploration_TracksSteps()
+    [Fact(Timeout = 120000)]
+    public async Task UpperConfidenceBoundExploration_TracksSteps()
     {
         var strategy = new UpperConfidenceBoundExploration<double>(explorationConstant: 1.0);
         var qValues = CreateVector(3, 0.1);
@@ -102,8 +103,8 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Equal(0, strategy.TotalSteps);
     }
 
-    [Fact]
-    public void ThompsonSamplingExploration_UpdateDistributionAndReset()
+    [Fact(Timeout = 120000)]
+    public async Task ThompsonSamplingExploration_UpdateDistributionAndReset()
     {
         var strategy = new ThompsonSamplingExploration<double>(priorAlpha: 1.0, priorBeta: 1.0);
         var policyAction = CreateVector(2, 0.1);

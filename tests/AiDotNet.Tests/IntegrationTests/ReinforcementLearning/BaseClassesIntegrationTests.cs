@@ -13,14 +13,15 @@ using AiDotNet.ReinforcementLearning.Policies;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
 public class BaseClassesIntegrationTests
 {
-    [Fact]
-    public void PolicyBase_ValidateStateAndAction_ThrowsForInvalidInput()
+    [Fact(Timeout = 120000)]
+    public async Task PolicyBase_ValidateStateAndAction_ThrowsForInvalidInput()
     {
         var policy = new TestPolicy();
 
@@ -29,8 +30,8 @@ public class BaseClassesIntegrationTests
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateActionSize(expected: 2, actual: 1));
     }
 
-    [Fact]
-    public void PolicyBase_Dispose_MarksDisposed()
+    [Fact(Timeout = 120000)]
+    public async Task PolicyBase_Dispose_MarksDisposed()
     {
         var policy = new TestPolicy();
 
@@ -39,8 +40,8 @@ public class BaseClassesIntegrationTests
         Assert.True(policy.IsDisposed);
     }
 
-    [Fact]
-    public void ExplorationStrategyBase_ClampAndValidate_Work()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationStrategyBase_ClampAndValidate_Work()
     {
         var strategy = new TestExplorationStrategy();
         var action = new Vector<double>(3);
@@ -57,8 +58,8 @@ public class BaseClassesIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.ValidateSize(expected: 2, actual: 1));
     }
 
-    [Fact]
-    public void ExplorationStrategyBase_BoxMullerSample_IsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationStrategyBase_BoxMullerSample_IsFinite()
     {
         var strategy = new TestExplorationStrategy();
 
@@ -68,16 +69,16 @@ public class BaseClassesIntegrationTests
         Assert.False(double.IsInfinity(sample));
     }
 
-    [Fact]
-    public void DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks()
+    [Fact(Timeout = 120000)]
+    public async Task DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks()
     {
         var agent = new TestDeepAgent(CreateOptions());
 
         Assert.Equal(agent.NetworkParameterCount, agent.ParameterCount);
     }
 
-    [Fact]
-    public void DeepReinforcementLearningAgentBase_JitRemoved_SupportsJitIsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task DeepReinforcementLearningAgentBase_JitRemoved_SupportsJitIsFalse()
     {
         var agent = new TestDeepAgent(CreateOptions());
 
@@ -86,8 +87,8 @@ public class BaseClassesIntegrationTests
         Assert.Throws<NotSupportedException>(() => agent.ExportComputationGraph(new List<ComputationNode<double>>()));
     }
 
-    [Fact]
-    public void ReinforcementLearningAgentBase_DefaultsAndStateRoundTrip_Work()
+    [Fact(Timeout = 120000)]
+    public async Task ReinforcementLearningAgentBase_DefaultsAndStateRoundTrip_Work()
     {
         var agent = new TestBaseAgent(CreateOptions());
         var state = new Vector<double>(agent.FeatureCount);

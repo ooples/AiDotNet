@@ -7,6 +7,7 @@ using AiDotNet.TrainingMonitoring.Notifications;
 using AiDotNet.TrainingMonitoring.Resources;
 using Xunit;
 using LogLevel = AiDotNet.Interfaces.LogLevel;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TrainingMonitoring;
 
@@ -45,8 +46,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region TrainingMonitor Tests
 
-    [Fact]
-    public void TrainingMonitor_StartSession_ReturnsUniqueSessionId()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_StartSession_ReturnsUniqueSessionId()
     {
         var monitor = new TrainingMonitor<double>();
 
@@ -58,8 +59,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.NotEqual(sessionId1, sessionId2);
     }
 
-    [Fact]
-    public void TrainingMonitor_StartSession_WithMetadata_StoresMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_StartSession_WithMetadata_StoresMetadata()
     {
         var monitor = new TrainingMonitor<double>();
         var metadata = new Dictionary<string, object>
@@ -75,8 +76,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Session was created successfully with metadata
     }
 
-    [Fact]
-    public void TrainingMonitor_StartSession_ThrowsOnNullOrEmptyName()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_StartSession_ThrowsOnNullOrEmptyName()
     {
         var monitor = new TrainingMonitor<double>();
 
@@ -84,8 +85,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => monitor.StartSession("   "));
     }
 
-    [Fact]
-    public void TrainingMonitor_EndSession_CompletesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_EndSession_CompletesSuccessfully()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -95,16 +96,16 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Session ended without exception
     }
 
-    [Fact]
-    public void TrainingMonitor_EndSession_ThrowsOnInvalidSession()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_EndSession_ThrowsOnInvalidSession()
     {
         var monitor = new TrainingMonitor<double>();
 
         Assert.Throws<ArgumentException>(() => monitor.EndSession("invalid_session_id"));
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMetric_StoresMetricValue()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMetric_StoresMetricValue()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -116,8 +117,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(0.5, metrics["loss"]);
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMetric_UpdatesCurrentValue()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMetric_UpdatesCurrentValue()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -129,8 +130,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(0.3, metrics["loss"]);
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMetric_ThrowsOnEmptyMetricName()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMetric_ThrowsOnEmptyMetricName()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -138,8 +139,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => monitor.LogMetric(sessionId, "", 0.5, step: 1));
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMetrics_StoresMultipleMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMetrics_StoresMultipleMetrics()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -159,8 +160,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(0.78, currentMetrics["f1_score"]);
     }
 
-    [Fact]
-    public void TrainingMonitor_GetMetricHistory_ReturnsAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_GetMetricHistory_ReturnsAllValues()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -177,8 +178,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(0.1, history[9].Value, precision: 5);
     }
 
-    [Fact]
-    public void TrainingMonitor_GetMetricHistory_ReturnsEmptyForUnknownMetric()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_GetMetricHistory_ReturnsEmptyForUnknownMetric()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -188,8 +189,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Empty(history);
     }
 
-    [Fact]
-    public void TrainingMonitor_LogResourceUsage_StoresResourceSnapshot()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogResourceUsage_StoresResourceSnapshot()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -204,8 +205,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(70.0, resourceStats.GpuMemoryUsageMB);
     }
 
-    [Fact]
-    public void TrainingMonitor_LogResourceUsage_WithoutGpu_StoresNullGpuValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogResourceUsage_WithoutGpu_StoresNullGpuValues()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -218,8 +219,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Null(resourceStats.GpuMemoryUsageMB);
     }
 
-    [Fact]
-    public void TrainingMonitor_UpdateProgress_SetsProgressInfo()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_UpdateProgress_SetsProgressInfo()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -232,8 +233,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(100, speedStats.TotalIterations);
     }
 
-    [Fact]
-    public void TrainingMonitor_GetSpeedStats_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_GetSpeedStats_CalculatesCorrectly()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -254,8 +255,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(speedStats.ElapsedTime.TotalMilliseconds > 0);
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMessage_StoresMessage()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMessage_StoresMessage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -266,8 +267,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Messages are stored (verified by CheckForIssues which examines error messages)
     }
 
-    [Fact]
-    public void TrainingMonitor_LogMessage_ThrowsOnEmptyMessage()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_LogMessage_ThrowsOnEmptyMessage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -275,8 +276,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => monitor.LogMessage(sessionId, LogLevel.Info, ""));
     }
 
-    [Fact]
-    public void TrainingMonitor_OnEpochStart_CreatesEpochSummary()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_OnEpochStart_CreatesEpochSummary()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -286,8 +287,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Epoch summary created successfully
     }
 
-    [Fact]
-    public void TrainingMonitor_OnEpochEnd_CompletesEpochSummary()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_OnEpochEnd_CompletesEpochSummary()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -305,8 +306,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Epoch completed successfully
     }
 
-    [Fact]
-    public void TrainingMonitor_CheckForIssues_DetectsHighMemoryUsage()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_CheckForIssues_DetectsHighMemoryUsage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -319,8 +320,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Contains(issues, i => i.Contains("memory", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void TrainingMonitor_CheckForIssues_DetectsHighGpuMemory()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_CheckForIssues_DetectsHighGpuMemory()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -333,8 +334,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Contains(issues, i => i.Contains("GPU memory", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void TrainingMonitor_CheckForIssues_DetectsErrorMessages()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_CheckForIssues_DetectsErrorMessages()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -348,8 +349,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Contains(issues, i => i.Contains("error", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void TrainingMonitor_CheckForIssues_ReturnsEmptyWhenNoIssues()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_CheckForIssues_ReturnsEmptyWhenNoIssues()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -364,8 +365,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(issues.Count == 0 || !issues.Any(i => i.Contains("error", StringComparison.OrdinalIgnoreCase)));
     }
 
-    [Fact]
-    public void TrainingMonitor_ExportData_CreatesJsonFile()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_ExportData_CreatesJsonFile()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -385,8 +386,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Contains("accuracy", content);
     }
 
-    [Fact]
-    public void TrainingMonitor_ExportData_CreatesCsvFile()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_ExportData_CreatesCsvFile()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -410,8 +411,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Contains("accuracy", content);
     }
 
-    [Fact]
-    public void TrainingMonitor_ExportData_ThrowsOnUnsupportedFormat()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_ExportData_ThrowsOnUnsupportedFormat()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -420,8 +421,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => monitor.ExportData(sessionId, outputPath, "xyz"));
     }
 
-    [Fact]
-    public void TrainingMonitor_CreateVisualization_CreatesFile()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_CreateVisualization_CreatesFile()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -439,8 +440,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(File.Exists(outputPath));
     }
 
-    [Fact]
-    public void TrainingMonitor_MultipleSessions_WorkConcurrently()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_MultipleSessions_WorkConcurrently()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId1 = monitor.StartSession("Session1");
@@ -457,8 +458,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(0.8, metrics2["loss"]);
     }
 
-    [Fact]
-    public void TrainingMonitor_ThreadSafety_ConcurrentLogging()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingMonitor_ThreadSafety_ConcurrentLogging()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("TestSession");
@@ -488,8 +489,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region ResourceMonitor Tests
 
-    [Fact]
-    public void ResourceMonitor_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_Constructor_InitializesCorrectly()
     {
         using var monitor = new ResourceMonitor();
 
@@ -497,8 +498,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(monitor.MonitorGpu);
     }
 
-    [Fact]
-    public void ResourceMonitor_Start_SetsIsRunning()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_Start_SetsIsRunning()
     {
         using var monitor = new ResourceMonitor();
 
@@ -509,8 +510,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         monitor.Stop();
     }
 
-    [Fact]
-    public void ResourceMonitor_Stop_ClearsIsRunning()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_Stop_ClearsIsRunning()
     {
         using var monitor = new ResourceMonitor();
 
@@ -520,8 +521,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(monitor.IsRunning);
     }
 
-    [Fact]
-    public void ResourceMonitor_GetSnapshot_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_GetSnapshot_ReturnsValidData()
     {
         using var monitor = new ResourceMonitor();
 
@@ -532,8 +533,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(snapshot.ProcessMemoryMB > 0);
     }
 
-    [Fact]
-    public void ResourceMonitor_GetHistory_ReturnsSnapshots()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_GetHistory_ReturnsSnapshots()
     {
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(50));
@@ -548,8 +549,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.NotEmpty(history);
     }
 
-    [Fact]
-    public void ResourceMonitor_GetHistory_WithLimit_RespectsLimit()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_GetHistory_WithLimit_RespectsLimit()
     {
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(10));
@@ -564,8 +565,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(history.Count <= 3);
     }
 
-    [Fact]
-    public void ResourceMonitor_GetAverage_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_GetAverage_CalculatesCorrectly()
     {
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
@@ -580,8 +581,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(average.MemoryUsedMB > 0);
     }
 
-    [Fact]
-    public void ResourceMonitor_GetPeak_ReturnsMaxValues()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_GetPeak_ReturnsMaxValues()
     {
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
@@ -596,8 +597,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(peak.MemoryUsedMB > 0);
     }
 
-    [Fact]
-    public void ResourceMonitor_ClearHistory_RemovesAllSnapshots()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_ClearHistory_RemovesAllSnapshots()
     {
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
@@ -612,8 +613,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Empty(history);
     }
 
-    [Fact]
-    public void ResourceMonitor_ResourceUpdated_EventFires()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_ResourceUpdated_EventFires()
     {
         using var monitor = new ResourceMonitor();
         var eventFired = false;
@@ -633,8 +634,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.NotNull(receivedSnapshot);
     }
 
-    [Fact]
-    public void ResourceMonitor_Dispose_StopsMonitoring()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_Dispose_StopsMonitoring()
     {
         var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(10));
@@ -644,8 +645,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(monitor.IsRunning);
     }
 
-    [Fact]
-    public void ResourceMonitor_MultipleStartCalls_AreIdempotent()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_MultipleStartCalls_AreIdempotent()
     {
         using var monitor = new ResourceMonitor();
 
@@ -657,8 +658,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         monitor.Stop();
     }
 
-    [Fact]
-    public void ResourceMonitor_DisableGpu_SkipsGpuMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ResourceMonitor_DisableGpu_SkipsGpuMetrics()
     {
         using var monitor = new ResourceMonitor();
         monitor.MonitorGpu = false;
@@ -673,8 +674,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region ExperimentTracker Tests
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_ReturnsExperimentInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_ReturnsExperimentInfo()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -686,8 +687,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_WithTags_StoresTags()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_WithTags_StoresTags()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -703,8 +704,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(2, experiment.Tags.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_GetExperiment_ReturnsExistingExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetExperiment_ReturnsExistingExperiment()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -716,8 +717,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal("my_experiment", experiment.Name);
     }
 
-    [Fact]
-    public void ExperimentTracker_GetExperiment_ReturnsNullForUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetExperiment_ReturnsNullForUnknown()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -727,8 +728,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Null(experiment);
     }
 
-    [Fact]
-    public void ExperimentTracker_SetExperiment_SetsActiveExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SetExperiment_SetsActiveExperiment()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -743,8 +744,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.NotNull(run);
     }
 
-    [Fact]
-    public void ExperimentTracker_ListExperiments_ReturnsAllExperiments()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListExperiments_ReturnsAllExperiments()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -758,8 +759,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(experiments.Count >= 3);
     }
 
-    [Fact]
-    public void ExperimentTracker_StartRun_ReturnsRunInfo()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_StartRun_ReturnsRunInfo()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -774,8 +775,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(RunStatus.Running, run.Status);
     }
 
-    [Fact]
-    public void ExperimentTracker_EndRun_SetsStatusCompleted()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_EndRun_SetsStatusCompleted()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -790,8 +791,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(RunStatus.Completed, retrievedRun?.Status);
     }
 
-    [Fact]
-    public void ExperimentTracker_EndRun_WithFailedStatus_SetsStatusFailed()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_EndRun_WithFailedStatus_SetsStatusFailed()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -806,8 +807,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(RunStatus.Failed, retrievedRun?.Status);
     }
 
-    [Fact]
-    public void ExperimentTracker_LogParameter_StoresParameter()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_LogParameter_StoresParameter()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -826,8 +827,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal("0.001", retrievedRun?.Parameters["learning_rate"]);
     }
 
-    [Fact]
-    public void ExperimentTracker_LogParameters_StoresMultipleParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_LogParameters_StoresMultipleParameters()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -848,8 +849,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         // Parameters were stored
     }
 
-    [Fact]
-    public void ExperimentTracker_LogMetric_StoresMetricValue()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_LogMetric_StoresMetricValue()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -868,8 +869,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(3, history.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_LogMetrics_StoresMultipleMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_LogMetrics_StoresMultipleMetrics()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -894,8 +895,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Single(accHistory);
     }
 
-    [Fact]
-    public void ExperimentTracker_GetMetricHistory_ReturnsAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetMetricHistory_ReturnsAllValues()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -916,8 +917,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(10, history.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_SetTag_StoresTag()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SetTag_StoresTag()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -933,8 +934,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(retrievedRun?.Tags.ContainsKey("model_type"));
     }
 
-    [Fact]
-    public void ExperimentTracker_ListRuns_ReturnsRunsForExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListRuns_ReturnsRunsForExperiment()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -956,8 +957,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(runs.Count >= 3);
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteRun_MarksRunAsDeleted()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteRun_MarksRunAsDeleted()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -973,8 +974,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(retrievedRun?.IsDeleted);
     }
 
-    [Fact]
-    public void ExperimentTracker_RestoreRun_RestoresDeletedRun()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_RestoreRun_RestoresDeletedRun()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -991,8 +992,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(retrievedRun?.IsDeleted);
     }
 
-    [Fact]
-    public void ExperimentTracker_CompareRuns_ReturnsComparison()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CompareRuns_ReturnsComparison()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -1016,8 +1017,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(comparison.Runs.Count >= 2);
     }
 
-    [Fact]
-    public void ExperimentTracker_SearchRuns_FiltersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SearchRuns_FiltersCorrectly()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns");
         using var tracker = new ExperimentTracker(trackerPath);
@@ -1042,8 +1043,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(results.Count >= 2); // Should include runs with 0.8 and 0.9
     }
 
-    [Fact]
-    public void ExperimentTracker_Persistence_LoadsOnRestart()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_Persistence_LoadsOnRestart()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns_persist");
 
@@ -1072,16 +1073,16 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region NotificationManager Tests
 
-    [Fact]
-    public void NotificationManager_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_Constructor_InitializesCorrectly()
     {
         using var manager = new NotificationManager();
 
         // Manager initializes without exception
     }
 
-    [Fact]
-    public void NotificationManager_AddService_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_AddService_ReturnsTrue()
     {
         using var manager = new NotificationManager();
         var mockService = new MockNotificationService("test_service");
@@ -1091,8 +1092,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(result);
     }
 
-    [Fact]
-    public void NotificationManager_AddService_DuplicateName_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_AddService_DuplicateName_ReturnsFalse()
     {
         using var manager = new NotificationManager();
         var service1 = new MockNotificationService("same_name");
@@ -1104,8 +1105,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(result);
     }
 
-    [Fact]
-    public void NotificationManager_RemoveService_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_RemoveService_ReturnsTrue()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1116,8 +1117,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(result);
     }
 
-    [Fact]
-    public void NotificationManager_RemoveService_NonExistent_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_RemoveService_NonExistent_ReturnsFalse()
     {
         using var manager = new NotificationManager();
 
@@ -1126,8 +1127,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(result);
     }
 
-    [Fact]
-    public void NotificationManager_GetService_ReturnsService()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_GetService_ReturnsService()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1139,8 +1140,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal("test_service", retrieved.ServiceName);
     }
 
-    [Fact]
-    public void NotificationManager_Send_SendsToAllServices()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_Send_SendsToAllServices()
     {
         using var manager = new NotificationManager();
         var service1 = new MockNotificationService("service1");
@@ -1163,7 +1164,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(1, service2.SendCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task NotificationManager_SendAsync_SendsToAllServices()
     {
         using var manager = new NotificationManager();
@@ -1185,8 +1186,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(results["service2"]);
     }
 
-    [Fact]
-    public void NotificationManager_SetMinimumSeverity_FiltersSeverity()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_SetMinimumSeverity_FiltersSeverity()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1214,8 +1215,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(1, service.SendCount); // Only Warning was sent
     }
 
-    [Fact]
-    public void NotificationManager_SetTypeEnabled_FiltersType()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_SetTypeEnabled_FiltersType()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1241,8 +1242,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(1, service.SendCount); // Only TrainingComplete was sent
     }
 
-    [Fact]
-    public void NotificationManager_NotificationSent_EventFires()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_NotificationSent_EventFires()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1263,8 +1264,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(eventFired);
     }
 
-    [Fact]
-    public void NotificationManager_NotificationFailed_EventFires()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_NotificationFailed_EventFires()
     {
         using var manager = new NotificationManager();
         var service = new MockNotificationService("failing_service", shouldFail: true);
@@ -1285,7 +1286,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(eventFired);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task NotificationManager_TestAllServicesAsync_ReturnsResults()
     {
         using var manager = new NotificationManager();
@@ -1300,8 +1301,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(results["bad_service"]);
     }
 
-    [Fact]
-    public void NotificationManager_Dispose_DisposesServices()
+    [Fact(Timeout = 120000)]
+    public async Task NotificationManager_Dispose_DisposesServices()
     {
         var manager = new NotificationManager();
         var service = new MockNotificationService("test_service");
@@ -1316,8 +1317,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region Dashboard Tests
 
-    [Fact]
-    public void ConsoleDashboard_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_Constructor_InitializesCorrectly()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
 
@@ -1325,8 +1326,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.False(dashboard.IsRunning);
     }
 
-    [Fact]
-    public void ConsoleDashboard_Start_SetsIsRunning()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_Start_SetsIsRunning()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
 
@@ -1337,8 +1338,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void ConsoleDashboard_LogScalar_StoresValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_LogScalar_StoresValue()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
@@ -1354,8 +1355,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void ConsoleDashboard_LogScalars_StoresMultipleValues()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_LogScalars_StoresMultipleValues()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
@@ -1374,8 +1375,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void ConsoleDashboard_LogHistogram_StoresValues()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_LogHistogram_StoresValues()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
@@ -1390,8 +1391,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void ConsoleDashboard_LogText_StoresText()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_LogText_StoresText()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
@@ -1402,8 +1403,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void ConsoleDashboard_Clear_RemovesAllData()
+    [Fact(Timeout = 120000)]
+    public async Task ConsoleDashboard_Clear_RemovesAllData()
     {
         var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
@@ -1419,8 +1420,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void HtmlDashboard_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task HtmlDashboard_Constructor_InitializesCorrectly()
     {
         var logDir = Path.Combine(_testOutputPath, "html_logs");
         var dashboard = new HtmlDashboard(logDir, "HtmlTest");
@@ -1429,8 +1430,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.Equal(logDir, dashboard.LogDirectory);
     }
 
-    [Fact]
-    public void HtmlDashboard_GenerateReport_CreatesFile()
+    [Fact(Timeout = 120000)]
+    public async Task HtmlDashboard_GenerateReport_CreatesFile()
     {
         var logDir = Path.Combine(_testOutputPath, "html_logs_report");
         var dashboard = new HtmlDashboard(logDir, "HtmlTest");
@@ -1451,8 +1452,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void HtmlDashboard_GenerateReport_WithCustomPath_UsesPath()
+    [Fact(Timeout = 120000)]
+    public async Task HtmlDashboard_GenerateReport_WithCustomPath_UsesPath()
     {
         var logDir = Path.Combine(_testOutputPath, "html_logs_custom");
         var dashboard = new HtmlDashboard(logDir, "HtmlTest");
@@ -1469,8 +1470,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void HtmlDashboard_LogHyperparameters_StoresHyperparameters()
+    [Fact(Timeout = 120000)]
+    public async Task HtmlDashboard_LogHyperparameters_StoresHyperparameters()
     {
         var logDir = Path.Combine(_testOutputPath, "html_logs_hparams");
         var dashboard = new HtmlDashboard(logDir, "HtmlTest");
@@ -1491,8 +1492,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         dashboard.Stop();
     }
 
-    [Fact]
-    public void HtmlDashboard_LogConfusionMatrix_StoresMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task HtmlDashboard_LogConfusionMatrix_StoresMatrix()
     {
         var logDir = Path.Combine(_testOutputPath, "html_logs_cm");
         var dashboard = new HtmlDashboard(logDir, "HtmlTest");
@@ -1516,8 +1517,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
 
     #region Cross-Module Integration Tests
 
-    [Fact]
-    public void Integration_TrainingMonitorWithResourceMonitor()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_TrainingMonitorWithResourceMonitor()
     {
         var trainingMonitor = new TrainingMonitor<double>();
         using var resourceMonitor = new ResourceMonitor();
@@ -1551,8 +1552,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(resourceStats.CpuUsagePercent >= 0);
     }
 
-    [Fact]
-    public void Integration_ExperimentTrackerWithDashboard()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_ExperimentTrackerWithDashboard()
     {
         var trackerPath = Path.Combine(_testOutputPath, "mlruns_dashboard");
         var logDir = Path.Combine(_testOutputPath, "dashboard_logs");
@@ -1599,8 +1600,8 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         Assert.True(File.Exists(reportPath));
     }
 
-    [Fact]
-    public void Integration_FullTrainingPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_FullTrainingPipeline()
     {
         // Set up all components
         var trackerPath = Path.Combine(_testOutputPath, "mlruns_full");

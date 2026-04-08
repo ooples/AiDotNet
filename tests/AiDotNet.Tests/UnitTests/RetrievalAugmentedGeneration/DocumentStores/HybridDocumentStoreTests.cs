@@ -6,6 +6,7 @@ using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 {
@@ -13,8 +14,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidStores_CreatesHybridStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidStores_CreatesHybridStore()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -32,8 +33,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, hybridStore.VectorDimension);
         }
 
-        [Fact]
-        public void Constructor_WithNullVectorStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullVectorStore_ThrowsArgumentNullException()
         {
             // Arrange
             var keywordStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 new HybridDocumentStore<float>(null!, keywordStore, 0.7f, 0.3f));
         }
 
-        [Fact]
-        public void Constructor_WithNullKeywordStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullKeywordStore_ThrowsArgumentNullException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -54,8 +55,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 new HybridDocumentStore<float>(vectorStore, null!, 0.7f, 0.3f));
         }
 
-        [Fact]
-        public void Constructor_WithDifferentWeights_CreatesStore()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDifferentWeights_CreatesStore()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -74,8 +75,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Add Tests
 
-        [Fact]
-        public void Add_WithValidDocument_AddsToBothStores()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithValidDocument_AddsToBothStores()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -92,8 +93,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(1, keywordStore.DocumentCount);
         }
 
-        [Fact]
-        public void Add_WithNullDocument_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNullDocument_ThrowsArgumentNullException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -104,8 +105,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.Add(null!));
         }
 
-        [Fact]
-        public void Add_MultipleDocuments_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task Add_MultipleDocuments_IncreasesCount()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -128,8 +129,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region AddBatch Tests
 
-        [Fact]
-        public void AddBatch_WithValidDocuments_AddsToBothStores()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithValidDocuments_AddsToBothStores()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -151,8 +152,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(3, keywordStore.DocumentCount);
         }
 
-        [Fact]
-        public void AddBatch_WithNullCollection_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithNullCollection_ThrowsArgumentNullException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -163,8 +164,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.AddBatch(null!));
         }
 
-        [Fact]
-        public void AddBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -179,8 +180,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilar Tests
 
-        [Fact]
-        public void GetSimilar_WithDocuments_CombinesResultsFromBothStores()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithDocuments_CombinesResultsFromBothStores()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
-        public void GetSimilar_WithEmptyStores_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithEmptyStores_ReturnsEmpty()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -220,8 +221,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithNullQueryVector_ThrowsArgumentNullException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentNullException>(() => hybridStore.GetSimilar(null!, topK: 5));
         }
 
-        [Fact]
-        public void GetSimilar_WithZeroTopK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithZeroTopK_ThrowsArgumentException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Throws<ArgumentException>(() => hybridStore.GetSimilar(queryVector, topK: 0));
         }
 
-        [Fact]
-        public void GetSimilar_ReturnsAtMostTopK()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_ReturnsAtMostTopK()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -267,8 +268,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(results.Count <= 5);
         }
 
-        [Fact]
-        public void GetSimilar_WithWeightedResults_AppliesWeightsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilar_WithWeightedResults_AppliesWeightsCorrectly()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -290,8 +291,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetSimilarWithFilters Tests
 
-        [Fact]
-        public void GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilters_WithMatchingMetadata_ReturnsFilteredResults()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -317,8 +318,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.All(results, r => Assert.Equal("science", r.Metadata["category"]));
         }
 
-        [Fact]
-        public void GetSimilarWithFilters_WithNullFilters_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilters_WithNullFilters_ThrowsArgumentNullException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -335,8 +336,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetById Tests
 
-        [Fact]
-        public void GetById_WithExistingDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithExistingDocument_ReturnsDocument()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("Test content", result.Content);
         }
 
-        [Fact]
-        public void GetById_WithNonExistingDocument_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithNonExistingDocument_ReturnsNull()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -369,8 +370,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Null(result);
         }
 
-        [Fact]
-        public void GetById_WithNullId_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task GetById_WithNullId_ThrowsArgumentException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -385,8 +386,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Remove Tests
 
-        [Fact]
-        public void Remove_WithExistingDocument_RemovesFromBothStores()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithExistingDocument_RemovesFromBothStores()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -405,8 +406,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, keywordStore.DocumentCount);
         }
 
-        [Fact]
-        public void Remove_WithNonExistingDocument_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNonExistingDocument_ReturnsFalse()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -420,8 +421,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.False(result);
         }
 
-        [Fact]
-        public void Remove_WithNullId_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNullId_ThrowsArgumentException()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -436,8 +437,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllDocumentsFromBothStores()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllDocumentsFromBothStores()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -460,8 +461,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(0, keywordStore.DocumentCount);
         }
 
-        [Fact]
-        public void Clear_OnEmptyStore_DoesNotThrow()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_OnEmptyStore_DoesNotThrow()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -477,8 +478,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #region GetAll Tests
 
-        [Fact]
-        public void GetAll_WithDocuments_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithDocuments_ReturnsAllDocuments()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -502,8 +503,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Contains(results, d => d.Id == "doc3");
         }
 
-        [Fact]
-        public void GetAll_WithEmptyStore_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAll_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
             var vectorStore = new InMemoryDocumentStore<float>(vectorDimension: 3);

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpolation;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Interpolation;
 
@@ -15,8 +16,8 @@ public class InterpolationIntegrationTests
 
     #region Linear Interpolation Tests
 
-    [Fact]
-    public void LinearInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task LinearInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -30,8 +31,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(9.0, interpolation.Interpolate(3.0), Tolerance);
     }
 
-    [Fact]
-    public void LinearInterpolation_InterpolateMidpoint_ReturnsAverage()
+    [Fact(Timeout = 120000)]
+    public async Task LinearInterpolation_InterpolateMidpoint_ReturnsAverage()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 2.0 });
@@ -45,8 +46,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
-    public void LinearInterpolation_ExtrapolateBelow_ReturnsFirstValue()
+    [Fact(Timeout = 120000)]
+    public async Task LinearInterpolation_ExtrapolateBelow_ReturnsFirstValue()
     {
         // Arrange
         var x = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -60,8 +61,8 @@ public class InterpolationIntegrationTests
         Assert.True(result <= 10.0);
     }
 
-    [Fact]
-    public void LinearInterpolation_ExtrapolateAbove_ReturnsLastValue()
+    [Fact(Timeout = 120000)]
+    public async Task LinearInterpolation_ExtrapolateAbove_ReturnsLastValue()
     {
         // Arrange
         var x = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -79,8 +80,8 @@ public class InterpolationIntegrationTests
 
     #region Cubic Spline Interpolation Tests
 
-    [Fact]
-    public void CubicSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task CubicSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -93,8 +94,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(0.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void CubicSplineInterpolation_InterpolateBetweenPoints_ReturnsSmoothValue()
+    [Fact(Timeout = 120000)]
+    public async Task CubicSplineInterpolation_InterpolateBetweenPoints_ReturnsSmoothValue()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -112,8 +113,8 @@ public class InterpolationIntegrationTests
 
     #region Natural Spline Interpolation Tests
 
-    [Fact]
-    public void NaturalSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task NaturalSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Natural spline needs more data points
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -129,8 +130,8 @@ public class InterpolationIntegrationTests
 
     #region Lagrange Polynomial Interpolation Tests
 
-    [Fact]
-    public void LagrangeInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task LagrangeInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -143,8 +144,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(5.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void LagrangeInterpolation_QuadraticData_InterpolatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LagrangeInterpolation_QuadraticData_InterpolatesCorrectly()
     {
         // Arrange - y = x^2
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -162,8 +163,8 @@ public class InterpolationIntegrationTests
 
     #region Newton Divided Difference Interpolation Tests
 
-    [Fact]
-    public void NewtonInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task NewtonInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -176,8 +177,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(5.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void NewtonInterpolation_LinearData_InterpolatesLinearly()
+    [Fact(Timeout = 120000)]
+    public async Task NewtonInterpolation_LinearData_InterpolatesLinearly()
     {
         // Arrange - y = 2x + 1
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -195,8 +196,8 @@ public class InterpolationIntegrationTests
 
     #region Hermite Interpolation Tests
 
-    [Fact]
-    public void HermiteInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task HermiteInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -214,8 +215,8 @@ public class InterpolationIntegrationTests
 
     #region Akima Interpolation Tests
 
-    [Fact]
-    public void AkimaInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AkimaInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Akima requires at least 5 points and works best with more
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -231,8 +232,8 @@ public class InterpolationIntegrationTests
 
     #region Nearest Neighbor Interpolation Tests
 
-    [Fact]
-    public void NearestNeighborInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task NearestNeighborInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -244,8 +245,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(20.0, interpolation.Interpolate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void NearestNeighborInterpolation_InterpolateBetweenPoints_ReturnsNearestValue()
+    [Fact(Timeout = 120000)]
+    public async Task NearestNeighborInterpolation_InterpolateBetweenPoints_ReturnsNearestValue()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0 });
@@ -265,8 +266,8 @@ public class InterpolationIntegrationTests
 
     #region Monotone Cubic Interpolation Tests
 
-    [Fact]
-    public void MonotoneCubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task MonotoneCubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -279,8 +280,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(3.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void MonotoneCubicInterpolation_MonotonicData_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task MonotoneCubicInterpolation_MonotonicData_PreservesMonotonicity()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -301,8 +302,8 @@ public class InterpolationIntegrationTests
 
     #region PCHIP Interpolation Tests
 
-    [Fact]
-    public void PchipInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task PchipInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -319,8 +320,8 @@ public class InterpolationIntegrationTests
 
     #region Barycentric Rational Interpolation Tests
 
-    [Fact]
-    public void BarycentricRationalInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task BarycentricRationalInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -337,8 +338,8 @@ public class InterpolationIntegrationTests
 
     #region Catmull-Rom Spline Interpolation Tests
 
-    [Fact]
-    public void CatmullRomSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task CatmullRomSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -355,8 +356,8 @@ public class InterpolationIntegrationTests
 
     #region Cubic B-Spline Interpolation Tests
 
-    [Fact]
-    public void CubicBSplineInterpolation_InterpolateAtKnownPoints_ReturnsCloseValues()
+    [Fact(Timeout = 120000)]
+    public async Task CubicBSplineInterpolation_InterpolateAtKnownPoints_ReturnsCloseValues()
     {
         // Arrange - B-splines need sufficient data points
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0 });
@@ -374,8 +375,8 @@ public class InterpolationIntegrationTests
 
     #region Sinc Interpolation Tests
 
-    [Fact]
-    public void SincInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task SincInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -391,8 +392,8 @@ public class InterpolationIntegrationTests
 
     #region 2D Interpolation Tests
 
-    [Fact]
-    public void BilinearInterpolation_InterpolateAtKnownPoint_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task BilinearInterpolation_InterpolateAtKnownPoint_ReturnsExactValue()
     {
         // Arrange - Create 2x2 grid
         var xGrid = new Vector<double>(new[] { 0.0, 1.0 });
@@ -411,8 +412,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(3.0, interpolation.Interpolate(1.0, 1.0), Tolerance);
     }
 
-    [Fact]
-    public void BilinearInterpolation_InterpolateAtCenter_ReturnsAverage()
+    [Fact(Timeout = 120000)]
+    public async Task BilinearInterpolation_InterpolateAtCenter_ReturnsAverage()
     {
         // Arrange
         var xGrid = new Vector<double>(new[] { 0.0, 1.0 });
@@ -431,8 +432,8 @@ public class InterpolationIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void BicubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task BicubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Create 4x4 grid for bicubic
         var xGrid = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -456,8 +457,8 @@ public class InterpolationIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void AllInterpolations_DoNotReturnNaN()
+    [Fact(Timeout = 120000)]
+    public async Task AllInterpolations_DoNotReturnNaN()
     {
         // Arrange - Use more data points for methods that require them
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -490,8 +491,8 @@ public class InterpolationIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllInterpolations_InterpolateAtKnownPoints_ReturnsCloseValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllInterpolations_InterpolateAtKnownPoints_ReturnsCloseValues()
     {
         // Arrange - Use strictly increasing monotonic data for stability
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -527,8 +528,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All polynomial interpolations should exactly reproduce linear functions y = mx + b
     /// </summary>
-    [Fact]
-    public void PolynomialInterpolations_LinearFunction_ExactReproduction()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialInterpolations_LinearFunction_ExactReproduction()
     {
         // Arrange: y = 2x + 3
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -560,8 +561,8 @@ public class InterpolationIntegrationTests
     /// Lagrange and Newton should exactly reproduce quadratic functions y = ax² + bx + c
     /// when given 3+ points from that quadratic
     /// </summary>
-    [Fact]
-    public void PolynomialInterpolations_QuadraticFunction_ExactReproduction()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialInterpolations_QuadraticFunction_ExactReproduction()
     {
         // Arrange: y = x² - 2x + 1 = (x-1)²
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -591,8 +592,8 @@ public class InterpolationIntegrationTests
     /// Lagrange and Newton should exactly reproduce cubic functions y = x³
     /// when given 4+ points from that cubic
     /// </summary>
-    [Fact]
-    public void PolynomialInterpolations_CubicFunction_ExactReproduction()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialInterpolations_CubicFunction_ExactReproduction()
     {
         // Arrange: y = x³
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -625,8 +626,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Cubic splines should exactly pass through all known points (interpolation property)
     /// </summary>
-    [Fact]
-    public void CubicSpline_InterpolationProperty_PassesThroughAllPoints()
+    [Fact(Timeout = 120000)]
+    public async Task CubicSpline_InterpolationProperty_PassesThroughAllPoints()
     {
         // Arrange: Use sine function sampled at several points
         var x = new Vector<double>(new[] { 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0 });
@@ -648,8 +649,8 @@ public class InterpolationIntegrationTests
     /// Natural cubic spline should have second derivatives equal to zero at endpoints
     /// This test verifies the spline behaves correctly near boundaries
     /// </summary>
-    [Fact]
-    public void NaturalSpline_BoundaryBehavior_SmoothAtEndpoints()
+    [Fact(Timeout = 120000)]
+    public async Task NaturalSpline_BoundaryBehavior_SmoothAtEndpoints()
     {
         // Arrange: Linear data should give linear interpolation
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -671,8 +672,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Hermite interpolation should match both values and derivatives at known points
     /// </summary>
-    [Fact]
-    public void HermiteInterpolation_ExactValuesAndDerivatives()
+    [Fact(Timeout = 120000)]
+    public async Task HermiteInterpolation_ExactValuesAndDerivatives()
     {
         // Arrange: y = x², y' = 2x
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -707,8 +708,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Monotone cubic interpolation should preserve monotonicity of input data
     /// </summary>
-    [Fact]
-    public void MonotoneCubic_MonotonicIncreasingData_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task MonotoneCubic_MonotonicIncreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly increasing data
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -730,8 +731,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Monotone cubic interpolation should preserve monotonicity of decreasing data
     /// </summary>
-    [Fact]
-    public void MonotoneCubic_MonotonicDecreasingData_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task MonotoneCubic_MonotonicDecreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly decreasing data
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -753,8 +754,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// PCHIP should also preserve monotonicity
     /// </summary>
-    [Fact]
-    public void Pchip_MonotonicIncreasingData_PreservesMonotonicity()
+    [Fact(Timeout = 120000)]
+    public async Task Pchip_MonotonicIncreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly increasing data with varying slope
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -780,8 +781,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Nearest neighbor should return the value of the closest known point
     /// </summary>
-    [Fact]
-    public void NearestNeighbor_CorrectNeighborSelection()
+    [Fact(Timeout = 120000)]
+    public async Task NearestNeighbor_CorrectNeighborSelection()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -807,8 +808,8 @@ public class InterpolationIntegrationTests
     /// Bilinear interpolation center of unit square with corners (0,0,0), (1,0,1), (0,1,2), (1,1,3)
     /// should equal 1.5 (average of all corners)
     /// </summary>
-    [Fact]
-    public void Bilinear_CenterOfSquare_ReturnsAverage()
+    [Fact(Timeout = 120000)]
+    public async Task Bilinear_CenterOfSquare_ReturnsAverage()
     {
         // Arrange
         var xGrid = new Vector<double>(new[] { 0.0, 1.0 });
@@ -829,8 +830,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Bilinear interpolation should be linear along edges
     /// </summary>
-    [Fact]
-    public void Bilinear_AlongEdge_IsLinear()
+    [Fact(Timeout = 120000)]
+    public async Task Bilinear_AlongEdge_IsLinear()
     {
         // Arrange
         var xGrid = new Vector<double>(new[] { 0.0, 1.0 });
@@ -861,8 +862,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Akima interpolation should pass through all known points
     /// </summary>
-    [Fact]
-    public void AkimaInterpolation_PassesThroughKnownPoints()
+    [Fact(Timeout = 120000)]
+    public async Task AkimaInterpolation_PassesThroughKnownPoints()
     {
         // Arrange - Akima requires at least 5 points
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -882,8 +883,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Akima should reproduce linear functions exactly
     /// </summary>
-    [Fact]
-    public void AkimaInterpolation_LinearData_ExactReproduction()
+    [Fact(Timeout = 120000)]
+    public async Task AkimaInterpolation_LinearData_ExactReproduction()
     {
         // Arrange: y = 2x + 1
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -909,8 +910,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Catmull-Rom spline should pass through all control points
     /// </summary>
-    [Fact]
-    public void CatmullRomSpline_PassesThroughControlPoints()
+    [Fact(Timeout = 120000)]
+    public async Task CatmullRomSpline_PassesThroughControlPoints()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -930,8 +931,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Sinc interpolation should pass through known points
     /// </summary>
-    [Fact]
-    public void SincInterpolation_PassesThroughKnownPoints()
+    [Fact(Timeout = 120000)]
+    public async Task SincInterpolation_PassesThroughKnownPoints()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -951,8 +952,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Barycentric rational interpolation should pass through all known points
     /// </summary>
-    [Fact]
-    public void BarycentricRational_PassesThroughKnownPoints()
+    [Fact(Timeout = 120000)]
+    public async Task BarycentricRational_PassesThroughKnownPoints()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -976,8 +977,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Test Lanczos interpolation passes through known points
     /// </summary>
-    [Fact]
-    public void LanczosInterpolation_PassesThroughKnownPoints()
+    [Fact(Timeout = 120000)]
+    public async Task LanczosInterpolation_PassesThroughKnownPoints()
     {
         // Arrange
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -1001,8 +1002,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Shepard's method (2D) should return exact values at known points
     /// </summary>
-    [Fact]
-    public void ShepardsMethod2D_PassesThroughKnownPoints()
+    [Fact(Timeout = 120000)]
+    public async Task ShepardsMethod2D_PassesThroughKnownPoints()
     {
         // Arrange - scattered 2D points with z values
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.5 });
@@ -1023,8 +1024,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Shepard's method should produce weighted average at center of uniform data
     /// </summary>
-    [Fact]
-    public void ShepardsMethod2D_CenterOfSquare_ReturnsWeightedAverage()
+    [Fact(Timeout = 120000)]
+    public async Task ShepardsMethod2D_CenterOfSquare_ReturnsWeightedAverage()
     {
         // Arrange - unit square corners with values
         var x = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0 });
@@ -1046,8 +1047,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All interpolations should handle extrapolation without crashing
     /// </summary>
-    [Fact]
-    public void AllInterpolations_Extrapolation_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task AllInterpolations_Extrapolation_DoesNotCrash()
     {
         // Arrange
         var x = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -1081,8 +1082,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All interpolations should handle constant function y = c
     /// </summary>
-    [Fact]
-    public void AllInterpolations_ConstantFunction_ExactReproduction()
+    [Fact(Timeout = 120000)]
+    public async Task AllInterpolations_ConstantFunction_ExactReproduction()
     {
         // Arrange: y = 5 (constant)
         var x = new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 });
@@ -1117,8 +1118,8 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Test minimum point requirements for various interpolations
     /// </summary>
-    [Fact]
-    public void Interpolations_MinimumPoints_DoNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task Interpolations_MinimumPoints_DoNotCrash()
     {
         // 2-point interpolation
         var x2 = new Vector<double>(new[] { 0.0, 1.0 });

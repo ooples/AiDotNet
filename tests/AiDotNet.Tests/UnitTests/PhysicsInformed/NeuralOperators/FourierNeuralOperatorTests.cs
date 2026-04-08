@@ -2,13 +2,14 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.NeuralOperators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class FourierNeuralOperatorTests
 {
-    [Fact]
-    public void FourierNeuralOperator_ForwardPreservesSpatialShape()
+    [Fact(Timeout = 60000)]
+    public async Task FourierNeuralOperator_ForwardPreservesSpatialShape()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,

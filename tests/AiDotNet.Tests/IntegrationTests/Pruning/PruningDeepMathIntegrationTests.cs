@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.ModelCompression;
 using AiDotNet.Pruning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Pruning;
 
@@ -17,8 +18,8 @@ public class PruningDeepMathIntegrationTests
 
     #region PruningMask Sparsity Computation
 
-    [Fact]
-    public void PruningMask_GetSparsity_AllOnes_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetSparsity_AllOnes_ReturnsZero()
     {
         // All-ones mask = no pruning = sparsity 0.0
         var mask = new PruningMask<double>(3, 4);
@@ -30,8 +31,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, sparsity, Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_GetSparsity_ExactFractionFromBoolArray()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetSparsity_ExactFractionFromBoolArray()
     {
         // 3 out of 8 are false (pruned) => sparsity = 3/8 = 0.375
         var keepIndices = new bool[] { true, false, true, true, false, true, false, true };
@@ -43,8 +44,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(3.0 / 8.0, sparsity, Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_GetSparsity_2DBoolArray_ExactComputation()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetSparsity_2DBoolArray_ExactComputation()
     {
         // 3x3 mask with specific pattern: 4 pruned out of 9 => sparsity = 4/9
         var keepIndices = new bool[,]
@@ -61,8 +62,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(4.0 / 9.0, sparsity, Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_GetSparsity_AllPruned_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetSparsity_AllPruned_ReturnsOne()
     {
         // All false = all pruned = sparsity 1.0
         var keepIndices = new bool[] { false, false, false, false, false };
@@ -77,8 +78,8 @@ public class PruningDeepMathIntegrationTests
 
     #region PruningMask Apply (Element-wise Multiply)
 
-    [Fact]
-    public void PruningMask_Apply_Matrix_ElementWiseMultiply_ExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_Apply_Matrix_ElementWiseMultiply_ExactValues()
     {
         // Mask: keep positions (0,0), (0,2), (1,1) => weight * 1; prune rest => weight * 0
         var keepIndices = new bool[,]
@@ -109,8 +110,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, result[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_Apply_Vector_PreservesKeptZeroesPruned()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_Apply_Vector_PreservesKeptZeroesPruned()
     {
         var keepIndices = new bool[] { true, false, true, false, true };
         var mask = new PruningMask<double>(keepIndices);
@@ -126,8 +127,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(-0.5, result[4], Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_Apply_PreservesNegativeWeights()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_Apply_PreservesNegativeWeights()
     {
         // Negative weights that are kept should remain negative (not absolute valued)
         var keepIndices = new bool[] { true, true, true };
@@ -142,8 +143,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(-99.9, result[2], Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_Apply_Matrix_ShapeMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_Apply_Matrix_ShapeMismatch_Throws()
     {
         var mask = new PruningMask<double>(2, 3);
         var wrongShape = new Matrix<double>(3, 2);
@@ -155,8 +156,8 @@ public class PruningDeepMathIntegrationTests
 
     #region PruningMask CombineWith (Logical AND)
 
-    [Fact]
-    public void PruningMask_CombineWith_LogicalAND_ExactBehavior()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_CombineWith_LogicalAND_ExactBehavior()
     {
         // Mask A: [1, 0, 1, 1, 0]
         // Mask B: [1, 1, 0, 1, 0]
@@ -174,8 +175,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, data[4], Tolerance); // 0 AND 0 = 0
     }
 
-    [Fact]
-    public void PruningMask_CombineWith_SparsityIncreasesOrStays()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_CombineWith_SparsityIncreasesOrStays()
     {
         // Combining masks can only increase sparsity (more pruning) or keep it the same
         var maskA = new PruningMask<double>(new bool[] { true, false, true, true, false, true, true, false });
@@ -192,8 +193,8 @@ public class PruningDeepMathIntegrationTests
             $"Combined sparsity {sparsityCombined} should be >= max({sparsityA}, {sparsityB})");
     }
 
-    [Fact]
-    public void PruningMask_CombineWith_2D_LogicalAND()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_CombineWith_2D_LogicalAND()
     {
         // Mask A: [[1,0],[1,1]]
         // Mask B: [[0,1],[1,0]]
@@ -217,8 +218,8 @@ public class PruningDeepMathIntegrationTests
 
     #region PruningMask GetKeptIndices / GetPrunedIndices
 
-    [Fact]
-    public void PruningMask_GetKeptAndPrunedIndices_AreComplementary()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetKeptAndPrunedIndices_AreComplementary()
     {
         var keepIndices = new bool[] { true, false, true, false, false, true, true, false };
         var mask = new PruningMask<double>(keepIndices);
@@ -239,8 +240,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 1, 3, 4, 7 }, pruned);
     }
 
-    [Fact]
-    public void PruningMask_GetKeptIndices_2D_RowMajorOrder()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetKeptIndices_2D_RowMajorOrder()
     {
         // 2x3 mask: [[1,0,1],[0,1,0]]
         // Flat row-major: [1,0,1,0,1,0] => kept at indices 0,2,4
@@ -256,8 +257,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 0, 2, 4 }, kept);
     }
 
-    [Fact]
-    public void PruningMask_GetPrunedIndices_CountMatchesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetPrunedIndices_CountMatchesSparsity()
     {
         var keepIndices = new bool[,]
         {
@@ -279,8 +280,8 @@ public class PruningDeepMathIntegrationTests
 
     #region PruningMask UpdateMask
 
-    [Fact]
-    public void PruningMask_UpdateMask_ChangesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_UpdateMask_ChangesSparsity()
     {
         // Start with all ones (no pruning)
         var mask = new PruningMask<double>(1, 6);
@@ -292,8 +293,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(4.0 / 6.0, mask.GetSparsity(), Tolerance);
     }
 
-    [Fact]
-    public void PruningMask_UpdateMask_2D_OverwritesPrevious()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_UpdateMask_2D_OverwritesPrevious()
     {
         var mask = new PruningMask<double>(2, 2);
         Assert.Equal(0.0, mask.GetSparsity(), Tolerance);
@@ -313,8 +314,8 @@ public class PruningDeepMathIntegrationTests
 
     #region MagnitudePruningStrategy ImportanceScores
 
-    [Fact]
-    public void MagnitudePruning_ImportanceScores_Vector_ExactAbsoluteValues()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ImportanceScores_Vector_ExactAbsoluteValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[] { -3.5, 0.0, 2.1, -0.7, 1.0, -4.2 });
@@ -330,8 +331,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(4.2, scores[5], Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_ImportanceScores_Matrix_ExactAbsoluteValues()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ImportanceScores_Matrix_ExactAbsoluteValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Matrix<double>(2, 3);
@@ -348,8 +349,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, scores[1, 2], Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_ImportanceScores_IgnoresGradients()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ImportanceScores_IgnoresGradients()
     {
         // Magnitude pruning should produce same scores regardless of gradients
         var strategy = new MagnitudePruningStrategy<double>();
@@ -369,8 +370,8 @@ public class PruningDeepMathIntegrationTests
 
     #region MagnitudePruningStrategy CreateMask for Vectors
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_Vector_PrunesSmallestFirst()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_Vector_PrunesSmallestFirst()
     {
         // Weights: [0.1, 0.5, 0.3, 0.9, 0.2] => sorted ascending by |w|: 0.1, 0.2, 0.3, 0.5, 0.9
         // Target sparsity 0.4 => prune 40% of 5 = Math.Round(2.0) = 2 smallest
@@ -389,8 +390,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, maskData[4], Tolerance); // 0.2 pruned (2nd smallest)
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_Vector_ZeroSparsity_KeepsAll()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_Vector_ZeroSparsity_KeepsAll()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[] { 0.5, -0.3, 0.8 });
@@ -405,8 +406,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(1.0, maskData[2], Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_Vector_FullSparsity_PrunesAll()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_Vector_FullSparsity_PrunesAll()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[] { 0.5, -0.3, 0.8 });
@@ -421,8 +422,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, maskData[2], Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_Vector_InvalidSparsity_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_Vector_InvalidSparsity_Throws()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var scores = new Vector<double>(new double[] { 0.5, 0.3 });
@@ -435,8 +436,8 @@ public class PruningDeepMathIntegrationTests
 
     #region MagnitudePruningStrategy CreateMask for Matrices
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_Matrix_ExactPruneCount()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_Matrix_ExactPruneCount()
     {
         // 3x4 matrix = 12 elements. Sparsity 0.5 => (int)(12 * 0.5) = 6 pruned
         var strategy = new MagnitudePruningStrategy<double>();
@@ -475,8 +476,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(1.0, maskData[11], Tolerance); // 0.85 kept
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateMask_NegativeWeights_PrunedByAbsoluteValue()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateMask_NegativeWeights_PrunedByAbsoluteValue()
     {
         // Verify that -0.9 is kept (high |w|) while 0.1 is pruned (low |w|)
         var strategy = new MagnitudePruningStrategy<double>();
@@ -501,8 +502,8 @@ public class PruningDeepMathIntegrationTests
 
     #region MagnitudePruningStrategy ApplyPruning
 
-    [Fact]
-    public void MagnitudePruning_ApplyPruning_Vector_InPlaceZeroing()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ApplyPruning_Vector_InPlaceZeroing()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[] { 0.1, -0.5, 0.3, 0.9, -0.2 });
@@ -520,8 +521,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.0, weights[4], Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_ApplyPruning_Matrix_InPlace()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ApplyPruning_Matrix_InPlace()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Matrix<double>(2, 2);
@@ -544,8 +545,8 @@ public class PruningDeepMathIntegrationTests
 
     #region N:M Structured Sparsity
 
-    [Fact]
-    public void MagnitudePruning_Create2to4Mask_ExactlyTwoZerosPerGroup()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_Create2to4Mask_ExactlyTwoZerosPerGroup()
     {
         // 2:4 sparsity: in every group of 4 elements, exactly 2 are pruned
         var strategy = new MagnitudePruningStrategy<double>();
@@ -575,8 +576,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateNtoMMask_3to6_ExactlyThreeZerosPerGroup()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateNtoMMask_3to6_ExactlyThreeZerosPerGroup()
     {
         // 3:6 sparsity: in every group of 6, exactly 3 are pruned
         var strategy = new MagnitudePruningStrategy<double>();
@@ -603,8 +604,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_CreateNtoMMask_1to4_Exactly25PercentSparse()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_CreateNtoMMask_1to4_Exactly25PercentSparse()
     {
         // 1:4 sparsity: prune 1 out of every 4 elements
         var strategy = new MagnitudePruningStrategy<double>();
@@ -633,8 +634,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(0.25, mask.GetSparsity(), Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_Create2to4Mask_PartialLastGroup()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_Create2to4Mask_PartialLastGroup()
     {
         // 6 elements: first group of 4, second group of 2 (partial)
         var strategy = new MagnitudePruningStrategy<double>();
@@ -663,8 +664,8 @@ public class PruningDeepMathIntegrationTests
 
     #region COO Sparse Format Conversion
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_COO_CorrectTriplets()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_COO_CorrectTriplets()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -695,8 +696,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(2, result.ColumnIndices?[2]); // (1,2) => col 2
     }
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_COO_Sparsity()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_COO_Sparsity()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -715,8 +716,8 @@ public class PruningDeepMathIntegrationTests
 
     #region CSR Sparse Format Conversion
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_CSR_CorrectStructure()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_CSR_CorrectStructure()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -749,8 +750,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 0, 2, 3, 5 }, result.RowPointers);
     }
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_CSR_EmptyRow()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_CSR_EmptyRow()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -770,8 +771,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 0, 1, 1, 2 }, result.RowPointers);
     }
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_CSR_RowPointerProperty()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_CSR_RowPointerProperty()
     {
         // CSR invariant: rowPointers has rows+1 entries
         // rowPointers[0] = 0 and rowPointers[rows] = nnz
@@ -792,8 +793,8 @@ public class PruningDeepMathIntegrationTests
 
     #region CSC Sparse Format Conversion
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_CSC_CorrectStructure()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_CSC_CorrectStructure()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -827,8 +828,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 0, 1, 2, 3, 5 }, result.ColumnPointers);
     }
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_CSC_ColumnPointerProperty()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_CSC_ColumnPointerProperty()
     {
         // CSC invariant: colPointers has cols+1 entries
         // colPointers[0] = 0 and colPointers[cols] = nnz
@@ -849,8 +850,8 @@ public class PruningDeepMathIntegrationTests
 
     #region N:M Sparse Format Conversion
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_2to4_CorrectMaskBits()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_2to4_CorrectMaskBits()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -878,8 +879,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal((byte)5, result.SparsityMask?[1]);   // 0b0101
     }
 
-    [Fact]
-    public void MagnitudePruning_ToSparseFormat_NtoM_MaskBitEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_ToSparseFormat_NtoM_MaskBitEncoding()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -898,8 +899,8 @@ public class PruningDeepMathIntegrationTests
 
     #region End-to-End Pruning Pipeline
 
-    [Fact]
-    public void PruningPipeline_ComputeScores_CreateMask_Apply_CorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task PruningPipeline_ComputeScores_CreateMask_Apply_CorrectResult()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -940,8 +941,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(-0.7, weights[5], Tolerance);   // kept (sign preserved)
     }
 
-    [Fact]
-    public void PruningPipeline_Matrix_PruneAndConvertToCSR()
+    [Fact(Timeout = 120000)]
+    public async Task PruningPipeline_Matrix_PruneAndConvertToCSR()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -984,8 +985,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(new[] { 1, 0, 2 }, csr.ColumnIndices);
     }
 
-    [Fact]
-    public void PruningPipeline_IterativePruning_IncreasingSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task PruningPipeline_IterativePruning_IncreasingSparsity()
     {
         var strategy = new MagnitudePruningStrategy<double>();
 
@@ -1034,8 +1035,8 @@ public class PruningDeepMathIntegrationTests
 
     #region SparseCompressionResult Properties
 
-    [Fact]
-    public void SparseCompressionResult_Sparsity_ExactComputation()
+    [Fact(Timeout = 120000)]
+    public async Task SparseCompressionResult_Sparsity_ExactComputation()
     {
         // 2x3 = 6 total, 2 non-zero => sparsity = 1 - 2/6 = 4/6 = 2/3
         var result = new SparseCompressionResult<double>
@@ -1051,8 +1052,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result.Sparsity, Tolerance);
     }
 
-    [Fact]
-    public void SparseCompressionResult_CompressedSizeBytes_Calculation()
+    [Fact(Timeout = 120000)]
+    public async Task SparseCompressionResult_CompressedSizeBytes_Calculation()
     {
         var result = new SparseCompressionResult<double>
         {
@@ -1078,8 +1079,8 @@ public class PruningDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void PruningMask_SingleElement_SparsityZeroOrOne()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_SingleElement_SparsityZeroOrOne()
     {
         // 1-element mask kept
         var kept = new PruningMask<double>(new bool[] { true });
@@ -1090,8 +1091,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(1.0, pruned.GetSparsity(), Tolerance);
     }
 
-    [Fact]
-    public void MagnitudePruning_AllSameWeights_PrunesArbitrarily()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_AllSameWeights_PrunesArbitrarily()
     {
         // All weights have same magnitude => any subset can be pruned
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1106,8 +1107,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(2, prunedCount);
     }
 
-    [Fact]
-    public void MagnitudePruning_AllZeroWeights_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task MagnitudePruning_AllZeroWeights_HandlesGracefully()
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[] { 0.0, 0.0, 0.0, 0.0 });
@@ -1123,8 +1124,8 @@ public class PruningDeepMathIntegrationTests
         Assert.Equal(2, prunedCount);
     }
 
-    [Fact]
-    public void PruningMask_GetMaskData_RowMajorFlatOrder()
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_GetMaskData_RowMajorFlatOrder()
     {
         // Verify GetMaskData returns in row-major order
         var keepIndices = new bool[,]

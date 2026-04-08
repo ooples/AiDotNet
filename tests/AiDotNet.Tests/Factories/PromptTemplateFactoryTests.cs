@@ -6,13 +6,14 @@ using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Factories
 {
     public class PromptTemplateFactoryTests
     {
-        [Fact]
-        public void Create_Throws_For_FewShot_Without_Typed_Selector()
+        [Fact(Timeout = 60000)]
+        public async Task Create_Throws_For_FewShot_Without_Typed_Selector()
         {
             var ex = Assert.Throws<ArgumentException>(() =>
                 PromptTemplateFactory.Create(PromptTemplateType.FewShot, "Base: {examples}\n{query}"));
@@ -20,8 +21,8 @@ namespace AiDotNet.Tests.Factories
             Assert.Equal("templateType", ex.ParamName);
         }
 
-        [Fact]
-        public void Create_Generic_FewShot_Works_For_NonDouble_Types()
+        [Fact(Timeout = 60000)]
+        public async Task Create_Generic_FewShot_Works_For_NonDouble_Types()
         {
             var selector = new FixedExampleSelector<float>();
             selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });

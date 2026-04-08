@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinearAlgebra;
 
@@ -13,8 +14,8 @@ public class TensorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Tensor_ConstructWithDimensions_CreatesCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ConstructWithDimensions_CreatesCorrectShape()
     {
         // Arrange & Act
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
@@ -26,8 +27,8 @@ public class TensorIntegrationTests
         Assert.Equal(4, tensor.Shape[2]);
     }
 
-    [Fact]
-    public void Tensor_ConstructWithVector_InitializesData()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ConstructWithVector_InitializesData()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -42,8 +43,8 @@ public class TensorIntegrationTests
         Assert.Equal(6.0, tensor[5]);
     }
 
-    [Fact]
-    public void Tensor_ConstructWithMatrix_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ConstructWithMatrix_InitializesCorrectly()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -64,8 +65,8 @@ public class TensorIntegrationTests
 
     #region Static Factory Methods
 
-    [Fact]
-    public void Tensor_CreateRandom_CreatesWithCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_CreateRandom_CreatesWithCorrectDimensions()
     {
         // Arrange & Act
         var tensor = Tensor<double>.CreateRandom(3, 4, 5);
@@ -77,8 +78,8 @@ public class TensorIntegrationTests
         Assert.Equal(5, tensor.Shape[2]);
     }
 
-    [Fact]
-    public void Tensor_FromVector_CreatesFromVector()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_FromVector_CreatesFromVector()
     {
         // Arrange
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -90,8 +91,8 @@ public class TensorIntegrationTests
         Assert.Equal(4, tensor.Length);
     }
 
-    [Fact]
-    public void Tensor_FromMatrix_CreatesFromMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_FromMatrix_CreatesFromMatrix()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -108,8 +109,8 @@ public class TensorIntegrationTests
         Assert.Equal(2, tensor.Shape[1]);
     }
 
-    [Fact]
-    public void Tensor_FromScalar_CreatesSingleValueTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_FromScalar_CreatesSingleValueTensor()
     {
         // Arrange & Act
         var tensor = Tensor<double>.FromScalar(42.0);
@@ -119,8 +120,8 @@ public class TensorIntegrationTests
         Assert.Equal(42.0, tensor[0]);
     }
 
-    [Fact]
-    public void Tensor_CreateDefault_FillsWithValue()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_CreateDefault_FillsWithValue()
     {
         // Arrange & Act
         var tensor = Tensor<double>.CreateDefault(new[] { 2, 3 }, 5.0);
@@ -133,8 +134,8 @@ public class TensorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tensor_Empty_CreatesMinimalTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Empty_CreatesMinimalTensor()
     {
         // Arrange & Act
         var tensor = Tensor<double>.Empty();
@@ -147,8 +148,8 @@ public class TensorIntegrationTests
 
     #region Arithmetic Operations
 
-    [Fact]
-    public void Tensor_Add_AddsTwoTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Add_AddsTwoTensors()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -164,8 +165,8 @@ public class TensorIntegrationTests
         Assert.Equal(12.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Subtract_SubtractsTwoTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Subtract_SubtractsTwoTensors()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 5.0, 6.0, 7.0, 8.0 }));
@@ -181,8 +182,8 @@ public class TensorIntegrationTests
         Assert.Equal(4.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_MultiplyScalar_MultipliesByScalar()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MultiplyScalar_MultipliesByScalar()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -197,8 +198,8 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_ElementwiseMultiply_MultipliesElementWise()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ElementwiseMultiply_MultipliesElementWise()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -214,8 +215,8 @@ public class TensorIntegrationTests
         Assert.Equal(20.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_PointwiseMultiply_SameAsElementwise()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_PointwiseMultiply_SameAsElementwise()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
@@ -230,8 +231,8 @@ public class TensorIntegrationTests
         Assert.Equal(18.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_OperatorAdd_WorksLikeMethod()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_OperatorAdd_WorksLikeMethod()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, 2.0 }));
@@ -245,8 +246,8 @@ public class TensorIntegrationTests
         Assert.Equal(6.0, result[1], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_DotProduct_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_DotProduct_ComputesCorrectly()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
@@ -263,8 +264,8 @@ public class TensorIntegrationTests
 
     #region Reshape and Transform
 
-    [Fact]
-    public void Tensor_Reshape_ChangesShape()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Reshape_ChangesShape()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -279,8 +280,8 @@ public class TensorIntegrationTests
         Assert.Equal(6, reshaped.Length);
     }
 
-    [Fact]
-    public void Tensor_Transpose_TransposesTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Transpose_TransposesTensor()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -293,8 +294,8 @@ public class TensorIntegrationTests
         Assert.Equal(2, transposed.Shape[1]);
     }
 
-    [Fact]
-    public void Tensor_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -308,8 +309,8 @@ public class TensorIntegrationTests
         Assert.Equal(999.0, clone[0]);
     }
 
-    [Fact]
-    public void Tensor_Fill_FillsWithValue()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Fill_FillsWithValue()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 });
@@ -328,8 +329,8 @@ public class TensorIntegrationTests
 
     #region Aggregation Operations
 
-    [Fact]
-    public void Tensor_Sum_SumsAllElements()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Sum_SumsAllElements()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -341,8 +342,8 @@ public class TensorIntegrationTests
         Assert.Equal(10.0, sum[0], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Max_FindsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Max_FindsMaximum()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 3.0, 7.0, 2.0, 5.0 }));
@@ -355,8 +356,8 @@ public class TensorIntegrationTests
         Assert.Equal(1, maxIndex);
     }
 
-    [Fact]
-    public void Tensor_SumOverAxis_SumsCorrectAxis()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SumOverAxis_SumsCorrectAxis()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -372,8 +373,8 @@ public class TensorIntegrationTests
 
     #region Conversion Methods
 
-    [Fact]
-    public void Tensor_ToVector_ConvertsToVector()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ToVector_ConvertsToVector()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -387,8 +388,8 @@ public class TensorIntegrationTests
         Assert.Equal(4.0, vector[3]);
     }
 
-    [Fact]
-    public void Tensor_ToMatrix_ConvertsToMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ToMatrix_ConvertsToMatrix()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -407,8 +408,8 @@ public class TensorIntegrationTests
 
     #region Stack and Concatenate
 
-    [Fact]
-    public void Tensor_Stack_StacksMultipleTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Stack_StacksMultipleTensors()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -422,8 +423,8 @@ public class TensorIntegrationTests
         Assert.Equal(2, stacked.Shape[0]);
     }
 
-    [Fact]
-    public void Tensor_Concatenate_ConcatenatesTensors()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Concatenate_ConcatenatesTensors()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -441,8 +442,8 @@ public class TensorIntegrationTests
 
     #region Row and Vector Operations
 
-    [Fact]
-    public void Tensor_GetRow_ReturnsCorrectRow()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_GetRow_ReturnsCorrectRow()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -454,8 +455,8 @@ public class TensorIntegrationTests
         Assert.Equal(2, row.Length);
     }
 
-    [Fact]
-    public void Tensor_SetRow_SetsRowCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetRow_SetsRowCorrectly()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 2 });
@@ -471,8 +472,8 @@ public class TensorIntegrationTests
         Assert.Equal(10.0, row[1]);
     }
 
-    [Fact]
-    public void Tensor_GetVector_ReturnsVectorAtIndex()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_GetVector_ReturnsVectorAtIndex()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -488,8 +489,8 @@ public class TensorIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void TensorMatrixVector_Integration_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task TensorMatrixVector_Integration_WorksTogether()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -510,8 +511,8 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, asMatrix[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_LargeOperations_CompletesWithinTimeout()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_LargeOperations_CompletesWithinTimeout()
     {
         // Arrange
         var t1 = Tensor<double>.CreateRandom(50, 50, 50);
@@ -529,8 +530,8 @@ public class TensorIntegrationTests
 
     #region Tensor Broadcast Operations
 
-    [Fact]
-    public void Tensor_BroadcastAdd_AddsTensorsWithBroadcasting()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_BroadcastAdd_AddsTensorsWithBroadcasting()
     {
         // Arrange - 2D tensor + 1D tensor broadcasting
         var t1 = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -547,8 +548,8 @@ public class TensorIntegrationTests
         Assert.Equal(33.0, result[2], Tolerance); // 3 + 30
     }
 
-    [Fact]
-    public void Tensor_BroadcastMultiply_MultipliesTensorsWithBroadcasting()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_BroadcastMultiply_MultipliesTensorsWithBroadcasting()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -566,8 +567,8 @@ public class TensorIntegrationTests
 
     #region Tensor Scale and Transform
 
-    [Fact]
-    public void Tensor_Scale_ScalesByFactor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Scale_ScalesByFactor()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -582,8 +583,8 @@ public class TensorIntegrationTests
         Assert.Equal(12.0, scaled[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_Transform_AppliesFunctionWithIndex()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Transform_AppliesFunctionWithIndex()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 10.0, 20.0, 30.0 }));
@@ -601,8 +602,8 @@ public class TensorIntegrationTests
 
     #region Tensor Mean and Aggregation
 
-    [Fact]
-    public void Tensor_Mean_ComputesMean()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Mean_ComputesMean()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 2.0, 4.0, 6.0, 8.0 }));
@@ -614,8 +615,8 @@ public class TensorIntegrationTests
         Assert.Equal(5.0, mean, Tolerance);
     }
 
-    [Fact]
-    public void Tensor_MeanOverAxis_ComputesMeanOverAxis()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MeanOverAxis_ComputesMeanOverAxis()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -627,8 +628,8 @@ public class TensorIntegrationTests
         Assert.Equal(3, mean.Length);
     }
 
-    [Fact]
-    public void Tensor_MaxOverAxis_ComputesMaxOverAxis()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MaxOverAxis_ComputesMaxOverAxis()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 5.0, 3.0, 4.0, 2.0, 6.0 }));
@@ -644,8 +645,8 @@ public class TensorIntegrationTests
 
     #region Tensor Slice Operations
 
-    [Fact]
-    public void Tensor_SliceAxis_ReturnsSliceAlongAxis()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SliceAxis_ReturnsSliceAlongAxis()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -658,8 +659,8 @@ public class TensorIntegrationTests
         Assert.Equal(2, slice.Shape[1]);
     }
 
-    [Fact]
-    public void Tensor_GetSliceByBatch_ReturnsCorrectSlice()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_GetSliceByBatch_ReturnsCorrectSlice()
     {
         // Arrange - Create a 2D tensor
         var tensor = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new double[] {
@@ -679,8 +680,8 @@ public class TensorIntegrationTests
 
     #region Tensor SetSlice Operations
 
-    [Fact]
-    public void Tensor_SetSliceWithVector_SetsValuesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetSliceWithVector_SetsValuesCorrectly()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 2 });
@@ -699,8 +700,8 @@ public class TensorIntegrationTests
 
     #region Tensor MatrixMultiply
 
-    [Fact]
-    public void Tensor_MatrixMultiply_MultipliesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MatrixMultiply_MultipliesCorrectly()
     {
         // Arrange - Two 2D tensors for matrix multiplication
         var t1 = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -720,8 +721,8 @@ public class TensorIntegrationTests
 
     #region Tensor Transpose Variants
 
-    [Fact]
-    public void Tensor_TransposeWithPermutation_PermutesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_TransposeWithPermutation_PermutesDimensions()
     {
         // Arrange - 3D tensor
         var tensor = Tensor<double>.CreateRandom(2, 3, 4);
@@ -735,8 +736,8 @@ public class TensorIntegrationTests
         Assert.Equal(3, transposed.Shape[2]); // Was dimension 1
     }
 
-    [Fact]
-    public void Tensor_TransposeLast2D_TransposesLastTwoDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_TransposeLast2D_TransposesLastTwoDimensions()
     {
         // Arrange - 3D tensor with shape (2, 3, 4)
         var tensor = Tensor<double>.CreateRandom(2, 3, 4);
@@ -754,8 +755,8 @@ public class TensorIntegrationTests
 
     #region Tensor Factory Methods
 
-    [Fact]
-    public void Tensor_FromRowMatrix_CreatesCorrectTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_FromRowMatrix_CreatesCorrectTensor()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -770,8 +771,8 @@ public class TensorIntegrationTests
         Assert.Equal(3, tensor.Length);
     }
 
-    [Fact]
-    public void Tensor_FromColumnMatrix_CreatesCorrectTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_FromColumnMatrix_CreatesCorrectTensor()
     {
         // Arrange
         var matrix = new Matrix<double>(new double[,]
@@ -792,8 +793,8 @@ public class TensorIntegrationTests
 
     #region Tensor Flat Index Operations
 
-    [Fact]
-    public void Tensor_GetFlatIndexValue_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_GetFlatIndexValue_ReturnsCorrectValue()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -805,8 +806,8 @@ public class TensorIntegrationTests
         Assert.Equal(5.0, value, Tolerance);
     }
 
-    [Fact]
-    public void Tensor_SetFlatIndexValue_SetsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetFlatIndexValue_SetsCorrectValue()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 2 });
@@ -823,8 +824,8 @@ public class TensorIntegrationTests
 
     #region Tensor Add with Vector
 
-    [Fact]
-    public void Tensor_AddVector_AddsVectorToTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_AddVector_AddsVectorToTensor()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -841,8 +842,8 @@ public class TensorIntegrationTests
 
     #region Tensor ElementwiseSubtract
 
-    [Fact]
-    public void Tensor_ElementwiseSubtract_SubtractsElementwise()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_ElementwiseSubtract_SubtractsElementwise()
     {
         // Arrange
         var t1 = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 }));
@@ -862,8 +863,8 @@ public class TensorIntegrationTests
 
     #region Tensor Cast Operations
 
-    [Fact]
-    public void Tensor_Cast_DoubleToFloat_ConvertsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Cast_DoubleToFloat_ConvertsCorrectly()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.5, 2.5, 3.5, 4.5 }));
@@ -879,8 +880,8 @@ public class TensorIntegrationTests
         Assert.Equal(4.5f, floatTensor[3], 0.001f);
     }
 
-    [Fact]
-    public void Tensor_Cast_PreservesShape()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Cast_PreservesShape()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 4, 2 });
@@ -898,8 +899,8 @@ public class TensorIntegrationTests
 
     #region SubTensor Operations
 
-    [Fact]
-    public void Tensor_SubTensor_Extracts2DSliceFrom3D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SubTensor_Extracts2DSliceFrom3D()
     {
         // Arrange - 3D tensor [2, 3, 4]
         var tensor = Tensor<double>.CreateRandom(2, 3, 4);
@@ -919,8 +920,8 @@ public class TensorIntegrationTests
         Assert.Equal(1.0, subTensor[[0, 0]], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_SubTensor_Extracts1DSliceFrom2D()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SubTensor_Extracts1DSliceFrom2D()
     {
         // Arrange - 2D tensor [3, 4]
         var tensor = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new double[] {
@@ -939,8 +940,8 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, subTensor[3], Tolerance);
     }
 
-    [Fact]
-    public void Tensor_SetSubTensor_SetsValuesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetSubTensor_SetsValuesCorrectly()
     {
         // Arrange - 3D tensor [2, 3, 4]
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
@@ -964,8 +965,8 @@ public class TensorIntegrationTests
 
     #region SetSlice with Tensor Operations
 
-    [Fact]
-    public void Tensor_SetSlice_DimensionIndexTensor_SetsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetSlice_DimensionIndexTensor_SetsCorrectly()
     {
         // Arrange - 3D tensor [2, 3, 4]
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
@@ -989,8 +990,8 @@ public class TensorIntegrationTests
 
     #region Slice Single Index Operations
 
-    [Fact]
-    public void Tensor_Slice_SingleIndex_Returns2DSlice()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Slice_SingleIndex_Returns2DSlice()
     {
         // Arrange - 3D tensor [2, 3, 4]
         var tensor = Tensor<double>.CreateRandom(2, 3, 4);
@@ -1004,8 +1005,8 @@ public class TensorIntegrationTests
         Assert.Equal(4, slice.Shape[1]);
     }
 
-    [Fact]
-    public void Tensor_Slice_SingleIndex_FromBatchTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_Slice_SingleIndex_FromBatchTensor()
     {
         // Arrange - 4D tensor [batch=2, channels=3, height=4, width=5]
         var tensor = new Tensor<double>(new[] { 2, 3, 4, 5 });
@@ -1028,8 +1029,8 @@ public class TensorIntegrationTests
 
     #region Multiply Matrix Operations
 
-    [Fact]
-    public void Tensor_MultiplyMatrix_AppliesMatrixMultiplication()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_MultiplyMatrix_AppliesMatrixMultiplication()
     {
         // Arrange - 3D tensor (required by Multiply(Matrix)) and a matrix
         // Tensor shape: [2, 2, 3] - batch=2, rows=2, cols=3
@@ -1059,8 +1060,8 @@ public class TensorIntegrationTests
 
     #region SetFlatIndex Operations
 
-    [Fact]
-    public void Tensor_SetFlatIndex_SetsValueAtFlatIndex()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetFlatIndex_SetsValueAtFlatIndex()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 3, 3 });
@@ -1074,8 +1075,8 @@ public class TensorIntegrationTests
         Assert.Equal(77.0, tensor.GetFlatIndexValue(4), Tolerance);
     }
 
-    [Fact]
-    public void Tensor_SetFlatIndex_MultipleValues()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetFlatIndex_MultipleValues()
     {
         // Arrange
         var tensor = new Tensor<double>(new[] { 2, 3 });
@@ -1096,8 +1097,8 @@ public class TensorIntegrationTests
 
     #region Tensor SetSlice with Index
 
-    [Fact]
-    public void Tensor_SetSlice_Index_SetsEntireSlice()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_SetSlice_Index_SetsEntireSlice()
     {
         // Arrange - 3D tensor
         var tensor = new Tensor<double>(new[] { 2, 3, 4 });
@@ -1119,8 +1120,8 @@ public class TensorIntegrationTests
 
     #region GetSubTensor Operations
 
-    [Fact]
-    public void Tensor_GetSubTensor_4D_ExtractsCorrectRegion()
+    [Fact(Timeout = 120000)]
+    public async Task Tensor_GetSubTensor_4D_ExtractsCorrectRegion()
     {
         // Arrange - 4D tensor [batch=2, channels=3, height=8, width=8]
         var tensor = new Tensor<double>(new[] { 2, 3, 8, 8 });

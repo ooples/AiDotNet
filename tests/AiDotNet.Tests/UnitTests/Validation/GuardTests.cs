@@ -3,6 +3,7 @@
 
 using AiDotNet.Validation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Validation;
 
@@ -13,23 +14,23 @@ public class GuardTests
 {
     // ───────────────── NotNull ─────────────────
 
-    [Fact]
-    public void NotNull_WithNonNullValue_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task NotNull_WithNonNullValue_DoesNotThrow()
     {
         var obj = new object();
         var exception = Record.Exception(() => Guard.NotNull(obj));
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void NotNull_WithNull_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNull_WithNull_ThrowsArgumentNullException()
     {
         string value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNull(value));
     }
 
-    [Fact]
-    public void NotNull_WithExplicitName_IncludesParameterNameInException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNull_WithExplicitName_IncludesParameterNameInException()
     {
         object value = null;
         var ex = Assert.Throws<ArgumentNullException>(() => Guard.NotNull(value, "myParam"));
@@ -38,28 +39,28 @@ public class GuardTests
 
     // ───────────────── NotNullOrEmpty ─────────────────
 
-    [Fact]
-    public void NotNullOrEmpty_WithValidString_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrEmpty_WithValidString_DoesNotThrow()
     {
         var exception = Record.Exception(() => Guard.NotNullOrEmpty("hello"));
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void NotNullOrEmpty_WithNull_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrEmpty_WithNull_ThrowsArgumentNullException()
     {
         string value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNullOrEmpty(value));
     }
 
-    [Fact]
-    public void NotNullOrEmpty_WithEmptyString_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrEmpty_WithEmptyString_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrEmpty(""));
     }
 
-    [Fact]
-    public void NotNullOrEmpty_WithWhitespace_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrEmpty_WithWhitespace_DoesNotThrow()
     {
         // Whitespace is allowed by NotNullOrEmpty (use NotNullOrWhiteSpace for stricter check)
         var exception = Record.Exception(() => Guard.NotNullOrEmpty("   "));
@@ -68,34 +69,34 @@ public class GuardTests
 
     // ───────────────── NotNullOrWhiteSpace ─────────────────
 
-    [Fact]
-    public void NotNullOrWhiteSpace_WithValidString_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrWhiteSpace_WithValidString_DoesNotThrow()
     {
         var exception = Record.Exception(() => Guard.NotNullOrWhiteSpace("hello"));
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void NotNullOrWhiteSpace_WithNull_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrWhiteSpace_WithNull_ThrowsArgumentNullException()
     {
         string value = null;
         Assert.Throws<ArgumentNullException>(() => Guard.NotNullOrWhiteSpace(value));
     }
 
-    [Fact]
-    public void NotNullOrWhiteSpace_WithEmptyString_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrWhiteSpace_WithEmptyString_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace(""));
     }
 
-    [Fact]
-    public void NotNullOrWhiteSpace_WithWhitespace_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrWhiteSpace_WithWhitespace_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace("   "));
     }
 
-    [Fact]
-    public void NotNullOrWhiteSpace_WithTabs_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task NotNullOrWhiteSpace_WithTabs_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => Guard.NotNullOrWhiteSpace("\t\t"));
     }
@@ -142,14 +143,14 @@ public class GuardTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(value));
     }
 
-    [Fact]
-    public void Positive_Double_WithNaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Positive_Double_WithNaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(double.NaN));
     }
 
-    [Fact]
-    public void Positive_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Positive_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(double.PositiveInfinity));
     }
@@ -194,14 +195,14 @@ public class GuardTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(value));
     }
 
-    [Fact]
-    public void NonNegative_Double_WithNaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task NonNegative_Double_WithNaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(double.NaN));
     }
 
-    [Fact]
-    public void NonNegative_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task NonNegative_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.NonNegative(double.PositiveInfinity));
     }
@@ -248,63 +249,63 @@ public class GuardTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(value, min, max));
     }
 
-    [Fact]
-    public void InRange_Double_WithNaN_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithNaN_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.NaN, 0.0, 1.0));
     }
 
-    [Fact]
-    public void InRange_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithPositiveInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.PositiveInfinity, 0.0, 1.0));
     }
 
-    [Fact]
-    public void InRange_Double_WithNegativeInfinity_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithNegativeInfinity_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.NegativeInfinity, 0.0, 1.0));
     }
 
     // ───────────────── InRange bound validation ─────────────────
 
-    [Fact]
-    public void InRange_Int_WithMinGreaterThanMax_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Int_WithMinGreaterThanMax_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() => Guard.InRange(5, 10, 1));
         Assert.Equal("min", ex.ParamName);
     }
 
-    [Fact]
-    public void InRange_Double_WithMinGreaterThanMax_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithMinGreaterThanMax_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() => Guard.InRange(0.5, 1.0, 0.0));
         Assert.Equal("min", ex.ParamName);
     }
 
-    [Fact]
-    public void InRange_Double_WithNaNMin_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithNaNMin_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, double.NaN, 1.0));
     }
 
-    [Fact]
-    public void InRange_Double_WithInfinityMax_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Double_WithInfinityMax_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, 0.0, double.PositiveInfinity));
     }
 
     // ───────────────── Parameter name propagation ─────────────────
 
-    [Fact]
-    public void Positive_Int_IncludesParameterNameInException()
+    [Fact(Timeout = 60000)]
+    public async Task Positive_Int_IncludesParameterNameInException()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => Guard.Positive(-1, "batchSize"));
         Assert.Equal("batchSize", ex.ParamName);
     }
 
-    [Fact]
-    public void InRange_Int_IncludesParameterNameInException()
+    [Fact(Timeout = 60000)]
+    public async Task InRange_Int_IncludesParameterNameInException()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(99, 0, 10, "epoch"));
         Assert.Equal("epoch", ex.ParamName);

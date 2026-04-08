@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.WindowFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.WindowFunctions;
 
@@ -16,8 +17,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Rectangular Window Tests
 
-    [Fact]
-    public void RectangularWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task RectangularWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new RectangularWindow<double>();
@@ -29,8 +30,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void RectangularWindow_Create_AllValuesAreOne()
+    [Fact(Timeout = 120000)]
+    public async Task RectangularWindow_Create_AllValuesAreOne()
     {
         // Arrange
         var window = new RectangularWindow<double>();
@@ -49,8 +50,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Hamming Window Tests
 
-    [Fact]
-    public void HammingWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -62,8 +63,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void HammingWindow_Create_SymmetricAroundCenter()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_Create_SymmetricAroundCenter()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -78,8 +79,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void HammingWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -95,8 +96,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void HammingWindow_Create_CenterIsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_Create_CenterIsMaximum()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -122,8 +123,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Hanning Window Tests
 
-    [Fact]
-    public void HanningWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new HanningWindow<double>();
@@ -135,8 +136,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(128, result.Length);
     }
 
-    [Fact]
-    public void HanningWindow_Create_EdgesAreZero()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_Create_EdgesAreZero()
     {
         // Arrange
         var window = new HanningWindow<double>();
@@ -148,8 +149,8 @@ public class WindowFunctionsIntegrationTests
         Assert.True(result[0] < 0.01);
     }
 
-    [Fact]
-    public void HanningWindow_Create_SymmetricAroundCenter()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_Create_SymmetricAroundCenter()
     {
         // Arrange
         var window = new HanningWindow<double>();
@@ -168,8 +169,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Blackman Window Tests
 
-    [Fact]
-    public void BlackmanWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BlackmanWindow<double>();
@@ -181,8 +182,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BlackmanWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new BlackmanWindow<double>();
@@ -202,8 +203,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Bartlett Window Tests
 
-    [Fact]
-    public void BartlettWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BartlettWindow<double>();
@@ -215,8 +216,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BartlettWindow_Create_TriangularShape()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettWindow_Create_TriangularShape()
     {
         // Arrange
         var window = new BartlettWindow<double>();
@@ -234,8 +235,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Triangular Window Tests
 
-    [Fact]
-    public void TriangularWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task TriangularWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new TriangularWindow<double>();
@@ -247,8 +248,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void TriangularWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task TriangularWindow_Create_Symmetric()
     {
         // Arrange
         var window = new TriangularWindow<double>();
@@ -267,8 +268,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Gaussian Window Tests
 
-    [Fact]
-    public void GaussianWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new GaussianWindow<double>(sigma: 0.4);
@@ -280,8 +281,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void GaussianWindow_Create_CenterIsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_Create_CenterIsMaximum()
     {
         // Arrange
         var window = new GaussianWindow<double>(sigma: 0.4);
@@ -298,8 +299,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(result[32], max, Tolerance);
     }
 
-    [Fact]
-    public void GaussianWindow_Create_ValuesDecreaseFromCenter()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_Create_ValuesDecreaseFromCenter()
     {
         // Arrange
         var window = new GaussianWindow<double>(sigma: 0.4);
@@ -319,8 +320,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Kaiser Window Tests
 
-    [Fact]
-    public void KaiserWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task KaiserWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new KaiserWindow<double>(beta: 5.0);
@@ -332,8 +333,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void KaiserWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task KaiserWindow_Create_Symmetric()
     {
         // Arrange
         var window = new KaiserWindow<double>(beta: 5.0);
@@ -348,8 +349,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void KaiserWindow_DifferentBeta_ProducesDifferentWindows()
+    [Fact(Timeout = 120000)]
+    public async Task KaiserWindow_DifferentBeta_ProducesDifferentWindows()
     {
         // Arrange
         var window1 = new KaiserWindow<double>(beta: 2.0);
@@ -376,8 +377,8 @@ public class WindowFunctionsIntegrationTests
 
     #region BlackmanHarris Window Tests
 
-    [Fact]
-    public void BlackmanHarrisWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanHarrisWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BlackmanHarrisWindow<double>();
@@ -389,8 +390,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BlackmanHarrisWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanHarrisWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new BlackmanHarrisWindow<double>();
@@ -410,8 +411,8 @@ public class WindowFunctionsIntegrationTests
 
     #region FlatTop Window Tests
 
-    [Fact]
-    public void FlatTopWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task FlatTopWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new FlatTopWindow<double>();
@@ -423,8 +424,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void FlatTopWindow_Create_HasFlatTop()
+    [Fact(Timeout = 120000)]
+    public async Task FlatTopWindow_Create_HasFlatTop()
     {
         // Arrange
         var window = new FlatTopWindow<double>();
@@ -442,8 +443,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Nuttall Window Tests
 
-    [Fact]
-    public void NuttallWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task NuttallWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new NuttallWindow<double>();
@@ -455,8 +456,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void NuttallWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task NuttallWindow_Create_Symmetric()
     {
         // Arrange
         var window = new NuttallWindow<double>();
@@ -475,8 +476,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Tukey Window Tests
 
-    [Fact]
-    public void TukeyWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task TukeyWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new TukeyWindow<double>(alpha: 0.5);
@@ -488,8 +489,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void TukeyWindow_AlphaZero_IsRectangular()
+    [Fact(Timeout = 120000)]
+    public async Task TukeyWindow_AlphaZero_IsRectangular()
     {
         // Arrange
         var window = new TukeyWindow<double>(alpha: 0.0);
@@ -504,8 +505,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void TukeyWindow_AlphaOne_IsHanning()
+    [Fact(Timeout = 120000)]
+    public async Task TukeyWindow_AlphaOne_IsHanning()
     {
         // Arrange
         var tukeyWindow = new TukeyWindow<double>(alpha: 1.0);
@@ -526,8 +527,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Welch Window Tests
 
-    [Fact]
-    public void WelchWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task WelchWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new WelchWindow<double>();
@@ -539,8 +540,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void WelchWindow_Create_ParabolicShape()
+    [Fact(Timeout = 120000)]
+    public async Task WelchWindow_Create_ParabolicShape()
     {
         // Arrange
         var window = new WelchWindow<double>();
@@ -557,8 +558,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Parzen Window Tests
 
-    [Fact]
-    public void ParzenWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task ParzenWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new ParzenWindow<double>();
@@ -570,8 +571,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void ParzenWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task ParzenWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new ParzenWindow<double>();
@@ -591,8 +592,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Lanczos Window Tests
 
-    [Fact]
-    public void LanczosWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task LanczosWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new LanczosWindow<double>();
@@ -604,8 +605,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void LanczosWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task LanczosWindow_Create_Symmetric()
     {
         // Arrange
         var window = new LanczosWindow<double>();
@@ -624,8 +625,8 @@ public class WindowFunctionsIntegrationTests
 
     #region BartlettHann Window Tests
 
-    [Fact]
-    public void BartlettHannWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettHannWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BartlettHannWindow<double>();
@@ -637,8 +638,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BartlettHannWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettHannWindow_Create_Symmetric()
     {
         // Arrange
         var window = new BartlettHannWindow<double>();
@@ -653,8 +654,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void BartlettHannWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettHannWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new BartlettHannWindow<double>();
@@ -674,8 +675,8 @@ public class WindowFunctionsIntegrationTests
 
     #region BlackmanNuttall Window Tests
 
-    [Fact]
-    public void BlackmanNuttallWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanNuttallWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BlackmanNuttallWindow<double>();
@@ -687,8 +688,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BlackmanNuttallWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanNuttallWindow_Create_Symmetric()
     {
         // Arrange
         var window = new BlackmanNuttallWindow<double>();
@@ -703,8 +704,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void BlackmanNuttallWindow_Create_ValuesInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanNuttallWindow_Create_ValuesInValidRange()
     {
         // Arrange
         var window = new BlackmanNuttallWindow<double>();
@@ -724,8 +725,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Bohman Window Tests
 
-    [Fact]
-    public void BohmanWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task BohmanWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new BohmanWindow<double>();
@@ -737,8 +738,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void BohmanWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task BohmanWindow_Create_Symmetric()
     {
         // Arrange
         var window = new BohmanWindow<double>();
@@ -753,8 +754,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void BohmanWindow_Create_EdgesAreZero()
+    [Fact(Timeout = 120000)]
+    public async Task BohmanWindow_Create_EdgesAreZero()
     {
         // Arrange
         var window = new BohmanWindow<double>();
@@ -771,8 +772,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Cosine Window Tests
 
-    [Fact]
-    public void CosineWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task CosineWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new CosineWindow<double>();
@@ -784,8 +785,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void CosineWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task CosineWindow_Create_Symmetric()
     {
         // Arrange
         var window = new CosineWindow<double>();
@@ -800,8 +801,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void CosineWindow_Create_CenterIsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task CosineWindow_Create_CenterIsMaximum()
     {
         // Arrange
         var window = new CosineWindow<double>();
@@ -827,8 +828,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Poisson Window Tests
 
-    [Fact]
-    public void PoissonWindow_Create_ReturnsCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_Create_ReturnsCorrectSize()
     {
         // Arrange
         var window = new PoissonWindow<double>(alpha: 2.0);
@@ -840,8 +841,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
-    [Fact]
-    public void PoissonWindow_Create_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_Create_Symmetric()
     {
         // Arrange
         var window = new PoissonWindow<double>(alpha: 2.0);
@@ -856,8 +857,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void PoissonWindow_Create_CenterIsMaximum()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_Create_CenterIsMaximum()
     {
         // Arrange
         var window = new PoissonWindow<double>(alpha: 2.0);
@@ -869,8 +870,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(1.0, result[32], Tolerance);
     }
 
-    [Fact]
-    public void PoissonWindow_DifferentAlpha_ProducesDifferentWindows()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_DifferentAlpha_ProducesDifferentWindows()
     {
         // Arrange
         var window1 = new PoissonWindow<double>(alpha: 1.0);
@@ -888,8 +889,8 @@ public class WindowFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void AllWindowFunctions_Create_ReturnCorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task AllWindowFunctions_Create_ReturnCorrectSize()
     {
         // Arrange
         var windows = new IWindowFunction<double>[]
@@ -924,8 +925,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllWindowFunctions_Create_NoNaNValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllWindowFunctions_Create_NoNaNValues()
     {
         // Arrange
         var windows = new IWindowFunction<double>[]
@@ -953,8 +954,8 @@ public class WindowFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void WindowFunctions_SmallSize_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_SmallSize_DoesNotThrow()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -967,8 +968,8 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(2, result2.Length);
     }
 
-    [Fact]
-    public void WindowFunctions_LargeSize_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_LargeSize_HandlesCorrectly()
     {
         // Arrange
         var window = new HammingWindow<double>();
@@ -986,141 +987,141 @@ public class WindowFunctionsIntegrationTests
 
     #region GetWindowFunctionType Tests
 
-    [Fact]
-    public void RectangularWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task RectangularWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new RectangularWindow<double>();
         Assert.Equal(WindowFunctionType.Rectangular, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void HammingWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task HammingWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new HammingWindow<double>();
         Assert.Equal(WindowFunctionType.Hamming, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void HanningWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task HanningWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new HanningWindow<double>();
         Assert.Equal(WindowFunctionType.Hanning, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BlackmanWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BlackmanWindow<double>();
         Assert.Equal(WindowFunctionType.Blackman, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BartlettWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BartlettWindow<double>();
         Assert.Equal(WindowFunctionType.Bartlett, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void TriangularWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task TriangularWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new TriangularWindow<double>();
         Assert.Equal(WindowFunctionType.Triangular, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void GaussianWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new GaussianWindow<double>(sigma: 0.4);
         Assert.Equal(WindowFunctionType.Gaussian, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void KaiserWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task KaiserWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new KaiserWindow<double>(beta: 5.0);
         Assert.Equal(WindowFunctionType.Kaiser, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BlackmanHarrisWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanHarrisWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BlackmanHarrisWindow<double>();
         Assert.Equal(WindowFunctionType.BlackmanHarris, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void FlatTopWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task FlatTopWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new FlatTopWindow<double>();
         Assert.Equal(WindowFunctionType.FlatTop, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void NuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task NuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new NuttallWindow<double>();
         Assert.Equal(WindowFunctionType.Nuttall, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void TukeyWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task TukeyWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new TukeyWindow<double>(alpha: 0.5);
         Assert.Equal(WindowFunctionType.Tukey, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void WelchWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task WelchWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new WelchWindow<double>();
         Assert.Equal(WindowFunctionType.Welch, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void ParzenWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task ParzenWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new ParzenWindow<double>();
         Assert.Equal(WindowFunctionType.Parzen, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void LanczosWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task LanczosWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new LanczosWindow<double>();
         Assert.Equal(WindowFunctionType.Lanczos, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BartlettHannWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BartlettHannWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BartlettHannWindow<double>();
         Assert.Equal(WindowFunctionType.BartlettHann, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BlackmanNuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BlackmanNuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BlackmanNuttallWindow<double>();
         Assert.Equal(WindowFunctionType.BlackmanNuttall, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void BohmanWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task BohmanWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new BohmanWindow<double>();
         Assert.Equal(WindowFunctionType.Bohman, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void CosineWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task CosineWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new CosineWindow<double>();
         Assert.Equal(WindowFunctionType.Cosine, window.GetWindowFunctionType());
     }
 
-    [Fact]
-    public void PoissonWindow_GetWindowFunctionType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonWindow_GetWindowFunctionType_ReturnsCorrectType()
     {
         var window = new PoissonWindow<double>(alpha: 2.0);
         Assert.Equal(WindowFunctionType.Poisson, window.GetWindowFunctionType());

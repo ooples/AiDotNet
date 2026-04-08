@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -29,8 +30,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidPath_CreatesIndex()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidPath_CreatesIndex()
         {
             // Arrange & Act
             var indexPath = GetTestIndexPath();
@@ -40,15 +41,15 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
-        public void Constructor_WithNullPath_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullPath_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new BTreeIndex(null!));
         }
 
-        [Fact]
-        public void Constructor_WithNonexistentDirectory_CreatesDirectory()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNonexistentDirectory_CreatesDirectory()
         {
             // Arrange
             var nestedPath = Path.Combine(_testDirectory, "nested", "path", "index.db");
@@ -66,8 +67,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Add Tests
 
-        [Fact]
-        public void Add_WithValidKeyAndOffset_IncreasesCount()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithValidKeyAndOffset_IncreasesCount()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -80,8 +81,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
-        public void Add_WithNullKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNullKey_ThrowsArgumentException()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -91,8 +92,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentException>(() => index.Add(null!, 100));
         }
 
-        [Fact]
-        public void Add_WithEmptyKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithEmptyKey_ThrowsArgumentException()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -102,8 +103,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentException>(() => index.Add("", 100));
         }
 
-        [Fact]
-        public void Add_WithWhitespaceKey_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithWhitespaceKey_ThrowsArgumentException()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -113,8 +114,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentException>(() => index.Add("   ", 100));
         }
 
-        [Fact]
-        public void Add_WithNegativeOffset_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithNegativeOffset_ThrowsArgumentException()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -124,8 +125,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentException>(() => index.Add("key1", -1));
         }
 
-        [Fact]
-        public void Add_WithDuplicateKey_UpdatesOffset()
+        [Fact(Timeout = 60000)]
+        public async Task Add_WithDuplicateKey_UpdatesOffset()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Get Tests
 
-        [Fact]
-        public void Get_WithExistingKey_ReturnsCorrectOffset()
+        [Fact(Timeout = 60000)]
+        public async Task Get_WithExistingKey_ReturnsCorrectOffset()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -162,8 +163,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2048, offset2);
         }
 
-        [Fact]
-        public void Get_WithNonexistentKey_ReturnsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task Get_WithNonexistentKey_ReturnsNegativeOne()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -176,8 +177,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(-1, offset);
         }
 
-        [Fact]
-        public void Get_WithNullKey_ReturnsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task Get_WithNullKey_ReturnsNegativeOne()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -194,8 +195,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Contains Tests
 
-        [Fact]
-        public void Contains_WithExistingKey_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task Contains_WithExistingKey_ReturnsTrue()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -209,8 +210,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(contains);
         }
 
-        [Fact]
-        public void Contains_WithNonexistentKey_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Contains_WithNonexistentKey_ReturnsFalse()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(contains);
         }
 
-        [Fact]
-        public void Contains_WithNullKey_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Contains_WithNullKey_ReturnsFalse()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -241,8 +242,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Remove Tests
 
-        [Fact]
-        public void Remove_WithExistingKey_RemovesKeyAndReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithExistingKey_RemovesKeyAndReturnsTrue()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -258,8 +259,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(index.Contains("key1"));
         }
 
-        [Fact]
-        public void Remove_WithNonexistentKey_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNonexistentKey_ReturnsFalse()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(result);
         }
 
-        [Fact]
-        public void Remove_WithNullKey_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task Remove_WithNullKey_ReturnsFalse()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -290,8 +291,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetAllKeys Tests
 
-        [Fact]
-        public void GetAllKeys_WithMultipleKeys_ReturnsAllKeys()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllKeys_WithMultipleKeys_ReturnsAllKeys()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -310,8 +311,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("key3", keys);
         }
 
-        [Fact]
-        public void GetAllKeys_WithEmptyIndex_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllKeys_WithEmptyIndex_ReturnsEmpty()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -328,8 +329,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Clear Tests
 
-        [Fact]
-        public void Clear_RemovesAllEntries()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllEntries()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -349,8 +350,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Flush and Persistence Tests
 
-        [Fact]
-        public void Flush_SavesIndexToDisk()
+        [Fact(Timeout = 60000)]
+        public async Task Flush_SavesIndexToDisk()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -367,8 +368,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(File.Exists(indexPath));
         }
 
-        [Fact]
-        public void Constructor_WithExistingIndexFile_LoadsData()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithExistingIndexFile_LoadsData()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -392,8 +393,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(3072, loadedIndex.Get("key3"));
         }
 
-        [Fact]
-        public void Dispose_FlushesDataToDisk()
+        [Fact(Timeout = 60000)]
+        public async Task Dispose_FlushesDataToDisk()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -415,8 +416,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2048, loadedIndex.Get("key2"));
         }
 
-        [Fact]
-        public void Flush_WithNoChanges_DoesNotModifyFileContent()
+        [Fact(Timeout = 60000)]
+        public async Task Flush_WithNoChanges_DoesNotModifyFileContent()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -448,8 +449,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Integration Tests
 
-        [Fact]
-        public void ComplexScenario_WithMultipleOperations_MaintainsConsistency()
+        [Fact(Timeout = 60000)]
+        public async Task ComplexScenario_WithMultipleOperations_MaintainsConsistency()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
@@ -489,8 +490,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void LargeIndex_WithThousandsOfEntries_PerformsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task LargeIndex_WithThousandsOfEntries_PerformsCorrectly()
         {
             // Arrange
             var indexPath = GetTestIndexPath();

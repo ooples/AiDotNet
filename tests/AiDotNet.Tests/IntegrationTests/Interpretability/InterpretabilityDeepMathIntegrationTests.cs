@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Interpretability;
 
@@ -17,8 +18,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region InterpretabilityMetricsHelper - PositiveRate Tests
 
-    [Fact]
-    public void PositiveRate_AllPositive_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task PositiveRate_AllPositive_ReturnsOne()
     {
         // predictions = [1, 1, 1] => 3 positive out of 3 => rate = 1.0
         var predictions = new Vector<double>(new[] { 1.0, 1.0, 1.0 });
@@ -26,8 +27,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void PositiveRate_AllNegative_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PositiveRate_AllNegative_ReturnsZero()
     {
         // predictions = [0, 0, 0] => 0 positive => rate = 0.0
         var predictions = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
@@ -35,8 +36,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void PositiveRate_MixedPredictions_ExactComputation()
+    [Fact(Timeout = 120000)]
+    public async Task PositiveRate_MixedPredictions_ExactComputation()
     {
         // predictions = [1, 0, 1, 0, 1] => 3/5 = 0.6
         // threshold is 0.5, so >= 0.5 is positive
@@ -45,8 +46,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.6, result, Tolerance);
     }
 
-    [Fact]
-    public void PositiveRate_ThresholdAt05()
+    [Fact(Timeout = 120000)]
+    public async Task PositiveRate_ThresholdAt05()
     {
         // predictions = [0.5, 0.4, 0.6, 0.3]
         // >= 0.5: {0.5, 0.6} => 2 positive out of 4 => rate = 0.5
@@ -55,8 +56,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void PositiveRate_Empty_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PositiveRate_Empty_ReturnsZero()
     {
         var predictions = new Vector<double>(0);
         var result = InterpretabilityMetricsHelper<double>.ComputePositiveRate(predictions);
@@ -67,8 +68,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region InterpretabilityMetricsHelper - TruePositiveRate Tests
 
-    [Fact]
-    public void TPR_PerfectPredictions_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task TPR_PerfectPredictions_ReturnsOne()
     {
         // pred = [1, 0, 1], actual = [1, 0, 1]
         // TP = 2, FN = 0, actual positives = 2
@@ -79,8 +80,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TPR_AllFalseNegatives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TPR_AllFalseNegatives_ReturnsZero()
     {
         // pred = [0, 0, 0], actual = [1, 1, 1]
         // TP = 0, FN = 3, actual positives = 3
@@ -91,8 +92,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TPR_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task TPR_HandComputed()
     {
         // pred = [1, 0, 1, 1, 0], actual = [1, 1, 0, 1, 0]
         // Actual positives at: 0, 1, 3
@@ -107,8 +108,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TPR_NoActualPositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TPR_NoActualPositives_ReturnsZero()
     {
         // pred = [1, 1], actual = [0, 0]
         // No actual positives => TPR = 0 (by definition)
@@ -122,8 +123,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region InterpretabilityMetricsHelper - FalsePositiveRate Tests
 
-    [Fact]
-    public void FPR_NoFalsePositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task FPR_NoFalsePositives_ReturnsZero()
     {
         // pred = [1, 0, 0], actual = [1, 0, 0]
         // Actual negatives: 1, 2. Both predicted 0 (correct) => FP = 0
@@ -134,8 +135,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void FPR_AllFalsePositives_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task FPR_AllFalsePositives_ReturnsOne()
     {
         // pred = [1, 1, 1], actual = [0, 0, 0]
         // All actual negatives predicted as positive => FP = 3, TN = 0
@@ -146,8 +147,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void FPR_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task FPR_HandComputed()
     {
         // pred = [1, 0, 1, 1, 0], actual = [1, 0, 0, 1, 0]
         // Actual negatives at: 1, 2, 4
@@ -166,8 +167,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region InterpretabilityMetricsHelper - Precision Tests
 
-    [Fact]
-    public void Precision_PerfectPredictions_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Precision_PerfectPredictions_ReturnsOne()
     {
         // pred = [1, 0, 1], actual = [1, 0, 1]
         // Predicted positives: 0, 2 => both are TP
@@ -178,8 +179,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Precision_AllFalsePositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Precision_AllFalsePositives_ReturnsZero()
     {
         // pred = [1, 1], actual = [0, 0]
         // All predicted positives are wrong => TP=0, FP=2
@@ -190,8 +191,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Precision_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task Precision_HandComputed()
     {
         // pred = [1, 1, 1, 0, 0], actual = [1, 0, 1, 1, 0]
         // Predicted positives at: 0, 1, 2
@@ -206,8 +207,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tolerance);
     }
 
-    [Fact]
-    public void Precision_NoPredictedPositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Precision_NoPredictedPositives_ReturnsZero()
     {
         // pred = [0, 0], actual = [1, 0]
         // No predicted positives => Precision = 0
@@ -221,24 +222,24 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region InterpretabilityMetricsHelper - GetUniqueGroups Tests
 
-    [Fact]
-    public void GetUniqueGroups_IdentifiesTwoGroups()
+    [Fact(Timeout = 120000)]
+    public async Task GetUniqueGroups_IdentifiesTwoGroups()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
         var groups = InterpretabilityMetricsHelper<double>.GetUniqueGroups(sensitiveFeature);
         Assert.Equal(2, groups.Count);
     }
 
-    [Fact]
-    public void GetUniqueGroups_ThreeGroups()
+    [Fact(Timeout = 120000)]
+    public async Task GetUniqueGroups_ThreeGroups()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 2.0, 0.0, 1.0 });
         var groups = InterpretabilityMetricsHelper<double>.GetUniqueGroups(sensitiveFeature);
         Assert.Equal(3, groups.Count);
     }
 
-    [Fact]
-    public void GetGroupIndices_CorrectIndices()
+    [Fact(Timeout = 120000)]
+    public async Task GetGroupIndices_CorrectIndices()
     {
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
         var indices = InterpretabilityMetricsHelper<double>.GetGroupIndices(sensitiveFeature, 0.0);
@@ -248,8 +249,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Contains(4, indices);
     }
 
-    [Fact]
-    public void GetSubset_ExtractsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task GetSubset_ExtractsCorrectValues()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
         var indices = new System.Collections.Generic.List<int> { 0, 2, 4 };
@@ -265,8 +266,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region DemographicParityBiasDetector Tests
 
-    [Fact]
-    public void DemographicParity_EqualRates_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task DemographicParity_EqualRates_NoBias()
     {
         // Group 0: predictions [1, 0] => rate = 0.5
         // Group 1: predictions [1, 0] => rate = 0.5
@@ -281,8 +282,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, Convert.ToDouble(result.StatisticalParityDifference), Tolerance);
     }
 
-    [Fact]
-    public void DemographicParity_UnequalRates_BiasDetected()
+    [Fact(Timeout = 120000)]
+    public async Task DemographicParity_UnequalRates_BiasDetected()
     {
         // Group 0: predictions [1, 1, 1, 1] => rate = 1.0
         // Group 1: predictions [0, 0, 0, 0] => rate = 0.0
@@ -297,8 +298,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, Convert.ToDouble(result.StatisticalParityDifference), Tolerance);
     }
 
-    [Fact]
-    public void DemographicParity_ExactSPD_Computation()
+    [Fact(Timeout = 120000)]
+    public async Task DemographicParity_ExactSPD_Computation()
     {
         // Group 0: predictions [1, 1, 0] => rate = 2/3
         // Group 1: predictions [1, 0, 0] => rate = 1/3
@@ -313,8 +314,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, Convert.ToDouble(result.StatisticalParityDifference), Tolerance);
     }
 
-    [Fact]
-    public void DemographicParity_BelowThreshold_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task DemographicParity_BelowThreshold_NoBias()
     {
         // Group 0: predictions [1, 1, 0, 0, 0] => rate = 2/5 = 0.4
         // Group 1: predictions [1, 1, 0, 0, 0] => rate = 2/5 = 0.4
@@ -328,8 +329,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.False(result.HasBias);
     }
 
-    [Fact]
-    public void DemographicParity_GroupSizes_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task DemographicParity_GroupSizes_Correct()
     {
         var detector = new DemographicParityBiasDetector<double>();
         var predictions = new Vector<double>(new[] { 1.0, 0.0, 1.0, 0.0, 0.0 });
@@ -345,8 +346,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region DisparateImpactBiasDetector Tests
 
-    [Fact]
-    public void DisparateImpact_EqualRates_RatioIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_EqualRates_RatioIsOne()
     {
         // Both groups have rate 0.5 => ratio = 0.5/0.5 = 1.0 >= 0.8 => no bias
         var detector = new DisparateImpactBiasDetector<double>(threshold: 0.8);
@@ -359,8 +360,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, Convert.ToDouble(result.DisparateImpactRatio), Tolerance);
     }
 
-    [Fact]
-    public void DisparateImpact_ExactRatio_Computation()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_ExactRatio_Computation()
     {
         // Group 0: predictions [1, 1, 1, 0] => rate = 3/4 = 0.75
         // Group 1: predictions [1, 0, 0, 0] => rate = 1/4 = 0.25
@@ -375,8 +376,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, Convert.ToDouble(result.DisparateImpactRatio), Tolerance);
     }
 
-    [Fact]
-    public void DisparateImpact_80PercentRule_PassingCase()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_80PercentRule_PassingCase()
     {
         // Group 0: predictions [1, 1, 1, 1, 0] => rate = 4/5 = 0.8
         // Group 1: predictions [1, 1, 1, 0, 0] => rate = 3/5 = 0.6
@@ -391,8 +392,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.75, Convert.ToDouble(result.DisparateImpactRatio), Tolerance);
     }
 
-    [Fact]
-    public void DisparateImpact_AllZeroPredictions_NosBias()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_AllZeroPredictions_NosBias()
     {
         // Both groups have rate 0.0 => maxRate = 0 => DI set to 1.0
         var detector = new DisparateImpactBiasDetector<double>(threshold: 0.8);
@@ -405,8 +406,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, Convert.ToDouble(result.DisparateImpactRatio), Tolerance);
     }
 
-    [Fact]
-    public void DisparateImpact_WithActualLabels_ComputesTPR()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_WithActualLabels_ComputesTPR()
     {
         // Group 0: pred=[1,0], actual=[1,0] => TPR=1/1=1.0
         // Group 1: pred=[0,1], actual=[1,0] => TPR=0/1=0.0
@@ -421,8 +422,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, Convert.ToDouble(result.GroupTruePositiveRates["1"]), Tolerance);
     }
 
-    [Fact]
-    public void DisparateImpact_StatisticalParityDifference_IsMaxMinusMin()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_StatisticalParityDifference_IsMaxMinusMin()
     {
         // Group 0: rate = 3/4 = 0.75
         // Group 1: rate = 1/4 = 0.25
@@ -440,8 +441,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region EqualOpportunityBiasDetector Tests
 
-    [Fact]
-    public void EqualOpportunity_EqualTPR_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task EqualOpportunity_EqualTPR_NoBias()
     {
         // Group 0: pred=[1,0], actual=[1,0] => TPR=1/1=1.0
         // Group 1: pred=[1,0], actual=[1,0] => TPR=1/1=1.0
@@ -457,8 +458,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, Convert.ToDouble(result.EqualOpportunityDifference), Tolerance);
     }
 
-    [Fact]
-    public void EqualOpportunity_UnequalTPR_BiasDetected()
+    [Fact(Timeout = 120000)]
+    public async Task EqualOpportunity_UnequalTPR_BiasDetected()
     {
         // Group 0: pred=[1,1], actual=[1,1] => TPR=2/2=1.0
         // Group 1: pred=[0,0], actual=[1,1] => TPR=0/2=0.0
@@ -474,8 +475,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, Convert.ToDouble(result.EqualOpportunityDifference), Tolerance);
     }
 
-    [Fact]
-    public void EqualOpportunity_ExactEODComputation()
+    [Fact(Timeout = 120000)]
+    public async Task EqualOpportunity_ExactEODComputation()
     {
         // Group 0: pred=[1,0,1], actual=[1,1,0] => TP=1, AP=2 => TPR=1/2=0.5
         // Group 1: pred=[1,1,0], actual=[1,0,1] => TP=1, AP=2 => TPR=1/2=0.5
@@ -491,8 +492,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.0, Convert.ToDouble(result.EqualOpportunityDifference), Tolerance);
     }
 
-    [Fact]
-    public void EqualOpportunity_WithoutActualLabels_NoBias()
+    [Fact(Timeout = 120000)]
+    public async Task EqualOpportunity_WithoutActualLabels_NoBias()
     {
         // Without actual labels, EO can't be computed
         var detector = new EqualOpportunityBiasDetector<double>(threshold: 0.1);
@@ -504,8 +505,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.False(result.HasBias);
     }
 
-    [Fact]
-    public void EqualOpportunity_CustomThreshold_RespectsThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task EqualOpportunity_CustomThreshold_RespectsThreshold()
     {
         // Group 0: pred=[1,0], actual=[1,1] => TPR = 1/2 = 0.5
         // Group 1: pred=[1,1], actual=[1,1] => TPR = 2/2 = 1.0
@@ -526,8 +527,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region BiasDetectorBase Tests
 
-    [Fact]
-    public void IsBetterBiasScore_LowerIsBetter_ReturnsTrueForLower()
+    [Fact(Timeout = 120000)]
+    public async Task IsBetterBiasScore_LowerIsBetter_ReturnsTrueForLower()
     {
         // DemographicParity has isLowerBiasBetter = true
         var detector = new DemographicParityBiasDetector<double>();
@@ -535,8 +536,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.False(detector.IsBetterBiasScore(0.2, 0.1)); // 0.2 > 0.1
     }
 
-    [Fact]
-    public void IsLowerBiasBetter_CorrectForDetectors()
+    [Fact(Timeout = 120000)]
+    public async Task IsLowerBiasBetter_CorrectForDetectors()
     {
         var dp = new DemographicParityBiasDetector<double>();
         var eo = new EqualOpportunityBiasDetector<double>();
@@ -545,16 +546,16 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.True(eo.IsLowerBiasBetter);
     }
 
-    [Fact]
-    public void DisparateImpact_IsLowerBiasBetter_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task DisparateImpact_IsLowerBiasBetter_IsFalse()
     {
         // DisparateImpact uses isLowerBiasBetter: false (higher ratio = less bias)
         var di = new DisparateImpactBiasDetector<double>();
         Assert.False(di.IsLowerBiasBetter);
     }
 
-    [Fact]
-    public void DetectBias_NullPredictions_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task DetectBias_NullPredictions_ThrowsException()
     {
         var detector = new DemographicParityBiasDetector<double>();
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0 });
@@ -563,8 +564,8 @@ public class InterpretabilityDeepMathIntegrationTests
             detector.DetectBias(null, sensitiveFeature));
     }
 
-    [Fact]
-    public void DetectBias_MismatchedLengths_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task DetectBias_MismatchedLengths_ThrowsException()
     {
         var detector = new DemographicParityBiasDetector<double>();
         var predictions = new Vector<double>(new[] { 1.0, 0.0, 1.0 });
@@ -578,8 +579,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region FairnessMetrics Data Class Tests
 
-    [Fact]
-    public void FairnessMetrics_StoresAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task FairnessMetrics_StoresAllValues()
     {
         var metrics = new FairnessMetrics<double>(
             demographicParity: 0.1,
@@ -598,8 +599,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(0.15, metrics.StatisticalParityDifference, Tolerance);
     }
 
-    [Fact]
-    public void FairnessMetrics_AdditionalMetrics_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task FairnessMetrics_AdditionalMetrics_Empty()
     {
         var metrics = new FairnessMetrics<double>(0, 0, 0, 0, 0, 0);
         Assert.NotNull(metrics.AdditionalMetrics);
@@ -610,8 +611,8 @@ public class InterpretabilityDeepMathIntegrationTests
 
     #region Cross-Component Integration Tests
 
-    [Fact]
-    public void EndToEnd_PerGroupMetrics_ConsistentWithHelper()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_PerGroupMetrics_ConsistentWithHelper()
     {
         // Manual computation matches detector result
         // Group 0: pred=[1,1,0], actual=[1,0,1]
@@ -641,8 +642,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, Convert.ToDouble(result.GroupPositiveRates["1"]), Tolerance);
     }
 
-    [Fact]
-    public void EndToEnd_ThreeGroups_BiasDetection()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_ThreeGroups_BiasDetection()
     {
         // 3 sensitive groups
         // Group 0 (indices 0,1): pred=[1,1] => rate=1.0
@@ -662,8 +663,8 @@ public class InterpretabilityDeepMathIntegrationTests
         Assert.Equal(1.0, Convert.ToDouble(result.StatisticalParityDifference), Tolerance);
     }
 
-    [Fact]
-    public void EndToEnd_AllDetectors_SameInput_ConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_AllDetectors_SameInput_ConsistentResults()
     {
         // All three detectors on the same data should provide consistent group rates
         var predictions = new Vector<double>(new[] { 1.0, 0.0, 1.0, 0.0, 0.0, 0.0 });

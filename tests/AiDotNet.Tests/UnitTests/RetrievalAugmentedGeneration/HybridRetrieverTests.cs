@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -142,8 +143,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_WithCustomTopK_SetsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomTopK_SetsCorrectly()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -171,8 +172,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact]
-        public void Constructor_WithCustomWeights_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomWeights_CreatesInstance()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_NullDenseRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullDenseRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var sparseRetriever = CreateMockRetriever();
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(null!, sparseRetriever));
         }
 
-        [Fact]
-        public void Constructor_NullSparseRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullSparseRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -209,8 +210,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(denseRetriever, null!));
         }
 
-        [Fact]
-        public void Constructor_ZeroTopK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ZeroTopK_ThrowsArgumentException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -221,8 +222,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(denseRetriever, sparseRetriever, defaultTopK: 0));
         }
 
-        [Fact]
-        public void Constructor_NegativeTopK_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NegativeTopK_ThrowsArgumentException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -237,8 +238,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
-        public void Retrieve_EmptyRetrievers_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyRetrievers_ReturnsEmptyResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_OnlyDenseResults_ReturnsWeightedDenseResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_OnlyDenseResults_ReturnsWeightedDenseResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -274,8 +275,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].RelevanceScore > results[1].RelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_OnlySparseResults_ReturnsWeightedSparseResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_OnlySparseResults_ReturnsWeightedSparseResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(); // Empty
@@ -295,8 +296,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Sparse weight is 0.3, so scores should be 0.8 * 0.3 = 0.24 and 0.6 * 0.3 = 0.18
         }
 
-        [Fact]
-        public void Retrieve_OverlappingResults_CombinesScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_OverlappingResults_CombinesScores()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -321,8 +322,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(doc1.RelevanceScore > 0.8); // Combined should be higher than either alone
         }
 
-        [Fact]
-        public void Retrieve_DisjointResults_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DisjointResults_ReturnsAllDocuments()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -341,8 +342,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(results, r => r.Id == "doc2");
         }
 
-        [Fact]
-        public void Retrieve_WithTopK_ReturnsLimitedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -362,8 +363,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
-        public void Retrieve_ResultsOrderedByScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ResultsOrderedByScore()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -388,8 +389,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_NullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -401,8 +402,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_EmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -414,8 +415,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
-        public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -431,8 +432,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Weight Combination Tests
 
-        [Fact]
-        public void Retrieve_EqualWeights_ProducesEqualContribution()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EqualWeights_ProducesEqualContribution()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -453,8 +454,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1.0, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_HigherDenseWeight_FavorsDenseResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_HigherDenseWeight_FavorsDenseResults()
         {
             // Arrange - Dense has lower raw score but should win with higher weight
             var denseRetriever = CreateMockRetriever(
@@ -476,8 +477,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_ZeroDenseWeight_OnlyUsesSparseScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroDenseWeight_OnlyUsesSparseScore()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -498,8 +499,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.5, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_ZeroSparseWeight_OnlyUsesDenseScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroSparseWeight_OnlyUsesDenseScore()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -524,8 +525,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_FiltersResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_FiltersResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetrieverWithMetadata(
@@ -546,8 +547,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 r.Metadata.TryGetValue("category", out var cat) && Equals(cat, "nature")));
         }
 
-        [Fact]
-        public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var denseRetriever = CreateMockRetrieverWithMetadata(
@@ -565,8 +566,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -584,8 +585,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(("doc1", "fox", 0.9));
@@ -601,8 +602,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_DocumentWithoutScore_NotIncluded()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentWithoutScore_NotIncluded()
         {
             // Arrange - Create a custom mock where some docs don't have scores
             var denseDocuments = new List<Document<double>>
@@ -627,8 +628,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_TopKGreaterThanResults_ReturnsAllAvailable()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TopKGreaterThanResults_ReturnsAllAvailable()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -645,8 +646,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -658,8 +659,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
-        public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever();
@@ -671,8 +672,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact]
-        public void Retrieve_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -697,8 +698,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_LargeNumberOfDocuments_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_LargeNumberOfDocuments_HandlesCorrectly()
         {
             // Arrange
             var denseDocsList = Enumerable.Range(1, 50)
@@ -725,8 +726,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_SameDocumentDifferentContent_UsesFirstEncountered()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SameDocumentDifferentContent_UsesFirstEncountered()
         {
             // Arrange - Same doc ID with different content in dense vs sparse
             var denseDocuments = new List<Document<double>>
@@ -757,8 +758,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Default Values Tests
 
-        [Fact]
-        public void Constructor_DefaultWeights_Uses70Dense30Sparse()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_DefaultWeights_Uses70Dense30Sparse()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(
@@ -777,8 +778,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1.0, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_WithDefaultTopK_UsesFive()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDefaultTopK_UsesFive()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(

@@ -9,6 +9,7 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Optimizers
 {
@@ -84,8 +85,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Batcher Creation Tests
 
-        [Fact]
-        public void CreateBatcher_WithDefaultOptions_CreatesBatcherCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithDefaultOptions_CreatesBatcherCorrectly()
         {
             // Arrange
             var inputData = CreateTestData(100, 10);
@@ -101,8 +102,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(4, batcher.NumBatches); // 100/32 = 4 (3 full + 1 partial)
         }
 
-        [Fact]
-        public void CreateBatcher_WithShuffleDisabled_ReturnsSequentialOrder()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithShuffleDisabled_ReturnsSequentialOrder()
         {
             // Arrange
             var inputData = CreateTestData(50, 5);
@@ -118,8 +119,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(Enumerable.Range(0, 50), allIndices);
         }
 
-        [Fact]
-        public void CreateBatcher_WithDropLast_DropsIncompleteBatches()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithDropLast_DropsIncompleteBatches()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);
@@ -137,8 +138,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact]
-        public void CreateBatcher_WithSeed_IsReproducible()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithSeed_IsReproducible()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);
@@ -159,8 +160,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Custom Sampler Tests
 
-        [Fact]
-        public void CreateBatcher_WithCustomSampler_UsesSamplerIndices()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithCustomSampler_UsesSamplerIndices()
         {
             // Arrange - Create data matching sampler size to avoid batcher/sampler size mismatch
             var inputData = CreateTestData(50, 5);
@@ -180,8 +181,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(Enumerable.Range(0, 50), allIndices);
         }
 
-        [Fact]
-        public void CreateBatcher_WithRandomSampler_ShufflesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CreateBatcher_WithRandomSampler_ShufflesCorrectly()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Epoch Notification Tests
 
-        [Fact]
-        public void NotifyEpochStart_CallsSamplerOnEpochStart()
+        [Fact(Timeout = 60000)]
+        public async Task NotifyEpochStart_CallsSamplerOnEpochStart()
         {
             // Arrange
             var trackingSampler = new TrackingDataSampler(100);
@@ -218,8 +219,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(new[] { 0, 1, 2 }, trackingSampler.EpochStartCalls);
         }
 
-        [Fact]
-        public void CurriculumSampler_EpochNotification_AffectsSampling()
+        [Fact(Timeout = 60000)]
+        public async Task CurriculumSampler_EpochNotification_AffectsSampling()
         {
             // Arrange
             var difficulties = new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(lastBatchExpectedSize, batches[batches.Count - 1].Indices.Length);
         }
 
-        [Fact]
-        public void BatchSizeNegativeOne_ForFullBatch_UsesAllData()
+        [Fact(Timeout = 60000)]
+        public async Task BatchSizeNegativeOne_ForFullBatch_UsesAllData()
         {
             // Arrange - For second-order optimizers, BatchSize = -1 means full batch
             var inputData = CreateTestData(100, 5);
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Batch Data Extraction Tests
 
-        [Fact]
-        public void GetBatches_ExtractedDataMatchesIndices()
+        [Fact(Timeout = 60000)]
+        public async Task GetBatches_ExtractedDataMatchesIndices()
         {
             // Arrange
             var inputData = CreateTestData(10, 3);
@@ -327,8 +328,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(inputData.YTrain[0], firstBatch.YBatch[0]);
         }
 
-        [Fact]
-        public void GetBatches_WithShuffle_DataMatchesShuffledIndices()
+        [Fact(Timeout = 60000)]
+        public async Task GetBatches_WithShuffle_DataMatchesShuffledIndices()
         {
             // Arrange
             var inputData = CreateTestData(10, 3);
@@ -361,8 +362,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Optimizer Options Default BatchSize Tests
 
-        [Fact]
-        public void AdamOptimizerOptions_DefaultBatchSize_Is32()
+        [Fact(Timeout = 60000)]
+        public async Task AdamOptimizerOptions_DefaultBatchSize_Is32()
         {
             // Arrange
             var options = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -371,8 +372,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, options.BatchSize);
         }
 
-        [Fact]
-        public void SGDOptimizerOptions_DefaultBatchSize_Is1()
+        [Fact(Timeout = 60000)]
+        public async Task SGDOptimizerOptions_DefaultBatchSize_Is1()
         {
             // Arrange
             var options = new StochasticGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -381,8 +382,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(1, options.BatchSize);
         }
 
-        [Fact]
-        public void MiniBatchGDOptimizerOptions_DefaultBatchSize_Is32()
+        [Fact(Timeout = 60000)]
+        public async Task MiniBatchGDOptimizerOptions_DefaultBatchSize_Is32()
         {
             // Arrange
             var options = new MiniBatchGradientDescentOptions<double, Matrix<double>, Vector<double>>();
@@ -391,8 +392,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, options.BatchSize);
         }
 
-        [Fact]
-        public void BFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task BFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange - Second-order optimizers use full batch
             var options = new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -401,8 +402,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact]
-        public void LBFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task LBFGSOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
             var options = new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -411,8 +412,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact]
-        public void NewtonMethodOptimizerOptions_DefaultBatchSize_IsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task NewtonMethodOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
             var options = new NewtonMethodOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -421,8 +422,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(-1, options.BatchSize);
         }
 
-        [Fact]
-        public void TrustRegionOptimizerOptions_DefaultBatchSize_IsNegativeOne()
+        [Fact(Timeout = 60000)]
+        public async Task TrustRegionOptimizerOptions_DefaultBatchSize_IsNegativeOne()
         {
             // Arrange
             var options = new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>();
@@ -435,8 +436,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region WithSampler and WithCurriculumLearning Tests
 
-        [Fact]
-        public void WithSampler_CreatesNewBatcherWithSampler()
+        [Fact(Timeout = 60000)]
+        public async Task WithSampler_CreatesNewBatcherWithSampler()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);
@@ -453,8 +454,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(newBatcher);
         }
 
-        [Fact]
-        public void WithClassBalancing_CreatesWeightedSampler()
+        [Fact(Timeout = 60000)]
+        public async Task WithClassBalancing_CreatesWeightedSampler()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);
@@ -474,8 +475,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotSame(batcher, balancedBatcher);
         }
 
-        [Fact]
-        public void WithCurriculumLearning_CreatesCurriculumSampler()
+        [Fact(Timeout = 60000)]
+        public async Task WithCurriculumLearning_CreatesCurriculumSampler()
         {
             // Arrange
             var inputData = CreateTestData(100, 5);

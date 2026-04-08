@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ActivationFunctions
 {
@@ -14,8 +15,8 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(Math.Abs(actual - expected) <= tol, $"Actual {actual} != Expected {expected}");
         }
 
-        [Fact]
-        public void ReLU_Activate_And_Derivative()
+        [Fact(Timeout = 60000)]
+        public async Task ReLU_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ReLU);
             AssertClose(fn.Activate(-1.0), 0.0);
@@ -23,8 +24,8 @@ namespace AiDotNet.Tests.ActivationFunctions
             AssertClose(fn.Derivative(-1.0), 0.0);
         }
 
-        [Fact]
-        public void Sigmoid_Activate_And_Derivative()
+        [Fact(Timeout = 60000)]
+        public async Task Sigmoid_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Sigmoid);
             var y = fn.Activate(0.0);
@@ -33,29 +34,29 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(dy > 0.0 && dy < 0.3);
         }
 
-        [Fact]
-        public void Tanh_Activate_And_Derivative()
+        [Fact(Timeout = 60000)]
+        public async Task Tanh_Activate_And_Derivative()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Tanh);
             AssertClose(fn.Activate(0.0), 0.0);
         }
 
-        [Fact]
-        public void Identity_Activate()
+        [Fact(Timeout = 60000)]
+        public async Task Identity_Activate()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Linear);
             AssertClose(fn.Activate(3.14), 3.14);
         }
 
-        [Fact]
-        public void LeakyRelu_Activate()
+        [Fact(Timeout = 60000)]
+        public async Task LeakyRelu_Activate()
         {
             var fn = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.LeakyReLU);
             Assert.True(fn.Activate(-2.0) < 0 && fn.Activate(2.0) > 0);
         }
 
-        [Fact]
-        public void ELU_SELU_Activate()
+        [Fact(Timeout = 60000)]
+        public async Task ELU_SELU_Activate()
         {
             var elu = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.ELU);
             var selu = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.SELU);
@@ -63,8 +64,8 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(selu.Activate(-1.0) < 0.0);
         }
 
-        [Fact]
-        public void Softplus_SoftSign_Swish_GELU()
+        [Fact(Timeout = 60000)]
+        public async Task Softplus_SoftSign_Swish_GELU()
         {
             var sp = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Softplus);
             var ss = ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.SoftSign);
@@ -76,8 +77,8 @@ namespace AiDotNet.Tests.ActivationFunctions
             Assert.True(ge.Activate(1.0) > 0.0);
         }
 
-        [Fact]
-        public void Vector_Softmax_Factory()
+        [Fact(Timeout = 60000)]
+        public async Task Vector_Softmax_Factory()
         {
             var vfn = ActivationFunctionFactory<double>.CreateVectorActivationFunction(ActivationFunction.Softmax);
             Assert.IsAssignableFrom<IVectorActivationFunction<double>>(vfn);
@@ -87,8 +88,8 @@ namespace AiDotNet.Tests.ActivationFunctions
         // IdentityActivation.Activate(Tensor<T>) — PR change coverage
         // ----------------------------------------------------------------
 
-        [Fact]
-        public void IdentityActivation_TensorActivate_ReturnsSameReference()
+        [Fact(Timeout = 60000)]
+        public async Task IdentityActivation_TensorActivate_ReturnsSameReference()
         {
             // The new override must return the exact same object (no allocation).
             // This is required to preserve the autodiff tape chain.
@@ -103,8 +104,8 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the exact same tensor reference — no copy.");
         }
 
-        [Fact]
-        public void IdentityActivation_TensorActivate_With1DTensor_ReturnsSameReference()
+        [Fact(Timeout = 60000)]
+        public async Task IdentityActivation_TensorActivate_With1DTensor_ReturnsSameReference()
         {
             var fn = new IdentityActivation<double>();
             var input = new Tensor<double>([8]);
@@ -116,8 +117,8 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the same reference for 1-D tensors.");
         }
 
-        [Fact]
-        public void IdentityActivation_TensorActivate_With3DTensor_ReturnsSameReference()
+        [Fact(Timeout = 60000)]
+        public async Task IdentityActivation_TensorActivate_With3DTensor_ReturnsSameReference()
         {
             var fn = new IdentityActivation<double>();
             var input = new Tensor<double>([2, 3, 4]);
@@ -130,8 +131,8 @@ namespace AiDotNet.Tests.ActivationFunctions
                 "IdentityActivation.Activate(Tensor) must return the same reference for 3-D tensors.");
         }
 
-        [Fact]
-        public void IdentityActivation_TensorActivate_DataIsUnchanged()
+        [Fact(Timeout = 60000)]
+        public async Task IdentityActivation_TensorActivate_DataIsUnchanged()
         {
             // Even though it's the same reference, verify values are untouched.
             var fn = new IdentityActivation<double>();
@@ -144,8 +145,8 @@ namespace AiDotNet.Tests.ActivationFunctions
                 Assert.Equal(data[i], output.GetFlat(i));
         }
 
-        [Fact]
-        public void IdentityActivation_TensorActivate_WithFloatType_ReturnsSameReference()
+        [Fact(Timeout = 60000)]
+        public async Task IdentityActivation_TensorActivate_WithFloatType_ReturnsSameReference()
         {
             var fn = new IdentityActivation<float>();
             var input = new Tensor<float>([4]);

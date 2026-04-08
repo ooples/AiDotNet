@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Issue357;
 
@@ -12,8 +13,8 @@ public class NodeModificationIntegrationTests
 {
     #region Construction and Default Values
 
-    [Fact]
-    public void NodeModification_DefaultConstructor_CreatesWithDefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_DefaultConstructor_CreatesWithDefaultValues()
     {
         var modification = new NodeModification();
 
@@ -26,8 +27,8 @@ public class NodeModificationIntegrationTests
 
     #region NodeId Property
 
-    [Fact]
-    public void NodeModification_NodeId_CanBeSetAndRetrieved()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NodeId_CanBeSetAndRetrieved()
     {
         var modification = new NodeModification
         {
@@ -37,8 +38,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(42, modification.NodeId);
     }
 
-    [Fact]
-    public void NodeModification_NodeId_AcceptsZero()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NodeId_AcceptsZero()
     {
         var modification = new NodeModification
         {
@@ -48,8 +49,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(0, modification.NodeId);
     }
 
-    [Fact]
-    public void NodeModification_NodeId_AcceptsNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NodeId_AcceptsNegativeValues()
     {
         // While unusual, negative IDs should be accepted by the data structure
         var modification = new NodeModification
@@ -60,8 +61,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(-1, modification.NodeId);
     }
 
-    [Fact]
-    public void NodeModification_NodeId_AcceptsLargeValues()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NodeId_AcceptsLargeValues()
     {
         var modification = new NodeModification
         {
@@ -75,8 +76,8 @@ public class NodeModificationIntegrationTests
 
     #region ModificationType Property
 
-    [Fact]
-    public void NodeModification_Type_AddNode()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_Type_AddNode()
     {
         var modification = new NodeModification
         {
@@ -86,8 +87,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ModificationType.AddNode, modification.Type);
     }
 
-    [Fact]
-    public void NodeModification_Type_RemoveNode()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_Type_RemoveNode()
     {
         var modification = new NodeModification
         {
@@ -97,8 +98,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ModificationType.RemoveNode, modification.Type);
     }
 
-    [Fact]
-    public void NodeModification_Type_ChangeNodeType()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_Type_ChangeNodeType()
     {
         var modification = new NodeModification
         {
@@ -126,16 +127,16 @@ public class NodeModificationIntegrationTests
 
     #region NewNodeType Property
 
-    [Fact]
-    public void NodeModification_NewNodeType_DefaultsToNull()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NewNodeType_DefaultsToNull()
     {
         var modification = new NodeModification();
 
         Assert.Null(modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_NewNodeType_CanBeSetToConstant()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NewNodeType_CanBeSetToConstant()
     {
         var modification = new NodeModification
         {
@@ -145,8 +146,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ExpressionNodeType.Constant, modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_NewNodeType_CanBeSetToVariable()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NewNodeType_CanBeSetToVariable()
     {
         var modification = new NodeModification
         {
@@ -173,8 +174,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(nodeType, modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_NewNodeType_CanBeSetToNull()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_NewNodeType_CanBeSetToNull()
     {
         var modification = new NodeModification
         {
@@ -190,8 +191,8 @@ public class NodeModificationIntegrationTests
 
     #region Combined Properties
 
-    [Fact]
-    public void NodeModification_AddNodeModification_AllPropertiesSet()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_AddNodeModification_AllPropertiesSet()
     {
         var modification = new NodeModification
         {
@@ -205,8 +206,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ExpressionNodeType.Multiply, modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_RemoveNodeModification_NewNodeTypeNotRelevant()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_RemoveNodeModification_NewNodeTypeNotRelevant()
     {
         var modification = new NodeModification
         {
@@ -220,8 +221,8 @@ public class NodeModificationIntegrationTests
         Assert.Null(modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_ChangeNodeType_RequiresNewNodeType()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_ChangeNodeType_RequiresNewNodeType()
     {
         var modification = new NodeModification
         {
@@ -240,8 +241,8 @@ public class NodeModificationIntegrationTests
 
     #region Usage Scenarios
 
-    [Fact]
-    public void NodeModification_ChangeOperatorFromAddToMultiply()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_ChangeOperatorFromAddToMultiply()
     {
         // Scenario: Change a node from addition to multiplication
         var modification = new NodeModification
@@ -256,8 +257,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ExpressionNodeType.Multiply, modification.NewNodeType);
     }
 
-    [Fact]
-    public void NodeModification_RemoveConstantNode()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_RemoveConstantNode()
     {
         // Scenario: Remove a constant node from the tree
         var modification = new NodeModification
@@ -270,8 +271,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ModificationType.RemoveNode, modification.Type);
     }
 
-    [Fact]
-    public void NodeModification_AddVariableNode()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_AddVariableNode()
     {
         // Scenario: Add a new variable node to the tree
         var modification = new NodeModification
@@ -290,8 +291,8 @@ public class NodeModificationIntegrationTests
 
     #region Collection Usage
 
-    [Fact]
-    public void NodeModification_CanBeStoredInList()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_CanBeStoredInList()
     {
         var modifications = new List<NodeModification>
         {
@@ -306,8 +307,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(ModificationType.ChangeNodeType, modifications[2].Type);
     }
 
-    [Fact]
-    public void NodeModification_CanBeFilteredByType()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_CanBeFilteredByType()
     {
         var modifications = new List<NodeModification>
         {
@@ -324,8 +325,8 @@ public class NodeModificationIntegrationTests
         Assert.Equal(3, addNodeMods[1].NodeId);
     }
 
-    [Fact]
-    public void NodeModification_CanBeGroupedByNodeId()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_CanBeGroupedByNodeId()
     {
         var modifications = new List<NodeModification>
         {
@@ -345,8 +346,8 @@ public class NodeModificationIntegrationTests
 
     #region Integration with ExpressionTreeVelocity
 
-    [Fact]
-    public void NodeModification_WorksWithExpressionTreeVelocity()
+    [Fact(Timeout = 120000)]
+    public async Task NodeModification_WorksWithExpressionTreeVelocity()
     {
         var velocity = new ExpressionTreeVelocity<double>();
 

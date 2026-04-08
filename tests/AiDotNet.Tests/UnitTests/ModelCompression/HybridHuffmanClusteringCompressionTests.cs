@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
@@ -10,8 +11,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new HybridHuffmanClusteringCompression<double>();
@@ -20,8 +21,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithCustomParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -39,8 +40,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compress Tests
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -58,8 +59,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>();
@@ -68,8 +69,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>();
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => compression.Compress(weights));
         }
 
-        [Fact]
-        public void Compress_ProducesHybridMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ProducesHybridMetadata()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -103,8 +104,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Decompress Tests
 
-        [Fact]
-        public void Decompress_ReconstructsWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsWeights()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -122,8 +123,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -136,8 +137,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void Decompress_WithNullMetadata_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullMetadata_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>();
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GetCompressedSize Tests
 
-        [Fact]
-        public void GetCompressedSize_ReturnsPositiveSize()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsPositiveSize()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
-        public void GetCompressedSize_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -184,8 +185,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.GetCompressedSize((Vector<double>)null!, metadata));
         }
 
-        [Fact]
-        public void GetCompressedSize_WithNullMetadata_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_WithNullMetadata_ThrowsException()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>();
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Round-Trip Tests
 
-        [Fact]
-        public void CompressAndDecompress_RoundTrip_PreservesApproximateValues()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_RoundTrip_PreservesApproximateValues()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<double>(
@@ -230,8 +231,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new HybridHuffmanClusteringCompression<float>(
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Metadata Tests
 
-        [Fact]
-        public void HybridCompressionMetadata_Generic_Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Generic_Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var clusteringMetadata = new WeightClusteringMetadata<double>(
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10, metadata.OriginalLength);
         }
 
-        [Fact]
-        public void HybridCompressionMetadata_Generic_WithNullClustering_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Generic_WithNullClustering_ThrowsException()
         {
             // Arrange
             var huffmanMetadata = new HuffmanEncodingMetadata<double>(
@@ -285,8 +286,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HybridCompressionMetadata<double>(null!, huffmanMetadata, 10));
         }
 
-        [Fact]
-        public void HybridCompressionMetadata_Generic_WithNullHuffman_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Generic_WithNullHuffman_ThrowsException()
         {
             // Arrange
             var clusteringMetadata = new WeightClusteringMetadata<double>(
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HybridCompressionMetadata<double>(clusteringMetadata, null!, 10));
         }
 
-        [Fact]
-        public void HybridCompressionMetadata_Generic_GetMetadataSize_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Generic_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
             var clusteringMetadata = new WeightClusteringMetadata<double>(
@@ -317,8 +318,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         }
 
 #pragma warning disable CS0618
-        [Fact]
-        public void HybridCompressionMetadata_Legacy_Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Legacy_Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var metadata = new HybridCompressionMetadata(
@@ -330,16 +331,16 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(metadata.HuffmanMetadata);
         }
 
-        [Fact]
-        public void HybridCompressionMetadata_Legacy_WithNullClustering_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Legacy_WithNullClustering_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new HybridCompressionMetadata(null!, new object()));
         }
 
-        [Fact]
-        public void HybridCompressionMetadata_Legacy_WithNullHuffman_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task HybridCompressionMetadata_Legacy_WithNullHuffman_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>

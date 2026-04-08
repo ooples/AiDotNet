@@ -212,8 +212,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -226,8 +226,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_WithAdvancedEntityExtractionDisabled_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithAdvancedEntityExtractionDisabled_CreatesInstance()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -240,8 +240,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange
             var embeddingModel = new MockEmbeddingModel();
@@ -251,8 +251,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRetriever<double>(null!, embeddingModel));
         }
 
-        [Fact]
-        public void Constructor_NullEmbeddingModel_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -262,8 +262,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRetriever<double>(store, null!));
         }
 
-        [Fact]
-        public void Constructor_BothParametersNull_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_BothParametersNull_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
@@ -274,8 +274,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
-        public void Retrieve_EmptyStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -289,8 +289,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_SingleDocument_ReturnsDocument()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleDocument_ReturnsDocument()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -306,8 +306,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_MultipleDocuments_ReturnsRankedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleDocuments_ReturnsRankedResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -326,8 +326,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_WithTopK_ReturnsLimitedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -346,8 +346,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
-        public void Retrieve_NullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -359,8 +359,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_EmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -372,8 +372,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
-        public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -385,8 +385,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("   ").ToList());
         }
 
-        [Fact]
-        public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -398,8 +398,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
-        public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -415,8 +415,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Entity Extraction Tests
 
-        [Fact]
-        public void Retrieve_ProperNounsInQuery_ExtractsEntities()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ProperNounsInQuery_ExtractsEntities()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -432,8 +432,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_QuotedTermsInQuery_ExtractsEntities()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_QuotedTermsInQuery_ExtractsEntities()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -448,8 +448,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_YearsInQuery_ExtractsWithAdvancedMode()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_YearsInQuery_ExtractsWithAdvancedMode()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -464,8 +464,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_AbbreviationsInQuery_ExtractsWithAdvancedMode()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AbbreviationsInQuery_ExtractsWithAdvancedMode()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -480,8 +480,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_NoEntitiesInQuery_StillWorks()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoEntitiesInQuery_StillWorks()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -500,8 +500,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Entity Match Scoring Tests
 
-        [Fact]
-        public void Retrieve_DocumentWithEntity_ScoresHigher()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentWithEntity_ScoresHigher()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -518,8 +518,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_DocumentWithMultipleEntities_ScoresHigher()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentWithMultipleEntities_ScoresHigher()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -537,8 +537,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_DocumentsHaveRelevanceScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -558,8 +558,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Relationship Scoring Tests
 
-        [Fact]
-        public void Retrieve_EntitiesCloseProximity_ScoresHigher()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EntitiesCloseProximity_ScoresHigher()
         {
             // Arrange - doc1 has Einstein and Princeton close together
             var store = CreateStoreWithDocuments(
@@ -575,8 +575,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_SingleEntity_NoRelationshipBoost()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleEntity_NoRelationshipBoost()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -592,8 +592,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_MultipleEntityPairs_CalculatesRelationships()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleEntityPairs_CalculatesRelationships()
         {
             // Arrange - document with multiple related entities
             var store = CreateStoreWithDocuments(
@@ -613,8 +613,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
@@ -632,8 +632,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
@@ -649,8 +649,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -667,8 +667,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "content"));
@@ -684,8 +684,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_LowercaseProperNouns_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_LowercaseProperNouns_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -700,8 +700,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_SpecialCharacters_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SpecialCharacters_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -716,8 +716,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -738,8 +738,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -755,8 +755,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_LongDocument_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_LongDocument_HandlesCorrectly()
         {
             // Arrange
             var longContent = "Albert Einstein " + string.Join(" ", Enumerable.Repeat("physics research", 100)) + " Princeton";
@@ -772,8 +772,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
-        public void Retrieve_UnicodeEntities_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_UnicodeEntities_HandlesCorrectly()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -792,8 +792,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Advanced Entity Extraction Mode Tests
 
-        [Fact]
-        public void Retrieve_AdvancedModeEnabled_ExtractsYears()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AdvancedModeEnabled_ExtractsYears()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -808,8 +808,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_AdvancedModeDisabled_StillWorksWithProperNouns()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AdvancedModeDisabled_StillWorksWithProperNouns()
         {
             // Arrange
             var store = CreateStoreWithDocuments(
@@ -824,8 +824,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
-        public void Retrieve_AdvancedModeEnabled_ExtractsAbbreviations()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AdvancedModeEnabled_ExtractsAbbreviations()
         {
             // Arrange
             var store = CreateStoreWithDocuments(

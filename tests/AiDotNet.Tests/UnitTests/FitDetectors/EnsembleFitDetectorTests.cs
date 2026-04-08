@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -42,16 +43,16 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 validActual, validPredicted);
         }
 
-        [Fact]
-        public void Constructor_WithNullDetectors_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullDetectors_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(null!));
         }
 
-        [Fact]
-        public void Constructor_WithEmptyDetectorList_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithEmptyDetectorList_ThrowsArgumentException()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>();
@@ -61,8 +62,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(detectors));
         }
 
-        [Fact]
-        public void Constructor_WithValidDetectors_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidDetectors_CreatesInstance()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -77,8 +78,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(ensemble);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(ensemble);
         }
 
-        [Fact]
-        public void DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Throws<ArgumentNullException>(() => ensemble.DetectFit(null!));
         }
 
-        [Fact]
-        public void DetectFit_WithSingleDetector_ReturnsSameFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithSingleDetector_ReturnsSameFitType()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -131,8 +132,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(FitType.GoodFit, result.FitType);
         }
 
-        [Fact]
-        public void DetectFit_WithMultipleDetectorsReturningGoodFit_ReturnsGoodFit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithMultipleDetectorsReturningGoodFit_ReturnsGoodFit()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(FitType.GoodFit, result.FitType);
         }
 
-        [Fact]
-        public void DetectFit_WithMixedFitTypes_CombinesResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithMixedFitTypes_CombinesResults()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_CalculatesWeightedConfidence()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_CalculatesWeightedConfidence()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -197,8 +198,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_WithDifferentWeights_AffectsResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithDifferentWeights_AffectsResult()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -220,8 +221,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
-        public void DetectFit_CombinesRecommendationsFromAllDetectors()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_CombinesRecommendationsFromAllDetectors()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -242,8 +243,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 3); // At least 3 unique recommendations
         }
 
-        [Fact]
-        public void DetectFit_RemovesDuplicateRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_RemovesDuplicateRecommendations()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -265,8 +266,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(sameRecCount <= 1, "Duplicate recommendations should be removed");
         }
 
-        [Fact]
-        public void DetectFit_RespectsMaxRecommendationsLimit()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_RespectsMaxRecommendationsLimit()
         {
             // Arrange
             var recommendations = new List<string>();
@@ -295,8 +296,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count <= 5);
         }
 
-        [Fact]
-        public void DetectFit_IncludesIndividualResultsInAdditionalInfo()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesIndividualResultsInAdditionalInfo()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -317,8 +318,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.AdditionalInfo.ContainsKey("DetectorWeights"));
         }
 
-        [Fact]
-        public void DetectFit_IncludesGeneralRecommendationBasedOnFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_IncludesGeneralRecommendationBasedOnFitType()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ResultContainsAllRequiredFields()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
             var detectors = new List<IFitDetector<double, Matrix<double>, Vector<double>>>

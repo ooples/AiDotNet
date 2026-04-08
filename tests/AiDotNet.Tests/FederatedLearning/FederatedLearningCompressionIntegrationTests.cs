@@ -3,6 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -60,7 +61,7 @@ public class FederatedLearningCompressionIntegrationTests
         Assert.All(metadata.RoundMetrics, r => Assert.True(r.UploadCompressionRatio <= 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithUniformQuantizationAndZeroDelta_Completes()
     {
         var (x, y) = CreateToyData();

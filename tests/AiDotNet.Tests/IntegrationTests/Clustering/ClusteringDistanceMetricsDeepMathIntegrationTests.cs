@@ -1,5 +1,6 @@
 using AiDotNet.Clustering.DistanceMetrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
@@ -34,8 +35,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Euclidean Distance Tests ────────────────────────────────────────────
 
-    [Fact]
-    public void Euclidean_PythagoreanTriple_345()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_PythagoreanTriple_345()
     {
         // dist((0,0), (3,4)) = sqrt(9+16) = 5
         var a = Vec(0, 0);
@@ -45,16 +46,16 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(5.0, eucl.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Euclidean_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_IdenticalVectors_ReturnsZero()
     {
         var a = Vec(3, 7, -2);
         var eucl = new EuclideanDistance<double>();
         Assert.Equal(0.0, eucl.Compute(a, a), Tolerance);
     }
 
-    [Fact]
-    public void Euclidean_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_Symmetric()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 5, 6);
@@ -63,8 +64,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(eucl.Compute(a, b), eucl.Compute(b, a), Tolerance);
     }
 
-    [Fact]
-    public void Euclidean_TriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_TriangleInequality()
     {
         var a = Vec(0, 0);
         var b = Vec(3, 4);
@@ -79,8 +80,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
             $"Triangle inequality violated: d(a,c)={ac} > d(a,b)+d(b,c)={ab + bc}");
     }
 
-    [Fact]
-    public void Euclidean_Squared_EqualsSquareOfDistance()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_Squared_EqualsSquareOfDistance()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -92,8 +93,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(dist * dist, distSq, Tolerance);
     }
 
-    [Fact]
-    public void Euclidean_HandCalculated_3D()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_HandCalculated_3D()
     {
         // dist((1,2,3), (4,6,3)) = sqrt((3)^2 + (4)^2 + 0^2) = sqrt(9+16) = 5
         var a = Vec(1, 2, 3);
@@ -105,8 +106,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Manhattan Distance Tests ────────────────────────────────────────────
 
-    [Fact]
-    public void Manhattan_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Manhattan_HandCalculated()
     {
         // |3-0| + |4-0| = 7
         var a = Vec(0, 0);
@@ -116,8 +117,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(7.0, manh.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Manhattan_AlwaysGreaterOrEqualToEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task Manhattan_AlwaysGreaterOrEqualToEuclidean()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -132,8 +133,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
             $"Manhattan should be >= Euclidean. Manhattan={manhDist}, Euclidean={euclDist}");
     }
 
-    [Fact]
-    public void Manhattan_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Manhattan_Symmetric()
     {
         var a = Vec(1, -2, 3);
         var b = Vec(-4, 5, 6);
@@ -142,8 +143,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(manh.Compute(a, b), manh.Compute(b, a), Tolerance);
     }
 
-    [Fact]
-    public void Manhattan_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Manhattan_IdenticalVectors_ReturnsZero()
     {
         var a = Vec(5, -3, 7);
         var manh = new ManhattanDistance<double>();
@@ -152,8 +153,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Chebyshev Distance Tests ────────────────────────────────────────────
 
-    [Fact]
-    public void Chebyshev_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Chebyshev_HandCalculated()
     {
         // max(|3-0|, |4-0|) = max(3, 4) = 4
         var a = Vec(0, 0);
@@ -163,8 +164,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(4.0, cheb.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Chebyshev_AlwaysLessOrEqualToManhattan()
+    [Fact(Timeout = 120000)]
+    public async Task Chebyshev_AlwaysLessOrEqualToManhattan()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -179,8 +180,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
             $"Chebyshev should be <= Manhattan. Chebyshev={chebDist}, Manhattan={manhDist}");
     }
 
-    [Fact]
-    public void Chebyshev_AlwaysLessOrEqualToEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task Chebyshev_AlwaysLessOrEqualToEuclidean()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -195,8 +196,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
             $"Chebyshev should be <= Euclidean. Chebyshev={chebDist}, Euclidean={euclDist}");
     }
 
-    [Fact]
-    public void Chebyshev_SingleDimension_EqualsAbsDiff()
+    [Fact(Timeout = 120000)]
+    public async Task Chebyshev_SingleDimension_EqualsAbsDiff()
     {
         var a = Vec(3.0);
         var b = Vec(-7.0);
@@ -207,8 +208,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Cosine Distance Tests ───────────────────────────────────────────────
 
-    [Fact]
-    public void Cosine_ParallelVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_ParallelVectors_ReturnsZero()
     {
         // Same direction → similarity = 1, distance = 0
         var a = Vec(1, 2, 3);
@@ -218,8 +219,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, cosine.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Cosine_PerpendicularVectors_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_PerpendicularVectors_ReturnsOne()
     {
         // 90 degrees → similarity = 0, distance = 1
         var a = Vec(1, 0);
@@ -229,8 +230,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, cosine.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Cosine_OppositeVectors_ReturnsTwo()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_OppositeVectors_ReturnsTwo()
     {
         // 180 degrees → similarity = -1, distance = 2
         var a = Vec(1, 0);
@@ -240,8 +241,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, cosine.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Cosine_MagnitudeIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_MagnitudeIndependent()
     {
         // Cosine distance should be the same regardless of vector magnitude
         var a = Vec(1, 2, 3);
@@ -256,8 +257,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(original, scaled, Tolerance);
     }
 
-    [Fact]
-    public void Cosine_HandCalculated_45Degrees()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_HandCalculated_45Degrees()
     {
         // cos(45°) = 1/sqrt(2) ≈ 0.7071
         // Vectors: (1,0) and (1,1)
@@ -272,8 +273,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(expected, cosine.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Cosine_Similarity_PlusDistance_EqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_Similarity_PlusDistance_EqualsOne()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 5, 6);
@@ -285,8 +286,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, distance + similarity, Tolerance);
     }
 
-    [Fact]
-    public void Cosine_ZeroVector_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_ZeroVector_ReturnsOne()
     {
         var a = Vec(0, 0, 0);
         var b = Vec(1, 2, 3);
@@ -297,8 +298,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Minkowski Distance Tests ────────────────────────────────────────────
 
-    [Fact]
-    public void Minkowski_P1_MatchesManhattan()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_P1_MatchesManhattan()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -309,8 +310,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(manh.Compute(a, b), mink.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Minkowski_P2_MatchesEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_P2_MatchesEuclidean()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -321,8 +322,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(eucl.Compute(a, b), mink.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Minkowski_LargeP_ApproachesChebyshev()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_LargeP_ApproachesChebyshev()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 6, 3);
@@ -337,8 +338,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(chebDist, minkDist, 0.01);
     }
 
-    [Fact]
-    public void Minkowski_P3_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_P3_HandCalculated()
     {
         // L3 distance: (|1-4|^3 + |2-6|^3 + |3-3|^3)^(1/3)
         // = (27 + 64 + 0)^(1/3) = 91^(1/3) ≈ 4.4979
@@ -350,14 +351,14 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(expected, mink.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Minkowski_InvalidP_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_InvalidP_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new MinkowskiDistance<double>(p: 0.5));
     }
 
-    [Fact]
-    public void Minkowski_IncreasingP_DistanceDecreases()
+    [Fact(Timeout = 120000)]
+    public async Task Minkowski_IncreasingP_DistanceDecreases()
     {
         // For any two points: L1 >= L2 >= ... >= Linf
         var a = Vec(1, 2, 3);
@@ -377,8 +378,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Mahalanobis Distance Tests ──────────────────────────────────────────
 
-    [Fact]
-    public void Mahalanobis_IdentityCovariance_MatchesEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task Mahalanobis_IdentityCovariance_MatchesEuclidean()
     {
         // With identity inverse covariance, Mahalanobis = Euclidean
         var identity = new Matrix<double>(2, 2);
@@ -394,8 +395,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(eucl.Compute(a, b), maha.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Mahalanobis_NoCovariance_FallsBackToEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task Mahalanobis_NoCovariance_FallsBackToEuclidean()
     {
         var a = Vec(0, 0);
         var b = Vec(3, 4);
@@ -406,8 +407,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(eucl.Compute(a, b), maha.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Mahalanobis_ScaledCovariance_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Mahalanobis_ScaledCovariance_HandCalculated()
     {
         // Inverse covariance = diag(4, 1) means x-dimension is "4x more important"
         // d^2 = (3-0)^2*4 + (4-0)^2*1 = 36 + 16 = 52
@@ -423,8 +424,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(52), maha.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Mahalanobis_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Mahalanobis_Symmetric()
     {
         var invCov = new Matrix<double>(2, 2);
         invCov[0, 0] = 2; invCov[0, 1] = 0.5;
@@ -439,8 +440,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Pairwise Distance Tests ─────────────────────────────────────────────
 
-    [Fact]
-    public void Euclidean_PairwiseMatrix_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_PairwiseMatrix_Symmetric()
     {
         var data = MakeMatrix(new double[,] { { 0, 0 }, { 3, 4 }, { 6, 0 } });
 
@@ -461,8 +462,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(6.0, pairwise[0, 2], Tolerance); // (0,0)→(6,0) = 6
     }
 
-    [Fact]
-    public void Euclidean_ComputeToAll_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_ComputeToAll_HandCalculated()
     {
         var point = Vec(0, 0);
         var data = MakeMatrix(new double[,] { { 3, 4 }, { 6, 0 }, { 0, 5 } });
@@ -475,8 +476,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(5.0, distances[2], Tolerance); // (0,0)→(0,5) = 5
     }
 
-    [Fact]
-    public void PairwiseTwoMatrices_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task PairwiseTwoMatrices_HandCalculated()
     {
         var x = MakeMatrix(new double[,] { { 0, 0 }, { 1, 0 } });
         var y = MakeMatrix(new double[,] { { 3, 4 }, { 0, 1 } });
@@ -493,8 +494,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Cross-Metric Ordering Tests ─────────────────────────────────────────
 
-    [Fact]
-    public void AllMetrics_IdenticalPoints_ReturnZero()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_IdenticalPoints_ReturnZero()
     {
         var a = Vec(3, 7, -2, 5);
 
@@ -509,8 +510,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, mink3.Compute(a, a), Tolerance);
     }
 
-    [Fact]
-    public void MetricOrdering_Chebyshev_LE_Euclidean_LE_Manhattan()
+    [Fact(Timeout = 120000)]
+    public async Task MetricOrdering_Chebyshev_LE_Euclidean_LE_Manhattan()
     {
         // For any pair: Chebyshev <= Euclidean <= Manhattan
         var a = Vec(1, 5, 3, -2);
@@ -530,8 +531,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Vector Length Mismatch Tests ────────────────────────────────────────
 
-    [Fact]
-    public void AllMetrics_DifferentLengths_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_DifferentLengths_ThrowsArgumentException()
     {
         var a = Vec(1, 2, 3);
         var b = Vec(4, 5);
@@ -545,8 +546,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Non-Negativity Tests ────────────────────────────────────────────────
 
-    [Fact]
-    public void AllMetrics_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task AllMetrics_AlwaysNonNegative()
     {
         var pairs = new[]
         {
@@ -571,8 +572,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── High-Dimensional Test ───────────────────────────────────────────────
 
-    [Fact]
-    public void Euclidean_HighDimensional_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Euclidean_HighDimensional_Correct()
     {
         // In d dimensions, dist((1,1,...,1), (0,0,...,0)) = sqrt(d)
         int d = 100;
@@ -588,8 +589,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(d), eucl.Compute(a, b), Tolerance);
     }
 
-    [Fact]
-    public void Manhattan_HighDimensional_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task Manhattan_HighDimensional_Correct()
     {
         // In d dimensions, L1 dist((1,1,...,1), (0,0,...,0)) = d
         int d = 100;
@@ -607,8 +608,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
 
     // ─── Cosine Distance Edge Cases ──────────────────────────────────────────
 
-    [Fact]
-    public void Cosine_NearlyParallel_SmallDistance()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_NearlyParallel_SmallDistance()
     {
         var a = Vec(1, 0, 0);
         var b = Vec(1, 0.001, 0);
@@ -619,8 +620,8 @@ public class ClusteringDistanceMetricsDeepMathIntegrationTests
         Assert.True(dist < 0.001, $"Nearly parallel vectors should have very small cosine distance. Got {dist}");
     }
 
-    [Fact]
-    public void Cosine_RangeIsZeroToTwo()
+    [Fact(Timeout = 120000)]
+    public async Task Cosine_RangeIsZeroToTwo()
     {
         // Cosine distance ranges from 0 (identical direction) to 2 (opposite direction)
         var pairs = new[]

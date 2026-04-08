@@ -1,5 +1,6 @@
 using AiDotNet.Classification.DiscriminantAnalysis;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -14,8 +15,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region LDA Core Functionality Tests
 
-    [Fact]
-    public void LDA_Train_ComputesCorrectClassMeans()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_Train_ComputesCorrectClassMeans()
     {
         // Arrange: Two classes with known means
         // Class 0: points around (0, 0)
@@ -57,8 +58,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point at class 1 mean should favor class 1. Got P(class0)={probsClass1[0, 0]}, P(class1)={probsClass1[0, 1]}");
     }
 
-    [Fact]
-    public void LDA_Train_ComputesCorrectClassPriors()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_Train_ComputesCorrectClassPriors()
     {
         // Arrange: Imbalanced classes - 3 samples class 0, 1 sample class 1
         var x = new Matrix<double>(4, 2);
@@ -88,8 +89,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"Probabilities should sum to 1, got {sum}");
     }
 
-    [Fact]
-    public void LDA_PredictProbabilities_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_PredictProbabilities_SumToOne()
     {
         // Arrange
         var x = new Matrix<double>(6, 3);
@@ -131,8 +132,8 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void LDA_MahalanobisDistance_PooledCovariance()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_MahalanobisDistance_PooledCovariance()
     {
         // Arrange: Well-separated Gaussian clusters
         // LDA should use pooled covariance - same distance metric for all classes
@@ -166,8 +167,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"At midpoint, probabilities should be relatively balanced. Got P(0)={probs[0, 0]}, P(1)={probs[0, 1]}");
     }
 
-    [Fact]
-    public void LDA_Regularization_ImprovesSingularCovariance()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_Regularization_ImprovesSingularCovariance()
     {
         // Arrange: Degenerate case with collinear points
         var x = new Matrix<double>(6, 2);
@@ -200,8 +201,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(sum - 1.0) < Tolerance, $"Probabilities should sum to 1, got {sum}");
     }
 
-    [Fact]
-    public void LDA_LinearDecisionBoundary_CorrectlyClassifies()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_LinearDecisionBoundary_CorrectlyClassifies()
     {
         // Arrange: Two classes that are linearly separable
         var x = new Matrix<double>(100, 2);
@@ -246,8 +247,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region QDA Core Functionality Tests
 
-    [Fact]
-    public void QDA_Train_ComputesSeparateCovarianceMatrices()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_Train_ComputesSeparateCovarianceMatrices()
     {
         // Arrange: Two classes with different covariance structures
         // Class 0: high variance in x, low in y
@@ -286,8 +287,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point (10,2) should favor class 1. Got P(0)={probs[1, 0]}, P(1)={probs[1, 1]}");
     }
 
-    [Fact]
-    public void QDA_PredictProbabilities_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_PredictProbabilities_SumToOne()
     {
         // Arrange
         var x = new Matrix<double>(9, 2);
@@ -323,8 +324,8 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void QDA_QuadraticDecisionBoundary_ClassifiesNonLinearData()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_QuadraticDecisionBoundary_ClassifiesNonLinearData()
     {
         // Arrange: Data that requires curved decision boundary
         // Class 0: ring/circle around origin
@@ -372,8 +373,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point (3,0) should favor class 0. Got P(0)={probs[2, 0]}, P(1)={probs[2, 1]}");
     }
 
-    [Fact]
-    public void QDA_Regularization_PreventsOverfitting()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_Regularization_PreventsOverfitting()
     {
         // Arrange: Small dataset prone to singular covariance
         var x = new Matrix<double>(6, 2);
@@ -408,8 +409,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region LDA vs QDA Comparison Tests
 
-    [Fact]
-    public void LDA_vs_QDA_SameCovariance_SimilarResults()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_vs_QDA_SameCovariance_SimilarResults()
     {
         // Arrange: Data where both classes have same covariance
         // LDA and QDA should give similar results
@@ -450,8 +451,8 @@ public class DiscriminantAnalysisIntegrationTests
             $"LDA and QDA should give similar probs when covariances are equal. LDA P(0)={ldaProbs[0, 0]}, QDA P(0)={qdaProbs[0, 0]}");
     }
 
-    [Fact]
-    public void LDA_vs_QDA_DifferentCovariance_QDABetter()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_vs_QDA_DifferentCovariance_QDABetter()
     {
         // Arrange: Data where classes have VERY different covariances
         // QDA should be more appropriate
@@ -501,8 +502,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void LDA_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -514,8 +515,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<ArgumentException>(() => lda.Train(x, y));
     }
 
-    [Fact]
-    public void QDA_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -527,8 +528,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<ArgumentException>(() => qda.Train(x, y));
     }
 
-    [Fact]
-    public void LDA_PredictBeforeTrain_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_PredictBeforeTrain_ThrowsInvalidOperationException()
     {
         // Arrange
         var lda = new LinearDiscriminantAnalysis<double>();
@@ -539,8 +540,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<InvalidOperationException>(() => lda.PredictProbabilities(testPoint));
     }
 
-    [Fact]
-    public void QDA_PredictBeforeTrain_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_PredictBeforeTrain_ThrowsInvalidOperationException()
     {
         // Arrange
         var qda = new QuadraticDiscriminantAnalysis<double>();
@@ -551,8 +552,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<InvalidOperationException>(() => qda.PredictProbabilities(testPoint));
     }
 
-    [Fact]
-    public void LDA_SingleSamplePerClass_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_SingleSamplePerClass_HandlesGracefully()
     {
         // Arrange: Edge case with just 1 sample per class
         var x = new Matrix<double>(2, 2);
@@ -583,8 +584,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region PredictLogProbabilities Tests
 
-    [Fact]
-    public void LDA_PredictLogProbabilities_ConsistentWithProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_PredictLogProbabilities_ConsistentWithProbabilities()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -616,8 +617,8 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void QDA_PredictLogProbabilities_ConsistentWithProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_PredictLogProbabilities_ConsistentWithProbabilities()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -653,8 +654,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Clone and Serialization Tests
 
-    [Fact]
-    public void LDA_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -684,8 +685,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(originalProbs[0, 1] - cloneProbs[0, 1]) < Tolerance);
     }
 
-    [Fact]
-    public void QDA_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -715,8 +716,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(originalProbs[0, 1] - cloneProbs[0, 1]) < Tolerance);
     }
 
-    [Fact]
-    public void LDA_Clone_IsIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_Clone_IsIndependent()
     {
         // Arrange
         var x = new Matrix<double>(6, 2);
@@ -758,8 +759,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Multiclass Tests
 
-    [Fact]
-    public void LDA_MulticlassClassification_ThreeClasses()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_MulticlassClassification_ThreeClasses()
     {
         // Arrange: 3-class problem
         var x = new Matrix<double>(15, 2);
@@ -806,8 +807,8 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
-    public void QDA_MulticlassClassification_FourClasses()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_MulticlassClassification_FourClasses()
     {
         // Arrange: 4-class problem at corners of a square
         var x = new Matrix<double>(20, 2);
@@ -855,8 +856,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void LDA_NumericalStability_LargeFeatureValues()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_NumericalStability_LargeFeatureValues()
     {
         // Arrange: Data with large feature values
         var x = new Matrix<double>(6, 2);
@@ -885,8 +886,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.False(double.IsInfinity(probs[0, 0]), "Probability should not be infinite");
     }
 
-    [Fact]
-    public void QDA_NumericalStability_SmallVariances()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_NumericalStability_SmallVariances()
     {
         // Arrange: Data with very small variances
         var x = new Matrix<double>(6, 2);
@@ -922,8 +923,8 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region GetModelMetadata Tests
 
-    [Fact]
-    public void LDA_GetModelMetadata_ContainsRegularizationParam()
+    [Fact(Timeout = 120000)]
+    public async Task LDA_GetModelMetadata_ContainsRegularizationParam()
     {
         // Arrange
         var options = new DiscriminantAnalysisOptions<double>
@@ -951,8 +952,8 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Equal(0.05, metadata.AdditionalInfo["RegularizationParam"]);
     }
 
-    [Fact]
-    public void QDA_GetModelMetadata_ContainsRegularizationParam()
+    [Fact(Timeout = 120000)]
+    public async Task QDA_GetModelMetadata_ContainsRegularizationParam()
     {
         // Arrange
         var options = new DiscriminantAnalysisOptions<double>

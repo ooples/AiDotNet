@@ -1,5 +1,6 @@
 using AiDotNet.RetrievalAugmentedGeneration.Configuration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
 
@@ -13,8 +14,8 @@ public class RAGConfigurationIntegrationTests
 {
     #region RAGConfiguration
 
-    [Fact]
-    public void RAGConfiguration_DefaultsAreNotNull()
+    [Fact(Timeout = 120000)]
+    public async Task RAGConfiguration_DefaultsAreNotNull()
     {
         var config = new RAGConfiguration<double>();
         Assert.NotNull(config.DocumentStore);
@@ -26,8 +27,8 @@ public class RAGConfigurationIntegrationTests
         Assert.NotNull(config.ContextCompression);
     }
 
-    [Fact]
-    public void RAGConfiguration_CanSetSubconfigs()
+    [Fact(Timeout = 120000)]
+    public async Task RAGConfiguration_CanSetSubconfigs()
     {
         var config = new RAGConfiguration<double>();
         config.Chunking.ChunkSize = 2000;
@@ -41,8 +42,8 @@ public class RAGConfigurationIntegrationTests
 
     #region ChunkingConfig
 
-    [Fact]
-    public void ChunkingConfig_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ChunkingConfig_DefaultValues()
     {
         var config = new ChunkingConfig();
         Assert.Equal(string.Empty, config.Strategy);
@@ -52,8 +53,8 @@ public class RAGConfigurationIntegrationTests
         Assert.Empty(config.Parameters);
     }
 
-    [Fact]
-    public void ChunkingConfig_CanSetParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ChunkingConfig_CanSetParameters()
     {
         var config = new ChunkingConfig
         {
@@ -72,8 +73,8 @@ public class RAGConfigurationIntegrationTests
 
     #region DocumentStoreConfig
 
-    [Fact]
-    public void DocumentStoreConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task DocumentStoreConfig_DefaultConstructor()
     {
         var config = new DocumentStoreConfig();
         Assert.NotNull(config);
@@ -83,8 +84,8 @@ public class RAGConfigurationIntegrationTests
 
     #region EmbeddingConfig
 
-    [Fact]
-    public void EmbeddingConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingConfig_DefaultConstructor()
     {
         var config = new EmbeddingConfig();
         Assert.NotNull(config);
@@ -94,8 +95,8 @@ public class RAGConfigurationIntegrationTests
 
     #region RetrievalConfig
 
-    [Fact]
-    public void RetrievalConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task RetrievalConfig_DefaultConstructor()
     {
         var config = new RetrievalConfig();
         Assert.NotNull(config);
@@ -105,8 +106,8 @@ public class RAGConfigurationIntegrationTests
 
     #region RerankingConfig
 
-    [Fact]
-    public void RerankingConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task RerankingConfig_DefaultConstructor()
     {
         var config = new RerankingConfig();
         Assert.NotNull(config);
@@ -116,8 +117,8 @@ public class RAGConfigurationIntegrationTests
 
     #region QueryExpansionConfig
 
-    [Fact]
-    public void QueryExpansionConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task QueryExpansionConfig_DefaultConstructor()
     {
         var config = new QueryExpansionConfig();
         Assert.NotNull(config);
@@ -127,8 +128,8 @@ public class RAGConfigurationIntegrationTests
 
     #region ContextCompressionConfig
 
-    [Fact]
-    public void ContextCompressionConfig_DefaultConstructor()
+    [Fact(Timeout = 120000)]
+    public async Task ContextCompressionConfig_DefaultConstructor()
     {
         var config = new ContextCompressionConfig();
         Assert.NotNull(config);

@@ -5,6 +5,7 @@ using AiDotNet.Serialization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -47,8 +48,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== StandardScaler Tests =====================
 
-    [Fact]
-    public void StandardScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -80,8 +81,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void StandardScaler_RoundTrip_PreservesConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_RoundTrip_PreservesConfiguration()
     {
         // Arrange - test with non-default options
         var scaler = new StandardScaler<double>(withMean: false, withStd: true);
@@ -102,8 +103,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== MinMaxScaler Tests =====================
 
-    [Fact]
-    public void MinMaxScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new MinMaxScaler<double>();
@@ -135,8 +136,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void MinMaxScaler_CustomRange_RoundTrip_PreservesRange()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_CustomRange_RoundTrip_PreservesRange()
     {
         // Arrange
         var scaler = new MinMaxScaler<double>(-1.0, 1.0);
@@ -182,8 +183,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== RobustScaler Tests =====================
 
-    [Fact]
-    public void RobustScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task RobustScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new RobustScaler<double>();
@@ -217,8 +218,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== MaxAbsScaler Tests =====================
 
-    [Fact]
-    public void MaxAbsScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new MaxAbsScaler<double>();
@@ -251,8 +252,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== SimpleImputer Tests =====================
 
-    [Fact]
-    public void SimpleImputer_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleImputer_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var imputer = new SimpleImputer<double>(ImputationStrategy.Mean);
@@ -286,8 +287,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== Pipeline Tests =====================
 
-    [Fact]
-    public void Pipeline_SingleStep_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_SingleStep_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -322,8 +323,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Pipeline_MultiStep_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_MultiStep_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -362,8 +363,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== PreprocessingInfo Tests =====================
 
-    [Fact]
-    public void PreprocessingInfo_RoundTrip_PreservesPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_RoundTrip_PreservesPipeline()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -400,8 +401,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== InverseTransform Tests =====================
 
-    [Fact]
-    public void StandardScaler_InverseTransform_WorksAfterDeserialization()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
         var scaler = new StandardScaler<double>();
@@ -428,8 +429,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void MinMaxScaler_InverseTransform_WorksAfterDeserialization()
+    [Fact(Timeout = 120000)]
+    public async Task MinMaxScaler_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
         var scaler = new MinMaxScaler<double>();
@@ -456,8 +457,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Pipeline_InverseTransform_WorksAfterDeserialization()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -489,8 +490,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== DecimalScaler Tests =====================
 
-    [Fact]
-    public void DecimalScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task DecimalScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new DecimalScaler<double>();
@@ -522,8 +523,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LogScaler Tests =====================
 
-    [Fact]
-    public void LogScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task LogScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new LogScaler<double>();
@@ -555,8 +556,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LpNormScaler Tests =====================
 
-    [Fact]
-    public void LpNormScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task LpNormScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new LpNormScaler<double>(p: 2.0);
@@ -588,8 +589,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== Normalizer Tests =====================
 
-    [Fact]
-    public void Normalizer_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var normalizer = new Normalizer<double>(NormType.L2);
@@ -621,8 +622,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LogMeanVarianceScaler Tests =====================
 
-    [Fact]
-    public void LogMeanVarianceScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task LogMeanVarianceScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new LogMeanVarianceScaler<double>();
@@ -656,8 +657,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== GlobalContrastScaler Tests =====================
 
-    [Fact]
-    public void GlobalContrastScaler_RoundTrip_PreservesFittedState()
+    [Fact(Timeout = 120000)]
+    public async Task GlobalContrastScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
         var scaler = new GlobalContrastScaler<double>();
@@ -690,8 +691,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== ColumnIndices Round-Trip Test =====================
 
-    [Fact]
-    public void StandardScaler_WithColumnIndices_RoundTripPreservesIndices()
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_WithColumnIndices_RoundTripPreservesIndices()
     {
         // Arrange: Create a scaler that only operates on columns 0 and 2
         var scaler = new StandardScaler<double>(columnIndices: new[] { 0, 2 });
@@ -731,8 +732,8 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== TargetPipeline Round-Trip Test =====================
 
-    [Fact]
-    public void PreprocessingInfo_WithNullTargetPipeline_RoundTripPreservesNullTarget()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_WithNullTargetPipeline_RoundTripPreservesNullTarget()
     {
         // Arrange: PreprocessingInfo with feature pipeline but null target pipeline
         var featurePipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -770,8 +771,8 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
-    public void PreprocessingInfo_WithTargetPipeline_RoundTripPreservesTarget()
+    [Fact(Timeout = 120000)]
+    public async Task PreprocessingInfo_WithTargetPipeline_RoundTripPreservesTarget()
     {
         // Arrange: Create PreprocessingInfo where TOutput is also Matrix<double>
         // so we can use a StandardScaler as the target pipeline transformer

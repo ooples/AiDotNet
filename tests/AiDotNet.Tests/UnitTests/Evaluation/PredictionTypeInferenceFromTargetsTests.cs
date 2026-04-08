@@ -2,13 +2,14 @@ using AiDotNet.Enums;
 using AiDotNet.Evaluation;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Evaluation;
 
 public class PredictionTypeInferenceFromTargetsTests
 {
-    [Fact]
-    public void InferFromTargets_ReturnsMultiClass_ForOneHotTensor()
+    [Fact(Timeout = 60000)]
+    public async Task InferFromTargets_ReturnsMultiClass_ForOneHotTensor()
     {
         var values = new[]
         {
@@ -23,8 +24,8 @@ public class PredictionTypeInferenceFromTargetsTests
         Assert.Equal(PredictionType.MultiClass, predictionType);
     }
 
-    [Fact]
-    public void InferFromTargets_ReturnsMultiLabel_ForMultiHotTensor()
+    [Fact(Timeout = 60000)]
+    public async Task InferFromTargets_ReturnsMultiLabel_ForMultiHotTensor()
     {
         var values = new[]
         {
@@ -39,8 +40,8 @@ public class PredictionTypeInferenceFromTargetsTests
         Assert.Equal(PredictionType.MultiLabel, predictionType);
     }
 
-    [Fact]
-    public void InferFromTargets_ReturnsRegression_ForDenseContinuousTensor()
+    [Fact(Timeout = 60000)]
+    public async Task InferFromTargets_ReturnsRegression_ForDenseContinuousTensor()
     {
         var values = new[]
         {

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new RecursiveCharacterChunkingStrategy();
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(200, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_WithCustomValues_SetsCorrectProperties()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomValues_SetsCorrectProperties()
         {
             // Act
             var strategy = new RecursiveCharacterChunkingStrategy(
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(50, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_WithCustomSeparators_AcceptsSeparators()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomSeparators_AcceptsSeparators()
         {
             // Act
             var strategy = new RecursiveCharacterChunkingStrategy(
@@ -50,8 +51,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, strategy.ChunkOverlap);
         }
 
-        [Fact]
-        public void Constructor_ChunkSizeZero_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkSizeZero_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -60,8 +61,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkSize", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkOverlapNegative_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkOverlapNegative_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -70,8 +71,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("ChunkOverlap", ex.Message);
         }
 
-        [Fact]
-        public void Constructor_ChunkOverlapEqualToChunkSize_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ChunkOverlapEqualToChunkSize_ThrowsArgumentException()
         {
             // Act & Assert
             var ex = Assert.Throws<ArgumentException>(() =>
@@ -84,8 +85,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Chunk Method Tests
 
-        [Fact]
-        public void Chunk_NullText_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_NullText_ThrowsArgumentNullException()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy();
@@ -95,8 +96,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(null!).ToList());
         }
 
-        [Fact]
-        public void Chunk_EmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_EmptyText_ThrowsArgumentException()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy();
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 strategy.Chunk(string.Empty).ToList());
         }
 
-        [Fact]
-        public void Chunk_ShortText_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_ShortText_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 100, chunkOverlap: 10);
@@ -121,8 +122,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(text.Trim(), chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_TextWithParagraphs_SplitsAtParagraphBoundaries()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextWithParagraphs_SplitsAtParagraphBoundaries()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 50, chunkOverlap: 0);
@@ -140,8 +141,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_TextWithNewlines_SplitsAtNewlineBoundaries()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextWithNewlines_SplitsAtNewlineBoundaries()
         {
             // Arrange - chunkSize set so paragraphs don't fit
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 30, chunkOverlap: 0);
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split text at newline boundaries");
         }
 
-        [Fact]
-        public void Chunk_TextWithSentences_SplitsAtSentenceBoundaries()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextWithSentences_SplitsAtSentenceBoundaries()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 25, chunkOverlap: 0);
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split at sentence boundaries");
         }
 
-        [Fact]
-        public void Chunk_TextWithSpaces_SplitsAtWordBoundaries()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextWithSpaces_SplitsAtWordBoundaries()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 15, chunkOverlap: 0);
@@ -182,8 +183,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split at word boundaries");
         }
 
-        [Fact]
-        public void Chunk_VeryLongWord_SplitsByCharacter()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_VeryLongWord_SplitsByCharacter()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 10, chunkOverlap: 0);
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Separator Hierarchy Tests
 
-        [Fact]
-        public void Chunk_PrefersParagraphSeparatorOverOthers()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_PrefersParagraphSeparatorOverOthers()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 100, chunkOverlap: 0);
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("paragraph two", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_FallsBackToNewlineWhenParagraphTooLarge()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_FallsBackToNewlineWhenParagraphTooLarge()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 30, chunkOverlap: 0);
@@ -230,8 +231,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should fall back to newline separator");
         }
 
-        [Fact]
-        public void Chunk_CustomSeparators_UseProvidedOrder()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_CustomSeparators_UseProvidedOrder()
         {
             // Arrange - Use pipe as primary separator
             // Text must exceed chunkSize to trigger splitting
@@ -252,8 +253,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Overlap Tests
 
-        [Fact]
-        public void Chunk_WithOverlap_ChunksContainOverlappingContent()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WithOverlap_ChunksContainOverlappingContent()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 30, chunkOverlap: 10);
@@ -276,8 +277,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_ZeroOverlap_ChunksAreIndependent()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_ZeroOverlap_ChunksAreIndependent()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 20, chunkOverlap: 0);
@@ -295,8 +296,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ChunkWithPositions Tests
 
-        [Fact]
-        public void ChunkWithPositions_ReturnsValidPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_ReturnsValidPositions()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 100, chunkOverlap: 0);
@@ -311,8 +312,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks[0].EndPosition > 0);
         }
 
-        [Fact]
-        public void ChunkWithPositions_MultipleChunks_HasSequentialPositions()
+        [Fact(Timeout = 60000)]
+        public async Task ChunkWithPositions_MultipleChunks_HasSequentialPositions()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 20, chunkOverlap: 0);
@@ -338,8 +339,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Chunk_SingleCharacter_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_SingleCharacter_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 100, chunkOverlap: 10);
@@ -353,8 +354,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("X", chunks[0]);
         }
 
-        [Fact]
-        public void Chunk_WhitespaceOnlyText_ReturnsEmptyOrSingleWhitespace()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_WhitespaceOnlyText_ReturnsEmptyOrSingleWhitespace()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 100, chunkOverlap: 10);
@@ -367,8 +368,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count <= 1, "Whitespace text should result in 0 or 1 chunks");
         }
 
-        [Fact]
-        public void Chunk_TextExactlyChunkSize_ReturnsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_TextExactlyChunkSize_ReturnsSingleChunk()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 20, chunkOverlap: 5);
@@ -381,8 +382,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(chunks);
         }
 
-        [Fact]
-        public void Chunk_LargeChunkSize_ReturnsEntireTextAsSingleChunk()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_LargeChunkSize_ReturnsEntireTextAsSingleChunk()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 10000, chunkOverlap: 100);
@@ -395,8 +396,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(chunks);
         }
 
-        [Fact]
-        public void Chunk_OnlyParagraphSeparators_SplitsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_OnlyParagraphSeparators_SplitsCorrectly()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 30, chunkOverlap: 0);
@@ -409,8 +410,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 2, "Should split into multiple chunks");
         }
 
-        [Fact]
-        public void Chunk_MixedSeparators_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_MixedSeparators_HandlesCorrectly()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 25, chunkOverlap: 0);
@@ -428,8 +429,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void Chunk_RepeatedCalls_ProduceSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 50, chunkOverlap: 10);
@@ -451,8 +452,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Recursive Splitting Tests
 
-        [Fact]
-        public void Chunk_VeryLargeParagraph_RecursivelySplits()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_VeryLargeParagraph_RecursivelySplits()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 20, chunkOverlap: 0);
@@ -465,8 +466,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(chunks.Count >= 3, "Large paragraph should be split into multiple chunks");
         }
 
-        [Fact]
-        public void Chunk_NestedStructure_PreservesSemanticOrder()
+        [Fact(Timeout = 60000)]
+        public async Task Chunk_NestedStructure_PreservesSemanticOrder()
         {
             // Arrange
             var strategy = new RecursiveCharacterChunkingStrategy(chunkSize: 50, chunkOverlap: 0);

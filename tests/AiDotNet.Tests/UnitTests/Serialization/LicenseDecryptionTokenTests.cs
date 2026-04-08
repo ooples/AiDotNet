@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -11,15 +12,15 @@ using Xunit;
 /// </summary>
 public class LicenseDecryptionTokenTests
 {
-    [Fact]
-    public void LicenseValidationResult_DecryptionToken_IsNull_ByDefault()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_DecryptionToken_IsNull_ByDefault()
     {
         var result = new LicenseValidationResult(LicenseKeyStatus.Active);
         Assert.Null(result.DecryptionToken);
     }
 
-    [Fact]
-    public void LicenseValidationResult_DecryptionToken_CanBeSet()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_DecryptionToken_CanBeSet()
     {
         var token = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
             0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
@@ -36,8 +37,8 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(token, result.DecryptionToken);
     }
 
-    [Fact]
-    public void LicenseValidationResult_AllFields_ArePopulated()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_AllFields_ArePopulated()
     {
         var token = new byte[] { 0x42, 0x43 };
         var expires = DateTimeOffset.UtcNow.AddDays(30);
@@ -61,8 +62,8 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(token, result.DecryptionToken);
     }
 
-    [Fact]
-    public void LicenseValidationResult_Invalid_Status_HasNoToken()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_Invalid_Status_HasNoToken()
     {
         var result = new LicenseValidationResult(
             LicenseKeyStatus.Invalid,
@@ -72,8 +73,8 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void LicenseValidationResult_Revoked_Status_HasNoToken()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidationResult_Revoked_Status_HasNoToken()
     {
         var result = new LicenseValidationResult(
             LicenseKeyStatus.Revoked,
@@ -83,8 +84,8 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(LicenseKeyStatus.Revoked, result.Status);
     }
 
-    [Fact]
-    public void LicenseKeyStatus_HasExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyStatus_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.Active));
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.Invalid));

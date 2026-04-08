@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Statistics;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
 {
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
-        public void Constructor_WithRequiredDetectors_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithRequiredDetectors_InitializesSuccessfully()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void Constructor_WithCustomOptions_InitializesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
-        public void DetectFit_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsValidResult()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -92,8 +93,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_ReturnsConfidenceLevel()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -112,8 +113,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
-        public void DetectFit_CombinesRecommendationsFromBothDetectors()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_CombinesRecommendationsFromBothDetectors()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 1);
         }
 
-        [Fact]
-        public void DetectFit_ProducesCombinedFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ProducesCombinedFitType()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -155,8 +156,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_ReturnsNonNullRecommendations()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ReturnsNonNullRecommendations()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -175,8 +176,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_HandlesConsistentDetectorResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_HandlesConsistentDetectorResults()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<float, Matrix<float>, Vector<float>>();
@@ -269,8 +270,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_UsesResidualAnalyzerComponent()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_UsesResidualAnalyzerComponent()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -295,8 +296,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
 
-        [Fact]
-        public void DetectFit_UsesLearningCurveComponent()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_UsesLearningCurveComponent()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -321,8 +322,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
 
-        [Fact]
-        public void DetectFit_ProvidesComprehensiveAnalysis()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ProvidesComprehensiveAnalysis()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -343,8 +344,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
-        public void DetectFit_ProducesReproducibleResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_ProducesReproducibleResults()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -365,8 +366,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact]
-        public void DetectFit_RespectsComponentDetectorInputs()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_RespectsComponentDetectorInputs()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -396,8 +397,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count >= 1);
         }
 
-        [Fact]
-        public void DetectFit_WithSameOptions_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithSameOptions_ProducesSameResults()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -426,8 +427,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.FitType, result2.FitType);
         }
 
-        [Fact]
-        public void DetectFit_HandlesUnstableFitType()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_HandlesUnstableFitType()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -447,8 +448,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
-        public void DetectFit_WithConfidenceComparison()
+        [Fact(Timeout = 60000)]
+        public async Task DetectFit_WithConfidenceComparison()
         {
             // Arrange
             var residualAnalyzer = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();

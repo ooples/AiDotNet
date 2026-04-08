@@ -2,13 +2,14 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.UncertaintyQuantification.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class MCDropoutLayerTests
 {
-    [Fact]
-    public void Constructor_WithValidDropoutRate_CreatesLayer()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidDropoutRate_CreatesLayer()
     {
         // Arrange & Act
         var layer = new MCDropoutLayer<double>(0.5);
@@ -18,8 +19,8 @@ public class MCDropoutLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void Constructor_WithInvalidDropoutRate_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidDropoutRate_ThrowsException()
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(-0.1));
@@ -27,8 +28,8 @@ public class MCDropoutLayerTests
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(1.5));
     }
 
-    [Fact]
-    public void Forward_InTrainingMode_AppliesDropout()
+    [Fact(Timeout = 60000)]
+    public async Task Forward_InTrainingMode_AppliesDropout()
     {
         // Arrange
         var layer = new MCDropoutLayer<double>(0.5);
@@ -57,8 +58,8 @@ public class MCDropoutLayerTests
         Assert.True(hasZeros && hasNonZeros, "Dropout should zero some activations while leaving others scaled.");
     }
 
-    [Fact]
-    public void Forward_InMonteCarloMode_AppliesDropout()
+    [Fact(Timeout = 60000)]
+    public async Task Forward_InMonteCarloMode_AppliesDropout()
     {
         // Arrange
         var layer = new MCDropoutLayer<double>(0.5, mcMode: true);
@@ -83,8 +84,8 @@ public class MCDropoutLayerTests
         Assert.True(hasModifiedValues);
     }
 
-    [Fact]
-    public void Forward_InInferenceMode_WithoutMCMode_PassesThrough()
+    [Fact(Timeout = 60000)]
+    public async Task Forward_InInferenceMode_WithoutMCMode_PassesThrough()
     {
         // Arrange
         var layer = new MCDropoutLayer<double>(0.5, mcMode: false);
@@ -102,8 +103,8 @@ public class MCDropoutLayerTests
         }
     }
 
-    [Fact]
-    public void GetParameters_ReturnsEmptyVector()
+    [Fact(Timeout = 60000)]
+    public async Task GetParameters_ReturnsEmptyVector()
     {
         // Arrange
         var layer = new MCDropoutLayer<double>(0.3);
@@ -116,8 +117,8 @@ public class MCDropoutLayerTests
         Assert.Equal(0, parameters.Length);
     }
 
-    [Fact]
-    public void MonteCarloMode_CanBeToggledOnOff()
+    [Fact(Timeout = 60000)]
+    public async Task MonteCarloMode_CanBeToggledOnOff()
     {
         // Arrange
         var layer = new MCDropoutLayer<double>(0.5, mcMode: false);

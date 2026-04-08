@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Agents;
 
@@ -57,8 +58,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Successful Application
 
-    [Fact]
-    public void Apply_KnownParameters_AppliesViaRegistry()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_KnownParameters_AppliesViaRegistry()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -75,8 +76,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(15, options.MaxDepth);
     }
 
-    [Fact]
-    public void Apply_DirectPropertyNames_AppliesWithoutRegistry()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_DirectPropertyNames_AppliesWithoutRegistry()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -92,8 +93,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(0.05, options.LearningRate);
     }
 
-    [Fact]
-    public void Apply_SharedParameter_AppliesSeed()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_SharedParameter_AppliesSeed()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -107,8 +108,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, options.Seed);
     }
 
-    [Fact]
-    public void Apply_TypeConversion_IntToDouble()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_TypeConversion_IntToDouble()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -122,8 +123,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(1.0, options.LearningRate);
     }
 
-    [Fact]
-    public void Apply_TypeConversion_DoubleToInt()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_TypeConversion_DoubleToInt()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -137,8 +138,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(200, options.NumberOfTrees);
     }
 
-    [Fact]
-    public void Apply_BoolParameter_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_BoolParameter_SetsCorrectly()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -152,8 +153,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.False(options.UseIntercept);
     }
 
-    [Fact]
-    public void Apply_StringParameter_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_StringParameter_SetsCorrectly()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -171,8 +172,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Skipped Parameters
 
-    [Fact]
-    public void Apply_UnknownParameter_Skipped()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_UnknownParameter_Skipped()
     {
         var (model, _) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -187,8 +188,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, result.Skipped["completely_unknown_param"]);
     }
 
-    [Fact]
-    public void Apply_MixedKnownAndUnknown_ReportsBoth()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_MixedKnownAndUnknown_ReportsBoth()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -208,8 +209,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Validation Warnings
 
-    [Fact]
-    public void Apply_OutOfRangeValue_AddsWarningButStillApplies()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_OutOfRangeValue_AddsWarningButStillApplies()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -225,8 +226,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Contains("above", result.Warnings[0]);
     }
 
-    [Fact]
-    public void Apply_BelowRangeValue_AddsWarningButStillApplies()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_BelowRangeValue_AddsWarningButStillApplies()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -246,8 +247,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region Apply - Empty Inputs
 
-    [Fact]
-    public void Apply_EmptyHyperparameters_ReturnsNoResults()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_EmptyHyperparameters_ReturnsNoResults()
     {
         var (model, _) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>();
@@ -280,16 +281,16 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
-    public void ConvertValue_NullInput_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertValue_NullInput_ReturnsNull()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(null!, typeof(int));
 
         Assert.Null(result);
     }
 
-    [Fact]
-    public void ConvertValue_NullableInt_ConvertsToUnderlyingType()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertValue_NullableInt_ConvertsToUnderlyingType()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(42, typeof(int?));
 
@@ -297,16 +298,16 @@ public class AgentHyperparameterApplicatorTests
         Assert.Equal(42, result);
     }
 
-    [Fact]
-    public void ConvertValue_AlreadyCorrectType_ReturnsAsIs()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertValue_AlreadyCorrectType_ReturnsAsIs()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue(42, typeof(int));
 
         Assert.Equal(42, result);
     }
 
-    [Fact]
-    public void ConvertValue_InvalidConversion_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertValue_InvalidConversion_ReturnsNull()
     {
         var result = AgentHyperparameterApplicator<double>.ConvertValue("not_a_number", typeof(int));
 
@@ -317,8 +318,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region HyperparameterApplicationResult
 
-    [Fact]
-    public void Result_GetSummary_IncludesAllSections()
+    [Fact(Timeout = 60000)]
+    public async Task Result_GetSummary_IncludesAllSections()
     {
         var (model, _) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>
@@ -336,8 +337,8 @@ public class AgentHyperparameterApplicatorTests
         Assert.Contains("unknown_param", summary);
     }
 
-    [Fact]
-    public void Result_GetSummary_EmptyResult_ShowsNoParameters()
+    [Fact(Timeout = 60000)]
+    public async Task Result_GetSummary_EmptyResult_ShowsNoParameters()
     {
         var result = new AiDotNet.Models.HyperparameterApplicationResult();
         var summary = result.GetSummary();
@@ -349,8 +350,8 @@ public class AgentHyperparameterApplicatorTests
 
     #region Case-Insensitive Property Matching
 
-    [Fact]
-    public void Apply_CaseInsensitivePropertyName_Works()
+    [Fact(Timeout = 60000)]
+    public async Task Apply_CaseInsensitivePropertyName_Works()
     {
         var (model, options) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>

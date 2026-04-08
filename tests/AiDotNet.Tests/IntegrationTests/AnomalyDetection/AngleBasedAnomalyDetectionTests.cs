@@ -3,6 +3,7 @@ using AiDotNet.AnomalyDetection.AngleBased;
 using AiDotNet.AnomalyDetection.Statistical;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -61,15 +62,15 @@ public class AngleBasedAnomalyDetectionTests
 
     #region ABODDetector Tests
 
-    [Fact]
-    public void ABOD_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task ABOD_Construction_NotFittedByDefault()
     {
         var detector = new ABODDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void ABOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ABOD_OutlierGetsHighestScore()
     {
         var detector = new ABODDetector<double>();
         var data = CreateTestData();
@@ -80,8 +81,8 @@ public class AngleBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void ABOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task ABOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ABODDetector<double>();
         var data = CreateTestData();
@@ -94,8 +95,8 @@ public class AngleBasedAnomalyDetectionTests
 
     #region FastABODDetector Tests
 
-    [Fact]
-    public void FastABOD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task FastABOD_OutlierGetsHighestScore()
     {
         var detector = new FastABODDetector<double>(k: 5);
         var data = CreateTestData();
@@ -105,8 +106,8 @@ public class AngleBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void FastABOD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task FastABOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FastABODDetector<double>(k: 5);
         var data = CreateTestData();
@@ -119,8 +120,8 @@ public class AngleBasedAnomalyDetectionTests
 
     #region OutlierRemovalAdapter Tests
 
-    [Fact]
-    public void OutlierRemovalAdapter_RemovesOutliers()
+    [Fact(Timeout = 120000)]
+    public async Task OutlierRemovalAdapter_RemovesOutliers()
     {
         var detector = new ZScoreDetector<double>();
         var adapter = new OutlierRemovalAdapter<double, Matrix<double>, Vector<double>>(detector);
@@ -131,8 +132,8 @@ public class AngleBasedAnomalyDetectionTests
 
     #region NoOutlierRemoval Tests
 
-    [Fact]
-    public void NoOutlierRemoval_PassesDataThrough()
+    [Fact(Timeout = 120000)]
+    public async Task NoOutlierRemoval_PassesDataThrough()
     {
         var noRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         Assert.NotNull(noRemoval);

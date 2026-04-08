@@ -8,6 +8,7 @@ using AiDotNet.Safety.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -20,8 +21,8 @@ public class MultimodalSafetyIntegrationTests
 {
     #region TextImageAlignmentChecker Tests
 
-    [Fact]
-    public void TextImageAlignment_MisleadingLabels_DetectsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task TextImageAlignment_MisleadingLabels_DetectsIssue()
     {
         var checker = new TextImageAlignmentChecker<double>();
         var findings = checker.EvaluateText(
@@ -30,8 +31,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
-    public void TextImageAlignment_SafeDescription_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task TextImageAlignment_SafeDescription_NoFindings()
     {
         var checker = new TextImageAlignmentChecker<double>();
         var findings = checker.EvaluateText(
@@ -40,8 +41,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void TextImageAlignment_ConflictingDescriptors_Detects()
+    [Fact(Timeout = 120000)]
+    public async Task TextImageAlignment_ConflictingDescriptors_Detects()
     {
         var checker = new TextImageAlignmentChecker<double>();
         var findings = checker.EvaluateText(
@@ -50,8 +51,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
-    public void TextImageAlignment_EmptyText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task TextImageAlignment_EmptyText_NoFindings()
     {
         var checker = new TextImageAlignmentChecker<double>();
         var findings = checker.EvaluateText("");
@@ -63,8 +64,8 @@ public class MultimodalSafetyIntegrationTests
 
     #region CrossModalConsistencyChecker Tests
 
-    [Fact]
-    public void CrossModal_OverridePatterns_Detects()
+    [Fact(Timeout = 120000)]
+    public async Task CrossModal_OverridePatterns_Detects()
     {
         var checker = new CrossModalConsistencyChecker<double>();
         var findings = checker.EvaluateText(
@@ -74,8 +75,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact]
-    public void CrossModal_SafeText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task CrossModal_SafeText_NoFindings()
     {
         var checker = new CrossModalConsistencyChecker<double>();
         var findings = checker.EvaluateText(
@@ -84,8 +85,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void CrossModal_Mismatch_DetectsManipulation()
+    [Fact(Timeout = 120000)]
+    public async Task CrossModal_Mismatch_DetectsManipulation()
     {
         var checker = new CrossModalConsistencyChecker<double>();
 
@@ -109,8 +110,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Manipulated);
     }
 
-    [Fact]
-    public void CrossModal_ConsistentFindings_NoManipulationFlag()
+    [Fact(Timeout = 120000)]
+    public async Task CrossModal_ConsistentFindings_NoManipulationFlag()
     {
         var checker = new CrossModalConsistencyChecker<double>();
 
@@ -148,8 +149,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(manipulationFindings);
     }
 
-    [Fact]
-    public void CrossModal_EmptyFindings_NoManipulation()
+    [Fact(Timeout = 120000)]
+    public async Task CrossModal_EmptyFindings_NoManipulation()
     {
         var checker = new CrossModalConsistencyChecker<double>();
         var findings = checker.CheckConsistency(
@@ -162,8 +163,8 @@ public class MultimodalSafetyIntegrationTests
 
     #region MultimodalGuardrail Tests
 
-    [Fact]
-    public void MultimodalGuardrail_DefaultModules_ProcessesTextImage()
+    [Fact(Timeout = 120000)]
+    public async Task MultimodalGuardrail_DefaultModules_ProcessesTextImage()
     {
         var guardrail = new MultimodalGuardrail<double>();
         var tensor = CreateRandomImageTensor(3, 16, 16);
@@ -173,8 +174,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void MultimodalGuardrail_WithTextModules_ProcessesTextImage()
+    [Fact(Timeout = 120000)]
+    public async Task MultimodalGuardrail_WithTextModules_ProcessesTextImage()
     {
         var textModules = new ITextSafetyModule<double>[]
         {
@@ -189,8 +190,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void MultimodalGuardrail_SafeContent_MinimalFindings()
+    [Fact(Timeout = 120000)]
+    public async Task MultimodalGuardrail_SafeContent_MinimalFindings()
     {
         var guardrail = new MultimodalGuardrail<double>();
         var tensor = CreateRandomImageTensor(3, 16, 16);
@@ -199,8 +200,8 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void MultimodalGuardrail_ProcessesImage()
+    [Fact(Timeout = 120000)]
+    public async Task MultimodalGuardrail_ProcessesImage()
     {
         var guardrail = new MultimodalGuardrail<double>();
         var tensor = CreateRandomImageTensor(3, 16, 16);
@@ -213,8 +214,8 @@ public class MultimodalSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllMultimodalModules_ProcessText_NoExceptions()
+    [Fact(Timeout = 120000)]
+    public async Task AllMultimodalModules_ProcessText_NoExceptions()
     {
         var text = "A description of an image showing a peaceful scene.";
 

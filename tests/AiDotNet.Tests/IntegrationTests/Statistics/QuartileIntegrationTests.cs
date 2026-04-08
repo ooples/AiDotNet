@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -22,8 +23,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7], 25) = 2.5
     /// </summary>
-    [Fact]
-    public void Q1_SevenValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q1_SevenValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -38,8 +39,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7, 8], 25) = 2.75
     /// </summary>
-    [Fact]
-    public void Q1_EightValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q1_EightValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -58,8 +59,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7], 50) = 4.0
     /// </summary>
-    [Fact]
-    public void Q2_SevenValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q2_SevenValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -74,8 +75,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6], 50) = 3.5
     /// </summary>
-    [Fact]
-    public void Q2_SixValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q2_SixValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -90,8 +91,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.median([5, 2, 8, 1, 9, 3, 7]) = 5.0
     /// </summary>
-    [Fact]
-    public void Q2_UnsortedData_ReturnsCorrectMedian()
+    [Fact(Timeout = 120000)]
+    public async Task Q2_UnsortedData_ReturnsCorrectMedian()
     {
         // Arrange - Unsorted data
         var data = new Vector<double>(new[] { 5.0, 2.0, 8.0, 1.0, 9.0, 3.0, 7.0 });
@@ -110,8 +111,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7], 75) = 5.5
     /// </summary>
-    [Fact]
-    public void Q3_SevenValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q3_SevenValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -126,8 +127,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5, 6, 7, 8], 75) = 6.25
     /// </summary>
-    [Fact]
-    public void Q3_EightValues_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task Q3_EightValues_ReturnsExactValue()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -147,8 +148,8 @@ public class QuartileIntegrationTests
     /// Verified with NumPy for data 1-100:
     /// np.percentile(range(1, 101), [25, 50, 75]) = [25.75, 50.5, 75.25]
     /// </summary>
-    [Fact]
-    public void AllQuartiles_LargeDataset_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_LargeDataset_ReturnsExactValues()
     {
         // Arrange - Create data from 1 to 100
         var values = new double[100];
@@ -170,8 +171,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// When all values are the same, all quartiles should equal that value.
     /// </summary>
-    [Fact]
-    public void AllQuartiles_ConstantData_AllEqual()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_ConstantData_AllEqual()
     {
         // Arrange
         var data = new Vector<double>(new[] { 5.0, 5.0, 5.0, 5.0, 5.0 });
@@ -188,8 +189,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Quartiles must maintain Q1 <= Q2 <= Q3 relationship.
     /// </summary>
-    [Fact]
-    public void AllQuartiles_MaintainOrder()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_MaintainOrder()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0 });
@@ -213,8 +214,8 @@ public class QuartileIntegrationTests
     /// - Q2: position = 6*0.5 = 3.0, exact: -1
     /// - Q3: position = 6*0.75 = 4.5, between 1 and 3: 1 + 0.5*2 = 2
     /// </summary>
-    [Fact]
-    public void AllQuartiles_NegativeValues_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_NegativeValues_ReturnsExactValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { -7.0, -5.0, -3.0, -1.0, 1.0, 3.0, 5.0 });
@@ -235,8 +236,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3], [25, 50, 75]) = [1.5, 2.0, 2.5]
     /// </summary>
-    [Fact]
-    public void AllQuartiles_ThreeValues_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_ThreeValues_ReturnsExactValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -253,8 +254,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4], [25, 50, 75]) = [1.75, 2.5, 3.25]
     /// </summary>
-    [Fact]
-    public void AllQuartiles_FourValues_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_FourValues_ReturnsExactValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -271,8 +272,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([1, 2, 3, 4, 5], [25, 50, 75]) = [2.0, 3.0, 4.0]
     /// </summary>
-    [Fact]
-    public void AllQuartiles_FiveValues_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_FiveValues_ReturnsExactValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -293,8 +294,8 @@ public class QuartileIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.percentile([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], [25, 50, 75]) = [0.25, 0.4, 0.55]
     /// </summary>
-    [Fact]
-    public void AllQuartiles_DecimalValues_ReturnsExactValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_DecimalValues_ReturnsExactValues()
     {
         // Arrange
         var data = new Vector<double>(new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7 });
@@ -312,8 +313,8 @@ public class QuartileIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void AllQuartiles_FloatType_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllQuartiles_FloatType_ReturnsCorrectValues()
     {
         // Arrange
         var data = new Vector<float>(new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f });
@@ -335,8 +336,8 @@ public class QuartileIntegrationTests
     /// IQR = Q3 - Q1. This is a fundamental statistical measure.
     /// Verified with NumPy: np.percentile([1,2,3,4,5,6,7], 75) - np.percentile([1,2,3,4,5,6,7], 25) = 3.0
     /// </summary>
-    [Fact]
-    public void IQR_CanBeCalculatedFromQ1AndQ3()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_CanBeCalculatedFromQ1AndQ3()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });

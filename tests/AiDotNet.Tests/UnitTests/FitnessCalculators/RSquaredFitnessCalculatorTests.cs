@@ -5,6 +5,7 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
@@ -27,8 +28,8 @@ public class RSquaredFitnessCalculatorTests
         return new PredictionStats<double>(inputs);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsOne()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsOne()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -47,8 +48,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(1.0, result, 5);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNoExplanatoryPower_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNoExplanatoryPower_ReturnsZero()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -68,8 +69,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(0.0, result, 5);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithGoodPredictions_ReturnsHighR2()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithGoodPredictions_ReturnsHighR2()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -88,8 +89,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result > 0.9, $"Expected R² > 0.9, but got {result}");
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithPoorPredictions_ReturnsLowR2()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPoorPredictions_ReturnsLowR2()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -108,8 +109,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result < 0.5, $"Expected R² < 0.5, but got {result}");
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNegativeR2_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNegativeR2_HandlesCorrectly()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -129,8 +130,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result <= 1.0, $"Expected R² <= 1.0, but got {result}");
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -142,8 +143,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -158,8 +159,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -171,8 +172,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -199,8 +200,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(1.0f, result, 3);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -209,8 +210,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -219,8 +220,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
@@ -229,8 +230,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultDataSetType_UsesValidation()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -239,8 +240,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.NotNull(calculator);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_RetrievesR2FromPredictionStats()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_RetrievesR2FromPredictionStats()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -258,8 +259,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.Equal(dataSet.PredictionStats.R2, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithVeryHighR2_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithVeryHighR2_HandlesCorrectly()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -278,8 +279,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result > 0.999, $"Expected R² > 0.999, but got {result}");
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithVeryLowR2_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithVeryLowR2_HandlesCorrectly()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -298,8 +299,8 @@ public class RSquaredFitnessCalculatorTests
         Assert.True(result < 0.1, $"Expected R² < 0.1, but got {result}");
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithR2AtBoundaries_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithR2AtBoundaries_WorksCorrectly()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();

@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Training.Configuration;
 using AiDotNet.Training.Factories;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Training
 {
@@ -33,8 +34,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
         }
 
-        [Fact]
-        public void Create_WithParams_AppliesParametersToOptions()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithParams_AppliesParametersToOptions()
         {
             // Arrange - LagOrder=3 should differ from default LagOrder=1
             var defaultConfig = new ModelConfig { Name = "ARIMA" };
@@ -57,8 +58,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(defaultModel, customModel);
         }
 
-        [Fact]
-        public void Create_WithAliasParams_ResolvesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithAliasParams_ResolvesCorrectly()
         {
             // Arrange - "p" is an alias for LagOrder, create two models with different p
             var p1Config = new ModelConfig
@@ -82,8 +83,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(model1, model5);
         }
 
-        [Fact]
-        public void Create_CaseInsensitiveName_Works()
+        [Fact(Timeout = 60000)]
+        public async Task Create_CaseInsensitiveName_Works()
         {
             // Arrange
             var config = new ModelConfig { Name = "arima" };
@@ -95,8 +96,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotNull(model);
         }
 
-        [Fact]
-        public void Create_WithInvalidName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithInvalidName_ThrowsArgumentException()
         {
             // Arrange
             var config = new ModelConfig { Name = "NonExistentModel" };
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.Training
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create(config));
         }
 
-        [Fact]
-        public void Create_WithEmptyName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithEmptyName_ThrowsArgumentException()
         {
             // Arrange
             var config = new ModelConfig { Name = "" };
@@ -117,16 +118,16 @@ namespace AiDotNetTests.UnitTests.Training
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create(config));
         }
 
-        [Fact]
-        public void Create_WithNullConfig_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithNullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 ModelFactory<double, Matrix<double>, Vector<double>>.Create((ModelConfig)null));
         }
 
-        [Fact]
-        public void Create_ByStringName_ReturnsModel()
+        [Fact(Timeout = 60000)]
+        public async Task Create_ByStringName_ReturnsModel()
         {
             // Act
             var model = ModelFactory<double, Matrix<double>, Vector<double>>.Create("ExponentialSmoothing");
@@ -135,8 +136,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotNull(model);
         }
 
-        [Fact]
-        public void Create_WithSeasonalPeriodParam_ProducesDifferentModelThanDefault()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithSeasonalPeriodParam_ProducesDifferentModelThanDefault()
         {
             // Arrange - create two ExponentialSmoothing models with different seasonal periods
             var defaultConfig = new ModelConfig { Name = "ExponentialSmoothing" };
@@ -159,8 +160,8 @@ namespace AiDotNetTests.UnitTests.Training
             Assert.NotSame(defaultModel, customModel);
         }
 
-        [Fact]
-        public void Create_WithMultipleParams_AllApplied()
+        [Fact(Timeout = 60000)]
+        public async Task Create_WithMultipleParams_AllApplied()
         {
             // Arrange - ARIMA with multiple params via aliases
             var config = new ModelConfig

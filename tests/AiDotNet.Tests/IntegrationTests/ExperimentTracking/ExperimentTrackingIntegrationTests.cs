@@ -1,6 +1,7 @@
 using Xunit;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Models;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ExperimentTracking;
 
@@ -37,8 +38,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Constructor Tests
 
-    [Fact]
-    public void Experiment_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_ValidConstruction()
     {
         // Arrange & Act
         var experiment = new Experiment("TestExperiment");
@@ -51,8 +52,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(experiment.Tags);
     }
 
-    [Fact]
-    public void Experiment_WithDescription()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_WithDescription()
     {
         // Arrange & Act
         var experiment = new Experiment("TestExperiment", "Test description");
@@ -61,8 +62,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
-    public void Experiment_WithTags()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_WithTags()
     {
         // Arrange
         var tags = new Dictionary<string, string>
@@ -80,22 +81,22 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("1.0", experiment.Tags["version"]);
     }
 
-    [Fact]
-    public void Experiment_NullName_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_NullName_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new Experiment(null!));
     }
 
-    [Fact]
-    public void Experiment_EmptyName_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_EmptyName_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Experiment(""));
     }
 
-    [Fact]
-    public void Experiment_WhitespaceName_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_WhitespaceName_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Experiment("   "));
@@ -105,8 +106,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Properties Tests
 
-    [Fact]
-    public void Experiment_ExperimentId_IsGuid()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_ExperimentId_IsGuid()
     {
         // Arrange & Act
         var experiment = new Experiment("TestExperiment");
@@ -115,8 +116,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(experiment.ExperimentId, out _));
     }
 
-    [Fact]
-    public void Experiment_CreatedAt_IsSet()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_CreatedAt_IsSet()
     {
         // Arrange
         var before = DateTime.UtcNow.AddSeconds(-1);
@@ -129,8 +130,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.CreatedAt <= DateTime.UtcNow.AddSeconds(1));
     }
 
-    [Fact]
-    public void Experiment_LastUpdatedAt_IsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_LastUpdatedAt_IsInitialized()
     {
         // Arrange & Act
         var experiment = new Experiment("TestExperiment");
@@ -139,8 +140,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.LastUpdatedAt >= experiment.CreatedAt.AddMilliseconds(-1));
     }
 
-    [Fact]
-    public void Experiment_Name_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Name_CanBeSet()
     {
         // Arrange
         var experiment = new Experiment("Original");
@@ -152,8 +153,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Updated", experiment.Name);
     }
 
-    [Fact]
-    public void Experiment_Name_SetNull_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Name_SetNull_ThrowsException()
     {
         // Arrange
         var experiment = new Experiment("Original");
@@ -162,8 +163,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => experiment.Name = null!);
     }
 
-    [Fact]
-    public void Experiment_Description_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Description_CanBeSet()
     {
         // Arrange
         var experiment = new Experiment("Test");
@@ -179,8 +180,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Methods Tests
 
-    [Fact]
-    public void Experiment_Archive_ChangesStatusToArchived()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Archive_ChangesStatusToArchived()
     {
         // Arrange
         var experiment = new Experiment("TestExperiment");
@@ -192,8 +193,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Archived", experiment.Status);
     }
 
-    [Fact]
-    public void Experiment_Archive_UpdatesLastUpdatedAt()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Archive_UpdatesLastUpdatedAt()
     {
         // Arrange
         var experiment = new Experiment("TestExperiment");
@@ -207,8 +208,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.LastUpdatedAt > originalUpdated);
     }
 
-    [Fact]
-    public void Experiment_Restore_ChangesStatusToActive()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Restore_ChangesStatusToActive()
     {
         // Arrange
         var experiment = new Experiment("TestExperiment");
@@ -221,8 +222,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Active", experiment.Status);
     }
 
-    [Fact]
-    public void Experiment_Restore_UpdatesLastUpdatedAt()
+    [Fact(Timeout = 120000)]
+    public async Task Experiment_Restore_UpdatesLastUpdatedAt()
     {
         // Arrange
         var experiment = new Experiment("TestExperiment");
@@ -241,8 +242,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Constructor Tests
 
-    [Fact]
-    public void ExperimentRun_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_ValidConstruction()
     {
         // Arrange & Act
         var run = new ExperimentRun<double>("exp-123");
@@ -255,8 +256,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Null(run.EndTime);
     }
 
-    [Fact]
-    public void ExperimentRun_WithRunName()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_WithRunName()
     {
         // Arrange & Act
         var run = new ExperimentRun<double>("exp-123", "my-run");
@@ -265,8 +266,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", run.RunName);
     }
 
-    [Fact]
-    public void ExperimentRun_WithTags()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_WithTags()
     {
         // Arrange
         var tags = new Dictionary<string, string>
@@ -284,15 +285,15 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("100", run.Tags["epochs"]);
     }
 
-    [Fact]
-    public void ExperimentRun_NullExperimentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_NullExperimentId_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(null!));
     }
 
-    [Fact]
-    public void ExperimentRun_RunId_IsGuid()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_RunId_IsGuid()
     {
         // Arrange & Act
         var run = new ExperimentRun<double>("exp-123");
@@ -301,8 +302,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(run.RunId, out _));
     }
 
-    [Fact]
-    public void ExperimentRun_StartTime_IsSet()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_StartTime_IsSet()
     {
         // Arrange
         var before = DateTime.UtcNow.AddSeconds(-1);
@@ -318,8 +319,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Parameter Logging Tests
 
-    [Fact]
-    public void ExperimentRun_LogParameter_StoresParameter()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogParameter_StoresParameter()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -333,8 +334,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(0.001, parameters["learning_rate"]);
     }
 
-    [Fact]
-    public void ExperimentRun_LogParameter_EmptyKey_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogParameter_EmptyKey_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -343,8 +344,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogParameter("", 0.001));
     }
 
-    [Fact]
-    public void ExperimentRun_LogParameters_StoresMultiple()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogParameters_StoresMultiple()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -366,8 +367,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("adam", logged["optimizer"]);
     }
 
-    [Fact]
-    public void ExperimentRun_LogParameters_NullDictionary_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogParameters_NullDictionary_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -380,8 +381,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Metric Logging Tests
 
-    [Fact]
-    public void ExperimentRun_LogMetric_StoresMetric()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogMetric_StoresMetric()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -397,8 +398,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(10, metrics["accuracy"][0].Step);
     }
 
-    [Fact]
-    public void ExperimentRun_LogMetric_EmptyKey_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogMetric_EmptyKey_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -407,8 +408,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogMetric("", 0.5));
     }
 
-    [Fact]
-    public void ExperimentRun_LogMetric_MultipleSteps()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogMetric_MultipleSteps()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -423,8 +424,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(3, metrics["loss"].Count);
     }
 
-    [Fact]
-    public void ExperimentRun_LogMetrics_StoresMultiple()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogMetrics_StoresMultiple()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -445,8 +446,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(5, logged["accuracy"][0].Step);
     }
 
-    [Fact]
-    public void ExperimentRun_LogMetrics_NullDictionary_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogMetrics_NullDictionary_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -455,8 +456,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => run.LogMetrics(null!));
     }
 
-    [Fact]
-    public void ExperimentRun_GetLatestMetric_ReturnsLatestByStep()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_GetLatestMetric_ReturnsLatestByStep()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -471,8 +472,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(0.25, latest);
     }
 
-    [Fact]
-    public void ExperimentRun_GetLatestMetric_NonExistentMetric_ReturnsDefault()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_GetLatestMetric_NonExistentMetric_ReturnsDefault()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -488,8 +489,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Artifact Logging Tests
 
-    [Fact]
-    public void ExperimentRun_LogArtifact_StoresPath()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogArtifact_StoresPath()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -503,8 +504,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("file.txt", artifacts[0]);
     }
 
-    [Fact]
-    public void ExperimentRun_LogArtifact_EmptyPath_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogArtifact_EmptyPath_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -513,8 +514,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogArtifact(""));
     }
 
-    [Fact]
-    public void ExperimentRun_LogArtifact_UsesFileName_WhenNoArtifactPath()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_LogArtifact_UsesFileName_WhenNoArtifactPath()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -532,8 +533,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Status Tests
 
-    [Fact]
-    public void ExperimentRun_Complete_ChangesStatusToCompleted()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Complete_ChangesStatusToCompleted()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -546,8 +547,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(run.EndTime);
     }
 
-    [Fact]
-    public void ExperimentRun_Fail_ChangesStatusToFailed()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Fail_ChangesStatusToFailed()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -561,8 +562,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Out of memory", run.GetErrorMessage());
     }
 
-    [Fact]
-    public void ExperimentRun_Fail_WithoutMessage()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_Fail_WithoutMessage()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -575,8 +576,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Null(run.GetErrorMessage());
     }
 
-    [Fact]
-    public void ExperimentRun_GetDuration_Running_ReturnsElapsedTime()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_GetDuration_Running_ReturnsElapsedTime()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -590,8 +591,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(duration.Value.TotalMilliseconds >= 50);
     }
 
-    [Fact]
-    public void ExperimentRun_GetDuration_Completed_ReturnsTotalDuration()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_GetDuration_Completed_ReturnsTotalDuration()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -610,8 +611,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Notes Tests
 
-    [Fact]
-    public void ExperimentRun_AddNote_StoresNote()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_AddNote_StoresNote()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -625,8 +626,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Training started successfully", notes[0].Note);
     }
 
-    [Fact]
-    public void ExperimentRun_AddNote_EmptyNote_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_AddNote_EmptyNote_ThrowsException()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -635,8 +636,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.AddNote(""));
     }
 
-    [Fact]
-    public void ExperimentRun_GetNotes_OrderedByTimestamp()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentRun_GetNotes_OrderedByTimestamp()
     {
         // Arrange
         var run = new ExperimentRun<double>("exp-123");
@@ -656,8 +657,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker Constructor Tests
 
-    [Fact]
-    public void ExperimentTracker_ValidConstruction()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ValidConstruction()
     {
         // Act
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -666,8 +667,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(tracker);
     }
 
-    [Fact]
-    public void ExperimentTracker_CreatesStorageDirectory()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreatesStorageDirectory()
     {
         // Arrange
         var subDir = Path.Combine(_testStorageDir, "subdir");
@@ -683,8 +684,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker CreateExperiment Tests
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_ReturnsExperimentId()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_ReturnsExperimentId()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -697,8 +698,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(experimentId, out _));
     }
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_WithDescription()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_WithDescription()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -711,8 +712,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_WithTags()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_WithTags()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -726,8 +727,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("value", experiment.Tags["key"]);
     }
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_EmptyName_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_EmptyName_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -736,8 +737,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.CreateExperiment(""));
     }
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_DuplicateName_ReturnsExistingId()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_DuplicateName_ReturnsExistingId()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -754,8 +755,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker StartRun Tests
 
-    [Fact]
-    public void ExperimentTracker_StartRun_ReturnsRun()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_StartRun_ReturnsRun()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -770,8 +771,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Running", run.Status);
     }
 
-    [Fact]
-    public void ExperimentTracker_StartRun_WithRunName()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_StartRun_WithRunName()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -784,8 +785,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", run.RunName);
     }
 
-    [Fact]
-    public void ExperimentTracker_StartRun_NonexistentExperiment_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_StartRun_NonexistentExperiment_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -794,8 +795,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.StartRun("nonexistent"));
     }
 
-    [Fact]
-    public void ExperimentTracker_StartRun_EmptyExperimentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_StartRun_EmptyExperimentId_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -808,8 +809,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker GetExperiment Tests
 
-    [Fact]
-    public void ExperimentTracker_GetExperiment_ReturnsExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetExperiment_ReturnsExperiment()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -823,8 +824,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Description", experiment.Description);
     }
 
-    [Fact]
-    public void ExperimentTracker_GetExperiment_NonexistentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetExperiment_NonexistentId_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -837,8 +838,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker GetRun Tests
 
-    [Fact]
-    public void ExperimentTracker_GetRun_ReturnsRun()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetRun_ReturnsRun()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -852,8 +853,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", retrievedRun.RunName);
     }
 
-    [Fact]
-    public void ExperimentTracker_GetRun_NonexistentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_GetRun_NonexistentId_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -866,8 +867,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker ListExperiments Tests
 
-    [Fact]
-    public void ExperimentTracker_ListExperiments_ReturnsAll()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListExperiments_ReturnsAll()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -882,8 +883,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(3, experiments.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_ListExperiments_WithFilter()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListExperiments_WithFilter()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -898,8 +899,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(2, experiments.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_ListExperiments_OrderedByLastUpdated()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListExperiments_OrderedByLastUpdated()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -920,8 +921,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker ListRuns Tests
 
-    [Fact]
-    public void ExperimentTracker_ListRuns_ReturnsRunsForExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListRuns_ReturnsRunsForExperiment()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -936,8 +937,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(2, runs.Count);
     }
 
-    [Fact]
-    public void ExperimentTracker_ListRuns_NonexistentExperiment_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListRuns_NonexistentExperiment_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -946,8 +947,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.ListRuns("nonexistent"));
     }
 
-    [Fact]
-    public void ExperimentTracker_ListRuns_WithFilter()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_ListRuns_WithFilter()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -966,8 +967,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker SearchRuns Tests
 
-    [Fact]
-    public void ExperimentTracker_SearchRuns_FindsByRunName()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SearchRuns_FindsByRunName()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -983,8 +984,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("unique_run_name", runs[0].RunName);
     }
 
-    [Fact]
-    public void ExperimentTracker_SearchRuns_FindsByStatus()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SearchRuns_FindsByStatus()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1000,8 +1001,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Single(runs);
     }
 
-    [Fact]
-    public void ExperimentTracker_SearchRuns_RespectsMaxResults()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_SearchRuns_RespectsMaxResults()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1022,8 +1023,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker DeleteExperiment Tests
 
-    [Fact]
-    public void ExperimentTracker_DeleteExperiment_RemovesExperiment()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteExperiment_RemovesExperiment()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1036,8 +1037,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetExperiment(experimentId));
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteExperiment_DeletesAssociatedRuns()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteExperiment_DeletesAssociatedRuns()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1052,8 +1053,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetRun(runId));
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteExperiment_NonexistentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteExperiment_NonexistentId_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1066,8 +1067,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker DeleteRun Tests
 
-    [Fact]
-    public void ExperimentTracker_DeleteRun_RemovesRun()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteRun_RemovesRun()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1081,8 +1082,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetRun(run.RunId));
     }
 
-    [Fact]
-    public void ExperimentTracker_DeleteRun_NonexistentId_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_DeleteRun_NonexistentId_ThrowsException()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);
@@ -1095,8 +1096,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker Float Type Tests
 
-    [Fact]
-    public void ExperimentTracker_Float_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_Float_Works()
     {
         // Arrange
         var tracker = new ExperimentTracker<float>(_testStorageDir);
@@ -1114,8 +1115,8 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Path Sanitization Tests (Via ExperimentTracker)
 
-    [Fact]
-    public void ExperimentTracker_CreateExperiment_SanitizesName()
+    [Fact(Timeout = 120000)]
+    public async Task ExperimentTracker_CreateExperiment_SanitizesName()
     {
         // Arrange
         var tracker = new ExperimentTracker<double>(_testStorageDir);

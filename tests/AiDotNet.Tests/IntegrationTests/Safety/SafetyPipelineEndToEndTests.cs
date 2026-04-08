@@ -6,6 +6,7 @@ using AiDotNet.Safety.Guardrails;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -18,8 +19,8 @@ public class SafetyPipelineEndToEndTests
 {
     #region Full Pipeline Flow Tests
 
-    [Fact]
-    public void FullPipeline_ToxicInput_BlocksContent()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_ToxicInput_BlocksContent()
     {
         var config = new SafetyConfig
         {
@@ -36,8 +37,8 @@ public class SafetyPipelineEndToEndTests
         Assert.True(report.Findings.Count > 0, "Toxic content should produce findings");
     }
 
-    [Fact]
-    public void FullPipeline_JailbreakInput_DetectsAndBlocks()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_JailbreakInput_DetectsAndBlocks()
     {
         var config = new SafetyConfig
         {
@@ -53,8 +54,8 @@ public class SafetyPipelineEndToEndTests
         Assert.True(report.Findings.Count > 0);
     }
 
-    [Fact]
-    public void FullPipeline_PIIInput_DetectsExposure()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_PIIInput_DetectsExposure()
     {
         var config = new SafetyConfig
         {
@@ -69,8 +70,8 @@ public class SafetyPipelineEndToEndTests
         Assert.Contains(report.Findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact]
-    public void FullPipeline_SafeContent_PassesAll()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_SafeContent_PassesAll()
     {
         var config = new SafetyConfig
         {
@@ -88,8 +89,8 @@ public class SafetyPipelineEndToEndTests
         Assert.Empty(actionable);
     }
 
-    [Fact]
-    public void FullPipeline_AllModulesEnabled_ProcessesComplex()
+    [Fact(Timeout = 120000)]
+    public async Task FullPipeline_AllModulesEnabled_ProcessesComplex()
     {
         var config = new SafetyConfig
         {
@@ -112,8 +113,8 @@ public class SafetyPipelineEndToEndTests
 
     #region EnforcePolicy Tests
 
-    [Fact]
-    public void EnforcePolicy_UnsafeInput_ThrowsOnBlock()
+    [Fact(Timeout = 120000)]
+    public async Task EnforcePolicy_UnsafeInput_ThrowsOnBlock()
     {
         var config = new SafetyConfig { ThrowOnUnsafeInput = true };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -128,8 +129,8 @@ public class SafetyPipelineEndToEndTests
         }
     }
 
-    [Fact]
-    public void EnforcePolicy_SafeInput_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task EnforcePolicy_SafeInput_DoesNotThrow()
     {
         var config = new SafetyConfig
         {
@@ -143,8 +144,8 @@ public class SafetyPipelineEndToEndTests
         pipeline.EnforcePolicy(report, isInput: true);
     }
 
-    [Fact]
-    public void EnforcePolicy_UnsafeOutput_WithThrowConfig_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task EnforcePolicy_UnsafeOutput_WithThrowConfig_Throws()
     {
         var config = new SafetyConfig { ThrowOnUnsafeOutput = true };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -163,8 +164,8 @@ public class SafetyPipelineEndToEndTests
 
     #region SafetyConfig Tests
 
-    [Fact]
-    public void Config_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Config_DefaultValues_AreCorrect()
     {
         var config = new SafetyConfig();
 
@@ -174,8 +175,8 @@ public class SafetyPipelineEndToEndTests
         Assert.False(config.EffectiveThrowOnUnsafeOutput);
     }
 
-    [Fact]
-    public void Config_TextDefaults_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Config_TextDefaults_AreCorrect()
     {
         var config = new SafetyConfig();
 
@@ -186,8 +187,8 @@ public class SafetyPipelineEndToEndTests
         Assert.False(config.Text.EffectiveCopyrightDetection);
     }
 
-    [Fact]
-    public void Config_OverriddenValues_TakePrecedence()
+    [Fact(Timeout = 120000)]
+    public async Task Config_OverriddenValues_TakePrecedence()
     {
         var config = new SafetyConfig
         {
@@ -200,8 +201,8 @@ public class SafetyPipelineEndToEndTests
         Assert.Equal(0.9, config.Text.EffectiveToxicityThreshold);
     }
 
-    [Fact]
-    public void Config_DisabledConfig_CreatesEmptyPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Config_DisabledConfig_CreatesEmptyPipeline()
     {
         var config = new SafetyConfig { Enabled = false };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -213,8 +214,8 @@ public class SafetyPipelineEndToEndTests
 
     #region SafetyReport Tests
 
-    [Fact]
-    public void Report_Safe_HasCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Report_Safe_HasCorrectProperties()
     {
         var report = SafetyReport.Safe(new[] { "ModuleA", "ModuleB" });
 
@@ -223,8 +224,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report.ModulesExecuted);
     }
 
-    [Fact]
-    public void Report_FromPipeline_HasModuleInfo()
+    [Fact(Timeout = 120000)]
+    public async Task Report_FromPipeline_HasModuleInfo()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var report = pipeline.EvaluateText("Hello world");
@@ -233,8 +234,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report.ModulesExecuted);
     }
 
-    [Fact]
-    public void Report_MultipleFindings_AggregatesAction()
+    [Fact(Timeout = 120000)]
+    public async Task Report_MultipleFindings_AggregatesAction()
     {
         var config = new SafetyConfig
         {
@@ -254,8 +255,8 @@ public class SafetyPipelineEndToEndTests
 
     #region Pipeline Factory Tests
 
-    [Fact]
-    public void Factory_DefaultConfig_CreatesPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_DefaultConfig_CreatesPipeline()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
 
@@ -263,8 +264,8 @@ public class SafetyPipelineEndToEndTests
         Assert.True(pipeline.Modules.Count > 0);
     }
 
-    [Fact]
-    public void Factory_TextOnly_CreatesCorrectModules()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_TextOnly_CreatesCorrectModules()
     {
         var config = new SafetyConfig
         {
@@ -282,8 +283,8 @@ public class SafetyPipelineEndToEndTests
         Assert.True(pipeline.Modules.Count > 0);
     }
 
-    [Fact]
-    public void Factory_AllEnabled_RegistersManyModules()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_AllEnabled_RegistersManyModules()
     {
         var config = new SafetyConfig
         {
@@ -306,8 +307,8 @@ public class SafetyPipelineEndToEndTests
 
     #region Multi-Modality Pipeline Tests
 
-    [Fact]
-    public void Pipeline_EvaluateImage_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_EvaluateImage_Works()
     {
         var config = new SafetyConfig
         {
@@ -325,8 +326,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact]
-    public void Pipeline_EvaluateAudio_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_EvaluateAudio_Works()
     {
         var config = new SafetyConfig
         {
@@ -350,8 +351,8 @@ public class SafetyPipelineEndToEndTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Pipeline_EmptyText_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_EmptyText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var report = pipeline.EvaluateText("");
@@ -359,8 +360,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact]
-    public void Pipeline_VeryLongText_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_VeryLongText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var longText = new string('A', 10000);
@@ -369,8 +370,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact]
-    public void Pipeline_UnicodeText_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_UnicodeText_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var report = pipeline.EvaluateText(
@@ -379,8 +380,8 @@ public class SafetyPipelineEndToEndTests
         Assert.NotNull(report);
     }
 
-    [Fact]
-    public void Pipeline_SpecialCharacters_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task Pipeline_SpecialCharacters_HandlesGracefully()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var report = pipeline.EvaluateText("!@#$%^&*()_+-=[]{}|;':\",./<>?");

@@ -1,5 +1,6 @@
 using AiDotNet.DataVersionControl;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TrainingInfrastructure;
 
@@ -50,8 +51,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Dataset Version Creation Tests
 
-    [Fact]
-    public void CreateDatasetVersion_WithValidData_ReturnsVersionHash()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_WithValidData_ReturnsVersionHash()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -64,8 +65,8 @@ public class DataVersionControlTests : IDisposable
         Assert.NotEmpty(versionHash);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithDescription_StoresDescription()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_WithDescription_StoresDescription()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -82,8 +83,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal("Test dataset for unit tests", version.Description);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithMetadata_StoresMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_WithMetadata_StoresMetadata()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -103,8 +104,8 @@ public class DataVersionControlTests : IDisposable
         Assert.NotNull(versionHash);
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithNullName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_WithNullName_ThrowsArgumentException()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -113,15 +114,15 @@ public class DataVersionControlTests : IDisposable
         Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion(null!, dataPath));
     }
 
-    [Fact]
-    public void CreateDatasetVersion_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_WithEmptyPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion("test-dataset", ""));
     }
 
-    [Fact]
-    public void CreateDatasetVersion_MultipleTimes_IncrementsVersion()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_MultipleTimes_IncrementsVersion()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("data1.csv", "a,b,c\n1,2,3");
@@ -142,8 +143,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Dataset Version Retrieval Tests
 
-    [Fact]
-    public void GetDatasetVersion_WithValidName_ReturnsVersion()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetVersion_WithValidName_ReturnsVersion()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -158,8 +159,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(createdHash, version.Hash);
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithVersionHash_ReturnsSpecificVersion()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetVersion_WithVersionHash_ReturnsSpecificVersion()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("version1.csv", "x,y,z\n1,2,3");
@@ -176,15 +177,15 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(hash2, version2.Hash);
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithInvalidName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetVersion_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetVersion("nonexistent-dataset"));
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithInvalidHash_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetVersion_WithInvalidHash_ThrowsArgumentException()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -194,8 +195,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetVersion("hash-test-dataset", "invalid-hash"));
     }
 
-    [Fact]
-    public void GetDatasetVersion_WithNoHash_ReturnsLatest()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetVersion_WithNoHash_ReturnsLatest()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("latest1.csv", "a,b\n1,2");
@@ -215,8 +216,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Version Listing Tests
 
-    [Fact]
-    public void ListDatasetVersions_ReturnsAllVersions()
+    [Fact(Timeout = 60000)]
+    public async Task ListDatasetVersions_ReturnsAllVersions()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("list1.csv", "col\n1");
@@ -234,8 +235,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(3, versions.Count);
     }
 
-    [Fact]
-    public void ListDatasetVersions_OrdersByVersionDescending()
+    [Fact(Timeout = 60000)]
+    public async Task ListDatasetVersions_OrdersByVersionDescending()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("order1.csv", "x\n1");
@@ -252,8 +253,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(1, versions.Last().Version);   // Oldest last
     }
 
-    [Fact]
-    public void ListDatasetVersions_WithInvalidName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ListDatasetVersions_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.ListDatasetVersions("nonexistent-dataset"));
@@ -263,8 +264,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Run Linking Tests
 
-    [Fact]
-    public void LinkDatasetToRun_CreatesLink()
+    [Fact(Timeout = 60000)]
+    public async Task LinkDatasetToRun_CreatesLink()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -280,8 +281,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(versionHash, linkedVersion.Hash);
     }
 
-    [Fact]
-    public void GetDatasetForRun_WithNoLink_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetForRun_WithNoLink_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetForRun("nonexistent-run"));
@@ -291,8 +292,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Tagging Tests
 
-    [Fact]
-    public void TagDatasetVersion_CreatesTag()
+    [Fact(Timeout = 60000)]
+    public async Task TagDatasetVersion_CreatesTag()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -307,8 +308,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(versionHash, taggedVersion.Hash);
     }
 
-    [Fact]
-    public void GetDatasetByTag_WithInvalidTag_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetByTag_WithInvalidTag_ThrowsArgumentException()
     {
         // Arrange
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
@@ -322,8 +323,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Comparison Tests
 
-    [Fact]
-    public void CompareDatasetVersions_ReturnsDifferences()
+    [Fact(Timeout = 60000)]
+    public async Task CompareDatasetVersions_ReturnsDifferences()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("compare1.csv", "col\n1\n2\n3");
@@ -343,8 +344,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Snapshot Tests
 
-    [Fact]
-    public void CreateDatasetSnapshot_CreatesMultiDatasetSnapshot()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetSnapshot_CreatesMultiDatasetSnapshot()
     {
         // Arrange
         var dataPath1 = CreateSampleDataFile("snap1.csv", "a\n1");
@@ -367,8 +368,8 @@ public class DataVersionControlTests : IDisposable
         Assert.NotEmpty(snapshotId);
     }
 
-    [Fact]
-    public void GetDatasetSnapshot_ReturnsSnapshot()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetSnapshot_ReturnsSnapshot()
     {
         // Arrange
         var dataPath = CreateSampleDataFile("snap_get.csv", "x\n1");
@@ -389,8 +390,8 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal("get-snapshot", snapshot.DatasetName);
     }
 
-    [Fact]
-    public void GetDatasetSnapshot_WithInvalidName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetDatasetSnapshot_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetSnapshot("nonexistent-snapshot"));
@@ -400,8 +401,8 @@ public class DataVersionControlTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void CreateDatasetVersion_FromMultipleThreads_IsThreadSafe()
+    [Fact(Timeout = 60000)]
+    public async Task CreateDatasetVersion_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
         var tasks = new List<Task<string>>();

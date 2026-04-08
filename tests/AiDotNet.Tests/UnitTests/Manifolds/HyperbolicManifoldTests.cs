@@ -1,13 +1,14 @@
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Manifolds;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Manifolds;
 
 public class HyperbolicManifoldTests
 {
-    [Fact]
-    public void PoincareMobiusAdd_IdentityPreservesPoint()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareMobiusAdd_IdentityPreservesPoint()
     {
         var manifold = new PoincareBallManifold<double>();
         var x = new Vector<double>(new[] { 0.1, -0.2 });
@@ -19,8 +20,8 @@ public class HyperbolicManifoldTests
         Assert.Equal(x[1], sum[1], precision: 10);
     }
 
-    [Fact]
-    public void PoincareExpLog_RoundTripAtOrigin()
+    [Fact(Timeout = 60000)]
+    public async Task PoincareExpLog_RoundTripAtOrigin()
     {
         var manifold = new PoincareBallManifold<double>();
         var basePoint = new Vector<double>(new[] { 0.0, 0.0 });
@@ -33,8 +34,8 @@ public class HyperbolicManifoldTests
         Assert.Equal(tangent[1], recovered[1], precision: 8);
     }
 
-    [Fact]
-    public void HyperboloidDistance_SamePointIsZero()
+    [Fact(Timeout = 60000)]
+    public async Task HyperboloidDistance_SamePointIsZero()
     {
         var manifold = new HyperboloidManifold<double>();
         var x = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
@@ -44,8 +45,8 @@ public class HyperbolicManifoldTests
         Assert.Equal(0.0, distance, precision: 10);
     }
 
-    [Fact]
-    public void HyperboloidExpLog_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task HyperboloidExpLog_RoundTrip()
     {
         var manifold = new HyperboloidManifold<double>();
         var basePoint = new Vector<double>(new[] { 1.0, 0.0, 0.0 });

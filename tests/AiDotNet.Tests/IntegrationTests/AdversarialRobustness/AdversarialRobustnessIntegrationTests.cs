@@ -12,6 +12,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdversarialRobustness;
 
@@ -62,8 +63,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region FGSM Attack Tests
 
-    [Fact]
-    public void FGSMAttack_GeneratesAdversarialExample_WithinEpsilonBound()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_GeneratesAdversarialExample_WithinEpsilonBound()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -92,8 +93,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateBatch_ProcessesMultipleInputs()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_GenerateBatch_ProcessesMultipleInputs()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };
@@ -115,8 +116,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void FGSMAttack_CalculatePerturbation_ReturnsValidPerturbation()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_CalculatePerturbation_ReturnsValidPerturbation()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };
@@ -136,8 +137,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, perturbation.Length);
     }
 
-    [Fact]
-    public void FGSMAttack_Targeted_GeneratesAdversarialTowardTarget()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_Targeted_GeneratesAdversarialTowardTarget()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -159,8 +160,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adversarial);
     }
 
-    [Fact]
-    public void FGSMAttack_GetOptions_ReturnsConfiguredOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -179,8 +180,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.02, retrievedOptions.StepSize, 3);
     }
 
-    [Fact]
-    public void FGSMAttack_SerializationRoundTrip_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.15, RandomSeed = Seed };
@@ -197,8 +198,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.15, newOptions.Epsilon, 3);
     }
 
-    [Fact]
-    public void FGSMAttack_ThrowsOnNullInput()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_ThrowsOnNullInput()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1 };
@@ -211,8 +212,8 @@ public class AdversarialRobustnessIntegrationTests
             attack.GenerateAdversarialExample(null!, label, model));
     }
 
-    [Fact]
-    public void FGSMAttack_ThrowsOnNullLabel()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_ThrowsOnNullLabel()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1 };
@@ -225,8 +226,8 @@ public class AdversarialRobustnessIntegrationTests
             attack.GenerateAdversarialExample(input, null!, model));
     }
 
-    [Fact]
-    public void FGSMAttack_ThrowsOnNullModel()
+    [Fact(Timeout = 120000)]
+    public async Task FGSMAttack_ThrowsOnNullModel()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1 };
@@ -243,8 +244,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region PGD Attack Tests
 
-    [Fact]
-    public void PGDAttack_GeneratesAdversarialExample_WithinEpsilonBound()
+    [Fact(Timeout = 120000)]
+    public async Task PGDAttack_GeneratesAdversarialExample_WithinEpsilonBound()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -272,8 +273,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void PGDAttack_WithRandomStart_GeneratesDifferentAdversarials()
+    [Fact(Timeout = 120000)]
+    public async Task PGDAttack_WithRandomStart_GeneratesDifferentAdversarials()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -300,8 +301,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adv2);
     }
 
-    [Fact]
-    public void PGDAttack_MultipleIterations_ImprovesAttack()
+    [Fact(Timeout = 120000)]
+    public async Task PGDAttack_MultipleIterations_ImprovesAttack()
     {
         // Arrange
         var options1 = new AdversarialAttackOptions<double>
@@ -333,8 +334,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adv10);
     }
 
-    [Fact]
-    public void PGDAttack_Reset_ReturnsToInitialState()
+    [Fact(Timeout = 120000)]
+    public async Task PGDAttack_Reset_ReturnsToInitialState()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, Iterations = 5 };
@@ -356,8 +357,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region CW Attack Tests
 
-    [Fact]
-    public void CWAttack_GeneratesAdversarialExample()
+    [Fact(Timeout = 120000)]
+    public async Task CWAttack_GeneratesAdversarialExample()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -379,8 +380,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void CWAttack_CalculatePerturbation_MinimizesL2Norm()
+    [Fact(Timeout = 120000)]
+    public async Task CWAttack_CalculatePerturbation_MinimizesL2Norm()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -416,8 +417,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(l2Norm >= 0);
     }
 
-    [Fact]
-    public void CWAttack_Targeted_AttemptsToMisclassifyToTarget()
+    [Fact(Timeout = 120000)]
+    public async Task CWAttack_Targeted_AttemptsToMisclassifyToTarget()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -444,8 +445,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AutoAttack Tests
 
-    [Fact]
-    public void AutoAttack_CombinesMultipleAttacks()
+    [Fact(Timeout = 120000)]
+    public async Task AutoAttack_CombinesMultipleAttacks()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -466,8 +467,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void AutoAttack_GetOptions_ReturnsConfiguredOptions()
+    [Fact(Timeout = 120000)]
+    public async Task AutoAttack_GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -488,8 +489,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Adversarial Training Tests
 
-    [Fact]
-    public void AdversarialTraining_ApplyDefense_ReturnsModel()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_ApplyDefense_ReturnsModel()
     {
         // Arrange
         var options = new AdversarialDefenseOptions<double>
@@ -509,8 +510,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(defendedModel);
     }
 
-    [Fact]
-    public void AdversarialTraining_WithPreprocessing_AppliesInputPreprocessing()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_WithPreprocessing_AppliesInputPreprocessing()
     {
         // Arrange
         var options = new AdversarialDefenseOptions<double>
@@ -530,8 +531,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
-    public void AdversarialTraining_PreprocessingMethods_AllSupported()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_PreprocessingMethods_AllSupported()
     {
         // Test different preprocessing methods
         var methods = new[] { "jpeg", "bit_depth_reduction", "denoising" };
@@ -556,8 +557,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdversarialTraining_EvaluateRobustness_ReturnsMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_EvaluateRobustness_ReturnsMetrics()
     {
         // Arrange
         var defenseOptions = new AdversarialDefenseOptions<double> { Epsilon = 0.1 };
@@ -578,8 +579,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.AdversarialAccuracy, 0.0, 1.0);
     }
 
-    [Fact]
-    public void AdversarialTraining_SerializationRoundTrip_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_SerializationRoundTrip_PreservesState()
     {
         // Arrange
         var options = new AdversarialDefenseOptions<double>
@@ -601,8 +602,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.15, newOptions.Epsilon, 3);
     }
 
-    [Fact]
-    public void AdversarialTraining_ThrowsOnNullTrainingData()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_ThrowsOnNullTrainingData()
     {
         // Arrange
         var options = new AdversarialDefenseOptions<double>();
@@ -615,8 +616,8 @@ public class AdversarialRobustnessIntegrationTests
             defense.ApplyDefense(null!, labels, model));
     }
 
-    [Fact]
-    public void AdversarialTraining_ThrowsOnMismatchedDataLabelCount()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_ThrowsOnMismatchedDataLabelCount()
     {
         // Arrange
         var options = new AdversarialDefenseOptions<double>();
@@ -634,8 +635,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Randomized Smoothing Tests
 
-    [Fact]
-    public void RandomizedSmoothing_CertifyPrediction_ReturnsCertifiedPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -658,8 +659,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(prediction.Confidence, 0.0, 1.0);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_CertifyBatch_ProcessesMultipleInputs()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -684,8 +685,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void RandomizedSmoothing_ComputeCertifiedRadius_ReturnsNonNegativeRadius()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -705,8 +706,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(radius >= 0, "Certified radius should be non-negative");
     }
 
-    [Fact]
-    public void RandomizedSmoothing_EvaluateCertifiedAccuracy_ReturnsValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -730,8 +731,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.CertificationRate, 0.0, 1.0);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_HigherSigma_ProducesLargerRadius()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_HigherSigma_ProducesLargerRadius()
     {
         // Arrange
         var optionsLowSigma = new CertifiedDefenseOptions<double>
@@ -761,8 +762,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(predHigh);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_SerializationRoundTrip_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -785,8 +786,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(200, newOptions.NumSamples);
     }
 
-    [Fact]
-    public void RandomizedSmoothing_ThrowsOnNullInput()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_ThrowsOnNullInput()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { RandomSeed = Seed };
@@ -798,8 +799,8 @@ public class AdversarialRobustnessIntegrationTests
             smoothing.CertifyPrediction(null!, model));
     }
 
-    [Fact]
-    public void RandomizedSmoothing_ThrowsOnNullModel()
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedSmoothing_ThrowsOnNullModel()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { RandomSeed = Seed };
@@ -815,8 +816,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Interval Bound Propagation Tests
 
-    [Fact]
-    public void IntervalBoundPropagation_CertifyPrediction_ReturnsCertifiedPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -837,8 +838,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_DefaultConstructor_Works()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_DefaultConstructor_Works()
     {
         // Arrange & Act
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
@@ -849,8 +850,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("IBP", options.CertificationMethod);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_CertifyBatch_ProcessesMultipleInputs()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -871,8 +872,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(2, predictions.Length);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_ComputeCertifiedRadius_ReturnsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_ComputeCertifiedRadius_ReturnsNonNegative()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -892,8 +893,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(radius >= 0);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_EvaluateCertifiedAccuracy_ReturnsMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_EvaluateCertifiedAccuracy_ReturnsMetrics()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -916,8 +917,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.CertifiedAccuracy, 0.0, 1.0);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_Reset_ResetsToDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_Reset_ResetsToDefaults()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5 };
@@ -931,8 +932,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("IBP", newOptions.CertificationMethod);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_SerializationRoundTrip_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -954,8 +955,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(100, newOptions.NumSamples);
     }
 
-    [Fact]
-    public void IntervalBoundPropagation_ThrowsOnMismatchedDataLabelCount()
+    [Fact(Timeout = 120000)]
+    public async Task IntervalBoundPropagation_ThrowsOnMismatchedDataLabelCount()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>();
@@ -973,8 +974,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region CROWN Verification Tests
 
-    [Fact]
-    public void CROWNVerification_CertifyPrediction_ReturnsCertifiedPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -995,8 +996,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
-    public void CROWNVerification_DefaultConstructor_SetsCROWNMethod()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_DefaultConstructor_SetsCROWNMethod()
     {
         // Arrange & Act
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
@@ -1008,8 +1009,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(options.UseTightBounds);
     }
 
-    [Fact]
-    public void CROWNVerification_CertifyBatch_ProcessesMultipleInputs()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -1030,8 +1031,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(2, predictions.Length);
     }
 
-    [Fact]
-    public void CROWNVerification_ProducesTighterBoundsThanIBP()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_ProducesTighterBoundsThanIBP()
     {
         // Note: This is a theoretical property - CROWN should produce tighter bounds
         // In practice with mock model, we just verify both methods work
@@ -1057,8 +1058,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(ibpPred);
     }
 
-    [Fact]
-    public void CROWNVerification_SerializationRoundTrip_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -1080,8 +1081,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(75, newOptions.NumSamples);
     }
 
-    [Fact]
-    public void CROWNVerification_Reset_ResetsToDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task CROWNVerification_Reset_ResetsToDefaults()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5 };
@@ -1100,8 +1101,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Safety Filter Tests
 
-    [Fact]
-    public void SafetyFilter_ValidateInput_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ValidateInput_ReturnsValidResult()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1121,8 +1122,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(result.SafetyScore, 0.0, 1.0);
     }
 
-    [Fact]
-    public void SafetyFilter_ValidateInput_DetectsLengthExceeded()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ValidateInput_DetectsLengthExceeded()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1143,8 +1144,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "LengthExceeded");
     }
 
-    [Fact]
-    public void SafetyFilter_ValidateInput_DetectsNaNValues()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ValidateInput_DetectsNaNValues()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1169,8 +1170,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "InvalidValue");
     }
 
-    [Fact]
-    public void SafetyFilter_ValidateInput_DetectsInfinityValues()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ValidateInput_DetectsInfinityValues()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1194,8 +1195,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "InvalidValue");
     }
 
-    [Fact]
-    public void SafetyFilter_FilterOutput_ReturnsFilteredResult()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_FilterOutput_ReturnsFilteredResult()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1214,8 +1215,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.FilteredOutput);
     }
 
-    [Fact]
-    public void SafetyFilter_DetectJailbreak_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_DetectJailbreak_ReturnsResult()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>();
@@ -1230,8 +1231,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.Indicators);
     }
 
-    [Fact]
-    public void SafetyFilter_IdentifyHarmfulContent_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_IdentifyHarmfulContent_ReturnsResult()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1249,8 +1250,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.CategoryScores);
     }
 
-    [Fact]
-    public void SafetyFilter_ComputeSafetyScore_ReturnsValidScore()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ComputeSafetyScore_ReturnsValidScore()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1267,8 +1268,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(score, 0.0, 1.0);
     }
 
-    [Fact]
-    public void SafetyFilter_SerializationRoundTrip_PreservesOptions()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1290,8 +1291,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(newOptions.EnableOutputFiltering);
     }
 
-    [Fact]
-    public void SafetyFilter_DisabledValidation_BypassesChecks()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_DisabledValidation_BypassesChecks()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>
@@ -1309,8 +1310,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(result.IsValid); // Bypassed due to disabled validation
     }
 
-    [Fact]
-    public void SafetyFilter_ThrowsOnNullInput()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ThrowsOnNullInput()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>();
@@ -1320,8 +1321,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null!));
     }
 
-    [Fact]
-    public void SafetyFilter_ThrowsOnNullOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SafetyFilter_ThrowsOnNullOutput()
     {
         // Arrange
         var options = new SafetyFilterOptions<double>();
@@ -1335,8 +1336,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Rule-Based Content Classifier Tests
 
-    [Fact]
-    public void RuleBasedContentClassifier_ClassifyText_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ClassifyText_ReturnsResult()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.5);
@@ -1350,8 +1351,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.PrimaryCategory);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ClassifyText_DetectsViolence()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ClassifyText_DetectsViolence()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.3);
@@ -1366,8 +1367,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("Violence", result.DetectedCategories);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ClassifyText_EmptyText_ReturnsSafe()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ClassifyText_EmptyText_ReturnsSafe()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1382,8 +1383,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("Safe", result.PrimaryCategory);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ClassifyVector_ReturnsResult()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ClassifyVector_ReturnsResult()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1398,8 +1399,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.False(result.IsHarmful);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_IsReady_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_IsReady_ReturnsTrue()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1408,8 +1409,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(classifier.IsReady());
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_AddPattern_AddsNewPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_AddPattern_AddsNewPattern()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1421,8 +1422,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("CustomCategory", classifier.GetSupportedCategories());
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ClearCategory_RemovesPatterns()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ClearCategory_RemovesPatterns()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1436,8 +1437,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_CustomPatterns_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_CustomPatterns_WorkCorrectly()
     {
         // Arrange
         var customPatterns = new Dictionary<string, List<string>>
@@ -1455,8 +1456,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("Custom", result.DetectedCategories);
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_SerializationRoundTrip_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_SerializationRoundTrip_PreservesState()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>(threshold: 0.7);
@@ -1472,8 +1473,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("TestCategory", newClassifier.GetSupportedCategories());
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ThrowsOnNullVector()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ThrowsOnNullVector()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1482,8 +1483,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentNullException>(() => classifier.Classify(null!));
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ThrowsOnEmptyCategory()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ThrowsOnEmptyCategory()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1492,8 +1493,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentException>(() => classifier.AddPattern("", @"\btest\b"));
     }
 
-    [Fact]
-    public void RuleBasedContentClassifier_ThrowsOnEmptyPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RuleBasedContentClassifier_ThrowsOnEmptyPattern()
     {
         // Arrange
         var classifier = new RuleBasedContentClassifier<double>();
@@ -1506,8 +1507,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void IntegrationScenario_AttackThenDefense_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrationScenario_AttackThenDefense_WorksTogether()
     {
         // Arrange
         var attackOptions = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };
@@ -1535,8 +1536,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
-    public void IntegrationScenario_CertificationAfterDefense_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrationScenario_CertificationAfterDefense_WorksTogether()
     {
         // Arrange
         var defenseOptions = new AdversarialDefenseOptions<double> { UsePreprocessing = false };
@@ -1564,8 +1565,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(certification);
     }
 
-    [Fact]
-    public void IntegrationScenario_SafetyFilterWithCertification_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrationScenario_SafetyFilterWithCertification_WorksTogether()
     {
         // Arrange
         var safetyOptions = new SafetyFilterOptions<double>
@@ -1601,8 +1602,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(certification);
     }
 
-    [Fact]
-    public void IntegrationScenario_MultipleAttackComparison()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrationScenario_MultipleAttackComparison()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -1638,8 +1639,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void IntegrationScenario_CertificationMethodComparison()
+    [Fact(Timeout = 120000)]
+    public async Task IntegrationScenario_CertificationMethodComparison()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -1676,8 +1677,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void EdgeCase_EmptyInput_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_EmptyInput_HandledGracefully()
     {
         // Arrange
         var options = new SafetyFilterOptions<double> { EnableInputValidation = true, MaxInputLength = 100 };
@@ -1692,8 +1693,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(result.IsValid); // Empty but valid
     }
 
-    [Fact]
-    public void EdgeCase_VerySmallEpsilon_StillWorks()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_VerySmallEpsilon_StillWorks()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double>
@@ -1718,8 +1719,8 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
-    public void EdgeCase_ZeroIterations_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_ZeroIterations_HandledGracefully()
     {
         // Some implementations may handle 0 iterations by returning the original input
         // or throwing an exception - verify consistent behavior
@@ -1741,8 +1742,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adversarial);
     }
 
-    [Fact]
-    public void EdgeCase_SingleElementInput_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_SingleElementInput_HandledCorrectly()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };
@@ -1759,8 +1760,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Single(adversarial.ToArray());
     }
 
-    [Fact]
-    public void EdgeCase_LargeInput_HandledEfficiently()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_LargeInput_HandledEfficiently()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };
@@ -1777,8 +1778,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(1000, adversarial.Length);
     }
 
-    [Fact]
-    public void EdgeCase_AllZeroInput_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_AllZeroInput_HandledCorrectly()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -1799,8 +1800,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
-    public void EdgeCase_AllOnesInput_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EdgeCase_AllOnesInput_HandledCorrectly()
     {
         // Arrange
         var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, RandomSeed = Seed };

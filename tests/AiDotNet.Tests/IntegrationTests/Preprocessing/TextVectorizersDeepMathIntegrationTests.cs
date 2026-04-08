@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.TextVectorizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -13,8 +14,8 @@ public class TextVectorizersDeepMathIntegrationTests
     // CountVectorizer: bag-of-words (term counts per document)
     // =====================================================================
 
-    [Fact]
-    public void CountVectorizer_BasicCounts_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_BasicCounts_HandComputed()
     {
         var docs = new[] { "cat dog cat", "dog bird", "cat bird bird" };
         var vectorizer = new CountVectorizer<double>();
@@ -47,8 +48,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(0.0, result[2, dogIdx], Tolerance);
     }
 
-    [Fact]
-    public void CountVectorizer_Binary_CapsAtOne()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_Binary_CapsAtOne()
     {
         var docs = new[] { "cat cat cat dog", "bird bird" };
         var vectorizer = new CountVectorizer<double>(binary: true);
@@ -67,8 +68,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(1.0, result[1, birdIdx], Tolerance);
     }
 
-    [Fact]
-    public void CountVectorizer_Lowercase_MergesCase()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_Lowercase_MergesCase()
     {
         var docs = new[] { "Cat CAT cat", "DOG Dog" };
         var vectorizer = new CountVectorizer<double>(lowercase: true);
@@ -85,8 +86,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(3.0, result[0, catIdx], Tolerance); // Cat + CAT + cat = 3
     }
 
-    [Fact]
-    public void CountVectorizer_StopWords_Filtered()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_StopWords_Filtered()
     {
         var stopWords = new HashSet<string> { "the", "a", "is" };
         var docs = new[] { "the cat is a cat", "a dog is the dog" };
@@ -102,8 +103,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.True(vectorizer.Vocabulary.ContainsKey("dog"));
     }
 
-    [Fact]
-    public void CountVectorizer_NGrams_BigramsGenerated()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_NGrams_BigramsGenerated()
     {
         var docs = new[] { "cat dog bird", "dog bird fish" };
         var vectorizer = new CountVectorizer<double>(nGramRange: (1, 2));
@@ -118,8 +119,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.True(vectorizer.Vocabulary.ContainsKey("dog bird"));
     }
 
-    [Fact]
-    public void CountVectorizer_MaxFeatures_LimitsVocabulary()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_MaxFeatures_LimitsVocabulary()
     {
         var docs = new[] { "alpha beta gamma delta", "alpha beta gamma", "alpha beta" };
         var vectorizer = new CountVectorizer<double>(maxFeatures: 2);
@@ -129,8 +130,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(2, vectorizer.Vocabulary.Count);
     }
 
-    [Fact]
-    public void CountVectorizer_MinDf_FiltersRareTerms()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_MinDf_FiltersRareTerms()
     {
         var docs = new[] { "cat dog", "cat bird", "cat fish" };
         // minDf=2 means term must appear in at least 2 documents
@@ -145,8 +146,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.False(vectorizer.Vocabulary.ContainsKey("fish"));
     }
 
-    [Fact]
-    public void CountVectorizer_OutputDimensions_CorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_OutputDimensions_CorrectShape()
     {
         var docs = new[] { "a b c", "d e f", "a d" };
         var vectorizer = new CountVectorizer<double>();
@@ -163,8 +164,8 @@ public class TextVectorizersDeepMathIntegrationTests
     // IDF standard = log(N/df) + 1
     // =====================================================================
 
-    [Fact]
-    public void Tfidf_SmoothIDF_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_SmoothIDF_HandComputed()
     {
         // 3 docs: term "cat" in all 3, "dog" in 2, "bird" in 1
         var docs = new[] { "cat dog", "cat dog bird", "cat" };
@@ -200,8 +201,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(0.0, result[0, birdIdx], Tolerance);
     }
 
-    [Fact]
-    public void Tfidf_StandardIDF_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_StandardIDF_HandComputed()
     {
         var docs = new[] { "cat dog", "cat bird", "cat" };
         var vectorizer = new TfidfVectorizer<double>(
@@ -221,8 +222,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(expectedCatIdf, vectorizer.IdfWeights[catIdx], Tolerance);
     }
 
-    [Fact]
-    public void Tfidf_SublinearTf_AppliesLogToTf()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_SublinearTf_AppliesLogToTf()
     {
         // SublinearTf: TF = 1 + log(raw_tf) when raw_tf > 0
         var docs = new[] { "cat cat cat dog", "bird" };
@@ -241,8 +242,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(1.0, result[0, dogIdx], Tolerance);
     }
 
-    [Fact]
-    public void Tfidf_L2Norm_UnitVectors()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_L2Norm_UnitVectors()
     {
         var docs = new[] { "cat dog bird", "cat cat", "dog dog dog" };
         var vectorizer = new TfidfVectorizer<double>(
@@ -262,8 +263,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tfidf_L1Norm_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_L1Norm_SumsToOne()
     {
         var docs = new[] { "cat dog bird", "cat cat", "dog dog dog" };
         var vectorizer = new TfidfVectorizer<double>(
@@ -281,8 +282,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tfidf_NoIdf_ReducesToTfOnly()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_NoIdf_ReducesToTfOnly()
     {
         // Without IDF, TF-IDF = TF (raw term counts)
         var docs = new[] { "cat dog", "cat cat" };
@@ -306,8 +307,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tfidf_RareTermHasHigherIdf()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_RareTermHasHigherIdf()
     {
         // A rare term should get higher IDF than a common term
         var docs = new[] { "cat", "cat", "cat", "cat dog", "cat" };
@@ -333,8 +334,8 @@ public class TextVectorizersDeepMathIntegrationTests
     // BM25 score = IDF * term weight
     // =====================================================================
 
-    [Fact]
-    public void BM25_IDF_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_IDF_HandComputed()
     {
         // 3 docs: "cat" in all 3, "dog" in 1
         var docs = new[] { "cat dog", "cat", "cat" };
@@ -358,8 +359,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(expectedDogIdf, vectorizer.IdfWeights[dogIdx], Tolerance);
     }
 
-    [Fact]
-    public void BM25_TermWeight_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_TermWeight_HandComputed()
     {
         // Single doc "cat cat dog", k1=1.5, b=0.75
         var docs = new[] { "cat cat dog", "cat", "dog" };
@@ -395,8 +396,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(expectedCatScore, result[0, catIdx], Tolerance);
     }
 
-    [Fact]
-    public void BM25_TermFrequencySaturation()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_TermFrequencySaturation()
     {
         // BM25 saturates: increasing TF beyond a point gives diminishing returns
         // A document with tf=10 should not score 10x a document with tf=1
@@ -427,8 +428,8 @@ public class TextVectorizersDeepMathIntegrationTests
             $"BM25 saturation: score ratio should be much less than 10x, got {ratio:F2}x");
     }
 
-    [Fact]
-    public void BM25_DocumentLengthNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_DocumentLengthNormalization()
     {
         // With b=0.75, longer documents are penalized
         // Same word, once in short doc vs once in long doc
@@ -450,8 +451,8 @@ public class TextVectorizersDeepMathIntegrationTests
             $"Short doc BM25 score ({result[0, targetIdx]}) should be > long doc ({result[1, targetIdx]})");
     }
 
-    [Fact]
-    public void BM25_NoLengthNorm_WhenBIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_NoLengthNorm_WhenBIsZero()
     {
         // With b=0, document length has no effect
         var docs = new[]
@@ -471,8 +472,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(result[0, targetIdx], result[1, targetIdx], Tolerance);
     }
 
-    [Fact]
-    public void BM25_Delta_AddedToTermWeight()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_Delta_AddedToTermWeight()
     {
         // BM25+ adds delta to term weight
         var docs = new[] { "cat dog", "cat" };
@@ -493,8 +494,8 @@ public class TextVectorizersDeepMathIntegrationTests
             "BM25+ with delta should give higher scores");
     }
 
-    [Fact]
-    public void BM25_AvgDocLength_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_AvgDocLength_HandComputed()
     {
         var docs = new[] { "a b c", "d", "e f" };
         var vectorizer = new BM25Vectorizer<double>();
@@ -504,8 +505,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(2.0, vectorizer.AverageDocumentLength, Tolerance);
     }
 
-    [Fact]
-    public void BM25_L2Norm_UnitVectors()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_L2Norm_UnitVectors()
     {
         var docs = new[] { "cat dog bird", "cat cat", "dog dog dog" };
         var vectorizer = new BM25Vectorizer<double>(norm: BM25Norm.L2);
@@ -523,8 +524,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BM25_ValidationRejectsInvalidParams()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_ValidationRejectsInvalidParams()
     {
         Assert.Throws<ArgumentException>(() =>
             new BM25Vectorizer<double>(k1: -1));
@@ -538,8 +539,8 @@ public class TextVectorizersDeepMathIntegrationTests
     // Cross-vectorizer consistency tests
     // =====================================================================
 
-    [Fact]
-    public void AllVectorizers_SameVocabulary_SameDocumentCount()
+    [Fact(Timeout = 120000)]
+    public async Task AllVectorizers_SameVocabulary_SameDocumentCount()
     {
         var docs = new[] { "hello world", "hello cat", "world cat" };
 
@@ -561,8 +562,8 @@ public class TextVectorizersDeepMathIntegrationTests
         Assert.Equal(count.Vocabulary.Count, bm25.Vocabulary.Count);
     }
 
-    [Fact]
-    public void Tfidf_TransformUnseen_UnknownWordsIgnored()
+    [Fact(Timeout = 120000)]
+    public async Task Tfidf_TransformUnseen_UnknownWordsIgnored()
     {
         var trainDocs = new[] { "cat dog", "cat bird" };
         var vectorizer = new TfidfVectorizer<double>(norm: TfidfNorm.None, useIdf: false);
@@ -586,8 +587,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CountVectorizer_GetFeatureNames_MatchesVocabulary()
+    [Fact(Timeout = 120000)]
+    public async Task CountVectorizer_GetFeatureNames_MatchesVocabulary()
     {
         var docs = new[] { "alpha beta gamma" };
         var vectorizer = new CountVectorizer<double>();
@@ -605,8 +606,8 @@ public class TextVectorizersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BM25_RareTermHigherScoreThanCommonTerm()
+    [Fact(Timeout = 120000)]
+    public async Task BM25_RareTermHigherScoreThanCommonTerm()
     {
         // BM25 should give higher score to rare terms (similar to TF-IDF)
         var docs = new[]

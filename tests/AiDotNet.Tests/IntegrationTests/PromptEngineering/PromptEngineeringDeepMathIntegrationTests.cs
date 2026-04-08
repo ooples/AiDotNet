@@ -2,6 +2,7 @@ using AiDotNet.PromptEngineering;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PromptEngineering;
 
@@ -21,8 +22,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: Token Estimation
     // ============================
 
-    [Fact]
-    public void DefaultTokenEstimator_4CharsPerToken()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultTokenEstimator_4CharsPerToken()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -30,8 +31,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(2, manager.EstimateTokens("Hello"));
     }
 
-    [Fact]
-    public void DefaultTokenEstimator_LongerText_CeilDivision()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultTokenEstimator_LongerText_CeilDivision()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -40,8 +41,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(25, manager.EstimateTokens(text));
     }
 
-    [Fact]
-    public void DefaultTokenEstimator_OddLength_RoundsUp()
+    [Fact(Timeout = 120000)]
+    public async Task DefaultTokenEstimator_OddLength_RoundsUp()
     {
         var manager = new ContextWindowManager(4096);
 
@@ -50,22 +51,22 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(4, manager.EstimateTokens(text));
     }
 
-    [Fact]
-    public void EstimateTokens_EmptyString_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateTokens_EmptyString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
         Assert.Equal(0, manager.EstimateTokens(""));
     }
 
-    [Fact]
-    public void EstimateTokens_NullString_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EstimateTokens_NullString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
         Assert.Equal(0, manager.EstimateTokens(null!));
     }
 
-    [Fact]
-    public void CustomTokenEstimator_UsedInstead()
+    [Fact(Timeout = 120000)]
+    public async Task CustomTokenEstimator_UsedInstead()
     {
         // Custom estimator: 1 token per word
         var manager = new ContextWindowManager(100, text =>
@@ -78,8 +79,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: FitsInWindow
     // ============================
 
-    [Fact]
-    public void FitsInWindow_WithinLimit_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task FitsInWindow_WithinLimit_ReturnsTrue()
     {
         var manager = new ContextWindowManager(100);
 
@@ -88,8 +89,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(manager.FitsInWindow(text));
     }
 
-    [Fact]
-    public void FitsInWindow_ExceedsLimit_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task FitsInWindow_ExceedsLimit_ReturnsFalse()
     {
         var manager = new ContextWindowManager(5);
 
@@ -98,8 +99,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(manager.FitsInWindow(text));
     }
 
-    [Fact]
-    public void FitsInWindow_WithReserved_AccountsForReserved()
+    [Fact(Timeout = 120000)]
+    public async Task FitsInWindow_WithReserved_AccountsForReserved()
     {
         var manager = new ContextWindowManager(100);
 
@@ -108,8 +109,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(manager.FitsInWindow(text, reservedTokens: 20));
     }
 
-    [Fact]
-    public void FitsInWindow_ExactlyAtLimit_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task FitsInWindow_ExactlyAtLimit_ReturnsTrue()
     {
         var manager = new ContextWindowManager(10);
 
@@ -122,8 +123,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: RemainingTokens
     // ============================
 
-    [Fact]
-    public void RemainingTokens_HalfUsed_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task RemainingTokens_HalfUsed_ReturnsHalf()
     {
         var manager = new ContextWindowManager(100);
 
@@ -132,8 +133,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(50, manager.RemainingTokens(text));
     }
 
-    [Fact]
-    public void RemainingTokens_Exceeded_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task RemainingTokens_Exceeded_ReturnsZero()
     {
         var manager = new ContextWindowManager(10);
 
@@ -142,8 +143,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0, manager.RemainingTokens(text));
     }
 
-    [Fact]
-    public void RemainingTokens_WithReserved_AccountsForBoth()
+    [Fact(Timeout = 120000)]
+    public async Task RemainingTokens_WithReserved_AccountsForBoth()
     {
         var manager = new ContextWindowManager(100);
 
@@ -156,8 +157,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: TruncateToFit (Binary Search)
     // ============================
 
-    [Fact]
-    public void TruncateToFit_FitsAlready_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task TruncateToFit_FitsAlready_ReturnsOriginal()
     {
         var manager = new ContextWindowManager(100);
         var text = "Hello world";
@@ -165,8 +166,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(text, manager.TruncateToFit(text));
     }
 
-    [Fact]
-    public void TruncateToFit_TooLong_Truncates()
+    [Fact(Timeout = 120000)]
+    public async Task TruncateToFit_TooLong_Truncates()
     {
         var manager = new ContextWindowManager(5);
         var text = new string('x', 100); // 25 tokens > 5
@@ -176,8 +177,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(manager.FitsInWindow(truncated));
     }
 
-    [Fact]
-    public void TruncateToFit_WithReserved_TruncatesMore()
+    [Fact(Timeout = 120000)]
+    public async Task TruncateToFit_WithReserved_TruncatesMore()
     {
         var manager = new ContextWindowManager(10);
         var text = new string('x', 100); // 25 tokens
@@ -188,15 +189,15 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(withReserve.Length <= noReserve.Length);
     }
 
-    [Fact]
-    public void TruncateToFit_EmptyString_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TruncateToFit_EmptyString_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(100);
         Assert.Equal("", manager.TruncateToFit(""));
     }
 
-    [Fact]
-    public void TruncateToFit_ZeroAvailable_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TruncateToFit_ZeroAvailable_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(5);
         var text = new string('x', 100);
@@ -209,8 +210,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ContextWindowManager: SplitIntoChunks
     // ============================
 
-    [Fact]
-    public void SplitIntoChunks_FitsInOne_SingleChunk()
+    [Fact(Timeout = 120000)]
+    public async Task SplitIntoChunks_FitsInOne_SingleChunk()
     {
         var manager = new ContextWindowManager(100);
         var text = "Short text";
@@ -220,8 +221,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(text, chunks[0]);
     }
 
-    [Fact]
-    public void SplitIntoChunks_LongText_MultipleChunks()
+    [Fact(Timeout = 120000)]
+    public async Task SplitIntoChunks_LongText_MultipleChunks()
     {
         var manager = new ContextWindowManager(10);
         var text = new string('x', 200); // 50 tokens, max 10 per chunk
@@ -236,8 +237,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SplitIntoChunks_EmptyText_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SplitIntoChunks_EmptyText_ReturnsEmpty()
     {
         var manager = new ContextWindowManager(100);
         var chunks = manager.SplitIntoChunks("");
@@ -248,8 +249,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // ComplexityAnalyzer: Flesch Reading Ease
     // ============================
 
-    [Fact]
-    public void ComplexityAnalyzer_SimplePrompt_LowComplexity()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexityAnalyzer_SimplePrompt_LowComplexity()
     {
         var analyzer = new ComplexityAnalyzer();
         var metrics = analyzer.Analyze("What is AI?");
@@ -258,8 +259,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.InRange(metrics.ComplexityScore, 0.0, 0.5);
     }
 
-    [Fact]
-    public void ComplexityAnalyzer_ComplexPrompt_HigherComplexity()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexityAnalyzer_ComplexPrompt_HigherComplexity()
     {
         var analyzer = new ComplexityAnalyzer();
         var complexPrompt =
@@ -277,8 +278,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(metrics.ComplexityScore > 0.1);
     }
 
-    [Fact]
-    public void ComplexityAnalyzer_AnalyzeReturnsValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexityAnalyzer_AnalyzeReturnsValidMetrics()
     {
         var analyzer = new ComplexityAnalyzer();
         var metrics = analyzer.Analyze("Tell me about machine learning in simple terms.");
@@ -312,22 +313,22 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal((decimal)expectedPrice, price);
     }
 
-    [Fact]
-    public void GetModelPrice_UnknownModel_DefaultsToGpt4()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelPrice_UnknownModel_DefaultsToGpt4()
     {
         var price = TokenCountAnalyzer.GetModelPrice("unknown-model");
         Assert.Equal(0.03m, price);
     }
 
-    [Fact]
-    public void GetModelPrice_CaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelPrice_CaseInsensitive()
     {
         var price = TokenCountAnalyzer.GetModelPrice("GPT-4");
         Assert.Equal(0.03m, price);
     }
 
-    [Fact]
-    public void GetSupportedModels_Returns11Models()
+    [Fact(Timeout = 120000)]
+    public async Task GetSupportedModels_Returns11Models()
     {
         var models = TokenCountAnalyzer.GetSupportedModels();
         Assert.Equal(11, models.Count);
@@ -337,8 +338,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // TokenCountAnalyzer: Cost Estimation
     // ============================
 
-    [Fact]
-    public void CostEstimation_1000Tokens_EqualsPricePerK()
+    [Fact(Timeout = 120000)]
+    public async Task CostEstimation_1000Tokens_EqualsPricePerK()
     {
         // For GPT-4: cost = (tokens / 1000) * $0.03
         var analyzer = TokenCountAnalyzer.ForGpt4();
@@ -349,8 +350,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(metrics.EstimatedCost > 0);
     }
 
-    [Fact]
-    public void CostEstimation_EmptyPrompt_ThrowsOnNull()
+    [Fact(Timeout = 120000)]
+    public async Task CostEstimation_EmptyPrompt_ThrowsOnNull()
     {
         var analyzer = TokenCountAnalyzer.ForGpt4();
         Assert.Throws<ArgumentNullException>(() => analyzer.Analyze(null!));
@@ -360,8 +361,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // TokenCountAnalyzer: Factory Methods
     // ============================
 
-    [Fact]
-    public void ForGpt4_CreatesAnalyzer()
+    [Fact(Timeout = 120000)]
+    public async Task ForGpt4_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGpt4();
         Assert.NotNull(analyzer);
@@ -370,8 +371,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-4", metrics.ModelName);
     }
 
-    [Fact]
-    public void ForGpt35Turbo_CreatesAnalyzer()
+    [Fact(Timeout = 120000)]
+    public async Task ForGpt35Turbo_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGpt35Turbo();
         Assert.NotNull(analyzer);
@@ -380,8 +381,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-3.5-turbo", metrics.ModelName);
     }
 
-    [Fact]
-    public void ForClaude_CreatesAnalyzer()
+    [Fact(Timeout = 120000)]
+    public async Task ForClaude_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForClaude();
         Assert.NotNull(analyzer);
@@ -390,8 +391,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("claude-3-sonnet", metrics.ModelName);
     }
 
-    [Fact]
-    public void ForGemini_CreatesAnalyzer()
+    [Fact(Timeout = 120000)]
+    public async Task ForGemini_CreatesAnalyzer()
     {
         var analyzer = TokenCountAnalyzer.ForGemini();
         Assert.NotNull(analyzer);
@@ -404,8 +405,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Pattern Detection
     // ============================
 
-    [Fact]
-    public void DetectPatterns_QuestionMark_DetectsQuestion()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_QuestionMark_DetectsQuestion()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("What is machine learning?");
@@ -413,8 +414,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("question", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_GenerationKeywords_DetectsGeneration()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_GenerationKeywords_DetectsGeneration()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Write a poem about the ocean.");
@@ -422,8 +423,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("generation", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_SummarizeKeyword_DetectsSummarization()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_SummarizeKeyword_DetectsSummarization()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Summarize the following article.");
@@ -431,8 +432,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("summarization", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_TranslateKeyword_DetectsTranslation()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_TranslateKeyword_DetectsTranslation()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Translate this text from English to Spanish.");
@@ -440,8 +441,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("translation", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_AnalyzeKeyword_DetectsAnalysis()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_AnalyzeKeyword_DetectsAnalysis()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Analyze the sentiment of these reviews.");
@@ -449,8 +450,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("analysis", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_ChainOfThoughtKeywords_DetectsCoT()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_ChainOfThoughtKeywords_DetectsCoT()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Let's think step by step about this problem.");
@@ -458,8 +459,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("chain-of-thought", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_RoleKeywords_DetectsRolePlaying()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_RoleKeywords_DetectsRolePlaying()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("You are a helpful assistant that specializes in coding.");
@@ -467,8 +468,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("role-playing", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_TemplateVariables_DetectsTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_TemplateVariables_DetectsTemplate()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Translate {text} from {source} to {target}.");
@@ -476,8 +477,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("template", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void DetectPatterns_SimpleText_DetectsGeneral()
+    [Fact(Timeout = 120000)]
+    public async Task DetectPatterns_SimpleText_DetectsGeneral()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("The sky looks blue today.");
@@ -489,8 +490,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Variable Counting
     // ============================
 
-    [Fact]
-    public void VariableCount_MultipleVariables_Counted()
+    [Fact(Timeout = 120000)]
+    public async Task VariableCount_MultipleVariables_Counted()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Hello {name}, your order {orderId} is ready at {location}.");
@@ -498,8 +499,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(3, metrics.VariableCount);
     }
 
-    [Fact]
-    public void VariableCount_NoVariables_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task VariableCount_NoVariables_Zero()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("Hello world, no variables here.");
@@ -511,8 +512,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptAnalyzerBase: Word and Character Count
     // ============================
 
-    [Fact]
-    public void WordCount_SplitsOnWhitespace()
+    [Fact(Timeout = 120000)]
+    public async Task WordCount_SplitsOnWhitespace()
     {
         var analyzer = new TokenCountAnalyzer();
         var metrics = analyzer.Analyze("one two three four five");
@@ -520,8 +521,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(5, metrics.WordCount);
     }
 
-    [Fact]
-    public void CharacterCount_MatchesStringLength()
+    [Fact(Timeout = 120000)]
+    public async Task CharacterCount_MatchesStringLength()
     {
         var analyzer = new TokenCountAnalyzer();
         var text = "Hello, world!";
@@ -534,8 +535,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: Syntax Validation
     // ============================
 
-    [Fact]
-    public void Validate_MismatchedBraces_ReportsError()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_MismatchedBraces_ReportsError()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate("Hello {name, your order is ready.");
@@ -543,8 +544,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE010" && i.Severity == IssueSeverity.Error);
     }
 
-    [Fact]
-    public void Validate_MismatchedParentheses_ReportsWarning()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_MismatchedParentheses_ReportsWarning()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate("Calculate (2 + 3 * (4 - 1 and return result.");
@@ -552,8 +553,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE011" && i.Severity == IssueSeverity.Warning);
     }
 
-    [Fact]
-    public void Validate_UnclosedCodeBlock_ReportsWarning()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_UnclosedCodeBlock_ReportsWarning()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate("Here is code:\n```python\nprint('hello')\nThat's all.");
@@ -561,8 +562,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE013");
     }
 
-    [Fact]
-    public void Validate_NullPrompt_ReportsError()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NullPrompt_ReportsError()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate(null!);
@@ -570,8 +571,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE001" && i.Severity == IssueSeverity.Error);
     }
 
-    [Fact]
-    public void Validate_EmptyPrompt_ReportsError()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EmptyPrompt_ReportsError()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate("");
@@ -597,8 +598,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Code == "PE030" && i.Severity == IssueSeverity.Warning);
     }
 
-    [Fact]
-    public void Validate_SafePrompt_NoInjectionWarnings()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_SafePrompt_NoInjectionWarnings()
     {
         var validator = new PromptValidator();
         var issues = validator.Validate("Please help me write a Python function that sorts a list.");
@@ -610,8 +611,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: ValidationSummary
     // ============================
 
-    [Fact]
-    public void GetSummary_ValidPrompt_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GetSummary_ValidPrompt_IsValid()
     {
         var validator = new PromptValidator();
         var summary = validator.GetSummary("Please help me with this task.");
@@ -620,8 +621,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0, summary.ErrorCount);
     }
 
-    [Fact]
-    public void GetSummary_InvalidPrompt_NotValid()
+    [Fact(Timeout = 120000)]
+    public async Task GetSummary_InvalidPrompt_NotValid()
     {
         var validator = new PromptValidator();
         var summary = validator.GetSummary("");
@@ -630,8 +631,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(summary.ErrorCount > 0);
     }
 
-    [Fact]
-    public void GetSummary_TotalCount_SumsAllSeverities()
+    [Fact(Timeout = 120000)]
+    public async Task GetSummary_TotalCount_SumsAllSeverities()
     {
         var summary = new ValidationSummary
         {
@@ -647,8 +648,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptValidator: ValidationOptions Presets
     // ============================
 
-    [Fact]
-    public void ValidationOptions_Strict_LowMaxTokens()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationOptions_Strict_LowMaxTokens()
     {
         var strict = ValidationOptions.Strict;
 
@@ -658,8 +659,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(IssueSeverity.Info, strict.MinSeverityToReport);
     }
 
-    [Fact]
-    public void ValidationOptions_Lenient_HighMaxTokens()
+    [Fact(Timeout = 120000)]
+    public async Task ValidationOptions_Lenient_HighMaxTokens()
     {
         var lenient = ValidationOptions.Lenient;
 
@@ -673,8 +674,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // StopWordRemovalCompressor: Compression
     // ============================
 
-    [Fact]
-    public void StopWordRemoval_Light_RemovesArticles()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_Light_RemovesArticles()
     {
         var compressor = new StopWordRemovalCompressor(
             StopWordRemovalCompressor.AggressivenessLevel.Light);
@@ -687,8 +688,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(compressed.Length < original.Length);
     }
 
-    [Fact]
-    public void StopWordRemoval_Medium_RemovesMoreWords()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_Medium_RemovesMoreWords()
     {
         var compressor = new StopWordRemovalCompressor(
             StopWordRemovalCompressor.AggressivenessLevel.Medium);
@@ -700,8 +701,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(compressed.Length < original.Length);
     }
 
-    [Fact]
-    public void StopWordRemoval_Aggressive_RemovesPrepositions()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_Aggressive_RemovesPrepositions()
     {
         var compressor = new StopWordRemovalCompressor(
             StopWordRemovalCompressor.AggressivenessLevel.Aggressive);
@@ -716,8 +717,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressionResult: Computed Properties
     // ============================
 
-    [Fact]
-    public void CompressionResult_TokensSaved_Computed()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionResult_TokensSaved_Computed()
     {
         var result = new CompressionResult
         {
@@ -728,8 +729,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(30, result.TokensSaved);
     }
 
-    [Fact]
-    public void CompressionResult_CompressionRatio_Computed()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionResult_CompressionRatio_Computed()
     {
         var result = new CompressionResult
         {
@@ -741,8 +742,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0.3, result.CompressionRatio, 0.001);
     }
 
-    [Fact]
-    public void CompressionResult_CompressionRatio_ZeroOriginal_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionResult_CompressionRatio_ZeroOriginal_ReturnsZero()
     {
         var result = new CompressionResult
         {
@@ -753,8 +754,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(0.0, result.CompressionRatio);
     }
 
-    [Fact]
-    public void CompressionResult_IsSuccessful_WhenReduced()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionResult_IsSuccessful_WhenReduced()
     {
         var successResult = new CompressionResult
         {
@@ -771,8 +772,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.False(noChangeResult.IsSuccessful);
     }
 
-    [Fact]
-    public void CompressionResult_50PercentReduction_Ratio05()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionResult_50PercentReduction_Ratio05()
     {
         var result = new CompressionResult
         {
@@ -788,8 +789,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressionOptions: Presets
     // ============================
 
-    [Fact]
-    public void CompressionOptions_Default_ModerateSettings()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptions_Default_ModerateSettings()
     {
         var opts = CompressionOptions.Default;
 
@@ -800,8 +801,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal("gpt-4", opts.ModelName);
     }
 
-    [Fact]
-    public void CompressionOptions_Aggressive_HigherReduction()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptions_Aggressive_HigherReduction()
     {
         var opts = CompressionOptions.Aggressive;
 
@@ -809,8 +810,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Equal(20, opts.MinTokenCount);
     }
 
-    [Fact]
-    public void CompressionOptions_Conservative_LowerReduction()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptions_Conservative_LowerReduction()
     {
         var opts = CompressionOptions.Conservative;
 
@@ -823,8 +824,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // CompressWithMetrics: Full Pipeline
     // ============================
 
-    [Fact]
-    public void CompressWithMetrics_ReturnsDetailedResult()
+    [Fact(Timeout = 120000)]
+    public async Task CompressWithMetrics_ReturnsDetailedResult()
     {
         var compressor = new StopWordRemovalCompressor();
         var original = "Please analyze the data and provide a detailed summary of the findings.";
@@ -838,8 +839,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.True(result.CompressionRatio <= 1.0);
     }
 
-    [Fact]
-    public void CompressWithMetrics_CostSavings_Positive()
+    [Fact(Timeout = 120000)]
+    public async Task CompressWithMetrics_CostSavings_Positive()
     {
         var compressor = new StopWordRemovalCompressor();
         var original = "I would really like you to please analyze the following document very carefully and then provide a comprehensive summary.";
@@ -856,8 +857,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptMetrics: Defaults
     // ============================
 
-    [Fact]
-    public void PromptMetrics_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PromptMetrics_DefaultValues()
     {
         var metrics = new PromptMetrics();
 
@@ -876,8 +877,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // PromptIssue: Properties
     // ============================
 
-    [Fact]
-    public void PromptIssue_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PromptIssue_DefaultValues()
     {
         var issue = new PromptIssue();
 
@@ -892,8 +893,8 @@ public class PromptEngineeringDeepMathIntegrationTests
     // End-to-End: Analysis Pipeline
     // ============================
 
-    [Fact]
-    public void EndToEnd_AnalyzeThenValidate_ConsistentResults()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_AnalyzeThenValidate_ConsistentResults()
     {
         var analyzer = new ComplexityAnalyzer();
         var validator = new PromptValidator(analyzer: analyzer);
@@ -914,8 +915,8 @@ public class PromptEngineeringDeepMathIntegrationTests
         Assert.Contains("template", metrics.DetectedPatterns);
     }
 
-    [Fact]
-    public void EndToEnd_AnalyzeCompressAnalyze_CompressionReducesTokens()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_AnalyzeCompressAnalyze_CompressionReducesTokens()
     {
         var analyzer = new TokenCountAnalyzer();
         var compressor = new StopWordRemovalCompressor();

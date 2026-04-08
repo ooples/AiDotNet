@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
@@ -10,8 +11,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var analyzer = new CompressionAnalyzer<double>();
@@ -20,8 +21,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(analyzer);
         }
 
-        [Fact]
-        public void Constructor_WithCustomParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomParameters_CreatesInstance()
         {
             // Arrange & Act
             var analyzer = new CompressionAnalyzer<double>(
@@ -36,8 +37,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Analyze Tests
 
-        [Fact]
-        public void Analyze_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithNullWeights_ThrowsException()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -46,8 +47,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => analyzer.Analyze(null!));
         }
 
-        [Fact]
-        public void Analyze_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -57,8 +58,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => analyzer.Analyze(weights));
         }
 
-        [Fact]
-        public void Analyze_WithValidWeights_ReturnsAnalysisResult()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithValidWeights_ReturnsAnalysisResult()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(6, result.TotalWeights);
         }
 
-        [Fact]
-        public void Analyze_WithHighSparsity_RecommendsPruning()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithHighSparsity_RecommendsPruning()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>(nearZeroThreshold: 0.1);
@@ -90,8 +91,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.NearZeroWeights >= 10);
         }
 
-        [Fact]
-        public void Analyze_CalculatesMeanMagnitude()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_CalculatesMeanMagnitude()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -104,8 +105,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(3.0, result.MeanMagnitude, 6);
         }
 
-        [Fact]
-        public void Analyze_CalculatesMinMaxMagnitude()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_CalculatesMinMaxMagnitude()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10.0, result.MaxMagnitude);
         }
 
-        [Fact]
-        public void Analyze_CalculatesStandardDeviation()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_CalculatesStandardDeviation()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -133,8 +134,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.StdDevMagnitude > 0);
         }
 
-        [Fact]
-        public void Analyze_CalculatesEntropy()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_CalculatesEntropy()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -147,8 +148,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.Entropy >= 0);
         }
 
-        [Fact]
-        public void Analyze_WithConvolutionalFlag_UsesConservativeSettings()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithConvolutionalFlag_UsesConservativeSettings()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>(nearZeroThreshold: 0.1);
@@ -166,8 +167,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(resultFC);
         }
 
-        [Fact]
-        public void Analyze_SetsRecommendationReasoning()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_SetsRecommendationReasoning()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -180,8 +181,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.False(string.IsNullOrEmpty(result.RecommendationReasoning));
         }
 
-        [Fact]
-        public void Analyze_SetsRecommendedParameters()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_SetsRecommendedParameters()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -194,8 +195,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(result.RecommendedParameters);
         }
 
-        [Fact]
-        public void Analyze_SetsEstimatedCompressionRatio()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_SetsEstimatedCompressionRatio()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -208,8 +209,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.EstimatedCompressionRatio > 0);
         }
 
-        [Fact]
-        public void Analyze_WithUniformWeights_CalculatesLowEntropy()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithUniformWeights_CalculatesLowEntropy()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -227,8 +228,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GenerateReport Tests
 
-        [Fact]
-        public void GenerateReport_ReturnsFormattedString()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateReport_ReturnsFormattedString()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Contains("Recommendation", report);
         }
 
-        [Fact]
-        public void GenerateReport_ContainsTotalWeights()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateReport_ContainsTotalWeights()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -260,8 +261,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Contains("Total Weights:", report);
         }
 
-        [Fact]
-        public void GenerateReport_ContainsRecommendedTechnique()
+        [Fact(Timeout = 60000)]
+        public async Task GenerateReport_ContainsRecommendedTechnique()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -279,8 +280,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact]
-        public void Analyze_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<float>();
@@ -298,8 +299,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Edge Case Tests
 
-        [Fact]
-        public void Analyze_WithSingleWeight_ReturnsValidResult()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithSingleWeight_ReturnsValidResult()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -313,8 +314,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(1, result.TotalWeights);
         }
 
-        [Fact]
-        public void Analyze_WithLargeArray_CompletesSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithLargeArray_CompletesSuccessfully()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
@@ -334,8 +335,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.UniqueValues > 0);
         }
 
-        [Fact]
-        public void Analyze_WithNegativeWeights_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Analyze_WithNegativeWeights_HandlesCorrectly()
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();

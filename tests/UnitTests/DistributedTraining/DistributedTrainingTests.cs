@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.NumericOperations;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.DistributedTraining;
 
@@ -25,8 +26,8 @@ public class DistributedTrainingTests
     /// <summary>
     /// Tests that the InMemoryCommunicationBackend correctly initializes.
     /// </summary>
-    [Fact]
-    public void InMemoryBackend_Initialize_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryBackend_Initialize_Succeeds()
     {
         // Arrange
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4);
@@ -51,8 +52,8 @@ public class DistributedTrainingTests
     /// This simulates having 4 processes, each with a vector [1, 2, 3].
     /// After AllReduce with Sum, each should have [4, 8, 12] (sum of all 4 vectors).
     /// </summary>
-    [Fact]
-    public void InMemoryBackend_AllReduceSum_CorrectlyCombinesValues()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryBackend_AllReduceSum_CorrectlyCombinesValues()
     {
         // Arrange - Simulate 4 processes
         var backends = new[]
@@ -106,8 +107,8 @@ public class DistributedTrainingTests
     /// This verifies gradient averaging - a crucial operation in distributed training.
     /// Each process calculates gradients, then they're averaged across all processes.
     /// </summary>
-    [Fact]
-    public void InMemoryBackend_AllReduceAverage_CorrectlyAveragesValues()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryBackend_AllReduceAverage_CorrectlyAveragesValues()
     {
         // Arrange - Simulate 4 processes with different values
         var backends = new[]
@@ -161,8 +162,8 @@ public class DistributedTrainingTests
     /// AllGather is used to reconstruct full parameters from shards.
     /// Each process has a piece, AllGather gives everyone the full picture.
     /// </summary>
-    [Fact]
-    public void InMemoryBackend_AllGather_CorrectlyConcatenatesData()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryBackend_AllGather_CorrectlyConcatenatesData()
     {
         // Arrange - Simulate 4 processes, each with different data
         var backends = new[]
@@ -219,8 +220,8 @@ public class DistributedTrainingTests
     /// This verifies that when we create a sharded model, parameters are
     /// correctly split across processes and each process gets its fair share.
     /// </summary>
-    [Fact]
-    public void ShardedModel_ParameterSharding_DistributesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ShardedModel_ParameterSharding_DistributesCorrectly()
     {
         // Arrange - Create a simple model with known parameters
         var coefficients = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -252,8 +253,8 @@ public class DistributedTrainingTests
     /// When we have many small parameter arrays, the analyzer groups them together
     /// to reduce communication overhead. This test verifies that grouping works correctly.
     /// </summary>
-    [Fact]
-    public void ParameterAnalyzer_SmallParameters_GroupsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ParameterAnalyzer_SmallParameters_GroupsCorrectly()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 4, worldSize: 2);
@@ -285,8 +286,8 @@ public class DistributedTrainingTests
     /// This tests the simple one-line API for making a model distributed.
     /// It should be as easy as: myModel.AsDistributed(backend)
     /// </summary>
-    [Fact]
-    public void AsDistributed_Extension_CreatesShardedModel()
+    [Fact(Timeout = 60000)]
+    public async Task AsDistributed_Extension_CreatesShardedModel()
     {
         // Arrange
         var coefficients = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -319,8 +320,8 @@ public class DistributedTrainingTests
     /// NOTE: This is a simplified test. A full implementation would train an actual
     /// model through multiple iterations and compare final parameters.
     /// </summary>
-    [Fact]
-    public void DistributedTraining_NumericalEquivalence_MatchesSingleProcess()
+    [Fact(Timeout = 60000)]
+    public async Task DistributedTraining_NumericalEquivalence_MatchesSingleProcess()
     {
         // Arrange - Create identical models for single-process and distributed
         var singleProcessCoefficients = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -354,8 +355,8 @@ public class DistributedTrainingTests
     /// <summary>
     /// Tests that CommunicationManager correctly initializes and manages backends.
     /// </summary>
-    [Fact]
-    public void CommunicationManager_Initialize_ManagesBackendCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CommunicationManager_Initialize_ManagesBackendCorrectly()
     {
         // Arrange
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4);
@@ -380,8 +381,8 @@ public class DistributedTrainingTests
     /// ShardingConfiguration has preset configurations for different scenarios
     /// (high bandwidth, low bandwidth). This tests that they're set up correctly.
     /// </summary>
-    [Fact]
-    public void ShardingConfiguration_FactoryMethods_CreateCorrectConfigurations()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_FactoryMethods_CreateCorrectConfigurations()
     {
         // Arrange
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);

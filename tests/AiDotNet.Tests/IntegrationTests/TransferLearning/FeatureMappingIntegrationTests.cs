@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.TransferLearning.FeatureMapping;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TransferLearning;
 
@@ -16,8 +17,8 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Basic Tests
 
-    [Fact]
-    public void LinearFeatureMapper_Train_SetsIsTrainedToTrue()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_Train_SetsIsTrainedToTrue()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -41,8 +42,8 @@ public class FeatureMappingIntegrationTests
         Assert.True(mapper.IsTrained);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_MapToTarget_BeforeTrain_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_MapToTarget_BeforeTrain_ThrowsException()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -56,8 +57,8 @@ public class FeatureMappingIntegrationTests
         Assert.Throws<InvalidOperationException>(() => mapper.MapToTarget(sourceFeatures, 2));
     }
 
-    [Fact]
-    public void LinearFeatureMapper_MapToSource_BeforeTrain_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_MapToSource_BeforeTrain_ThrowsException()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -71,8 +72,8 @@ public class FeatureMappingIntegrationTests
         Assert.Throws<InvalidOperationException>(() => mapper.MapToSource(targetFeatures, 3));
     }
 
-    [Fact]
-    public void LinearFeatureMapper_MapToTarget_ProducesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_MapToTarget_ProducesCorrectDimensions()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -105,8 +106,8 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns); // Target dimension
     }
 
-    [Fact]
-    public void LinearFeatureMapper_MapToSource_ProducesCorrectDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_MapToSource_ProducesCorrectDimensions()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -139,8 +140,8 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(3, mapped.Columns); // Source dimension
     }
 
-    [Fact]
-    public void LinearFeatureMapper_GetMappingConfidence_ReturnsValueBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_GetMappingConfidence_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -169,8 +170,8 @@ public class FeatureMappingIntegrationTests
         Assert.True(confidence <= 1.0, $"Confidence {confidence} should be <= 1");
     }
 
-    [Fact]
-    public void LinearFeatureMapper_GetMappingConfidence_BeforeTrain_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_GetMappingConfidence_BeforeTrain_ReturnsZero()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -186,8 +187,8 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Dimension Reduction/Expansion Tests
 
-    [Fact]
-    public void LinearFeatureMapper_DimensionReduction_PreservesInformation()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_DimensionReduction_PreservesInformation()
     {
         // Arrange - Map from 5D to 2D
         var mapper = new LinearFeatureMapper<double>();
@@ -222,8 +223,8 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearFeatureMapper_DimensionExpansion_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_DimensionExpansion_ProducesValidOutput()
     {
         // Arrange - Map from 2D to 5D
         var mapper = new LinearFeatureMapper<double>();
@@ -260,8 +261,8 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearFeatureMapper_SameDimensions_Works()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_SameDimensions_Works()
     {
         // Arrange - Map from 3D to 3D
         var mapper = new LinearFeatureMapper<double>();
@@ -292,8 +293,8 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Round-Trip Tests
 
-    [Fact]
-    public void LinearFeatureMapper_RoundTrip_PreservesApproximateStructure()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_RoundTrip_PreservesApproximateStructure()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -336,8 +337,8 @@ public class FeatureMappingIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void LinearFeatureMapper_SingleRow_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_SingleRow_HandlesGracefully()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -359,8 +360,8 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_SingleColumn_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_SingleColumn_HandlesGracefully()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -386,8 +387,8 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(1, mapped.Columns);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_LargeMatrix_HandlesWithoutOverflow()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_LargeMatrix_HandlesWithoutOverflow()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -418,8 +419,8 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearFeatureMapper_ZeroVarianceColumn_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_ZeroVarianceColumn_HandlesGracefully()
     {
         // Arrange - Column 1 has zero variance
         var mapper = new LinearFeatureMapper<double>();
@@ -445,8 +446,8 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns);
     }
 
-    [Fact]
-    public void LinearFeatureMapper_NegativeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_NegativeValues_HandlesCorrectly()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -481,8 +482,8 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearFeatureMapper_VerySmallValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_VerySmallValues_HandlesCorrectly()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
@@ -514,8 +515,8 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearFeatureMapper_VeryLargeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LinearFeatureMapper_VeryLargeValues_HandlesCorrectly()
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();

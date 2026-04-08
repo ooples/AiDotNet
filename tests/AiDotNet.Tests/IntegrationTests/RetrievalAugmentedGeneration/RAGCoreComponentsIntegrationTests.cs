@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 using AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
 
@@ -20,8 +21,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region VectorSearch Metrics
 
-    [Fact]
-    public void CosineSimilarity_IdenticalVectors_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_IdenticalVectors_ReturnsOne()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -31,8 +32,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(1.0, similarity, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_OrthogonalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_OrthogonalVectors_ReturnsZero()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v1 = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
@@ -43,8 +44,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(0.0, similarity, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_OppositeVectors_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_OppositeVectors_ReturnsNegativeOne()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v1 = new Vector<double>(new[] { 1.0, 0.0 });
@@ -55,8 +56,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(-1.0, similarity, Tolerance);
     }
 
-    [Fact]
-    public void CosineSimilarity_GoldenReference_45Degrees()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_GoldenReference_45Degrees()
     {
         var metric = new CosineSimilarityMetric<double>();
         // cos(45) = 1/sqrt(2) ~ 0.7071
@@ -68,15 +69,15 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(1.0 / Math.Sqrt(2.0), similarity, 1e-4);
     }
 
-    [Fact]
-    public void CosineSimilarity_HigherIsBetter_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_HigherIsBetter_ReturnsTrue()
     {
         var metric = new CosineSimilarityMetric<double>();
         Assert.True(metric.HigherIsBetter);
     }
 
-    [Fact]
-    public void CosineSimilarity_ScaleInvariant()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarity_ScaleInvariant()
     {
         var metric = new CosineSimilarityMetric<double>();
         var v1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -87,8 +88,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(1.0, similarity, 1e-4); // same direction, should be 1.0
     }
 
-    [Fact]
-    public void EuclideanDistance_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_IdenticalVectors_ReturnsZero()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -98,8 +99,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(0.0, distance, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_GoldenReference_345Triangle()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_GoldenReference_345Triangle()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var v1 = new Vector<double>(new[] { 0.0, 0.0 });
@@ -110,15 +111,15 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(5.0, distance, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_HigherIsBetter_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_HigherIsBetter_ReturnsFalse()
     {
         var metric = new EuclideanDistanceMetric<double>();
         Assert.False(metric.HigherIsBetter);
     }
 
-    [Fact]
-    public void EuclideanDistance_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_IsSymmetric()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var v1 = new Vector<double>(new[] { 1.0, 5.0, 3.0 });
@@ -130,8 +131,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(d12, d21, Tolerance);
     }
 
-    [Fact]
-    public void EuclideanDistance_TriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_TriangleInequality()
     {
         var metric = new EuclideanDistanceMetric<double>();
         var a = new Vector<double>(new[] { 0.0, 0.0 });
@@ -150,8 +151,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region QueryProcessors
 
-    [Fact]
-    public void StopWordRemoval_RemovesCommonWords()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_RemovesCommonWords()
     {
         var processor = new StopWordRemovalQueryProcessor();
 
@@ -166,16 +167,16 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Contains("iPhone", result);
     }
 
-    [Fact]
-    public void StopWordRemoval_EmptyQuery_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_EmptyQuery_ThrowsArgumentException()
     {
         var processor = new StopWordRemovalQueryProcessor();
 
         Assert.Throws<ArgumentException>(() => processor.ProcessQuery(""));
     }
 
-    [Fact]
-    public void StopWordRemoval_AllStopWords_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_AllStopWords_ReturnsEmpty()
     {
         var processor = new StopWordRemovalQueryProcessor();
 
@@ -183,8 +184,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("", result.Trim());
     }
 
-    [Fact]
-    public void StopWordRemoval_NoStopWords_PreservesAll()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_NoStopWords_PreservesAll()
     {
         var processor = new StopWordRemovalQueryProcessor();
 
@@ -192,8 +193,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("quantum entanglement physics", result);
     }
 
-    [Fact]
-    public void StopWordRemoval_CustomStopWords()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_CustomStopWords()
     {
         var customStopWords = new HashSet<string> { "hello", "world" };
         var processor = new StopWordRemovalQueryProcessor(customStopWords);
@@ -202,8 +203,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("programming", result.Trim());
     }
 
-    [Fact]
-    public void StopWordRemoval_PreserveFirstWord()
+    [Fact(Timeout = 120000)]
+    public async Task StopWordRemoval_PreserveFirstWord()
     {
         var processor = new StopWordRemovalQueryProcessor(preserveFirstWord: true);
 
@@ -212,8 +213,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.StartsWith("What", result);
     }
 
-    [Fact]
-    public void KeywordExtraction_ExtractsKeyTerms()
+    [Fact(Timeout = 120000)]
+    public async Task KeywordExtraction_ExtractsKeyTerms()
     {
         var processor = new KeywordExtractionQueryProcessor();
 
@@ -227,16 +228,16 @@ public class RAGCoreComponentsIntegrationTests
         Assert.DoesNotContain("tell", result);
     }
 
-    [Fact]
-    public void KeywordExtraction_EmptyQuery_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task KeywordExtraction_EmptyQuery_ThrowsArgumentException()
     {
         var processor = new KeywordExtractionQueryProcessor();
 
         Assert.Throws<ArgumentException>(() => processor.ProcessQuery(""));
     }
 
-    [Fact]
-    public void KeywordExtraction_MinWordLength_FiltersShortWords()
+    [Fact(Timeout = 120000)]
+    public async Task KeywordExtraction_MinWordLength_FiltersShortWords()
     {
         var processor = new KeywordExtractionQueryProcessor(minWordLength: 4);
 
@@ -248,8 +249,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Contains("model", result);
     }
 
-    [Fact]
-    public void KeywordExtraction_RemovesPunctuation()
+    [Fact(Timeout = 120000)]
+    public async Task KeywordExtraction_RemovesPunctuation()
     {
         var processor = new KeywordExtractionQueryProcessor();
 
@@ -264,8 +265,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region DiversityReranker
 
-    [Fact]
-    public void DiversityReranker_PromotesDiverseDocuments()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_PromotesDiverseDocuments()
     {
         var reranker = new DiversityReranker<double>();
 
@@ -288,8 +289,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.True(mlPosition < 3, "Diverse ML doc should be promoted above position 3");
     }
 
-    [Fact]
-    public void DiversityReranker_SingleDocument_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_SingleDocument_ReturnsSame()
     {
         var reranker = new DiversityReranker<double>();
         var docs = new List<Document<double>>
@@ -303,8 +304,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("1", reranked[0].Id);
     }
 
-    [Fact]
-    public void DiversityReranker_EmptyDocs_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_EmptyDocs_ReturnsEmpty()
     {
         var reranker = new DiversityReranker<double>();
 
@@ -313,8 +314,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Empty(reranked);
     }
 
-    [Fact]
-    public void DiversityReranker_LambdaOne_PureRelevance()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_LambdaOne_PureRelevance()
     {
         var reranker = new DiversityReranker<double>(1.0);
 
@@ -331,15 +332,15 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("2", reranked[0].Id);
     }
 
-    [Fact]
-    public void DiversityReranker_InvalidLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_InvalidLambda_Throws()
     {
         Assert.Throws<ArgumentException>(() => new DiversityReranker<double>(-0.1));
         Assert.Throws<ArgumentException>(() => new DiversityReranker<double>(1.1));
     }
 
-    [Fact]
-    public void DiversityReranker_AssignsNewRelevanceScores()
+    [Fact(Timeout = 120000)]
+    public async Task DiversityReranker_AssignsNewRelevanceScores()
     {
         var reranker = new DiversityReranker<double>();
         var docs = new List<Document<double>>
@@ -360,8 +361,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region MaximalMarginalRelevanceReranker
 
-    [Fact]
-    public void MMR_PromotesDiverseEmbeddings()
+    [Fact(Timeout = 120000)]
+    public async Task MMR_PromotesDiverseEmbeddings()
     {
         var docs = new List<Document<double>>
         {
@@ -387,8 +388,8 @@ public class RAGCoreComponentsIntegrationTests
             "Diverse ocean doc should be ranked above similar temperature doc");
     }
 
-    [Fact]
-    public void MMR_LambdaOne_IsRankByRelevance()
+    [Fact(Timeout = 120000)]
+    public async Task MMR_LambdaOne_IsRankByRelevance()
     {
         var docs = new List<Document<double>>
         {
@@ -407,8 +408,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("2", reranked[0].Id);
     }
 
-    [Fact]
-    public void MMR_InvalidLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MMR_InvalidLambda_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new MaximalMarginalRelevanceReranker<double>(d => new Vector<double>(1), lambda: -0.1));
@@ -416,15 +417,15 @@ public class RAGCoreComponentsIntegrationTests
             new MaximalMarginalRelevanceReranker<double>(d => new Vector<double>(1), lambda: 1.1));
     }
 
-    [Fact]
-    public void MMR_NullEmbeddingFunc_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MMR_NullEmbeddingFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new MaximalMarginalRelevanceReranker<double>(null!, lambda: 0.7));
     }
 
-    [Fact]
-    public void MMR_SingleDocument_ReturnsSame()
+    [Fact(Timeout = 120000)]
+    public async Task MMR_SingleDocument_ReturnsSame()
     {
         var docs = new List<Document<double>>
         {
@@ -442,8 +443,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region ReciprocalRankFusion
 
-    [Fact]
-    public void RRF_GoldenReference_ScoreFormula()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_GoldenReference_ScoreFormula()
     {
         // RRF score = 1 / (k + rank + 1), with k=60, rank is 0-based
         var rrf = new ReciprocalRankFusion<double>(k: 60);
@@ -465,8 +466,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(1.0 / 63.0, reranked[2].RelevanceScore, 1e-8);
     }
 
-    [Fact]
-    public void RRF_FuseRankings_CombinesMultipleLists()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_FuseRankings_CombinesMultipleLists()
     {
         var rrf = new ReciprocalRankFusion<double>(k: 60);
 
@@ -491,8 +492,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("B", fused[0].Id);
     }
 
-    [Fact]
-    public void RRF_FuseRankings_DocumentAppearsOnce_GetsPartialScore()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_FuseRankings_DocumentAppearsOnce_GetsPartialScore()
     {
         var rrf = new ReciprocalRankFusion<double>(k: 60);
 
@@ -506,15 +507,15 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal(fused[0].RelevanceScore, fused[1].RelevanceScore, Tolerance);
     }
 
-    [Fact]
-    public void RRF_InvalidK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_InvalidK_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ReciprocalRankFusion<double>(k: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ReciprocalRankFusion<double>(k: -1));
     }
 
-    [Fact]
-    public void RRF_FuseRankings_NullLists_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_FuseRankings_NullLists_Throws()
     {
         var rrf = new ReciprocalRankFusion<double>();
         Assert.Throws<ArgumentException>(() => rrf.FuseRankings(null!, 5));
@@ -522,8 +523,8 @@ public class RAGCoreComponentsIntegrationTests
             rrf.FuseRankings(new List<List<Document<double>>>(), 5));
     }
 
-    [Fact]
-    public void RRF_FuseRankings_InvalidTopK_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RRF_FuseRankings_InvalidTopK_Throws()
     {
         var rrf = new ReciprocalRankFusion<double>();
         var lists = new List<List<Document<double>>>
@@ -537,8 +538,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region Document Model
 
-    [Fact]
-    public void Document_DefaultConstruction_HasExpectedDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task Document_DefaultConstruction_HasExpectedDefaults()
     {
         var doc = new Document<double>();
 
@@ -550,8 +551,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Null(doc.Embedding);
     }
 
-    [Fact]
-    public void Document_SetProperties_Persists()
+    [Fact(Timeout = 120000)]
+    public async Task Document_SetProperties_Persists()
     {
         var doc = new Document<double>
         {
@@ -573,8 +574,8 @@ public class RAGCoreComponentsIntegrationTests
         Assert.Equal("Test Author", doc.Metadata["author"]);
     }
 
-    [Fact]
-    public void Document_Embedding_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task Document_Embedding_CanBeSet()
     {
         var doc = new Document<double>
         {
@@ -590,8 +591,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region LostInTheMiddleReranker
 
-    [Fact]
-    public void LostInTheMiddle_ReordersToAlternateEnds()
+    [Fact(Timeout = 120000)]
+    public async Task LostInTheMiddle_ReordersToAlternateEnds()
     {
         var reranker = new LostInTheMiddleReranker<double>();
 
@@ -609,8 +610,8 @@ public class RAGCoreComponentsIntegrationTests
 
     #region IdentityReranker
 
-    [Fact]
-    public void IdentityReranker_ReturnsDocsInOriginalOrder()
+    [Fact(Timeout = 120000)]
+    public async Task IdentityReranker_ReturnsDocsInOriginalOrder()
     {
         var reranker = new IdentityReranker<double>();
 

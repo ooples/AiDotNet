@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -29,8 +30,8 @@ public class WordPieceTokenizerTests
         _tokenizer = WordPieceTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact]
-    public void Train_CreatesVocabulary_WithCorrectSize()
+    [Fact(Timeout = 60000)]
+    public async Task Train_CreatesVocabulary_WithCorrectSize()
     {
         // Arrange & Act
         var tokenizer = WordPieceTokenizer.Train(_trainingCorpus, 100);
@@ -39,8 +40,8 @@ public class WordPieceTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void Tokenize_SimpleText_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_SimpleText_ReturnsTokens()
     {
         // Arrange
         var text = "Hello world";
@@ -53,8 +54,8 @@ public class WordPieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_UnknownWord_ReturnsUnkOrSubwords()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_UnknownWord_ReturnsUnkOrSubwords()
     {
         // Arrange
         var text = "xyzabc123";
@@ -67,8 +68,8 @@ public class WordPieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_ContinuationPrefix_UsesHashHash()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_ContinuationPrefix_UsesHashHash()
     {
         // Arrange
         var text = "tokenization";
@@ -83,8 +84,8 @@ public class WordPieceTokenizerTests
         Assert.True(tokens.Count > 0, "Should produce at least one token");
     }
 
-    [Fact]
-    public void Encode_WithSpecialTokens_AddsBertStyleTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithSpecialTokens_AddsBertStyleTokens()
     {
         // Arrange
         var text = "Hello world";
@@ -99,8 +100,8 @@ public class WordPieceTokenizerTests
         Assert.Contains("[SEP]", result.Tokens);
     }
 
-    [Fact]
-    public void Encode_WithAttentionMask_ReturnsAllOnes()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithAttentionMask_ReturnsAllOnes()
     {
         // Arrange
         var text = "Hello world";
@@ -113,8 +114,8 @@ public class WordPieceTokenizerTests
         Assert.All(result.AttentionMask, m => Assert.Equal(1, m));
     }
 
-    [Fact]
-    public void Encode_WithPadding_HasZerosInAttentionMask()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithPadding_HasZerosInAttentionMask()
     {
         // Arrange
         var text = "Hi";
@@ -133,8 +134,8 @@ public class WordPieceTokenizerTests
         Assert.Contains(0, result.AttentionMask); // Padding has 0 attention
     }
 
-    [Fact]
-    public void Decode_RemovesContinuationMarkers()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_RemovesContinuationMarkers()
     {
         // Arrange
         var text = "tokenization";
@@ -147,8 +148,8 @@ public class WordPieceTokenizerTests
         Assert.DoesNotContain("##", decoded);
     }
 
-    [Fact]
-    public void Roundtrip_PreservesWordContent()
+    [Fact(Timeout = 60000)]
+    public async Task Roundtrip_PreservesWordContent()
     {
         // Arrange
         var text = "machine learning";
@@ -163,8 +164,8 @@ public class WordPieceTokenizerTests
         Assert.Contains("machine", normalizedDecoded);
     }
 
-    [Fact]
-    public void SpecialTokens_AreBertStyle()
+    [Fact(Timeout = 60000)]
+    public async Task SpecialTokens_AreBertStyle()
     {
         // Assert
         Assert.Equal("[UNK]", _tokenizer.SpecialTokens.UnkToken);
@@ -174,8 +175,8 @@ public class WordPieceTokenizerTests
         Assert.Equal("[MASK]", _tokenizer.SpecialTokens.MaskToken);
     }
 
-    [Fact]
-    public void Encode_TokenTypeIds_DefaultsToZero()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_TokenTypeIds_DefaultsToZero()
     {
         // Arrange
         var text = "Hello world";
@@ -188,8 +189,8 @@ public class WordPieceTokenizerTests
         Assert.All(result.TokenTypeIds, id => Assert.Equal(0, id));
     }
 
-    [Fact]
-    public void EncodeBatch_ConsistentResults()
+    [Fact(Timeout = 60000)]
+    public async Task EncodeBatch_ConsistentResults()
     {
         // Arrange
         var texts = new List<string> { "Hello", "world", "test" };
@@ -204,15 +205,15 @@ public class WordPieceTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void Train_NullCorpus_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
             WordPieceTokenizer.Train(null!, 100));
     }
 
-    [Fact]
-    public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
     {
         var corpus = new List<string> { "Hello world" };
 
@@ -222,8 +223,8 @@ public class WordPieceTokenizerTests
             WordPieceTokenizer.Train(corpus, -1));
     }
 
-    [Fact]
-    public void Constructor_InvalidMaxInputCharsPerWord_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_InvalidMaxInputCharsPerWord_ThrowsArgumentOutOfRangeException()
     {
         var vocabulary = new AiDotNet.Tokenization.Vocabulary.Vocabulary();
 

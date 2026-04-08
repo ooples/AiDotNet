@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -131,8 +132,8 @@ public class NmfDecompositionIntegrationTests
             $"Relative reconstruction error {relError} should be less than {ReconstructionTolerance}");
     }
 
-    [Fact]
-    public void NmfDecomposition_WH_Product_EqualsReconstruct()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_WH_Product_EqualsReconstruct()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(6, 5);
@@ -157,8 +158,8 @@ public class NmfDecompositionIntegrationTests
 
     #region Convergence Tests
 
-    [Fact]
-    public void NmfDecomposition_MoreIterations_ImproveReconstruction()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_MoreIterations_ImproveReconstruction()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(8, 8);
@@ -178,8 +179,8 @@ public class NmfDecompositionIntegrationTests
             $"More iterations should improve or maintain error. Few: {errorFew}, Many: {errorMany}");
     }
 
-    [Fact]
-    public void NmfDecomposition_MoreComponents_ImproveReconstruction()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_MoreComponents_ImproveReconstruction()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(10, 10);
@@ -203,8 +204,8 @@ public class NmfDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void NmfDecomposition_NegativeMatrix_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_NegativeMatrix_ThrowsArgumentException()
     {
         // Arrange
         var V = new Matrix<double>(3, 3);
@@ -214,8 +215,8 @@ public class NmfDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(V, 2));
     }
 
-    [Fact]
-    public void NmfDecomposition_ZeroComponents_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_ZeroComponents_ThrowsArgumentException()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(3, 3);
@@ -224,8 +225,8 @@ public class NmfDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(V, 0));
     }
 
-    [Fact]
-    public void NmfDecomposition_TooManyComponents_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_TooManyComponents_ThrowsArgumentException()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(3, 4);
@@ -238,8 +239,8 @@ public class NmfDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void NmfDecomposition_ZeroMatrix_ProducesZeroFactors()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_ZeroMatrix_ProducesZeroFactors()
     {
         // Arrange - Matrix with all zeros
         var V = new Matrix<double>(4, 4);
@@ -254,8 +255,8 @@ public class NmfDecompositionIntegrationTests
             $"Zero matrix reconstruction should be zero. Error: {error}");
     }
 
-    [Fact]
-    public void NmfDecomposition_SparseMatrix_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_SparseMatrix_HandledCorrectly()
     {
         // Arrange - Sparse matrix with many zeros
         var V = new Matrix<double>(5, 5);
@@ -270,8 +271,8 @@ public class NmfDecompositionIntegrationTests
         Assert.True(IsNonNegative(nmf.H), "H should be non-negative for sparse input");
     }
 
-    [Fact]
-    public void NmfDecomposition_DefaultComponents_UsesHalfMinDimension()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_DefaultComponents_UsesHalfMinDimension()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(6, 4); // min = 4, so default = 2
@@ -287,8 +288,8 @@ public class NmfDecompositionIntegrationTests
 
     #region Numerical Properties
 
-    [Fact]
-    public void NmfDecomposition_ReconstructedValues_AreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_ReconstructedValues_AreNonNegative()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(6, 6);
@@ -302,8 +303,8 @@ public class NmfDecompositionIntegrationTests
             "Reconstructed matrix should be non-negative");
     }
 
-    [Fact]
-    public void NmfDecomposition_NoNaNOrInfinity_InFactors()
+    [Fact(Timeout = 120000)]
+    public async Task NmfDecomposition_NoNaNOrInfinity_InFactors()
     {
         // Arrange
         var V = CreateNonNegativeMatrix(5, 5);

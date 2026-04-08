@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class VisionLanguageDocumentTests
 
     #region DocOwl Tests
 
-    [Fact]
-    public void DocOwl_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DocOwl_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DocOwl<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DocOwl_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DocOwl_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new DocOwl<double>(arch, imageSize: 64);
@@ -55,8 +56,8 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DocOwl_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DocOwl_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DocOwl<double>(arch, imageSize: 64);
@@ -68,16 +69,16 @@ public class VisionLanguageDocumentTests
 
     #region InfographicVQA Tests
 
-    [Fact]
-    public void InfographicVQA_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task InfographicVQA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new InfographicVQA<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void InfographicVQA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InfographicVQA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new InfographicVQA<double>(arch, imageSize: 64);
@@ -88,8 +89,8 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void InfographicVQA_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task InfographicVQA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new InfographicVQA<double>(arch, imageSize: 64);
@@ -101,16 +102,16 @@ public class VisionLanguageDocumentTests
 
     #region UDOP Tests
 
-    [Fact]
-    public void UDOP_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new UDOP<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void UDOP_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new UDOP<double>(arch, imageSize: 64);
@@ -121,8 +122,8 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void UDOP_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new UDOP<double>(arch, imageSize: 64);
@@ -134,8 +135,8 @@ public class VisionLanguageDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllVisionLanguageModels_SupportsTraining_InNativeMode()
+    [Fact(Timeout = 120000)]
+    public async Task AllVisionLanguageModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]

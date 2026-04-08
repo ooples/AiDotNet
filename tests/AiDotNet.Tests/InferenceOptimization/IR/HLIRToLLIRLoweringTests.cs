@@ -4,6 +4,7 @@ using AiDotNet.InferenceOptimization.IR.HighLevel;
 using AiDotNet.InferenceOptimization.IR.Lowering;
 using AiDotNet.InferenceOptimization.IR.LowLevel;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization.IR;
 
@@ -14,8 +15,8 @@ public class HLIRToLLIRLoweringTests
 {
     #region Basic Lowering Tests
 
-    [Fact]
-    public void Lower_EmptyGraph_ReturnsEmptyLLIRGraph()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_EmptyGraph_ReturnsEmptyLLIRGraph()
     {
         var hlirGraph = new HLIRGraph<double>();
         var lowering = new HLIRToLLIRLowering<double>();
@@ -26,8 +27,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Empty(llirGraph.Operations);
     }
 
-    [Fact]
-    public void Lower_SingleInputNode_CreatesInputBuffer()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_SingleInputNode_CreatesInputBuffer()
     {
         var hlirGraph = new HLIRGraph<double>();
         var inputNode = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -43,8 +44,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Contains(llirGraph.InputIds[0], llirGraph.BufferShapes.Keys);
     }
 
-    [Fact]
-    public void Lower_ReLUOperation_CreatesElementwiseOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_ReLUOperation_CreatesElementwiseOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -64,8 +65,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(ElementwiseOpType.ReLU, elementwiseOp.ElementwiseType);
     }
 
-    [Fact]
-    public void Lower_AddOperation_CreatesElementwiseOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_AddOperation_CreatesElementwiseOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input1 = hlirGraph.CreateNode(OperationType.Input, "input1");
@@ -89,8 +90,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(2, addOp.InputIds.Length);
     }
 
-    [Fact]
-    public void Lower_MatMulOperation_CreatesMatMulOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_MatMulOperation_CreatesMatMulOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input1 = hlirGraph.CreateNode(OperationType.Input, "input1");
@@ -116,8 +117,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(256, matmulOp.K);
     }
 
-    [Fact]
-    public void Lower_Conv2DOperation_CreatesConv2DOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_Conv2DOperation_CreatesConv2DOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -149,8 +150,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(1, convOp.BatchSize);
     }
 
-    [Fact]
-    public void Lower_ReshapeOperation_CreatesMemoryOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_ReshapeOperation_CreatesMemoryOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -170,8 +171,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(MemoryOpType.Reshape, memOp.MemoryOpType);
     }
 
-    [Fact]
-    public void Lower_TransposeOperation_CreatesMemoryOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_TransposeOperation_CreatesMemoryOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -191,8 +192,8 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(MemoryOpType.Transpose, memOp.MemoryOpType);
     }
 
-    [Fact]
-    public void Lower_ConstantNode_CreatesConstantOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_ConstantNode_CreatesConstantOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var constant = hlirGraph.CreateNode(OperationType.Constant, "constant");
@@ -240,8 +241,8 @@ public class HLIRToLLIRLoweringTests
 
     #region Fused Operation Tests
 
-    [Fact]
-    public void Lower_FusedNode_CreatesFusedOp()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_FusedNode_CreatesFusedOp()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
@@ -290,8 +291,8 @@ public class HLIRToLLIRLoweringTests
 
     #region Complex Graph Tests
 
-    [Fact]
-    public void Lower_LinearSequence_PreservesOrder()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_LinearSequence_PreservesOrder()
     {
         var hlirGraph = new HLIRGraph<double>();
 
@@ -315,8 +316,8 @@ public class HLIRToLLIRLoweringTests
         Assert.True(elementwiseOps.Count >= 2);
     }
 
-    [Fact]
-    public void Lower_BranchingGraph_HandlesMultipleOutputs()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_BranchingGraph_HandlesMultipleOutputs()
     {
         var hlirGraph = new HLIRGraph<double>();
 
@@ -371,8 +372,8 @@ public class HLIRToLLIRLoweringTests
 
     #region Provenance Tracking Tests
 
-    [Fact]
-    public void Lower_PreservesSourceNodeId()
+    [Fact(Timeout = 60000)]
+    public async Task Lower_PreservesSourceNodeId()
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");

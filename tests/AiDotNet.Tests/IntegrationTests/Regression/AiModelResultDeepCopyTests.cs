@@ -5,6 +5,7 @@ using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -15,8 +16,8 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelResultDeepCopyTests
 {
-    [Fact]
-    public void DeepCopy_PredictionsMatchOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCopy_PredictionsMatchOriginal()
     {
         // Arrange: Train model, deep copy, verify both produce identical predictions
         var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 42);
@@ -46,8 +47,8 @@ public class AiModelResultDeepCopyTests
         }
     }
 
-    [Fact]
-    public void DeepCopy_MutatingCopyDoesNotAffectOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCopy_MutatingCopyDoesNotAffectOriginal()
     {
         // Arrange: Train model, deep copy
         var (x, y) = CreateLinearDataset(samples: 60, features: 3, seed: 77);
@@ -83,8 +84,8 @@ public class AiModelResultDeepCopyTests
         }
     }
 
-    [Fact]
-    public void DeepCopy_PreservesPreprocessingInfo()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCopy_PreservesPreprocessingInfo()
     {
         // Arrange: Train with preprocessing, deep copy, verify preprocessing works on copy
         var (x, y) = CreateLinearDataset(samples: 60, features: 3, seed: 55);

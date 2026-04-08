@@ -2,6 +2,7 @@ using AiDotNet.CausalDiscovery;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -39,8 +40,8 @@ public class CausalGraphTests
 
     #region CausalGraph Structure Tests
 
-    [Fact]
-    public void CausalGraph_Construction_PreservesAdjacencyStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_Construction_PreservesAdjacencyStructure()
     {
         var adj = CreateSmallAdjacency();
         var names = new[] { "X0", "X1", "X2" };
@@ -57,8 +58,8 @@ public class CausalGraphTests
         Assert.False(graph.HasEdge(2, 1), "Should not have reverse edge X2->X1");
     }
 
-    [Fact]
-    public void CausalGraph_GetParents_ReturnsCorrectParents()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetParents_ReturnsCorrectParents()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -82,8 +83,8 @@ public class CausalGraphTests
         Assert.Equal(["X1"], graph.GetParents("X2"));
     }
 
-    [Fact]
-    public void CausalGraph_GetChildren_ReturnsCorrectChildren()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetChildren_ReturnsCorrectChildren()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -102,8 +103,8 @@ public class CausalGraphTests
         Assert.Empty(graph.GetChildren(2));
     }
 
-    [Fact]
-    public void CausalGraph_GetAncestors_ReturnsTransitiveCauses()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetAncestors_ReturnsTransitiveCauses()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -121,8 +122,8 @@ public class CausalGraphTests
         Assert.Contains(1, x2Ancestors);
     }
 
-    [Fact]
-    public void CausalGraph_GetDescendants_ReturnsTransitiveEffects()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetDescendants_ReturnsTransitiveEffects()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -142,8 +143,8 @@ public class CausalGraphTests
         Assert.Empty(graph.GetDescendants(2));
     }
 
-    [Fact]
-    public void CausalGraph_GetMarkovBlanket_IncludesParentsAndChildren()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetMarkovBlanket_IncludesParentsAndChildren()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -154,8 +155,8 @@ public class CausalGraphTests
         Assert.Contains(2, x1Blanket); // child
     }
 
-    [Fact]
-    public void CausalGraph_EdgeCount_And_Density()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_EdgeCount_And_Density()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -164,8 +165,8 @@ public class CausalGraphTests
         Assert.Equal(2.0 / 6.0, graph.Density, 1e-10); // 2 edges out of 3*2=6 possible
     }
 
-    [Fact]
-    public void CausalGraph_GetEdges_ReturnsAllEdgesWithWeights()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetEdges_ReturnsAllEdgesWithWeights()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -185,8 +186,8 @@ public class CausalGraphTests
         Assert.Contains(named, e => e.From == "X1" && e.To == "X2");
     }
 
-    [Fact]
-    public void CausalGraph_GetNodeImportance_X0HasHighestImportance()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_GetNodeImportance_X0HasHighestImportance()
     {
         // X0 -> X1 (weight 1.0), X1 -> X2 (weight 1.0)
         // X0 out-degree weight = 1.0, X1 out-degree weight = 1.0, X2 out-degree weight = 0
@@ -203,8 +204,8 @@ public class CausalGraphTests
 
     #region TopologicalSort Tests
 
-    [Fact]
-    public void CausalGraph_TopologicalSort_CausesBeforeEffects()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_TopologicalSort_CausesBeforeEffects()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -221,16 +222,16 @@ public class CausalGraphTests
         Assert.True(x1Pos < x2Pos, "X1 should precede X2 in topological order");
     }
 
-    [Fact]
-    public void CausalGraph_IsDAG_TrueForAcyclicGraph()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_IsDAG_TrueForAcyclicGraph()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
         Assert.True(graph.IsDAG(), "Chain graph X0->X1->X2 should be a DAG");
     }
 
-    [Fact]
-    public void CausalGraph_IsDAG_FalseForCyclicGraph()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_IsDAG_FalseForCyclicGraph()
     {
         // Create cycle: X0->X1, X1->X2, X2->X0
         var adj = new Matrix<double>(new double[,]
@@ -247,8 +248,8 @@ public class CausalGraphTests
 
     #region ComputeInterventionalDistribution Tests
 
-    [Fact]
-    public void CausalGraph_InterventionalDistribution_ProducesValidSamples()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_InterventionalDistribution_ProducesValidSamples()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -270,8 +271,8 @@ public class CausalGraphTests
         }
     }
 
-    [Fact]
-    public void CausalGraph_InterventionalDistribution_NameBasedAPI()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_InterventionalDistribution_NameBasedAPI()
     {
         var adj = CreateSmallAdjacency();
         var graph = new CausalGraph<double>(adj, ["X0", "X1", "X2"]);
@@ -287,8 +288,8 @@ public class CausalGraphTests
 
     #region CausalDiscoverySelector Tests
 
-    [Fact]
-    public void CausalDiscoverySelector_FitTransform_SelectsCausalFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task CausalDiscoverySelector_FitTransform_SelectsCausalFeatures()
     {
         var selector = new CausalDiscoverySelector<double>();
         Assert.NotNull(selector);
@@ -307,8 +308,8 @@ public class CausalGraphTests
 
     #region CausalDiscoveryAlgorithmFactory Tests
 
-    [Fact]
-    public void Factory_CreatePC_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_CreatePC_ReturnsCorrectType()
     {
         var algorithm = CausalDiscoveryAlgorithmFactory<double>.Create(
             AiDotNet.Enums.CausalDiscoveryAlgorithmType.PC);
@@ -318,8 +319,8 @@ public class CausalGraphTests
         Assert.NotSame(algorithm, algorithm2);
     }
 
-    [Fact]
-    public void Factory_CreateGES_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_CreateGES_ReturnsCorrectType()
     {
         var algorithm = CausalDiscoveryAlgorithmFactory<double>.Create(
             AiDotNet.Enums.CausalDiscoveryAlgorithmType.GES);
@@ -329,8 +330,8 @@ public class CausalGraphTests
         Assert.NotEqual(algorithm.GetType(), pcAlgorithm.GetType());
     }
 
-    [Fact]
-    public void Factory_Discover_FoundEdgesAndGraphAPIWorks()
+    [Fact(Timeout = 120000)]
+    public async Task Factory_Discover_FoundEdgesAndGraphAPIWorks()
     {
         var algorithm = CausalDiscoveryAlgorithmFactory<double>.Create(
             AiDotNet.Enums.CausalDiscoveryAlgorithmType.PC);
@@ -346,22 +347,22 @@ public class CausalGraphTests
 
     #region Validation Tests
 
-    [Fact]
-    public void CausalGraph_NonSquareMatrix_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_NonSquareMatrix_Throws()
     {
         var adj = new Matrix<double>(new double[,] { { 0, 1 }, { 0, 0 }, { 0, 0 } });
         Assert.Throws<ArgumentException>(() => new CausalGraph<double>(adj, ["A", "B", "C"]));
     }
 
-    [Fact]
-    public void CausalGraph_MismatchedNames_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_MismatchedNames_Throws()
     {
         var adj = CreateSmallAdjacency();
         Assert.Throws<ArgumentException>(() => new CausalGraph<double>(adj, ["A", "B"]));
     }
 
-    [Fact]
-    public void CausalGraph_DuplicateNames_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGraph_DuplicateNames_Throws()
     {
         var adj = CreateSmallAdjacency();
         Assert.Throws<ArgumentException>(() => new CausalGraph<double>(adj, ["A", "A", "B"]));

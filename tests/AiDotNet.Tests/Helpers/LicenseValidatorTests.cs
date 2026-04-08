@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Helpers;
 
@@ -20,8 +21,8 @@ public class LicenseValidatorTests
     private const string ValidTestKey2 = "aidn.cached12key3.sig456cached78";
     private const string ValidTestKey3 = "aidn.grace12test3.sig789grace012";
 
-    [Fact]
-    public void OfflineMode_ValidKey_ReturnsActive()
+    [Fact(Timeout = 60000)]
+    public async Task OfflineMode_ValidKey_ReturnsActive()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey)
         {
@@ -35,8 +36,8 @@ public class LicenseValidatorTests
         Assert.Equal("Offline-only mode.", result.Message);
     }
 
-    [Fact]
-    public void OfflineMode_CachesResult()
+    [Fact(Timeout = 60000)]
+    public async Task OfflineMode_CachesResult()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey2)
         {
@@ -52,16 +53,16 @@ public class LicenseValidatorTests
         Assert.NotNull(validator.CachedResult);
     }
 
-    [Fact]
-    public void DefaultServerUrl_IsSet()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultServerUrl_IsSet()
     {
         Assert.False(string.IsNullOrWhiteSpace(LicenseValidator.DefaultServerUrl));
         Assert.Contains("supabase.co", LicenseValidator.DefaultServerUrl);
         Assert.Contains("validate-license", LicenseValidator.DefaultServerUrl);
     }
 
-    [Fact]
-    public void OnlineMode_ValidResponse_ServerUnreachable_ReturnsPending()
+    [Fact(Timeout = 60000)]
+    public async Task OnlineMode_ValidResponse_ServerUnreachable_ReturnsPending()
     {
         // Cannot inject HttpClient into LicenseValidator (uses shared static client).
         // Instead, verify the flow: with a fake server URL, the validator should
@@ -79,8 +80,8 @@ public class LicenseValidatorTests
         Assert.Contains("unreachable", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void OnlineMode_ServerReturnsInvalidKey_ReturnsInvalid()
+    [Fact(Timeout = 60000)]
+    public async Task OnlineMode_ServerReturnsInvalidKey_ReturnsInvalid()
     {
         var key = new AiDotNetLicenseKey("aidn.badkey12test3.sigbadkey456abc")
         {
@@ -96,8 +97,8 @@ public class LicenseValidatorTests
         Assert.Contains("unreachable", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void OnlineMode_ServerUnreachable_NoCachedResult_ReturnsPending()
+    [Fact(Timeout = 60000)]
+    public async Task OnlineMode_ServerUnreachable_NoCachedResult_ReturnsPending()
     {
         var key = new AiDotNetLicenseKey("aidn.unreachtest12.sigunreachtest34")
         {
@@ -111,8 +112,8 @@ public class LicenseValidatorTests
         Assert.Contains("unreachable", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void OnlineMode_CachedActiveResult_WithinGracePeriod_ReturnsCached()
+    [Fact(Timeout = 60000)]
+    public async Task OnlineMode_CachedActiveResult_WithinGracePeriod_ReturnsCached()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey3)
         {
@@ -132,8 +133,8 @@ public class LicenseValidatorTests
         Assert.Equal(LicenseKeyStatus.Active, cached.Status);
     }
 
-    [Fact]
-    public void ValidationResult_ContainsTier()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_ContainsTier()
     {
         var result = new LicenseValidationResult(
             LicenseKeyStatus.Active,
@@ -145,8 +146,8 @@ public class LicenseValidatorTests
         Assert.Equal("Valid enterprise license.", result.Message);
     }
 
-    [Fact]
-    public void ValidationResult_ContainsSeatsInfo()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_ContainsSeatsInfo()
     {
         var result = new LicenseValidationResult(
             LicenseKeyStatus.SeatLimitReached,
@@ -159,22 +160,22 @@ public class LicenseValidatorTests
         Assert.Equal(5, result.SeatsMax);
     }
 
-    [Fact]
-    public void ValidationResult_SeatsUsed_CannotBeNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_SeatsUsed_CannotBeNegative()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LicenseValidationResult(LicenseKeyStatus.Active, seatsUsed: -1));
     }
 
-    [Fact]
-    public void ValidationResult_SeatsMax_CannotBeNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_SeatsMax_CannotBeNegative()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LicenseValidationResult(LicenseKeyStatus.Active, seatsMax: -1));
     }
 
-    [Fact]
-    public void ValidationResult_ValidatedAt_DefaultsToUtcNow()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_ValidatedAt_DefaultsToUtcNow()
     {
         var before = DateTimeOffset.UtcNow;
         var result = new LicenseValidationResult(LicenseKeyStatus.Active);
@@ -183,8 +184,8 @@ public class LicenseValidatorTests
         Assert.InRange(result.ValidatedAt, before, after);
     }
 
-    [Fact]
-    public void ValidationResult_DecryptionToken_ReturnsDefensiveCopy()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_DecryptionToken_ReturnsDefensiveCopy()
     {
         byte[] token = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
         var result = new LicenseValidationResult(LicenseKeyStatus.Active, decryptionToken: token);
@@ -202,15 +203,15 @@ public class LicenseValidatorTests
         Assert.NotEqual(copy1, result.DecryptionToken);
     }
 
-    [Fact]
-    public void ValidationResult_NullDecryptionToken_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task ValidationResult_NullDecryptionToken_ReturnsNull()
     {
         var result = new LicenseValidationResult(LicenseKeyStatus.Active, decryptionToken: null);
         Assert.Null(result.DecryptionToken);
     }
 
-    [Fact]
-    public void LicenseKeyStatus_HasExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseKeyStatus_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.Active));
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.Expired));
@@ -220,50 +221,50 @@ public class LicenseValidatorTests
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.ValidationPending));
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_Constructor_SetsKey()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_Constructor_SetsKey()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.Equal(ValidTestKey, key.Key);
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_ServerUrl_DefaultNull()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_ServerUrl_DefaultNull()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.Null(key.ServerUrl);
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_OfflineGracePeriod_Default7Days()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_OfflineGracePeriod_Default7Days()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.Equal(TimeSpan.FromDays(7), key.OfflineGracePeriod);
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_EnableTelemetry_DefaultTrue()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_EnableTelemetry_DefaultTrue()
     {
         var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.True(key.EnableTelemetry);
     }
 
 #nullable disable
-    [Fact]
-    public void AiDotNetLicenseKey_NullKey_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_NullKey_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null));
     }
 #nullable restore
 
-    [Fact]
-    public void AiDotNetLicenseKey_EmptyKey_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_EmptyKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AiDotNetLicenseKey(""));
     }
 
-    [Fact]
-    public void AiDotNetLicenseKey_WhitespaceKey_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task AiDotNetLicenseKey_WhitespaceKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AiDotNetLicenseKey("   "));
     }

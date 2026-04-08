@@ -7,12 +7,13 @@ using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
 public sealed class SqlControllerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_NullRequest_ReturnsBadRequest()
     {
         var controller = CreateController(new FakeSqlSandboxExecutor(_ => Task.FromResult(new SqlExecuteResponse { Success = true })));
@@ -25,7 +26,7 @@ public sealed class SqlControllerTests
         Assert.Null(payload.Dialect);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_Success_ReturnsOk()
     {
         var controller = CreateController(new FakeSqlSandboxExecutor(_ => Task.FromResult(new SqlExecuteResponse
@@ -50,7 +51,7 @@ public sealed class SqlControllerTests
         Assert.Equal(SqlDialect.SQLite, payload.Dialect);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Execute_Timeout_Returns408()
     {
         var controller = CreateController(new FakeSqlSandboxExecutor(_ => Task.FromResult(new SqlExecuteResponse

@@ -7,14 +7,15 @@ using AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 using AiDotNet.ReinforcementLearning.Agents.MuZero;
 using AiDotNet.ReinforcementLearning.Common;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
 public class TrajectoryAndHelpersIntegrationTests
 {
-    [Fact]
-    public void Trajectory_AddStepAndClear_TracksState()
+    [Fact(Timeout = 120000)]
+    public async Task Trajectory_AddStepAndClear_TracksState()
     {
         var trajectory = new Trajectory<double>();
         var state = CreateVector(2, 0.1);
@@ -37,8 +38,8 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Null(trajectory.Returns);
     }
 
-    [Fact]
-    public void SequenceContext_LengthReflectsStates()
+    [Fact(Timeout = 120000)]
+    public async Task SequenceContext_LengthReflectsStates()
     {
         var context = new SequenceContext<double>();
 
@@ -49,8 +50,8 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(1, context.Length);
     }
 
-    [Fact]
-    public void MCTSNode_DefaultsAndAssignments_Work()
+    [Fact(Timeout = 120000)]
+    public async Task MCTSNode_DefaultsAndAssignments_Work()
     {
         var node = new MCTSNode<double>
         {
@@ -69,8 +70,8 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(1, node.TotalVisits);
     }
 
-    [Fact]
-    public void TransitionData_DefaultsAndOverrides_Work()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionData_DefaultsAndOverrides_Work()
     {
         var data = new TransitionData<double>();
 
@@ -87,8 +88,8 @@ public class TrajectoryAndHelpersIntegrationTests
         Assert.Equal(0.5, data.Probability);
     }
 
-    [Fact]
-    public void WorkerNetworks_DefaultsAndAssignments_Work()
+    [Fact(Timeout = 120000)]
+    public async Task WorkerNetworks_DefaultsAndAssignments_Work()
     {
         var policyNetwork = CreateNetwork(2, 1);
         var valueNetwork = CreateNetwork(2, 1);

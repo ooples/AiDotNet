@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SVMTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact]
-    public void Margin_ShouldExist_OnSeparableData()
+    [Fact(Timeout = 60000)]
+    public async Task Margin_ShouldExist_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -46,8 +47,8 @@ public abstract class SVMTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact]
-    public void SVM_ShouldProduceValidLabels()
+    [Fact(Timeout = 60000)]
+    public async Task SVM_ShouldProduceValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

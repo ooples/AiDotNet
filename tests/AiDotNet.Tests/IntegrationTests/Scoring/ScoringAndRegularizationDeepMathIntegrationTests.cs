@@ -5,6 +5,7 @@ using AiDotNet.Regularization;
 using AiDotNet.Scoring;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Scoring;
 
@@ -21,8 +22,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // CRPS Score - Normal Distribution (Closed-Form)
     // ============================
 
-    [Fact]
-    public void CRPSNormal_ObservationAtMean_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_ObservationAtMean_Formula()
     {
         // CRPS for N(0,1) at observation=0: z=0, phi(0)=1/sqrt(2*pi), Phi(0)=0.5
         // CRPS = sigma * [z*(2*Phi-1) + 2*phi - 1/sqrt(pi)]
@@ -38,8 +39,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact]
-    public void CRPSNormal_ObservationAwayFromMean_IncreasesScore()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_ObservationAwayFromMean_IncreasesScore()
     {
         var dist = new NormalDistribution<double>(0.0, 1.0);
         var crps = new CRPSScore<double>();
@@ -52,8 +53,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
             $"CRPS at 3.0 ({scoreAway}) should be > CRPS at 0.0 ({scoreAtMean})");
     }
 
-    [Fact]
-    public void CRPSNormal_LargerVariance_IncreasesScore()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_LargerVariance_IncreasesScore()
     {
         var narrow = new NormalDistribution<double>(0.0, 1.0);   // variance=1
         var wide = new NormalDistribution<double>(0.0, 100.0);   // variance=100 (sigma=10)
@@ -67,8 +68,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
             $"Wide CRPS ({scoreWide}) should be > narrow CRPS ({scoreNarrow})");
     }
 
-    [Fact]
-    public void CRPSNormal_ScalesWithSigma()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_ScalesWithSigma()
     {
         // CRPS at mean for N(mu, sigma^2) = sigma * (sqrt(2) - 1) / sqrt(pi)
         // So CRPS is proportional to sigma
@@ -83,8 +84,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(2.0 * score1, score2, Tolerance);
     }
 
-    [Fact]
-    public void CRPSNormal_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_IsNonNegative()
     {
         var dist = new NormalDistribution<double>(5.0, 4.0);
         var crps = new CRPSScore<double>();
@@ -93,8 +94,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.True(score >= 0, $"CRPS should be non-negative, got {score}");
     }
 
-    [Fact]
-    public void CRPSNormal_HandComputed_SpecificCase()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormal_HandComputed_SpecificCase()
     {
         // N(10, 4): mu=10, sigma=2
         // Observation y=12: z=(12-10)/2 = 1
@@ -121,8 +122,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // CRPS Score - Laplace Distribution (Closed-Form)
     // ============================
 
-    [Fact]
-    public void CRPSLaplace_ObservationAtLocation_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSLaplace_ObservationAtLocation_Formula()
     {
         // CRPS for Laplace(mu, b) at y=mu:
         // |y-mu| = 0, exp(0) = 1
@@ -134,8 +135,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.5, score, Tolerance); // b/4 = 2/4 = 0.5
     }
 
-    [Fact]
-    public void CRPSLaplace_HandComputed_AwayFromLocation()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSLaplace_HandComputed_AwayFromLocation()
     {
         // Laplace(mu=0, b=1), observation y=2
         // |y-mu| = 2, exp(-2/1) = exp(-2)
@@ -149,8 +150,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact]
-    public void CRPSLaplace_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSLaplace_IsNonNegative()
     {
         var dist = new LaplaceDistribution<double>(5.0, 3.0);
         var crps = new CRPSScore<double>();
@@ -163,8 +164,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // LogScore Tests
     // ============================
 
-    [Fact]
-    public void LogScore_IsNegLogPdf()
+    [Fact(Timeout = 120000)]
+    public async Task LogScore_IsNegLogPdf()
     {
         // LogScore = -log(pdf(y))
         // For N(0,1), pdf(0) = 1/sqrt(2*pi), log(pdf(0)) = -0.5*log(2*pi)
@@ -178,8 +179,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(expected, score, Tolerance);
     }
 
-    [Fact]
-    public void LogScore_FartherObservation_HigherScore()
+    [Fact(Timeout = 120000)]
+    public async Task LogScore_FartherObservation_HigherScore()
     {
         var dist = new NormalDistribution<double>(0.0, 1.0);
         var logScore = new LogScore<double>();
@@ -191,8 +192,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
             $"LogScore far ({scoreFar}) should be > close ({scoreClose})");
     }
 
-    [Fact]
-    public void LogScore_NormalAtMean_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task LogScore_NormalAtMean_HandComputed()
     {
         // N(5, 9): mu=5, variance=9, sigma=3
         // pdf(5) = 1/(3*sqrt(2*pi))
@@ -211,8 +212,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // CRPS Gradient Tests
     // ============================
 
-    [Fact]
-    public void CRPSNormalGradient_AtMean_MeanGradientIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormalGradient_AtMean_MeanGradientIsZero()
     {
         // d(CRPS)/d(mu) = -(2*Phi(z) - 1), at z=0: -(2*0.5-1) = 0
         var dist = new NormalDistribution<double>(0.0, 1.0);
@@ -222,8 +223,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, gradient[0], Tolerance); // gradient w.r.t. mean
     }
 
-    [Fact]
-    public void CRPSNormalGradient_ObservationAboveMean_NegativeMeanGrad()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSNormalGradient_ObservationAboveMean_NegativeMeanGrad()
     {
         // When y > mu, z > 0, Phi(z) > 0.5, so 2*Phi-1 > 0, grad_mu = -(2*Phi-1) < 0
         // This means increasing mu would decrease CRPS (move closer to observation)
@@ -239,8 +240,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // L1 Regularization (Lasso) Tests
     // ============================
 
-    [Fact]
-    public void L1_SoftThresholding_BelowThreshold_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task L1_SoftThresholding_BelowThreshold_IsZero()
     {
         // L1 with strength=0.5: values with |x| < 0.5 → 0
         var l1 = new L1Regularization<double, double[], Vector<double>>(
@@ -256,8 +257,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void L1_SoftThresholding_AboveThreshold_ShrunkByStrength()
+    [Fact(Timeout = 120000)]
+    public async Task L1_SoftThresholding_AboveThreshold_ShrunkByStrength()
     {
         // L1 with strength=0.1: sign(x) * max(0, |x| - 0.1)
         var l1 = new L1Regularization<double, double[], Vector<double>>(
@@ -276,8 +277,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[3], Tolerance);
     }
 
-    [Fact]
-    public void L1_SparsityInducing_SmallValuesGoToZero()
+    [Fact(Timeout = 120000)]
+    public async Task L1_SparsityInducing_SmallValuesGoToZero()
     {
         var l1 = new L1Regularization<double, double[], Vector<double>>(
             new RegularizationOptions { Strength = 0.3, L1Ratio = 1.0, Type = RegularizationType.L1 });
@@ -293,8 +294,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[4], Tolerance); // 0.01 < 0.3
     }
 
-    [Fact]
-    public void L1_GradientRegularize_AddsSubdifferential()
+    [Fact(Timeout = 120000)]
+    public async Task L1_GradientRegularize_AddsSubdifferential()
     {
         // Gradient regularization: gradient + strength * sign(coefficients)
         var l1 = new L1Regularization<double, double[], Vector<double>>(
@@ -317,8 +318,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // L2 Regularization (Ridge) Tests
     // ============================
 
-    [Fact]
-    public void L2_UniformShrinkage_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task L2_UniformShrinkage_Formula()
     {
         // L2 Regularize(vector): x * (1 - strength)
         var l2 = new L2Regularization<double, double[], Vector<double>>(
@@ -334,8 +335,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(-1.0 * shrinkage, result[3], Tolerance);
     }
 
-    [Fact]
-    public void L2_NeverProducesExactZeros()
+    [Fact(Timeout = 120000)]
+    public async Task L2_NeverProducesExactZeros()
     {
         // L2 shrinks but never sets to exactly zero (unlike L1)
         var l2 = new L2Regularization<double, double[], Vector<double>>(
@@ -351,8 +352,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void L2_GradientRegularize_AddsProportionalPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task L2_GradientRegularize_AddsProportionalPenalty()
     {
         // Gradient regularization: gradient + strength * coefficients
         var l2 = new L2Regularization<double, double[], Vector<double>>(
@@ -369,8 +370,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(-2.2, result[1], Tolerance);
     }
 
-    [Fact]
-    public void L2_PreservesSign()
+    [Fact(Timeout = 120000)]
+    public async Task L2_PreservesSign()
     {
         var l2 = new L2Regularization<double, double[], Vector<double>>(
             new RegularizationOptions { Strength = 0.1, L1Ratio = 0.0, Type = RegularizationType.L2 });
@@ -383,8 +384,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tolerance); // Zero stays zero
     }
 
-    [Fact]
-    public void L2_MatrixRegularize_UniformShrinkage()
+    [Fact(Timeout = 120000)]
+    public async Task L2_MatrixRegularize_UniformShrinkage()
     {
         var l2 = new L2Regularization<double, double[], Vector<double>>(
             new RegularizationOptions { Strength = 0.1, L1Ratio = 0.0, Type = RegularizationType.L2 });
@@ -406,8 +407,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // ElasticNet Regularization Tests
     // ============================
 
-    [Fact]
-    public void ElasticNet_L1RatioZero_PureL2()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_L1RatioZero_PureL2()
     {
         // L1Ratio=0 means pure L2
         var elastic = new ElasticNetRegularization<double, double[], Vector<double>>(
@@ -425,8 +426,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ElasticNet_L1RatioOne_PureL1()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_L1RatioOne_PureL1()
     {
         // L1Ratio=1 means pure L1
         var elastic = new ElasticNetRegularization<double, double[], Vector<double>>(
@@ -444,8 +445,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ElasticNet_HandComputed_MixedPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_HandComputed_MixedPenalty()
     {
         // ElasticNet with strength=0.2, L1Ratio=0.5:
         // L1 threshold = strength * L1Ratio = 0.2 * 0.5 = 0.1
@@ -466,8 +467,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.81, result[2], Tolerance);
     }
 
-    [Fact]
-    public void ElasticNet_GradientRegularize_CombinesL1AndL2()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_GradientRegularize_CombinesL1AndL2()
     {
         // gradient + strength * [L1Ratio * sign(coeff) + (1-L1Ratio) * coeff]
         var elastic = new ElasticNetRegularization<double, double[], Vector<double>>(
@@ -484,8 +485,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(-1.35, result[1], Tolerance);
     }
 
-    [Fact]
-    public void ElasticNet_MoreSparseWithHigherL1Ratio()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_MoreSparseWithHigherL1Ratio()
     {
         var data = new Vector<double>(new double[] { 0.15, -0.15, 0.3, -0.3 });
 
@@ -509,8 +510,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // Regularization Properties
     // ============================
 
-    [Fact]
-    public void L1_Matrix_SoftThresholding_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task L1_Matrix_SoftThresholding_HandComputed()
     {
         var l1 = new L1Regularization<double, double[], Vector<double>>(
             new RegularizationOptions { Strength = 0.2, L1Ratio = 1.0, Type = RegularizationType.L1 });
@@ -531,8 +532,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         Assert.Equal(0.8, result[1, 1], Tolerance);
     }
 
-    [Fact]
-    public void Regularization_ZeroInputs_StayZero()
+    [Fact(Timeout = 120000)]
+    public async Task Regularization_ZeroInputs_StayZero()
     {
         var l1 = new L1Regularization<double, double[], Vector<double>>(
             new RegularizationOptions { Strength = 0.1, L1Ratio = 1.0, Type = RegularizationType.L1 });
@@ -551,8 +552,8 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void L1_SoftThresholding_IsIdempotentAtFixedPoint()
+    [Fact(Timeout = 120000)]
+    public async Task L1_SoftThresholding_IsIdempotentAtFixedPoint()
     {
         // Applying L1 regularization repeatedly to the same data:
         // After first application, values are shrunk. Applying again shrinks further.
@@ -574,22 +575,22 @@ public class ScoringAndRegularizationDeepMathIntegrationTests
     // Scoring Properties
     // ============================
 
-    [Fact]
-    public void CRPSScore_IsMinimized()
+    [Fact(Timeout = 120000)]
+    public async Task CRPSScore_IsMinimized()
     {
         var crps = new CRPSScore<double>();
         Assert.True(crps.IsMinimized);
     }
 
-    [Fact]
-    public void LogScore_IsMinimized()
+    [Fact(Timeout = 120000)]
+    public async Task LogScore_IsMinimized()
     {
         var logScore = new LogScore<double>();
         Assert.True(logScore.IsMinimized);
     }
 
-    [Fact]
-    public void CRPS_MinIntegrationPoints_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_MinIntegrationPoints_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CRPSScore<double>(5)); // min is 10
     }

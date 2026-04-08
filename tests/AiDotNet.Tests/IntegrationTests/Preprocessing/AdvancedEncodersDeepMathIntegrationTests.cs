@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -21,8 +22,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // TargetEncoder - Smoothed Target Mean Encoding
     // ========================================================================
 
-    [Fact]
-    public void TargetEncoder_SmoothedMean_HandComputedFormula()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_SmoothedMean_HandComputedFormula()
     {
         // Data: category column with values [1, 1, 1, 2, 2]
         // Target: [10, 20, 30, 40, 50]
@@ -43,8 +44,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol);
     }
 
-    [Fact]
-    public void TargetEncoder_HighSmoothing_PullsTowardGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_HighSmoothing_PullsTowardGlobalMean()
     {
         // Data: [1, 1, 2, 2]
         // Target: [10, 20, 80, 90]
@@ -69,8 +70,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 50) < 2.0);
     }
 
-    [Fact]
-    public void TargetEncoder_ZeroSmoothing_UsesRawCategoryMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_ZeroSmoothing_UsesRawCategoryMean()
     {
         // smoothing = 0 means no shrinkage
         // Cat 1: (2*15 + 0*50)/(2+0) = 15
@@ -86,8 +87,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(85.0, result[2, 0], Tol); // (80+90)/2
     }
 
-    [Fact]
-    public void TargetEncoder_MinSamplesLeaf_RareCategoryGetsGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_MinSamplesLeaf_RareCategoryGetsGlobalMean()
     {
         // Data: [1, 1, 1, 1, 2] - Category 2 has only 1 sample
         // Target: [10, 20, 30, 40, 100]
@@ -106,8 +107,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol); // rare category -> global mean
     }
 
-    [Fact]
-    public void TargetEncoder_UnknownCategory_UsesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
         var target = MakeVector(new double[] { 10, 20, 80, 90 });
@@ -123,8 +124,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(50.0, result[0, 0], Tol);
     }
 
-    [Fact]
-    public void TargetEncoder_UnknownCategory_ErrorMode_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_UnknownCategory_ErrorMode_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
         var target = MakeVector(new double[] { 10, 20 });
@@ -136,8 +137,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact]
-    public void TargetEncoder_MultiColumn_IndependentEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_MultiColumn_IndependentEncoding()
     {
         // Two columns with different categories
         var data = MakeMatrix(new double[,] { { 1, 10 }, { 1, 20 }, { 2, 10 }, { 2, 20 } });
@@ -157,8 +158,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(300.0, result[1, 1], Tol);
     }
 
-    [Fact]
-    public void TargetEncoder_NegativeSmoothing_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_NegativeSmoothing_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TargetEncoder<double>(smoothing: -1.0));
     }
@@ -167,8 +168,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // WOEEncoder - Weight of Evidence
     // ========================================================================
 
-    [Fact]
-    public void WOEEncoder_HandComputed_TwoCategories()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_HandComputed_TwoCategories()
     {
         // Data: [1, 1, 1, 2, 2, 2]
         // Target: [1, 1, 0, 0, 0, 1]
@@ -199,8 +200,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expectedWoeCat2, result[3, 0], Tol);
     }
 
-    [Fact]
-    public void WOEEncoder_PositiveWOE_MoreEventsInCategory()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_PositiveWOE_MoreEventsInCategory()
     {
         // Category with more events than non-events should have positive WOE
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 1 }, { 1 }, { 2 }, { 2 } });
@@ -215,8 +216,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[0, 0] > 0, "Category with more events should have positive WOE");
     }
 
-    [Fact]
-    public void WOEEncoder_NegativeWOE_MoreNonEventsInCategory()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_NegativeWOE_MoreNonEventsInCategory()
     {
         // Category with more non-events than events should have negative WOE
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 1 }, { 1 }, { 2 }, { 2 } });
@@ -230,8 +231,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[0, 0] < 0, "Category with more non-events should have negative WOE");
     }
 
-    [Fact]
-    public void WOEEncoder_Clamping_ExtremeValuesClampedToFive()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_Clamping_ExtremeValuesClampedToFive()
     {
         // Create extreme imbalance: one category has almost all events
         // With low regularization, WOE could be extreme
@@ -263,8 +264,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[100, 0] >= -5.0 - Tol);
     }
 
-    [Fact]
-    public void WOEEncoder_InformationValue_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_InformationValue_HandComputed()
     {
         // Using same data as HandComputed test
         // Cat 1: distEvents=0.625, distNonEvents=0.375, WOE=ln(0.625/0.375)
@@ -288,8 +289,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(ivValues[0] >= 0, "IV should be non-negative");
     }
 
-    [Fact]
-    public void WOEEncoder_BinaryTargetRequired_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_BinaryTargetRequired_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
         var target = MakeVector(new double[] { 0, 2 }); // non-binary
@@ -298,8 +299,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Fit(data, target));
     }
 
-    [Fact]
-    public void WOEEncoder_SingleClassTarget_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_SingleClassTarget_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
         var target = MakeVector(new double[] { 1, 1 }); // all events, no non-events
@@ -308,8 +309,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Fit(data, target));
     }
 
-    [Fact]
-    public void WOEEncoder_UnknownCategory_UseZero()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_UnknownCategory_UseZero()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
         var target = MakeVector(new double[] { 1, 0, 0, 1 });
@@ -323,8 +324,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(0.0, result[0, 0], Tol); // Unknown -> 0 (neutral evidence)
     }
 
-    [Fact]
-    public void WOEEncoder_Symmetry_SwappedClassesNegateWOE()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_Symmetry_SwappedClassesNegateWOE()
     {
         // If we swap events and non-events for a category, WOE should negate
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -348,8 +349,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // HelmertEncoder - Contrast Coding
     // ========================================================================
 
-    [Fact]
-    public void HelmertEncoder_ThreeCategories_ContrastMatrixValues()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_ThreeCategories_ContrastMatrixValues()
     {
         // 3 categories (10, 20, 30), creates 2 contrast columns
         // Standard Helmert matrix for k=3:
@@ -378,8 +379,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(-1.0 / 2, result[2, 1], Tol);
     }
 
-    [Fact]
-    public void HelmertEncoder_ReversedMode_ComparesWithPreviousLevels()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_ReversedMode_ComparesWithPreviousLevels()
     {
         // Reversed Helmert for k=3:
         // Col 0: compare level 1 to mean of level 0
@@ -407,8 +408,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(2.0 / 3, result[2, 1], Tol);
     }
 
-    [Fact]
-    public void HelmertEncoder_OutputDimension_KMinusOneColumns()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_OutputDimension_KMinusOneColumns()
     {
         // 4 categories -> 3 contrast columns
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 } });
@@ -421,8 +422,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void HelmertEncoder_ColumnSumsToZero()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_ColumnSumsToZero()
     {
         // Each column in the Helmert contrast matrix should sum to zero
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 } });
@@ -442,8 +443,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void HelmertEncoder_UnknownCategory_ZeroVector()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_UnknownCategory_ZeroVector()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
 
@@ -461,8 +462,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // JamesSteinEncoder - Bayesian Shrinkage
     // ========================================================================
 
-    [Fact]
-    public void JamesSteinEncoder_LargeCountLowShrinkage_NearCategoryMean()
+    [Fact(Timeout = 120000)]
+    public async Task JamesSteinEncoder_LargeCountLowShrinkage_NearCategoryMean()
     {
         // Large count category far from global mean -> low shrinkage -> close to category mean
         // Category 1: count=100, all targets=100 -> mean=100
@@ -501,8 +502,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[100, 0] < 10, $"Cat 2 encoded {result[100, 0]} should be close to its mean 0");
     }
 
-    [Fact]
-    public void JamesSteinEncoder_SmallCount_FullShrinkageToGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task JamesSteinEncoder_SmallCount_FullShrinkageToGlobalMean()
     {
         // Category with count <= 2 gets full shrinkage (shrinkage=1.0)
         // Encoded value = (1-1)*categoryMean + 1*globalMean = globalMean
@@ -519,8 +520,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(globalMean, result[0, 0], Tol);
     }
 
-    [Fact]
-    public void JamesSteinEncoder_GlobalMean_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task JamesSteinEncoder_GlobalMean_IsCorrect()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
         var target = MakeVector(new double[] { 10, 20, 30, 40 });
@@ -531,8 +532,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(25.0, encoder.GlobalMean, Tol);
     }
 
-    [Fact]
-    public void JamesSteinEncoder_UnknownCategory_UsesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task JamesSteinEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
         var target = MakeVector(new double[] { 10, 20, 30, 40 });
@@ -550,8 +551,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // LeaveOneOutEncoder - LOO Target Encoding
     // ========================================================================
 
-    [Fact]
-    public void LeaveOneOutEncoder_HandComputed_ThreeSamples()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOutEncoder_HandComputed_ThreeSamples()
     {
         // Category "A" (value 1) has 3 samples with targets [10, 20, 30]
         // Category "B" (value 2) has 2 samples with targets [40, 50]
@@ -582,8 +583,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol);
     }
 
-    [Fact]
-    public void LeaveOneOutEncoder_WithSmoothing_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOutEncoder_WithSmoothing_HandComputed()
     {
         // Same data as above but with smoothing=1
         // LOO for row 0 (cat=1, target=10): looSum=50, looCount=2, looMean=25
@@ -599,8 +600,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expected, result[0, 0], Tol);
     }
 
-    [Fact]
-    public void LeaveOneOutEncoder_SingleSampleCategory_FallsToGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOutEncoder_SingleSampleCategory_FallsToGlobalMean()
     {
         // Category with only 1 sample: LOO count = 0, should use global mean
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 2 }, { 2 } });
@@ -616,8 +617,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(globalMean, result[0, 0], Tol);
     }
 
-    [Fact]
-    public void LeaveOneOutEncoder_TransformForTestData_UsesFullStats()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOutEncoder_TransformForTestData_UsesFullStats()
     {
         // Transform (without target) for test data uses full category statistics
         // Cat 1: sum=60, count=3, mean=20, smoothed=(3*20+1*30)/(3+1) = 90/4 = 22.5
@@ -632,8 +633,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expectedCat1, result[0, 0], Tol);
     }
 
-    [Fact]
-    public void LeaveOneOutEncoder_EachRowGetsDifferentEncoding()
+    [Fact(Timeout = 120000)]
+    public async Task LeaveOneOutEncoder_EachRowGetsDifferentEncoding()
     {
         // Unlike TargetEncoder, LOO gives different encodings per row even for same category
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 1 } });
@@ -658,8 +659,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // MEstimateEncoder - Simplified Target Encoding with M-Parameter
     // ========================================================================
 
-    [Fact]
-    public void MEstimateEncoder_HandComputed_Formula()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_HandComputed_Formula()
     {
         // Formula: (sum + m * globalMean) / (count + m)
         // Data: [1, 1, 1, 2, 2]
@@ -685,8 +686,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(65.5, result[4, 0], Tol);
     }
 
-    [Fact]
-    public void MEstimateEncoder_MZero_EqualsRawCategoryMean()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_MZero_EqualsRawCategoryMean()
     {
         // m=0: encoded = (sum + 0)/(count + 0) = sum/count = categoryMean
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -700,8 +701,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(80.0, result[2, 0], Tol); // (70+90)/2
     }
 
-    [Fact]
-    public void MEstimateEncoder_VeryLargeM_ApproachesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_VeryLargeM_ApproachesGlobalMean()
     {
         // m=10000: encoded ~ globalMean for all categories
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -716,8 +717,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 50.0) < 0.1);
     }
 
-    [Fact]
-    public void MEstimateEncoder_EquivalenceWithTargetEncoder()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_EquivalenceWithTargetEncoder()
     {
         // MEstimate with m=s and TargetEncoder with smoothing=s should produce same results
         // MEstimate: (sum + m*global) / (count + m) = (count*mean + m*global) / (count + m)
@@ -740,8 +741,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MEstimateEncoder_UnknownCategory_UsesGlobalMean()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
         var target = MakeVector(new double[] { 10, 30 });
@@ -755,8 +756,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(20.0, result[0, 0], Tol); // global mean
     }
 
-    [Fact]
-    public void MEstimateEncoder_NegativeM_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MEstimateEncoder_NegativeM_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MEstimateEncoder<double>(m: -1.0));
     }
@@ -765,8 +766,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // BackwardDifferenceEncoder - Contrast Coding
     // ========================================================================
 
-    [Fact]
-    public void BackwardDifferenceEncoder_ThreeCategories_ContrastValues()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardDifferenceEncoder_ThreeCategories_ContrastValues()
     {
         // k=3 categories (1, 2, 3), creates 2 contrast columns
         // Backward difference matrix for k=3:
@@ -801,8 +802,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(2.0 / 3, result[2, 1], Tol);
     }
 
-    [Fact]
-    public void BackwardDifferenceEncoder_ColumnSumsToZero()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardDifferenceEncoder_ColumnSumsToZero()
     {
         // Each column should sum to zero (balanced contrast)
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 } });
@@ -822,8 +823,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BackwardDifferenceEncoder_OutputDimension_KMinusOne()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardDifferenceEncoder_OutputDimension_KMinusOne()
     {
         // 5 categories -> 4 contrast columns
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -836,8 +837,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
-    public void BackwardDifferenceEncoder_AdjacentDifference_IsOneOverK()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardDifferenceEncoder_AdjacentDifference_IsOneOverK()
     {
         // The difference between adjacent rows in each column should be predictable
         // For k=4, col c: row c gets -(k-c-1)/k, row c+1 gets (c+1)/k
@@ -860,8 +861,8 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void BackwardDifferenceEncoder_UnknownCategory_ZeroVector()
+    [Fact(Timeout = 120000)]
+    public async Task BackwardDifferenceEncoder_UnknownCategory_ZeroVector()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
 
@@ -879,37 +880,37 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // Cross-Encoder Properties
     // ========================================================================
 
-    [Fact]
-    public void TargetEncoder_InverseTransform_NotSupported()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_InverseTransform_NotSupported()
     {
         var encoder = new TargetEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void WOEEncoder_InverseTransform_NotSupported()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_InverseTransform_NotSupported()
     {
         var encoder = new WOEEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void HelmertEncoder_InverseTransform_NotSupported()
+    [Fact(Timeout = 120000)]
+    public async Task HelmertEncoder_InverseTransform_NotSupported()
     {
         var encoder = new HelmertEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
-    public void TargetEncoder_FitWithoutTarget_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TargetEncoder_FitWithoutTarget_Throws()
     {
         var encoder = new TargetEncoder<double>();
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
         Assert.Throws<InvalidOperationException>(() => encoder.Fit(data));
     }
 
-    [Fact]
-    public void WOEEncoder_FitWithoutTarget_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_FitWithoutTarget_Throws()
     {
         var encoder = new WOEEncoder<double>();
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });

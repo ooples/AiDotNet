@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System.Collections.Generic;
@@ -10,8 +11,8 @@ using Xunit;
 
 public class TensorJsonConverterTests
 {
-    [Fact]
-    public void CanConvert_ReturnsTrue_ForTensorAndDerivedTensor()
+    [Fact(Timeout = 60000)]
+    public async Task CanConvert_ReturnsTrue_ForTensorAndDerivedTensor()
     {
         var converter = new TensorJsonConverter();
 
@@ -19,16 +20,16 @@ public class TensorJsonConverterTests
         Assert.True(converter.CanConvert(typeof(NoVectorConstructorTensor<double>)));
     }
 
-    [Fact]
-    public void CanConvert_ReturnsFalse_ForNonTensorType()
+    [Fact(Timeout = 60000)]
+    public async Task CanConvert_ReturnsFalse_ForNonTensorType()
     {
         var converter = new TensorJsonConverter();
 
         Assert.False(converter.CanConvert(typeof(string)));
     }
 
-    [Fact]
-    public void WriteJson_WritesNull_WhenValueIsNull()
+    [Fact(Timeout = 60000)]
+    public async Task WriteJson_WritesNull_WhenValueIsNull()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -40,8 +41,8 @@ public class TensorJsonConverterTests
         Assert.Equal(JTokenType.Null, writer.Token!.Type);
     }
 
-    [Fact]
-    public void WriteJson_Throws_WhenMissingRequiredTensorProperties()
+    [Fact(Timeout = 60000)]
+    public async Task WriteJson_Throws_WhenMissingRequiredTensorProperties()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -50,8 +51,8 @@ public class TensorJsonConverterTests
         Assert.Throws<JsonSerializationException>(() => converter.WriteJson(writer, new object(), serializer));
     }
 
-    [Fact]
-    public void ReadJson_ReturnsNull_WhenJsonNull()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_ReturnsNull_WhenJsonNull()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -64,8 +65,8 @@ public class TensorJsonConverterTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public void ReadJson_Throws_WhenShapeMissing()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_Throws_WhenShapeMissing()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -77,8 +78,8 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact]
-    public void ReadJson_Throws_WhenDataMissing()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_Throws_WhenDataMissing()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -90,8 +91,8 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact]
-    public void ReadJson_Throws_WhenDataLengthMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_Throws_WhenDataLengthMismatch()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();
@@ -103,8 +104,8 @@ public class TensorJsonConverterTests
             converter.ReadJson(reader, typeof(Tensor<double>), existingValue: null, serializer));
     }
 
-    [Fact]
-    public void RoundTrip_SerializesAndDeserializesTensor()
+    [Fact(Timeout = 60000)]
+    public async Task RoundTrip_SerializesAndDeserializesTensor()
     {
         var settings = new JsonSerializerSettings
         {
@@ -128,8 +129,8 @@ public class TensorJsonConverterTests
         Assert.Equal(tensor.ToArray(), roundTrip.ToArray());
     }
 
-    [Fact]
-    public void ReadJson_UsesFallbackConstructor_WhenVectorConstructorMissing()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_UsesFallbackConstructor_WhenVectorConstructorMissing()
     {
         var settings = new JsonSerializerSettings
         {
@@ -148,8 +149,8 @@ public class TensorJsonConverterTests
         Assert.Equal(tensor.ToArray(), fallback.ToArray());
     }
 
-    [Fact]
-    public void ReadJson_Throws_WhenNoSuitableConstructor()
+    [Fact(Timeout = 60000)]
+    public async Task ReadJson_Throws_WhenNoSuitableConstructor()
     {
         var converter = new TensorJsonConverter();
         var serializer = JsonSerializer.CreateDefault();

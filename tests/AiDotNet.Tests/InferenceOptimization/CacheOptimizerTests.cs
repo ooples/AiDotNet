@@ -1,12 +1,13 @@
 using AiDotNet.Tensors.Engines.Optimization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class CacheOptimizerTests
 {
-    [Fact]
-    public void TransposeBlocked_Transposes2DMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task TransposeBlocked_Transposes2DMatrix()
     {
         // 2x3
         float[] src = new float[] { 1f, 2f, 3f, 4f, 5f, 6f };
@@ -19,8 +20,8 @@ public class CacheOptimizerTests
         Assert.Equal(expected, dst);
     }
 
-    [Fact]
-    public void CopyWithPrefetch_CopiesPrefix()
+    [Fact(Timeout = 60000)]
+    public async Task CopyWithPrefetch_CopiesPrefix()
     {
         float[] src = new float[] { 1f, 2f, 3f, 4f, 5f };
         float[] dst = new float[] { 0f, 0f, 0f, 0f, 0f };

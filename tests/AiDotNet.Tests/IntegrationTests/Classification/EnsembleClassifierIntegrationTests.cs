@@ -1,6 +1,7 @@
 using AiDotNet.Classification.Ensemble;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -15,8 +16,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region RandomForest Core Tests
 
-    [Fact]
-    public void RandomForest_MultipleTreesImproveAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_MultipleTreesImproveAccuracy()
     {
         // Arrange: Data with some noise where ensemble should help
         var x = new Matrix<double>(40, 3);
@@ -68,8 +69,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correctMany >= 30, $"Many trees should work. Got {correctMany}/40");
     }
 
-    [Fact]
-    public void RandomForest_BootstrapSampling_DifferentTrees()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_BootstrapSampling_DifferentTrees()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -104,8 +105,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 16, $"Random Forest should classify most correctly. Got {correct}/20");
     }
 
-    [Fact]
-    public void RandomForest_MaxFeaturesConstraint_Works()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_MaxFeaturesConstraint_Works()
     {
         // Arrange: Many features but only first one matters
         var x = new Matrix<double>(20, 10);
@@ -145,8 +146,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 16, $"Random Forest with max_features should work. Got {correct}/20");
     }
 
-    [Fact]
-    public void RandomForest_OobScore_ProvidedWhenEnabled()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_OobScore_ProvidedWhenEnabled()
     {
         // Arrange
         var x = new Matrix<double>(30, 2);
@@ -175,8 +176,8 @@ public class EnsembleClassifierIntegrationTests
             $"OOB score should be in [0,1], got {rf.OobScore_}");
     }
 
-    [Fact]
-    public void RandomForest_PredictProbabilities_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_PredictProbabilities_SumToOne()
     {
         // Arrange
         var x = new Matrix<double>(12, 2);
@@ -214,8 +215,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region AdaBoost Core Tests
 
-    [Fact]
-    public void AdaBoost_WeakLearnersBecomingStrong()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_WeakLearnersBecomingStrong()
     {
         // Arrange: Data where single stump would struggle but boosting helps
         var x = new Matrix<double>(20, 2);
@@ -249,8 +250,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 16, $"AdaBoost should achieve good accuracy. Got {correct}/20");
     }
 
-    [Fact]
-    public void AdaBoost_LearningRate_AffectsConvergence()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_LearningRate_AffectsConvergence()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -298,8 +299,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correctHigh >= 14, $"High learning rate AdaBoost should work. Got {correctHigh}/20");
     }
 
-    [Fact]
-    public void AdaBoost_PredictProbabilities_ValidProbabilities()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_PredictProbabilities_ValidProbabilities()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -333,8 +334,8 @@ public class EnsembleClassifierIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdaBoost_FocusesOnMisclassifiedSamples()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_FocusesOnMisclassifiedSamples()
     {
         // Arrange: Data with one hard-to-classify sample
         var x = new Matrix<double>(11, 2);
@@ -385,8 +386,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region ExtraTrees Tests
 
-    [Fact]
-    public void ExtraTrees_RandomSplitsWork()
+    [Fact(Timeout = 120000)]
+    public async Task ExtraTrees_RandomSplitsWork()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -420,8 +421,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 16, $"Extra Trees should classify correctly. Got {correct}/20");
     }
 
-    [Fact]
-    public void ExtraTrees_MoreRandomThanRandomForest()
+    [Fact(Timeout = 120000)]
+    public async Task ExtraTrees_MoreRandomThanRandomForest()
     {
         // Arrange: Same data, compare behavior
         var x = new Matrix<double>(20, 2);
@@ -473,8 +474,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region GradientBoosting Tests
 
-    [Fact]
-    public void GradientBoosting_SequentialLearning()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_SequentialLearning()
     {
         // Arrange
         var x = new Matrix<double>(20, 2);
@@ -509,8 +510,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 16, $"Gradient Boosting should classify correctly. Got {correct}/20");
     }
 
-    [Fact]
-    public void GradientBoosting_LearningRateSubsamplingWork()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoosting_LearningRateSubsamplingWork()
     {
         // Arrange
         var x = new Matrix<double>(30, 2);
@@ -550,8 +551,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void RandomForest_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -584,8 +585,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
-    public void AdaBoost_Clone_ProducesSamePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_Clone_ProducesSamePredictions()
     {
         // Arrange
         var x = new Matrix<double>(10, 2);
@@ -622,8 +623,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void RandomForest_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -635,8 +636,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.Throws<ArgumentException>(() => rf.Train(x, y));
     }
 
-    [Fact]
-    public void AdaBoost_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_ThrowsOnMismatchedDimensions()
     {
         // Arrange
         var x = new Matrix<double>(5, 2);
@@ -648,8 +649,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.Throws<ArgumentException>(() => ada.Train(x, y));
     }
 
-    [Fact]
-    public void RandomForest_PredictBeforeTrain_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_PredictBeforeTrain_Throws()
     {
         // Arrange
         var rf = new RandomForestClassifier<double>();
@@ -659,8 +660,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.Throws<InvalidOperationException>(() => rf.Predict(testPoint));
     }
 
-    [Fact]
-    public void AdaBoost_PredictBeforeTrain_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_PredictBeforeTrain_Throws()
     {
         // Arrange
         var ada = new AdaBoostClassifier<double>();
@@ -674,8 +675,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region Multiclass Tests
 
-    [Fact]
-    public void RandomForest_MulticlassClassification()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_MulticlassClassification()
     {
         // Arrange: 3-class problem
         var x = new Matrix<double>(15, 2);
@@ -715,8 +716,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.True(correct >= 12, $"Random Forest multiclass should work. Got {correct}/15");
     }
 
-    [Fact]
-    public void AdaBoost_MulticlassClassification()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_MulticlassClassification()
     {
         // Arrange: 3-class problem
         var x = new Matrix<double>(15, 2);
@@ -754,8 +755,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region Feature Importance Tests
 
-    [Fact]
-    public void RandomForest_FeatureImportances_CorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_FeatureImportances_CorrectLength()
     {
         // Arrange
         var x = new Matrix<double>(20, 5);
@@ -797,8 +798,8 @@ public class EnsembleClassifierIntegrationTests
 
     #region GetModelMetadata Tests
 
-    [Fact]
-    public void RandomForest_GetModelMetadata_ContainsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task RandomForest_GetModelMetadata_ContainsCorrectInfo()
     {
         // Arrange
         var options = new RandomForestClassifierOptions<double>
@@ -826,8 +827,8 @@ public class EnsembleClassifierIntegrationTests
         Assert.Equal(10, metadata.AdditionalInfo["NEstimators"]);
     }
 
-    [Fact]
-    public void AdaBoost_GetModelMetadata_ContainsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task AdaBoost_GetModelMetadata_ContainsCorrectInfo()
     {
         // Arrange
         var options = new AdaBoostClassifierOptions<double>

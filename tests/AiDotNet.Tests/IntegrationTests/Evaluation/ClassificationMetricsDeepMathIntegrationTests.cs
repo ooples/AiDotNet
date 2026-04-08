@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.Evaluation.Metrics.Classification;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
@@ -19,8 +20,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region AUC-ROC - Exact Math Verification
 
-    [Fact]
-    public void AUCROC_PerfectRanking_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_PerfectRanking_ReturnsOne()
     {
         // All positives ranked above all negatives
         // probs:   [0.9, 0.8, 0.4, 0.3]
@@ -39,8 +40,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_WorstRanking_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_WorstRanking_ReturnsZero()
     {
         // All negatives ranked above all positives
         // probs:   [0.1, 0.2, 0.8, 0.9]
@@ -59,8 +60,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_HandCalculated_PartialRanking()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_HandCalculated_PartialRanking()
     {
         // probs:   [0.9, 0.6, 0.4, 0.3, 0.1]
         // actuals: [1,   0,   1,   0,   0]
@@ -80,8 +81,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 6.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_TiedScores_DependsOnOriginalOrder()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_TiedScores_DependsOnOriginalOrder()
     {
         // When all probabilities are tied, sort is stable and preserves original order
         // probs:   [0.5, 0.5, 0.5, 0.5]
@@ -102,8 +103,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_AllSameClass_ReturnsPontFive()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_AllSameClass_ReturnsPontFive()
     {
         // Only one class present -> should return 0.5 (undefined case)
         var metric = new AUCROCMetric<double>();
@@ -114,8 +115,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_MannWhitney_Consistency()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_MannWhitney_Consistency()
     {
         // AUC equals the Mann-Whitney U statistic:
         // AUC = P(score(pos) > score(neg))
@@ -132,8 +133,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_MultiClass_OVR_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_MultiClass_OVR_HandCalculated()
     {
         // 3-class problem, 4 samples
         // actuals: [0, 1, 2, 1]
@@ -152,8 +153,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCROC_EmptyInput_ReturnsPontFive()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_EmptyInput_ReturnsPontFive()
     {
         var metric = new AUCROCMetric<double>();
         double[] probs = Array.Empty<double>();
@@ -167,8 +168,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region AUC-PR - Exact Math Verification
 
-    [Fact]
-    public void AUCPR_PerfectRanking_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AUCPR_PerfectRanking_ReturnsOne()
     {
         // All positives ranked above all negatives
         // Sorted desc: (0.9,1), (0.8,1), (0.4,0), (0.3,0)
@@ -186,8 +187,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCPR_HandCalculated_PartialRanking()
+    [Fact(Timeout = 120000)]
+    public async Task AUCPR_HandCalculated_PartialRanking()
     {
         // probs:   [0.9, 0.6, 0.4, 0.3, 0.1]
         // actuals: [1,   0,   1,   0,   0]
@@ -207,8 +208,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 6.0, result, RelaxedTol);
     }
 
-    [Fact]
-    public void AUCPR_NoPositives_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task AUCPR_NoPositives_ReturnsZero()
     {
         var metric = new AUCPRMetric<double>();
         double[] probs = { 0.9, 0.8, 0.7 };
@@ -218,8 +219,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCPR_AllPositives_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AUCPR_AllPositives_ReturnsOne()
     {
         // When all samples are positive, precision is always 1.0
         var metric = new AUCPRMetric<double>();
@@ -230,8 +231,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void AUCPR_WorstRanking_LowScore()
+    [Fact(Timeout = 120000)]
+    public async Task AUCPR_WorstRanking_LowScore()
     {
         // All negatives ranked above all positives
         // Sorted desc: (0.9,0), (0.8,0), (0.2,1), (0.1,1)
@@ -253,8 +254,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Log Loss - Exact Math Verification
 
-    [Fact]
-    public void LogLoss_PerfectPredictions_NearZero()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_PerfectPredictions_NearZero()
     {
         // probs close to actual labels -> very low loss
         var metric = new LogLossMetric<double>();
@@ -270,8 +271,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, RelaxedTol);
     }
 
-    [Fact]
-    public void LogLoss_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_HandCalculated_ExactValue()
     {
         // probs:   [0.8, 0.3, 0.9, 0.2]
         // actuals: [1,   0,   1,   0]
@@ -294,8 +295,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void LogLoss_ConfidentlyWrong_HighPenalty()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_ConfidentlyWrong_HighPenalty()
     {
         // Predicting 0.99 for a negative and 0.01 for a positive -> very high loss
         var metric = new LogLossMetric<double>();
@@ -310,8 +311,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void LogLoss_RandomGuessing_Ln2()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_RandomGuessing_Ln2()
     {
         // p = 0.5 for all -> log loss = -ln(0.5) = ln(2) ~ 0.693
         var metric = new LogLossMetric<double>();
@@ -322,8 +323,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Log(2), result, Tol);
     }
 
-    [Fact]
-    public void LogLoss_EpsilonClamping_PreventsInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_EpsilonClamping_PreventsInfinity()
     {
         // p = 0 or p = 1 would give -ln(0) = infinity
         // epsilon clamping should prevent this
@@ -336,8 +337,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(result > 0, "Log loss should be positive for wrong predictions");
     }
 
-    [Fact]
-    public void LogLoss_MultiClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_MultiClass_HandCalculated()
     {
         // 3-class problem, 3 samples
         // actuals: [0, 1, 2]
@@ -355,8 +356,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void LogLoss_Asymmetry_MoreWrongMoreLoss()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_Asymmetry_MoreWrongMoreLoss()
     {
         // More confidently wrong predictions should give higher loss
         var metric = new LogLossMetric<double>();
@@ -375,8 +376,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Brier Score - Exact Math Verification
 
-    [Fact]
-    public void BrierScore_PerfectPredictions_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_PerfectPredictions_Zero()
     {
         // probs exactly match actuals
         var metric = new BrierScoreMetric<double>();
@@ -387,8 +388,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void BrierScore_WorstPredictions_One()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_WorstPredictions_One()
     {
         // probs are opposite of actuals
         // (0-1)^2 + (1-0)^2 + (0-1)^2 + (1-0)^2 = 1+1+1+1 = 4 / 4 = 1.0
@@ -400,8 +401,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void BrierScore_RandomGuessing_PointTwoFive()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_RandomGuessing_PointTwoFive()
     {
         // p = 0.5 for all -> (0.5-1)^2 + (0.5-0)^2 = 0.25 + 0.25 = 0.5 / 2 = 0.25
         var metric = new BrierScoreMetric<double>();
@@ -412,8 +413,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tol);
     }
 
-    [Fact]
-    public void BrierScore_HandCalculated_ExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_HandCalculated_ExactValue()
     {
         // probs:   [0.8, 0.3, 0.9, 0.2]
         // actuals: [1,   0,   1,   0]
@@ -429,8 +430,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.045, result, Tol);
     }
 
-    [Fact]
-    public void BrierScore_IsProperScoringRule_BetterPredictionsGetLowerScore()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_IsProperScoringRule_BetterPredictionsGetLowerScore()
     {
         // Better calibrated predictions should get lower Brier score
         var metric = new BrierScoreMetric<double>();
@@ -444,8 +445,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(okResult < badResult, $"OK ({okResult}) should beat bad ({badResult})");
     }
 
-    [Fact]
-    public void BrierScore_MultiClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_MultiClass_HandCalculated()
     {
         // 3-class problem, 2 samples
         // actuals: [0, 2]
@@ -488,8 +489,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Accuracy - Exact Math Verification
 
-    [Fact]
-    public void Accuracy_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_PerfectPrediction_ReturnsOne()
     {
         var metric = new AccuracyMetric<double>();
         double[] preds = { 0, 1, 0, 1, 1 };
@@ -499,8 +500,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void Accuracy_AllWrong_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_AllWrong_ReturnsZero()
     {
         var metric = new AccuracyMetric<double>();
         double[] preds = { 1, 0, 1, 0 };
@@ -510,8 +511,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void Accuracy_HandCalculated_ThreeOfFive()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_HandCalculated_ThreeOfFive()
     {
         // 3 out of 5 correct
         var metric = new AccuracyMetric<double>();
@@ -523,8 +524,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.6, result, Tol);
     }
 
-    [Fact]
-    public void Accuracy_MultiClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_MultiClass_HandCalculated()
     {
         // Multi-class: 3 classes
         var metric = new AccuracyMetric<double>();
@@ -536,8 +537,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(4.0 / 6.0, result, Tol);
     }
 
-    [Fact]
-    public void Accuracy_EmptyInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_EmptyInput_ReturnsZero()
     {
         var metric = new AccuracyMetric<double>();
         double result = metric.Compute(Array.Empty<double>(), Array.Empty<double>());
@@ -548,8 +549,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Balanced Accuracy - Exact Math Verification
 
-    [Fact]
-    public void BalancedAccuracy_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_PerfectPrediction_ReturnsOne()
     {
         var metric = new BalancedAccuracyMetric<double>();
         double[] preds = { 0, 1, 0, 1, 0, 1 };
@@ -559,8 +560,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void BalancedAccuracy_ImbalancedDataset_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_ImbalancedDataset_HandCalculated()
     {
         // Highly imbalanced: 8 negatives, 2 positives
         // Model predicts all negative
@@ -575,8 +576,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
-    public void BalancedAccuracy_VsAccuracy_ImbalancedData()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_VsAccuracy_ImbalancedData()
     {
         // Imbalanced: 9 negatives, 1 positive
         // Model predicts all negative
@@ -595,8 +596,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(balanced < accuracy, "Balanced accuracy should be lower for imbalanced all-negative predictions");
     }
 
-    [Fact]
-    public void BalancedAccuracy_MultiClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_MultiClass_HandCalculated()
     {
         // 3 classes: A(0), B(1), C(2)
         // actuals: [0, 0, 0, 1, 1, 2]
@@ -613,8 +614,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(5.0 / 9.0, result, Tol);
     }
 
-    [Fact]
-    public void BalancedAccuracy_AllWrong_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_AllWrong_ReturnsZero()
     {
         var metric = new BalancedAccuracyMetric<double>();
         double[] preds = { 1, 0, 1, 0 };
@@ -631,8 +632,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region MCC - Deep Edge Case Tests
 
-    [Fact]
-    public void MCC_HandCalculated_ConfusionMatrix_Binary()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_HandCalculated_ConfusionMatrix_Binary()
     {
         // TP=5, TN=3, FP=2, FN=1
         // preds:   [1,1,1,1,1, 0,0,0, 1,1, 0]
@@ -650,8 +651,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void MCC_PerfectPrediction_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_PerfectPrediction_ReturnsOne()
     {
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
         double[] preds = { 0, 1, 0, 1, 1, 0 };
@@ -661,8 +662,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void MCC_MultiClass_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_MultiClass_HandCalculated()
     {
         // 3-class confusion matrix:
         //          pred=0  pred=1  pred=2
@@ -694,8 +695,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void MCC_SingleClassPredicted_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_SingleClassPredicted_ReturnsZero()
     {
         // Model always predicts class 0 -> denominator is 0
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
@@ -710,8 +711,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Cohen's Kappa - Deep Edge Cases
 
-    [Fact]
-    public void CohensKappa_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_PerfectAgreement_ReturnsOne()
     {
         var metric = new CohensKappaMetric<double>();
         double[] preds = { 0, 1, 2, 0, 1, 2 };
@@ -721,8 +722,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
-    public void CohensKappa_HandCalculated_Binary()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_HandCalculated_Binary()
     {
         // TP=4, TN=3, FP=1, FN=2
         // preds:   [1,1,1,1, 0,0,0, 1, 0,0]
@@ -746,8 +747,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, result, Tol);
     }
 
-    [Fact]
-    public void CohensKappa_NoAgreementBeyondChance_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_NoAgreementBeyondChance_ReturnsZero()
     {
         // When observed agreement equals expected agreement
         // 50/50 pred split, 50/50 actual split, 50% observed agreement
@@ -764,8 +765,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void CohensKappa_WorseThanChance_Negative()
+    [Fact(Timeout = 120000)]
+    public async Task CohensKappa_WorseThanChance_Negative()
     {
         // Complete inversion -> kappa should be negative
         var metric = new CohensKappaMetric<double>();
@@ -784,8 +785,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Cross-Metric Consistency Tests
 
-    [Fact]
-    public void BrierScore_AlwaysBounded_ZeroToOne()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_AlwaysBounded_ZeroToOne()
     {
         // Brier score for binary classification is always in [0, 1]
         var metric = new BrierScoreMetric<double>();
@@ -807,8 +808,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LogLoss_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_AlwaysNonNegative()
     {
         var metric = new LogLossMetric<double>();
         double[] actuals = { 1, 0, 1, 0 };
@@ -826,8 +827,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AUCROC_AlwaysBounded_ZeroToOne()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_AlwaysBounded_ZeroToOne()
     {
         var metric = new AUCROCMetric<double>();
         double[] actuals = { 1, 0, 1, 0 };
@@ -846,8 +847,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Accuracy_PlusMissRate_EqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_PlusMissRate_EqualsOne()
     {
         // accuracy + error rate = 1
         var metric = new AccuracyMetric<double>();
@@ -861,8 +862,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, errorRate, Tol);
     }
 
-    [Fact]
-    public void MCC_And_CohensKappa_BothZero_ForNoDiscrimination()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_And_CohensKappa_BothZero_ForNoDiscrimination()
     {
         // When model always predicts the same class
         var mcc = new MatthewsCorrelationCoefficientMetric<double>();
@@ -880,8 +881,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, kappaResult, Tol);
     }
 
-    [Fact]
-    public void PerfectModel_AllMetricsAreOptimal()
+    [Fact(Timeout = 120000)]
+    public async Task PerfectModel_AllMetricsAreOptimal()
     {
         // Perfect binary classification
         double[] preds = { 0, 1, 0, 1, 0, 1 };
@@ -898,8 +899,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, kappa, Tol);
     }
 
-    [Fact]
-    public void PerfectProbabilistic_BestScores()
+    [Fact(Timeout = 120000)]
+    public async Task PerfectProbabilistic_BestScores()
     {
         // Perfect probabilistic predictions
         double[] probs = { 0.99, 0.01, 0.99, 0.01 };
@@ -915,8 +916,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(logLoss < 0.02, $"Log loss should be near 0 for perfect, got {logLoss}");
     }
 
-    [Fact]
-    public void MCC_SymmetricUnderClassSwap()
+    [Fact(Timeout = 120000)]
+    public async Task MCC_SymmetricUnderClassSwap()
     {
         // MCC(pred, actual) should equal MCC when both are inverted
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
@@ -933,8 +934,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(result1, result2, Tol);
     }
 
-    [Fact]
-    public void AUCROC_InvariantToMonotonicTransform()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_InvariantToMonotonicTransform()
     {
         // AUC-ROC is rank-based; any monotonic transform of probs gives same AUC
         var metric = new AUCROCMetric<double>();
@@ -949,8 +950,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(auc1, auc2, Tol);
     }
 
-    [Fact]
-    public void BrierScore_DecomposesIntoReliabilityResolutionUncertainty()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_DecomposesIntoReliabilityResolutionUncertainty()
     {
         // Brier Score = Reliability - Resolution + Uncertainty
         // For a well-calibrated model: reliability is small
@@ -968,8 +969,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
             $"Calibrated ({calibrated}) should have lower Brier than poor ({poorCalibration})");
     }
 
-    [Fact]
-    public void LogLoss_MonotonicInConfidence()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_MonotonicInConfidence()
     {
         // For correct predictions, higher confidence -> lower loss
         var metric = new LogLossMetric<double>();
@@ -987,48 +988,48 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void AUCROC_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_MismatchedLengths_Throws()
     {
         var metric = new AUCROCMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0.5, 0.5 }, new double[] { 1 }));
     }
 
-    [Fact]
-    public void LogLoss_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_MismatchedLengths_Throws()
     {
         var metric = new LogLossMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0.5, 0.5 }, new double[] { 1 }));
     }
 
-    [Fact]
-    public void BrierScore_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_MismatchedLengths_Throws()
     {
         var metric = new BrierScoreMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0.5, 0.5 }, new double[] { 1 }));
     }
 
-    [Fact]
-    public void Accuracy_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Accuracy_MismatchedLengths_Throws()
     {
         var metric = new AccuracyMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0, 1 }, new double[] { 0 }));
     }
 
-    [Fact]
-    public void BalancedAccuracy_MismatchedLengths_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BalancedAccuracy_MismatchedLengths_Throws()
     {
         var metric = new BalancedAccuracyMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0, 1 }, new double[] { 0 }));
     }
 
-    [Fact]
-    public void AUCROC_MultiClass_WrongProbsLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_MultiClass_WrongProbsLength_Throws()
     {
         var metric = new AUCROCMetric<double>();
         // 3 classes, 2 samples -> need 6 probs
@@ -1036,16 +1037,16 @@ public class ClassificationMetricsDeepMathIntegrationTests
             metric.Compute(new double[] { 0.5, 0.5, 0.5 }, new double[] { 0, 1 }, numClasses: 3));
     }
 
-    [Fact]
-    public void LogLoss_MultiClass_WrongProbsLength_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_MultiClass_WrongProbsLength_Throws()
     {
         var metric = new LogLossMetric<double>();
         Assert.Throws<ArgumentException>(() =>
             metric.Compute(new double[] { 0.5, 0.5, 0.5 }, new double[] { 0, 1 }, numClasses: 3));
     }
 
-    [Fact]
-    public void AUCROC_SingleSample_ReturnsPontFive()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_SingleSample_ReturnsPontFive()
     {
         // Single sample can't define a ranking
         var metric = new AUCROCMetric<double>();
@@ -1057,8 +1058,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
-    public void BrierScore_SingleSample_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_SingleSample_HandCalculated()
     {
         var metric = new BrierScoreMetric<double>();
         double[] probs = { 0.7 };
@@ -1069,8 +1070,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(0.09, result, Tol);
     }
 
-    [Fact]
-    public void LogLoss_SingleSample_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_SingleSample_HandCalculated()
     {
         var metric = new LogLossMetric<double>();
         double[] probs = { 0.7 };
@@ -1085,8 +1086,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void AUCROC_Float_SameAsDouble()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_Float_SameAsDouble()
     {
         var doubleMetric = new AUCROCMetric<double>();
         var floatMetric = new AUCROCMetric<float>();
@@ -1102,8 +1103,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(dResult, fResult, 1e-5);
     }
 
-    [Fact]
-    public void BrierScore_Float_SameAsDouble()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_Float_SameAsDouble()
     {
         var doubleMetric = new BrierScoreMetric<double>();
         var floatMetric = new BrierScoreMetric<float>();
@@ -1119,8 +1120,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.Equal(dResult, fResult, 1e-5);
     }
 
-    [Fact]
-    public void LogLoss_Float_ReasonableAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_Float_ReasonableAccuracy()
     {
         var doubleMetric = new LogLossMetric<double>();
         var floatMetric = new LogLossMetric<float>();
@@ -1140,8 +1141,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
 
     #region Confidence Interval Tests
 
-    [Fact]
-    public void AUCROC_BootstrapCI_LowerLessThanUpper()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_BootstrapCI_LowerLessThanUpper()
     {
         var metric = new AUCROCMetric<double>();
         double[] probs = { 0.9, 0.7, 0.6, 0.3, 0.2, 0.1, 0.8, 0.4 };
@@ -1160,8 +1161,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(upper <= 1.0, $"Upper {upper} should be <= 1");
     }
 
-    [Fact]
-    public void LogLoss_BootstrapCI_LowerLessThanUpper()
+    [Fact(Timeout = 120000)]
+    public async Task LogLoss_BootstrapCI_LowerLessThanUpper()
     {
         var metric = new LogLossMetric<double>();
         double[] probs = { 0.9, 0.7, 0.6, 0.3, 0.2, 0.1, 0.8, 0.4 };
@@ -1177,8 +1178,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
         Assert.True(lower >= 0.0, $"Lower {lower} should be >= 0");
     }
 
-    [Fact]
-    public void BrierScore_BootstrapCI_LowerLessThanUpper()
+    [Fact(Timeout = 120000)]
+    public async Task BrierScore_BootstrapCI_LowerLessThanUpper()
     {
         var metric = new BrierScoreMetric<double>();
         double[] probs = { 0.9, 0.7, 0.6, 0.3, 0.2, 0.1, 0.8, 0.4 };
@@ -1195,8 +1196,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
             $"Brier CI should be in [0,1], got [{lower}, {upper}]");
     }
 
-    [Fact]
-    public void AUCROC_BootstrapCI_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_BootstrapCI_InvalidParams_Throws()
     {
         var metric = new AUCROCMetric<double>();
         double[] probs = { 0.9, 0.1 };
@@ -1210,8 +1211,8 @@ public class ClassificationMetricsDeepMathIntegrationTests
             metric.ComputeWithCI(probs, actuals, confidenceLevel: 1.0));
     }
 
-    [Fact]
-    public void AUCROC_BootstrapCI_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task AUCROC_BootstrapCI_Reproducible()
     {
         var metric = new AUCROCMetric<double>();
         double[] probs = { 0.9, 0.7, 0.3, 0.1, 0.8, 0.2 };

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -39,8 +40,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Improvement Scenario
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FitnessImproves_IncreasesCrossoverRate()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FitnessImproves_IncreasesCrossoverRate()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.8);
@@ -56,8 +57,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.5 * 1.05, crossoverRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FitnessImproves_DecreasesMutationRate()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FitnessImproves_DecreasesMutationRate()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.8);
@@ -73,8 +74,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 0.95, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_SmallImprovement_StillUpdatesRates()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_SmallImprovement_StillUpdatesRates()
     {
         var currentStep = CreateStepData(0.8001);
         var previousStep = CreateStepData(0.8);
@@ -95,8 +96,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - No Improvement Scenario
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FitnessDecreases_DecreasesCrossoverRate()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FitnessDecreases_DecreasesCrossoverRate()
     {
         var currentStep = CreateStepData(0.7);
         var previousStep = CreateStepData(0.8);
@@ -112,8 +113,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.5 * 0.95, crossoverRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FitnessDecreases_IncreasesMutationRate()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FitnessDecreases_IncreasesMutationRate()
     {
         var currentStep = CreateStepData(0.7);
         var previousStep = CreateStepData(0.8);
@@ -129,8 +130,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 1.05, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FitnessUnchanged_TreatedAsNoImprovement()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FitnessUnchanged_TreatedAsNoImprovement()
     {
         var currentStep = CreateStepData(0.8);
         var previousStep = CreateStepData(0.8);
@@ -151,8 +152,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Boundary Clamping
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_CrossoverRateExceedsMax_ClampedToMax()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_CrossoverRateExceedsMax_ClampedToMax()
     {
         var currentStep = CreateStepData(1.0);
         var previousStep = CreateStepData(0.5);
@@ -169,8 +170,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(options.MaxCrossoverRate, crossoverRate);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_CrossoverRateBelowMin_ClampedToMin()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_CrossoverRateBelowMin_ClampedToMin()
     {
         var currentStep = CreateStepData(0.5);
         var previousStep = CreateStepData(1.0);
@@ -187,8 +188,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(options.MinCrossoverRate, crossoverRate);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_MutationRateExceedsMax_ClampedToMax()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_MutationRateExceedsMax_ClampedToMax()
     {
         var currentStep = CreateStepData(0.5);
         var previousStep = CreateStepData(1.0);
@@ -205,8 +206,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(options.MaxMutationRate, mutationRate);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_MutationRateBelowMin_ClampedToMin()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_MutationRateBelowMin_ClampedToMin()
     {
         var currentStep = CreateStepData(1.0);
         var previousStep = CreateStepData(0.5);
@@ -223,8 +224,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(options.MinMutationRate, mutationRate);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_BothRatesExceedBounds_BothClamped()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_BothRatesExceedBounds_BothClamped()
     {
         var currentStep = CreateStepData(1.0);
         var previousStep = CreateStepData(0.5);
@@ -245,8 +246,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Custom Options
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_CustomIncreaseFactor_AppliesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_CustomIncreaseFactor_AppliesCorrectly()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.5);
@@ -270,8 +271,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 0.80, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_CustomDecayFactor_AppliesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_CustomDecayFactor_AppliesCorrectly()
     {
         var currentStep = CreateStepData(0.5);
         var previousStep = CreateStepData(0.9);
@@ -295,8 +296,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 1.20, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_CustomBounds_ClampsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_CustomBounds_ClampsCorrectly()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.5);
@@ -324,8 +325,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Multiple Iterations
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_MultipleImprovements_RatesConvergeTowardBounds()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_MultipleImprovements_RatesConvergeTowardBounds()
     {
         var options = CreateDefaultOptions();
         double crossoverRate = 0.5;
@@ -351,8 +352,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.True(mutationRate >= options.MinMutationRate, "Mutation should be at or above min");
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_MultipleDeclines_RatesConvergeTowardBounds()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_MultipleDeclines_RatesConvergeTowardBounds()
     {
         var options = CreateDefaultOptions();
         double crossoverRate = 0.5;
@@ -378,8 +379,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.True(mutationRate <= options.MaxMutationRate, "Mutation should be at or below max");
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_AlternatingResults_RatesOscillate()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_AlternatingResults_RatesOscillate()
     {
         var options = CreateDefaultOptions();
         double crossoverRate = 0.5;
@@ -410,8 +411,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Float Type
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_Float_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_Float_WorksCorrectly()
     {
         var currentStep = new OptimizationStepData<float, Matrix<float>, Vector<float>>
         {
@@ -447,8 +448,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Edge Cases
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_ZeroFitnessScores_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_ZeroFitnessScores_HandlesCorrectly()
     {
         var currentStep = CreateStepData(0.0);
         var previousStep = CreateStepData(0.0);
@@ -465,8 +466,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 1.05, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_NegativeFitnessScores_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_NegativeFitnessScores_HandlesCorrectly()
     {
         var currentStep = CreateStepData(-0.5);
         var previousStep = CreateStepData(-0.8);
@@ -483,8 +484,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 0.95, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_VeryLargeFitnessScores_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_VeryLargeFitnessScores_HandlesCorrectly()
     {
         var currentStep = CreateStepData(1e10);
         var previousStep = CreateStepData(1e9);
@@ -501,8 +502,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(0.05 * 0.95, mutationRate, 10);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_RatesAtBounds_StayAtBounds()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_RatesAtBounds_StayAtBounds()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.5);
@@ -520,8 +521,8 @@ public class AdaptiveParametersHelperIntegrationTests
         Assert.Equal(options.MinMutationRate, mutationRate);
     }
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_FactorOfOne_RatesUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_FactorOfOne_RatesUnchanged()
     {
         var currentStep = CreateStepData(0.9);
         var previousStep = CreateStepData(0.5);
@@ -552,8 +553,8 @@ public class AdaptiveParametersHelperIntegrationTests
 
     #region UpdateAdaptiveGeneticParameters Tests - Tensor Types
 
-    [Fact]
-    public void UpdateAdaptiveGeneticParameters_TensorTypes_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAdaptiveGeneticParameters_TensorTypes_WorksCorrectly()
     {
         var currentStep = new OptimizationStepData<double, Tensor<double>, Tensor<double>>
         {

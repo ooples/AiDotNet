@@ -8,6 +8,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -115,8 +116,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 1: MAML Variants
     // ========================================================================
 
-    [Fact]
-    public void MAMLPlusPlus_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MAMLPlusPlus_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MAMLPlusPlusOptions<double, Matrix<double>, Vector<double>>(model)
@@ -143,8 +144,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MAMLPlusPlus, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void OpenMAML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task OpenMAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new OpenMAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -167,8 +168,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.OpenMAML, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void HyperMAML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task HyperMAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new HyperMAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -195,8 +196,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 2: Context/Parameter Adaptation Methods
     // ========================================================================
 
-    [Fact]
-    public void CAVIA_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task CAVIA_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new CAVIAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -222,8 +223,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.CAVIA, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void WarpGrad_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task WarpGrad_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new WarpGradOptions<double, Matrix<double>, Vector<double>>(model)
@@ -255,8 +256,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 3: Closed-Form / Metric Methods
     // ========================================================================
 
-    [Fact]
-    public void R2D2_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task R2D2_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new R2D2Options<double, Matrix<double>, Vector<double>>(model)
@@ -280,8 +281,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.R2D2, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void MetaBaseline_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MetaBaseline_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaBaselineOptions<double, Matrix<double>, Vector<double>>(model)
@@ -302,8 +303,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MetaBaseline, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void SimpleShot_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleShot_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new SimpleShotOptions<double, Matrix<double>, Vector<double>>(model)
@@ -326,8 +327,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.SimpleShot, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void LaplacianShot_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task LaplacianShot_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new LaplacianShotOptions<double, Matrix<double>, Vector<double>>(model)
@@ -352,8 +353,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 4: Transductive / Inference-Time Methods
     // ========================================================================
 
-    [Fact]
-    public void TIM_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task TIM_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new TIMOptions<double, Matrix<double>, Vector<double>>(model)
@@ -378,8 +379,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.TIM, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void SIB_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task SIB_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new SIBOptions<double, Matrix<double>, Vector<double>>(model)
@@ -400,8 +401,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.SIB, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void PTMAP_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task PTMAP_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new PTMAPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -426,8 +427,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 5: Amortized / Feed-Forward Methods
     // ========================================================================
 
-    [Fact]
-    public void VERSA_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task VERSA_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new VERSAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -450,8 +451,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.VERSA, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void SNAIL_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task SNAIL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new SNAILOptions<double, Matrix<double>, Vector<double>>(model)
@@ -483,8 +484,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 6: Kernel / GP Methods
     // ========================================================================
 
-    [Fact]
-    public void DKT_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task DKT_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new DKTOptions<double, Matrix<double>, Vector<double>>(model)
@@ -512,8 +513,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 7: Feature Transformation Methods
     // ========================================================================
 
-    [Fact]
-    public void FEAT_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task FEAT_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new FEATOptions<double, Matrix<double>, Vector<double>>(model)
@@ -538,8 +539,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.FEAT, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void DeepEMD_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task DeepEMD_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new DeepEMDOptions<double, Matrix<double>, Vector<double>>(model)
@@ -564,8 +565,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.DeepEMD, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void FRN_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task FRN_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new FRNOptions<double, Matrix<double>, Vector<double>>(model)
@@ -590,8 +591,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 8: Graph / Distribution Methods
     // ========================================================================
 
-    [Fact]
-    public void DPGN_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task DPGN_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new DPGNOptions<double, Matrix<double>, Vector<double>>(model)
@@ -612,8 +613,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.DPGN, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void ConstellationNet_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task ConstellationNet_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new ConstellationNetOptions<double, Matrix<double>, Vector<double>>(model)
@@ -638,8 +639,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 9: Set / Embedding Methods
     // ========================================================================
 
-    [Fact]
-    public void SetFeat_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task SetFeat_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new SetFeatOptions<double, Matrix<double>, Vector<double>>(model)
@@ -660,8 +661,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.SetFeat, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void FewTURE_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task FewTURE_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new FewTUREOptions<double, Matrix<double>, Vector<double>>(model)
@@ -682,8 +683,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.FewTURE, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void HyperShot_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task HyperShot_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new HyperShotOptions<double, Matrix<double>, Vector<double>>(model)
@@ -708,8 +709,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 10: Embedding Propagation / Bayesian Methods
     // ========================================================================
 
-    [Fact]
-    public void EPNet_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task EPNet_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new EPNetOptions<double, Matrix<double>, Vector<double>>(model)
@@ -730,8 +731,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.EPNet, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void NPBML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task NPBML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new NPBMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -756,8 +757,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 11: Contrastive / Pre-trained Methods
     // ========================================================================
 
-    [Fact]
-    public void MCL_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MCL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MCLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -778,8 +779,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MCL, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void PMF_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task PMF_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new PMFOptions<double, Matrix<double>, Vector<double>>(model)
@@ -800,8 +801,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.PMF, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void CAML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task CAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new CAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -826,8 +827,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 12: Multi-task Batch Tests (multiple tasks per batch)
     // ========================================================================
 
-    [Fact]
-    public void MAMLPlusPlus_MultipleTasks_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MAMLPlusPlus_MultipleTasks_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MAMLPlusPlusOptions<double, Matrix<double>, Vector<double>>(model)
@@ -850,8 +851,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.False(double.IsNaN(loss), "MAMLPlusPlus multi-task MetaTrain returned NaN loss");
     }
 
-    [Fact]
-    public void WarpGrad_MultipleTasks_Run()
+    [Fact(Timeout = 120000)]
+    public async Task WarpGrad_MultipleTasks_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new WarpGradOptions<double, Matrix<double>, Vector<double>>(model)
@@ -873,8 +874,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.False(double.IsNaN(loss), "WarpGrad multi-task MetaTrain returned NaN loss");
     }
 
-    [Fact]
-    public void CAVIA_MultipleTasks_Run()
+    [Fact(Timeout = 120000)]
+    public async Task CAVIA_MultipleTasks_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new CAVIAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -895,8 +896,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.False(double.IsNaN(loss), "CAVIA multi-task MetaTrain returned NaN loss");
     }
 
-    [Fact]
-    public void DeepEMD_MultipleTasks_Run()
+    [Fact(Timeout = 120000)]
+    public async Task DeepEMD_MultipleTasks_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new DeepEMDOptions<double, Matrix<double>, Vector<double>>(model)
@@ -922,8 +923,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 13: Parameter change verification (training actually updates params)
     // ========================================================================
 
-    [Fact]
-    public void CAVIA_MetaTrain_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task CAVIA_MetaTrain_UpdatesParameters()
     {
         var model = new LinearVectorModel(3);
         var options = new CAVIAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -954,8 +955,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.True(changed, "CAVIA MetaTrain did not update model parameters");
     }
 
-    [Fact]
-    public void R2D2_MetaTrain_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task R2D2_MetaTrain_UpdatesParameters()
     {
         var model = new LinearVectorModel(3);
         var options = new R2D2Options<double, Matrix<double>, Vector<double>>(model)
@@ -985,8 +986,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.True(changed, "R2D2 MetaTrain did not update model parameters");
     }
 
-    [Fact]
-    public void WarpGrad_MetaTrain_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task WarpGrad_MetaTrain_UpdatesParameters()
     {
         var model = new LinearVectorModel(3);
         var options = new WarpGradOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1018,8 +1019,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.True(changed, "WarpGrad MetaTrain did not update model parameters");
     }
 
-    [Fact]
-    public void MAMLPlusPlus_MetaTrain_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task MAMLPlusPlus_MetaTrain_UpdatesParameters()
     {
         var model = new LinearVectorModel(3);
         var options = new MAMLPlusPlusOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1056,8 +1057,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 14: Adapted model interface verification (IAdaptedMetaModel)
     // ========================================================================
 
-    [Fact]
-    public void DeepEMD_AdaptedModel_ImplementsIAdaptedMetaModel()
+    [Fact(Timeout = 120000)]
+    public async Task DeepEMD_AdaptedModel_ImplementsIAdaptedMetaModel()
     {
         var model = new LinearVectorModel(3);
         var options = new DeepEMDOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1083,8 +1084,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.NotNull(predictions);
     }
 
-    [Fact]
-    public void VERSA_AdaptedModel_ImplementsIAdaptedMetaModel()
+    [Fact(Timeout = 120000)]
+    public async Task VERSA_AdaptedModel_ImplementsIAdaptedMetaModel()
     {
         var model = new LinearVectorModel(3);
         var options = new VERSAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1108,8 +1109,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         Assert.NotNull(predictions);
     }
 
-    [Fact]
-    public void FEAT_AdaptedModel_ImplementsIAdaptedMetaModel()
+    [Fact(Timeout = 120000)]
+    public async Task FEAT_AdaptedModel_ImplementsIAdaptedMetaModel()
     {
         var model = new LinearVectorModel(3);
         var options = new FEATOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1138,8 +1139,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     // Group 15: Consecutive MetaTrain calls (stability test)
     // ========================================================================
 
-    [Fact]
-    public void R2D2_ConsecutiveMetaTrain_StaysFinite()
+    [Fact(Timeout = 120000)]
+    public async Task R2D2_ConsecutiveMetaTrain_StaysFinite()
     {
         var model = new LinearVectorModel(3);
         var options = new R2D2Options<double, Matrix<double>, Vector<double>>(model)
@@ -1161,8 +1162,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void VERSA_ConsecutiveMetaTrain_StaysFinite()
+    [Fact(Timeout = 120000)]
+    public async Task VERSA_ConsecutiveMetaTrain_StaysFinite()
     {
         var model = new LinearVectorModel(3);
         var options = new VERSAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1184,8 +1185,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void SNAIL_ConsecutiveMetaTrain_StaysFinite()
+    [Fact(Timeout = 120000)]
+    public async Task SNAIL_ConsecutiveMetaTrain_StaysFinite()
     {
         var model = new LinearVectorModel(3);
         var options = new SNAILOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1212,8 +1213,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void DKT_ConsecutiveMetaTrain_StaysFinite()
+    [Fact(Timeout = 120000)]
+    public async Task DKT_ConsecutiveMetaTrain_StaysFinite()
     {
         var model = new LinearVectorModel(3);
         var options = new DKTOptions<double, Matrix<double>, Vector<double>>(model)
@@ -1236,8 +1237,8 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void FEAT_ConsecutiveMetaTrain_StaysFinite()
+    [Fact(Timeout = 120000)]
+    public async Task FEAT_ConsecutiveMetaTrain_StaysFinite()
     {
         var model = new LinearVectorModel(3);
         var options = new FEATOptions<double, Matrix<double>, Vector<double>>(model)

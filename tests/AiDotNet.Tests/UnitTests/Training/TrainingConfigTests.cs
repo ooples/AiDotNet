@@ -2,13 +2,14 @@ using System;
 using AiDotNet.Configuration;
 using AiDotNet.Training.Configuration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Training
 {
     public class TrainingConfigTests
     {
-        [Fact]
-        public void LoadFromString_FullRecipe_DeserializesAllSections()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_FullRecipe_DeserializesAllSections()
         {
             // Arrange
             var yaml = @"
@@ -72,8 +73,8 @@ trainer:
             Assert.Equal(42, config.Trainer.Seed);
         }
 
-        [Fact]
-        public void LoadFromString_MinimalRecipe_UsesDefaults()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_MinimalRecipe_UsesDefaults()
         {
             // Arrange
             var yaml = @"
@@ -93,16 +94,16 @@ model:
             Assert.Null(config.Trainer);
         }
 
-        [Fact]
-        public void LoadFromString_EmptyYaml_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_EmptyYaml_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 YamlConfigLoader.LoadFromString<TrainingRecipeConfig>(""));
         }
 
-        [Fact]
-        public void TrainingRecipeConfig_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task TrainingRecipeConfig_DefaultValues_AreCorrect()
         {
             // Act
             var config = new TrainingRecipeConfig();
@@ -115,8 +116,8 @@ model:
             Assert.Null(config.Trainer);
         }
 
-        [Fact]
-        public void DatasetConfig_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task DatasetConfig_DefaultValues_AreCorrect()
         {
             // Act
             var config = new DatasetConfig();
@@ -129,8 +130,8 @@ model:
             Assert.Equal(-1, config.LabelColumn);
         }
 
-        [Fact]
-        public void TrainerSettings_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task TrainerSettings_DefaultValues_AreCorrect()
         {
             // Act
             var config = new TrainerSettings();
@@ -141,8 +142,8 @@ model:
             Assert.Null(config.Seed);
         }
 
-        [Fact]
-        public void OptimizerConfig_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task OptimizerConfig_DefaultValues_AreCorrect()
         {
             // Act
             var config = new OptimizerConfig();
@@ -154,8 +155,8 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
-        public void LossFunctionConfig_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task LossFunctionConfig_DefaultValues_AreCorrect()
         {
             // Act
             var config = new LossFunctionConfig();
@@ -166,8 +167,8 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
-        public void ModelConfig_DefaultValues_AreCorrect()
+        [Fact(Timeout = 60000)]
+        public async Task ModelConfig_DefaultValues_AreCorrect()
         {
             // Act
             var config = new ModelConfig();
@@ -178,8 +179,8 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
-        public void LoadFromString_WithOnlyTrainerSection_DeserializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_WithOnlyTrainerSection_DeserializesCorrectly()
         {
             // Arrange
             var yaml = @"
@@ -200,8 +201,8 @@ trainer:
             Assert.True(config.Trainer.EnableLogging); // default
         }
 
-        [Fact]
-        public void LoadFromString_WithLossFunctionParams_DeserializesParamsDictionary()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_WithLossFunctionParams_DeserializesParamsDictionary()
         {
             // Arrange
             var yaml = @"
@@ -224,8 +225,8 @@ lossFunction:
             Assert.True(config.LossFunction.Params.ContainsKey("alpha"));
         }
 
-        [Fact]
-        public void LoadFromString_WithOptimizerSection_DeserializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task LoadFromString_WithOptimizerSection_DeserializesCorrectly()
         {
             // Arrange
             var yaml = @"

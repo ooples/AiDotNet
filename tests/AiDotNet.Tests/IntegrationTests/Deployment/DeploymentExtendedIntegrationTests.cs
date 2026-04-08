@@ -9,6 +9,7 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Deployment;
 
@@ -21,8 +22,8 @@ public class DeploymentExtendedIntegrationTests
 {
     #region DeploymentConfiguration
 
-    [Fact]
-    public void DeploymentConfiguration_DefaultValues_AllNull()
+    [Fact(Timeout = 120000)]
+    public async Task DeploymentConfiguration_DefaultValues_AllNull()
     {
         var config = new DeploymentConfiguration();
 
@@ -37,8 +38,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Null(config.Profiling);
     }
 
-    [Fact]
-    public void DeploymentConfiguration_Create_SetsAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task DeploymentConfiguration_Create_SetsAllProperties()
     {
         var quant = new QuantizationConfig();
         var cache = new CacheConfig();
@@ -75,8 +76,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region OnnxGraph
 
-    [Fact]
-    public void OnnxGraph_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxGraph_DefaultValues()
     {
         var graph = new OnnxGraph();
 
@@ -92,8 +93,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Empty(graph.Initializers);
     }
 
-    [Fact]
-    public void OnnxGraph_AddInputsOutputsOperations()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxGraph_AddInputsOutputsOperations()
     {
         var graph = new OnnxGraph { Name = "TestGraph", OpsetVersion = 15 };
 
@@ -127,8 +128,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region OnnxNode
 
-    [Fact]
-    public void OnnxNode_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxNode_DefaultValues()
     {
         var node = new OnnxNode();
 
@@ -138,8 +139,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Null(node.DocString);
     }
 
-    [Fact]
-    public void OnnxNode_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxNode_SetProperties()
     {
         var node = new OnnxNode
         {
@@ -159,8 +160,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region OnnxOperation
 
-    [Fact]
-    public void OnnxOperation_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxOperation_DefaultValues()
     {
         var op = new OnnxOperation();
 
@@ -175,8 +176,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal("ai.onnx", op.Domain);
     }
 
-    [Fact]
-    public void OnnxOperation_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task OnnxOperation_SetProperties()
     {
         var op = new OnnxOperation
         {
@@ -202,8 +203,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region AdaptiveInferenceConfig
 
-    [Fact]
-    public void AdaptiveInferenceConfig_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveInferenceConfig_DefaultValues()
     {
         var config = new AdaptiveInferenceConfig();
 
@@ -214,8 +215,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Empty(config.SkipLayers);
     }
 
-    [Fact]
-    public void AdaptiveInferenceConfig_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveInferenceConfig_SetProperties()
     {
         var config = new AdaptiveInferenceConfig
         {
@@ -236,8 +237,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region LayerQuantizationParams
 
-    [Fact]
-    public void LayerQuantizationParams_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task LayerQuantizationParams_DefaultValues()
     {
         var param = new LayerQuantizationParams();
 
@@ -248,8 +249,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Null(param.Mode);
     }
 
-    [Fact]
-    public void LayerQuantizationParams_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LayerQuantizationParams_SetProperties()
     {
         var param = new LayerQuantizationParams
         {
@@ -271,8 +272,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region CacheStatistics
 
-    [Fact]
-    public void CacheStatistics_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStatistics_DefaultValues()
     {
         var stats = new CacheStatistics();
 
@@ -283,8 +284,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal(TimeSpan.Zero, stats.NewestEntryAge);
     }
 
-    [Fact]
-    public void CacheStatistics_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStatistics_SetProperties()
     {
         var stats = new CacheStatistics
         {
@@ -306,8 +307,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region InferenceStatistics
 
-    [Fact]
-    public void InferenceStatistics_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceStatistics_DefaultValues()
     {
         var stats = new InferenceStatistics();
 
@@ -316,8 +317,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal(0, stats.ActiveStreams);
     }
 
-    [Fact]
-    public void InferenceStatistics_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceStatistics_SetProperties()
     {
         var stats = new InferenceStatistics
         {
@@ -335,8 +336,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region NNAPIPerformanceInfo
 
-    [Fact]
-    public void NNAPIPerformanceInfo_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task NNAPIPerformanceInfo_DefaultValues()
     {
         var info = new NNAPIPerformanceInfo();
 
@@ -348,8 +349,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.False(info.SupportsRelaxedFp32);
     }
 
-    [Fact]
-    public void NNAPIPerformanceInfo_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task NNAPIPerformanceInfo_SetProperties()
     {
         var info = new NNAPIPerformanceInfo
         {
@@ -373,8 +374,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region ActivationStatistics
 
-    [Fact]
-    public void ActivationStatistics_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationStatistics_DefaultValues()
     {
         var stats = new ActivationStatistics<double>();
 
@@ -388,8 +389,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Empty(stats.CalibrationWarnings);
     }
 
-    [Fact]
-    public void ActivationStatistics_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationStatistics_SetProperties()
     {
         var stats = new ActivationStatistics<double>
         {
@@ -406,8 +407,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Single(stats.CalibrationWarnings);
     }
 
-    [Fact]
-    public void LayerActivationStats_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task LayerActivationStats_DefaultValues()
     {
         var stats = new LayerActivationStats<double>();
 
@@ -422,8 +423,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal(0.0, stats.StandardDeviation);
     }
 
-    [Fact]
-    public void LayerActivationStats_UpdateWithTensor()
+    [Fact(Timeout = 120000)]
+    public async Task LayerActivationStats_UpdateWithTensor()
     {
         var stats = new LayerActivationStats<double> { LayerName = "conv1" };
         var tensor = new Tensor<double>(new[] { 2, 3 });
@@ -446,8 +447,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.True(stats.StandardDeviation > 0);
     }
 
-    [Fact]
-    public void LayerActivationStats_StandardDeviation_SingleSample()
+    [Fact(Timeout = 120000)]
+    public async Task LayerActivationStats_StandardDeviation_SingleSample()
     {
         var stats = new LayerActivationStats<double>();
         var tensor = new Tensor<double>(new[] { 1 });
@@ -459,8 +460,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal(0.0, stats.StandardDeviation);
     }
 
-    [Fact]
-    public void ActivationStatistics_AddLayerStats()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationStatistics_AddLayerStats()
     {
         var stats = new ActivationStatistics<double>();
         var layerStats = new LayerActivationStats<double> { LayerName = "fc1" };
@@ -475,8 +476,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region TensorRT Enums
 
-    [Fact]
-    public void TensorRTPrecision_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task TensorRTPrecision_HasExpectedValues()
     {
         Assert.Equal(0, (int)TensorRTPrecision.FP32);
         Assert.Equal(1, (int)TensorRTPrecision.FP16);
@@ -487,8 +488,8 @@ public class DeploymentExtendedIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void Integration_BuildOnnxGraph_WithMultipleOperations()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_BuildOnnxGraph_WithMultipleOperations()
     {
         var graph = new OnnxGraph { Name = "ResNet18", OpsetVersion = 15 };
 
@@ -538,8 +539,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal("Relu", graph.Operations[2].Type);
     }
 
-    [Fact]
-    public void Integration_DeploymentConfig_FullPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_DeploymentConfig_FullPipeline()
     {
         var config = DeploymentConfiguration.Create(
             quantization: new QuantizationConfig(),
@@ -563,8 +564,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Null(config.GpuAcceleration);
     }
 
-    [Fact]
-    public void Integration_PerLayerQuantization_Config()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_PerLayerQuantization_Config()
     {
         var layers = new Dictionary<string, LayerQuantizationParams>
         {
@@ -593,8 +594,8 @@ public class DeploymentExtendedIntegrationTests
         Assert.Equal(QuantizationMode.Float16, layers["fc1"].Mode);
     }
 
-    [Fact]
-    public void Integration_ActivationStatistics_MultipleLayerUpdates()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_ActivationStatistics_MultipleLayerUpdates()
     {
         var stats = new ActivationStatistics<double>
         {

@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var retriever = new ContentAwareMockRetriever(CreateEinsteinDocuments());
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRAG<double>(null!, retriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRAG<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_WithValidArguments_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(graphRag);
         }
 
-        [Fact]
-        public void Constructor_WithCustomMaxHops_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomMaxHops_InitializesCorrectly()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -177,8 +178,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddRelation Tests
 
-        [Fact]
-        public void AddRelation_WithNullEntity_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithNullEntity_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -190,8 +191,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation(null!, "DISCOVERED", "Relativity"));
         }
 
-        [Fact]
-        public void AddRelation_WithEmptyEntity_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithEmptyEntity_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -203,8 +204,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("   ", "DISCOVERED", "Relativity"));
         }
 
-        [Fact]
-        public void AddRelation_WithNullRelation_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithNullRelation_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", null!, "Relativity"));
         }
 
-        [Fact]
-        public void AddRelation_WithEmptyRelation_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithEmptyRelation_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "", "Relativity"));
         }
 
-        [Fact]
-        public void AddRelation_WithNullTarget_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithNullTarget_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -242,8 +243,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "DISCOVERED", null!));
         }
 
-        [Fact]
-        public void AddRelation_WithEmptyTarget_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithEmptyTarget_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -255,8 +256,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "DISCOVERED", "   "));
         }
 
-        [Fact]
-        public void AddRelation_WithValidInputs_AddsRelationSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_WithValidInputs_AddsRelationSuccessfully()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -271,8 +272,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
-        public void AddRelation_NormalizesRelationToUpperCase()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_NormalizesRelationToUpperCase()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
-        public void AddRelation_TrimsEntityAndTarget()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_TrimsEntityAndTarget()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -323,8 +324,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
-        public void AddRelation_PreventsDuplicateRelations()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_PreventsDuplicateRelations()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -344,8 +345,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Tests
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -357,8 +358,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.Retrieve(null!, 10));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -386,8 +387,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.Retrieve("Einstein", topK));
         }
 
-        [Fact]
-        public void Retrieve_WithValidQuery_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -403,8 +404,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
-        public void Retrieve_RespectsTopKLimit()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RespectsTopKLimit()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -423,8 +424,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Entity Extraction Tests
 
-        [Fact]
-        public void Retrieve_ExtractsCapitalizedPhrases()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ExtractsCapitalizedPhrases()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -453,8 +454,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
-        public void Retrieve_ExtractsQuotedTerms()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ExtractsQuotedTerms()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -480,8 +481,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
-        public void Retrieve_FallsBackToLLMForEntityExtraction()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_FallsBackToLLMForEntityExtraction()
         {
             // Arrange - Generator returns entities when no capitalized/quoted terms found
             var generator = new EntityExtractionMockGenerator("physics, energy, matter");
@@ -511,8 +512,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Graph Traversal Tests
 
-        [Fact]
-        public void Retrieve_TraversesOneHopRelations()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TraversesOneHopRelations()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -542,8 +543,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Document mentioning "Theory of Relativity" should be boosted
         }
 
-        [Fact]
-        public void Retrieve_AddsGraphContextToDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AddsGraphContextToDocuments()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -575,8 +576,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Score Boosting Tests
 
-        [Fact]
-        public void Retrieve_BoostsScoresForGraphMatchedDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_BoostsScoresForGraphMatchedDocuments()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -613,8 +614,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // because it's connected to "Einstein" in the graph
         }
 
-        [Fact]
-        public void Retrieve_BoostFactorIsFixed1_5x()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_BoostFactorIsFixed1_5x()
         {
             // Arrange - Document mentions multiple graph-connected entities
             var generator = new EntityExtractionMockGenerator();
@@ -648,8 +649,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.90, Convert.ToDouble(firstDoc.RelevanceScore), 2);
         }
 
-        [Fact]
-        public void Retrieve_AddsGraphMetadataToEnrichedDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AddsGraphMetadataToEnrichedDocuments()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -691,8 +692,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_WithEmptyKnowledgeGraph_StillReturnsVectorResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyKnowledgeGraph_StillReturnsVectorResults()
         {
             // Arrange - No relations added
             var generator = new EntityExtractionMockGenerator();
@@ -708,8 +709,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
-        public void Retrieve_WithNoMatchingDocuments_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNoMatchingDocuments_ReturnsEmptyResults()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -725,8 +726,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(resultList);
         }
 
-        [Fact]
-        public void Retrieve_WithDocumentsWithoutScores_UsesDefaultScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDocumentsWithoutScores_UsesDefaultScore()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -754,8 +755,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should use 0.5 default for boosting calculation
         }
 
-        [Fact]
-        public void Retrieve_CapsBoostAtMaxValue()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_CapsBoostAtMaxValue()
         {
             // Arrange - Many matching entities to test boost capping
             var generator = new EntityExtractionMockGenerator();
@@ -795,8 +796,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Multi-hop Traversal Tests
 
-        [Fact]
-        public void Retrieve_TraversesMultipleHops_DefaultTwoHops()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TraversesMultipleHops_DefaultTwoHops()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma (2 hops needed to reach Gamma from Alpha)
             var generator = new EntityExtractionMockGenerator();
@@ -831,8 +832,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True((bool)firstDoc.Metadata["graph_boosted"]);
         }
 
-        [Fact]
-        public void Retrieve_DoesNotExceedMaxHops()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DoesNotExceedMaxHops()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta (3 hops needed to reach Delta from Alpha)
             var generator = new EntityExtractionMockGenerator();
@@ -867,8 +868,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
-        public void Retrieve_WithMaxHopsThree_ReachesThreeHopEntities()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMaxHopsThree_ReachesThreeHopEntities()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta
             var generator = new EntityExtractionMockGenerator();
@@ -908,8 +909,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Case-Insensitive Entity Matching Tests
 
-        [Fact]
-        public void AddRelation_IsCaseInsensitive()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_IsCaseInsensitive()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -943,8 +944,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
-        public void Retrieve_MatchesEntitiesCaseInsensitively()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MatchesEntitiesCaseInsensitively()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();
@@ -976,8 +977,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
-        public void AddRelation_PreventsDuplicatesRegardlessOfCase()
+        [Fact(Timeout = 60000)]
+        public async Task AddRelation_PreventsDuplicatesRegardlessOfCase()
         {
             // Arrange
             var generator = new EntityExtractionMockGenerator();

@@ -3,6 +3,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Video;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Video;
 
@@ -16,8 +17,8 @@ public class RealESRGANIntegrationTests
 
     #region Native Mode Construction Tests
 
-    [Fact]
-    public void Constructor_NativeMode_WithValidArchitectures_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_WithValidArchitectures_CreatesModel()
     {
         // Arrange
         var generatorArch = CreateArchitecture(64, 64, 3);
@@ -81,8 +82,8 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_NativeMode_WithNullGeneratorArchitecture_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_WithNullGeneratorArchitecture_ThrowsArgumentNullException()
     {
         // Arrange
         var discriminatorArch = CreateArchitecture(256, 256, 3);
@@ -94,8 +95,8 @@ public class RealESRGANIntegrationTests
             InputType.ThreeDimensional));
     }
 
-    [Fact]
-    public void Constructor_NativeMode_WithNullDiscriminatorArchitecture_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_WithNullDiscriminatorArchitecture_ThrowsArgumentNullException()
     {
         // Arrange
         var generatorArch = CreateArchitecture(64, 64, 3);
@@ -107,8 +108,8 @@ public class RealESRGANIntegrationTests
             InputType.ThreeDimensional));
     }
 
-    [Fact]
-    public void Constructor_NativeMode_WithInvalidScaleFactor_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_WithInvalidScaleFactor_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
         var generatorArch = CreateArchitecture(64, 64, 3);
@@ -126,8 +127,8 @@ public class RealESRGANIntegrationTests
 
     #region Tensor Rank Support Tests
 
-    [Fact]
-    public void Predict_With4DTensor_BatchChannelHeightWidth_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_With4DTensor_BatchChannelHeightWidth_ReturnsCorrectShape()
     {
         // Arrange - 4D tensor: [batch, channels, height, width]
         var generatorArch = CreateArchitecture(32, 32, 3);
@@ -147,8 +148,8 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void Predict_With5DTensor_BatchFramesChannelsHeightWidth_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_With5DTensor_BatchFramesChannelsHeightWidth_ReturnsCorrectShape()
     {
         // Arrange - [batch, frames, channels, height, width] for video
         // Note: Using ThreeDimensional input type but with 5D tensor shape
@@ -172,8 +173,8 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void Predict_With2DTensor_HeightWidth_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_With2DTensor_HeightWidth_ReturnsCorrectShape()
     {
         // Arrange - [height, width] grayscale (using ThreeDimensional architecture)
         // The model should support any-rank tensors regardless of architecture input type
@@ -196,8 +197,8 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void Predict_WithBatchOf4Images_ProcessesAllImages()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WithBatchOf4Images_ProcessesAllImages()
     {
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
@@ -223,8 +224,8 @@ public class RealESRGANIntegrationTests
 
     #region Training Tests
 
-    [Fact]
-    public void TrainStep_NativeMode_ReturnsLossValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrainStep_NativeMode_ReturnsLossValues()
     {
         // Arrange - Uses the proper RRDBNetGenerator architecture that outputs spatial tensors
         // Scale factor must be 2 or 4 for RRDBNetGenerator
@@ -249,8 +250,8 @@ public class RealESRGANIntegrationTests
         Assert.Equal(generatorLoss, model.LastGeneratorLoss);
     }
 
-    [Fact]
-    public void Train_NativeMode_MultipleBatches_UpdatesLoss()
+    [Fact(Timeout = 120000)]
+    public async Task Train_NativeMode_MultipleBatches_UpdatesLoss()
     {
         // Arrange - Uses the proper RRDBNetGenerator architecture that outputs spatial tensors
         // Scale factor must be 2 or 4 for RRDBNetGenerator
@@ -282,8 +283,8 @@ public class RealESRGANIntegrationTests
 
     #region Upscale Tests
 
-    [Fact]
-    public void Upscale_NativeMode_ReturnsUpscaledTensor()
+    [Fact(Timeout = 120000)]
+    public async Task Upscale_NativeMode_ReturnsUpscaledTensor()
     {
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
@@ -303,8 +304,8 @@ public class RealESRGANIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void Upscale_WithNullInput_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Upscale_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
@@ -323,8 +324,8 @@ public class RealESRGANIntegrationTests
 
     #region Metadata Tests
 
-    [Fact]
-    public void GetModelMetadata_NativeMode_ReturnsCorrectMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_NativeMode_ReturnsCorrectMetadata()
     {
         // Arrange
         var generatorArch = CreateArchitecture(64, 64, 3);
@@ -353,8 +354,8 @@ public class RealESRGANIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_CreatesModel()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithFloatType_CreatesModel()
     {
         // Arrange
         var generatorArch = new NeuralNetworkArchitecture<float>(
@@ -388,8 +389,8 @@ public class RealESRGANIntegrationTests
         Assert.True(model.UseNativeMode);
     }
 
-    [Fact]
-    public void Predict_WithFloatType_ReturnsCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WithFloatType_ReturnsCorrectType()
     {
         // Arrange
         var generatorArch = new NeuralNetworkArchitecture<float>(

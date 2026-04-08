@@ -12,13 +12,14 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class AiModelResultProgramSynthesisTests
 {
-    [Fact]
-    public void ExecuteCodeTask_DelegatesToUnderlyingCodeModel()
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteCodeTask_DelegatesToUnderlyingCodeModel()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
 
@@ -50,8 +51,8 @@ public class AiModelResultProgramSynthesisTests
         Assert.NotNull(typed.Summary);
     }
 
-    [Fact]
-    public void TokenizeCode_UsesCanonicalPipelineAndSupportsSql()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeCode_UsesCanonicalPipelineAndSupportsSql()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>
         {
@@ -86,7 +87,7 @@ public class AiModelResultProgramSynthesisTests
         Assert.NotEmpty(csharp.AstEdges);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteCodeTaskAsync_UsesServingClient_WhenConfiguredAndPreferred()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>
@@ -122,8 +123,8 @@ public class AiModelResultProgramSynthesisTests
         Assert.Equal(1, stubClient.CodeTaskCalls);
     }
 
-    [Fact]
-    public void ExecuteCodeTask_UsesLocalModel_WhenServingIsPresentButNotPreferred()
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteCodeTask_UsesLocalModel_WhenServingIsPresentButNotPreferred()
     {
         var model = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp);
 
@@ -160,8 +161,8 @@ public class AiModelResultProgramSynthesisTests
         Assert.Equal(0, stubClient.CodeTaskCalls);
     }
 
-    [Fact]
-    public void ExecuteProgramAsync_ThrowsWhenServingNotConfigured()
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteProgramAsync_ThrowsWhenServingNotConfigured()
     {
         var optimizationResult = new OptimizationResult<double, Tensor<double>, Tensor<double>>
         {

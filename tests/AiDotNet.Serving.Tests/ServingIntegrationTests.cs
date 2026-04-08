@@ -17,6 +17,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -95,7 +96,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that the GET /api/models endpoint returns an empty list when no models are loaded.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GetModels_WhenNoModelsLoaded_ReturnsEmptyList()
     {
         // Act
@@ -111,7 +112,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that a model can be loaded programmatically and appears in the model list.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GetModels_AfterLoadingModel_ReturnsModelInfo()
     {
         // Arrange: Load a test model programmatically
@@ -141,7 +142,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that a specific model's information can be retrieved.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GetModel_WhenModelExists_ReturnsModelInfo()
     {
         // Arrange
@@ -167,7 +168,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that requesting a non-existent model returns 404.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task GetModel_WhenModelDoesNotExist_Returns404()
     {
         // Act
@@ -180,7 +181,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that a model can be unloaded successfully.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task UnloadModel_WhenModelExists_ReturnsSuccess()
     {
         // Arrange
@@ -204,7 +205,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that the inference endpoint can perform predictions.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithValidInput_ReturnsResults()
     {
         // Arrange
@@ -243,7 +244,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that serving can route to a pre-loaded model variant via an adapter header (Multi-LoRA MVP).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithAdapterHeader_RoutesToModelVariant()
     {
         // Arrange
@@ -309,7 +310,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// and the model is called once with the full batch.
     /// Note: This test now uses Channel-based batching which is reliable in CI environments.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithConcurrentRequests_ProcessesAsBatch()
     {
         // Arrange
@@ -384,7 +385,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that predictions with non-existent models return 404.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithNonExistentModel_Returns404()
     {
         // Arrange
@@ -403,7 +404,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// <summary>
     /// Verifies that predictions with invalid input return 400.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithEmptyFeatures_Returns400()
     {
         // Arrange
@@ -428,7 +429,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         repository.UnloadModel("test-model-5");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DownloadModelArtifact_FreeTier_ReturnsForbidden()
     {
         using var scope = _factory.Services.CreateScope();
@@ -453,7 +454,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         File.Delete(artifactPath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DownloadModelArtifact_ProTier_ReturnsEncryptedArtifact_AndKeyReleaseSucceeds()
     {
         var proApiKey = await CreateApiKeyAsync(SubscriptionTier.Pro);
@@ -502,7 +503,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         File.Delete(artifactPath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DownloadModelArtifact_EnterpriseTier_ReturnsEncryptedArtifact_AndKeyReleaseSucceeds()
     {
         var enterpriseApiKey = await CreateApiKeyAsync(SubscriptionTier.Enterprise);

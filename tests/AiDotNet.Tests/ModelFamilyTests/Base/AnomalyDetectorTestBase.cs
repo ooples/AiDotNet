@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -33,8 +34,8 @@ public abstract class AnomalyDetectorTestBase
         return (x, y);
     }
 
-    [Fact]
-    public void Outliers_ShouldHaveHigherScores()
+    [Fact(Timeout = 60000)]
+    public async Task Outliers_ShouldHaveHigherScores()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -71,8 +72,8 @@ public abstract class AnomalyDetectorTestBase
         }
     }
 
-    [Fact]
-    public void Scores_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task Scores_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -87,8 +88,8 @@ public abstract class AnomalyDetectorTestBase
         }
     }
 
-    [Fact]
-    public void Predict_ShouldBeDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -101,8 +102,8 @@ public abstract class AnomalyDetectorTestBase
             Assert.Equal(scores1[i], scores2[i]);
     }
 
-    [Fact]
-    public void Clone_ShouldProduceSameScores()
+    [Fact(Timeout = 60000)]
+    public async Task Clone_ShouldProduceSameScores()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -116,8 +117,8 @@ public abstract class AnomalyDetectorTestBase
             Assert.Equal(scores1[i], scores2[i]);
     }
 
-    [Fact]
-    public void OutputDimension_ShouldMatchInputRows()
+    [Fact(Timeout = 60000)]
+    public async Task OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -126,8 +127,8 @@ public abstract class AnomalyDetectorTestBase
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
     }
 
-    [Fact]
-    public void Metadata_ShouldExistAfterTraining()
+    [Fact(Timeout = 60000)]
+    public async Task Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -136,8 +137,8 @@ public abstract class AnomalyDetectorTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
-    public void Parameters_ShouldBeNonEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Parameters_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

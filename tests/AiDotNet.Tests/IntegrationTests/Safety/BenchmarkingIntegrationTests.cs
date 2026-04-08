@@ -2,6 +2,7 @@
 using AiDotNet.Safety;
 using AiDotNet.Safety.Benchmarking;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -15,8 +16,8 @@ public class BenchmarkingIntegrationTests
 {
     #region SafetyBenchmarkRunner Tests
 
-    [Fact]
-    public void Runner_FullBenchmark_ProducesResults()
+    [Fact(Timeout = 120000)]
+    public async Task Runner_FullBenchmark_ProducesResults()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var runner = new SafetyBenchmarkRunner<double>(pipeline);
@@ -28,8 +29,8 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.Recall >= 0 && result.Recall <= 1);
     }
 
-    [Fact]
-    public void Runner_JailbreakBenchmark_CorrectTestCount()
+    [Fact(Timeout = 120000)]
+    public async Task Runner_JailbreakBenchmark_CorrectTestCount()
     {
         var config = new SafetyConfig { Text = { JailbreakDetection = true } };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -40,8 +41,8 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(StandardSafetyBenchmarks.JailbreakBenchmark.Count, result.TotalTestCases);
     }
 
-    [Fact]
-    public void Runner_ToxicityBenchmark_ProducesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Runner_ToxicityBenchmark_ProducesMetrics()
     {
         var config = new SafetyConfig { Text = { ToxicityDetection = true } };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -54,8 +55,8 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.Recall >= 0);
     }
 
-    [Fact]
-    public void Runner_PIIBenchmark_ProducesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Runner_PIIBenchmark_ProducesMetrics()
     {
         var config = new SafetyConfig { Text = { PIIDetection = true } };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -66,8 +67,8 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.TotalTestCases > 0);
     }
 
-    [Fact]
-    public void Runner_FullBenchmarkWithFairness_ProducesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Runner_FullBenchmarkWithFairness_ProducesMetrics()
     {
         var config = new SafetyConfig { Fairness = { DemographicParity = true, StereotypeDetection = true } };
         var pipeline = SafetyPipelineFactory<double>.Create(config);
@@ -82,33 +83,33 @@ public class BenchmarkingIntegrationTests
 
     #region StandardSafetyBenchmarks Tests
 
-    [Fact]
-    public void StandardBenchmarks_FullBenchmark_HasTestCases()
+    [Fact(Timeout = 120000)]
+    public async Task StandardBenchmarks_FullBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0,
             "Full benchmark should have test cases");
     }
 
-    [Fact]
-    public void StandardBenchmarks_ToxicityBenchmark_HasTestCases()
+    [Fact(Timeout = 120000)]
+    public async Task StandardBenchmarks_ToxicityBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.ToxicityBenchmark.Count > 0);
     }
 
-    [Fact]
-    public void StandardBenchmarks_JailbreakBenchmark_HasTestCases()
+    [Fact(Timeout = 120000)]
+    public async Task StandardBenchmarks_JailbreakBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.JailbreakBenchmark.Count > 0);
     }
 
-    [Fact]
-    public void StandardBenchmarks_PIIBenchmark_HasTestCases()
+    [Fact(Timeout = 120000)]
+    public async Task StandardBenchmarks_PIIBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.PIIBenchmark.Count > 0);
     }
 
-    [Fact]
-    public void StandardBenchmarks_FullBenchmark_IncludesMultipleCategories()
+    [Fact(Timeout = 120000)]
+    public async Task StandardBenchmarks_FullBenchmark_IncludesMultipleCategories()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0,
             "Full benchmark should include multiple categories of test cases");
@@ -118,8 +119,8 @@ public class BenchmarkingIntegrationTests
 
     #region Individual Benchmark Class Tests
 
-    [Fact]
-    public void ToxicityBenchmark_RunsWithPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task ToxicityBenchmark_RunsWithPipeline()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var runner = new SafetyBenchmarkRunner<double>(pipeline);
@@ -129,15 +130,15 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.TotalTestCases > 0);
     }
 
-    [Fact]
-    public void HallucinationBenchmark_ExistsInFullBenchmark()
+    [Fact(Timeout = 120000)]
+    public async Task HallucinationBenchmark_ExistsInFullBenchmark()
     {
         // Verify the full benchmark contains hallucination test cases
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0);
     }
 
-    [Fact]
-    public void AdversarialBenchmark_ExistsInFullBenchmark()
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialBenchmark_ExistsInFullBenchmark()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0);
     }
@@ -146,8 +147,8 @@ public class BenchmarkingIntegrationTests
 
     #region Benchmark Metrics Tests
 
-    [Fact]
-    public void BenchmarkResult_MetricsInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkResult_MetricsInValidRange()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var runner = new SafetyBenchmarkRunner<double>(pipeline);
@@ -159,8 +160,8 @@ public class BenchmarkingIntegrationTests
             $"Recall should be between 0 and 1, got {result.Recall}");
     }
 
-    [Fact]
-    public void BenchmarkResult_F1Score_Computable()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkResult_F1Score_Computable()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
         var runner = new SafetyBenchmarkRunner<double>(pipeline);

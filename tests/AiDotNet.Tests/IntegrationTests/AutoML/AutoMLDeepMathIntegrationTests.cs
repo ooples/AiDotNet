@@ -1,6 +1,7 @@
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
 
@@ -19,8 +20,8 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: Construction
     // ============================
 
-    [Fact]
-    public void Architecture_Defaults_EmptyOperations()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_Defaults_EmptyOperations()
     {
         var arch = new Architecture<double>();
         Assert.Empty(arch.Operations);
@@ -28,8 +29,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Empty(arch.NodeChannels);
     }
 
-    [Fact]
-    public void Architecture_AddOperation_UpdatesNodeCount()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_AddOperation_UpdatesNodeCount()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -37,8 +38,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(2, arch.NodeCount); // max(1, 0) + 1 = 2
     }
 
-    [Fact]
-    public void Architecture_AddMultipleOperations_NodeCountTracksMax()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_AddMultipleOperations_NodeCountTracksMax()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -49,8 +50,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(4, arch.NodeCount); // max(3, 1) + 1 = 4
     }
 
-    [Fact]
-    public void Architecture_GetDescription_ContainsNodeInfo()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_GetDescription_ContainsNodeInfo()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -62,8 +63,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Contains("batch_norm", desc);
     }
 
-    [Fact]
-    public void Architecture_GetDescription_EmptyArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_GetDescription_EmptyArchitecture()
     {
         var arch = new Architecture<double>();
         string desc = arch.GetDescription();
@@ -74,8 +75,8 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: NodeChannels
     // ============================
 
-    [Fact]
-    public void Architecture_NodeChannels_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_NodeChannels_SetAndGet()
     {
         var arch = new Architecture<double>();
         arch.NodeChannels[0] = 16;
@@ -91,8 +92,8 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: JSON Serialization
     // ============================
 
-    [Fact]
-    public void Architecture_ToJson_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ToJson_RoundTrip()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -109,8 +110,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal("relu", restored.Operations[1].Operation);
     }
 
-    [Fact]
-    public void Architecture_ToJson_IndentedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ToJson_IndentedByDefault()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -119,8 +120,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Contains("\n", json); // Indented has newlines
     }
 
-    [Fact]
-    public void Architecture_ToJson_CompactWhenNotIndented()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ToJson_CompactWhenNotIndented()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -129,14 +130,14 @@ public class AutoMLDeepMathIntegrationTests
         Assert.DoesNotContain("\n", json);
     }
 
-    [Fact]
-    public void Architecture_FromJson_NullThrows()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_FromJson_NullThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(null!));
     }
 
-    [Fact]
-    public void Architecture_FromJson_EmptyThrows()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_FromJson_EmptyThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(string.Empty));
     }
@@ -145,8 +146,8 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: Binary Serialization
     // ============================
 
-    [Fact]
-    public void Architecture_ToBytes_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ToBytes_RoundTrip()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -163,20 +164,20 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(16, restored.NodeChannels[1]);
     }
 
-    [Fact]
-    public void Architecture_FromBytes_NullThrows()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_FromBytes_NullThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(null!));
     }
 
-    [Fact]
-    public void Architecture_FromBytes_EmptyThrows()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_FromBytes_EmptyThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(Array.Empty<byte>()));
     }
 
-    [Fact]
-    public void Architecture_ToBytes_CompactThanJson()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_ToBytes_CompactThanJson()
     {
         var arch = new Architecture<double>();
         for (int i = 0; i < 10; i++)
@@ -196,8 +197,8 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: Defaults
     // ============================
 
-    [Fact]
-    public void TrialResult_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_Defaults()
     {
         var result = new TrialResult();
         Assert.Equal(0, result.TrialId);
@@ -211,8 +212,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(result.ErrorMessage);
     }
 
-    [Fact]
-    public void TrialResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_SetProperties()
     {
         var result = new TrialResult
         {
@@ -235,8 +236,8 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: Clone
     // ============================
 
-    [Fact]
-    public void TrialResult_Clone_DeepCopiesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_Clone_DeepCopiesParameters()
     {
         var original = new TrialResult
         {
@@ -260,8 +261,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(0.01, original.Parameters["lr"]);
     }
 
-    [Fact]
-    public void TrialResult_Clone_PreservesAllFields()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_Clone_PreservesAllFields()
     {
         var original = new TrialResult
         {
@@ -287,8 +288,8 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: CloneRedacted
     // ============================
 
-    [Fact]
-    public void TrialResult_CloneRedacted_ClearsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_CloneRedacted_ClearsParameters()
     {
         var original = new TrialResult
         {
@@ -313,8 +314,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(redacted.Metadata); // Metadata nulled
     }
 
-    [Fact]
-    public void TrialResult_CloneRedacted_PreservesPublicFields()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_CloneRedacted_PreservesPublicFields()
     {
         var original = new TrialResult
         {
@@ -336,8 +337,8 @@ public class AutoMLDeepMathIntegrationTests
     // ParameterRange: Defaults
     // ============================
 
-    [Fact]
-    public void ParameterRange_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRange_Defaults()
     {
         var range = new ParameterRange();
         Assert.Equal(ParameterType.Integer, range.Type); // First enum value
@@ -349,8 +350,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(range.DefaultValue);
     }
 
-    [Fact]
-    public void ParameterRange_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRange_SetProperties()
     {
         var range = new ParameterRange
         {
@@ -374,8 +375,8 @@ public class AutoMLDeepMathIntegrationTests
     // ParameterRange: Clone
     // ============================
 
-    [Fact]
-    public void ParameterRange_Clone_DeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRange_Clone_DeepCopy()
     {
         var original = new ParameterRange
         {
@@ -434,8 +435,8 @@ public class AutoMLDeepMathIntegrationTests
     // SearchConstraint: Defaults
     // ============================
 
-    [Fact]
-    public void SearchConstraint_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task SearchConstraint_Defaults()
     {
         var constraint = new SearchConstraint();
         Assert.Equal(string.Empty, constraint.Name);
@@ -450,8 +451,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Empty(constraint.Metadata);
     }
 
-    [Fact]
-    public void SearchConstraint_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SearchConstraint_SetProperties()
     {
         var constraint = new SearchConstraint
         {
@@ -472,8 +473,8 @@ public class AutoMLDeepMathIntegrationTests
     // SearchConstraint: Clone
     // ============================
 
-    [Fact]
-    public void SearchConstraint_Clone_DeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SearchConstraint_Clone_DeepCopy()
     {
         var original = new SearchConstraint
         {
@@ -500,8 +501,8 @@ public class AutoMLDeepMathIntegrationTests
     // ConstraintType Enum
     // ============================
 
-    [Fact]
-    public void ConstraintType_HasFiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task ConstraintType_HasFiveValues()
     {
         var values = (((ConstraintType[])Enum.GetValues(typeof(ConstraintType))));
         Assert.Equal(5, values.Length);
@@ -522,8 +523,8 @@ public class AutoMLDeepMathIntegrationTests
     // CompressionTrial: Defaults
     // ============================
 
-    [Fact]
-    public void CompressionTrial_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionTrial_Defaults()
     {
         var trial = new CompressionTrial<double>();
         Assert.NotNull(trial.Hyperparameters);
@@ -533,8 +534,8 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(trial.ErrorMessage);
     }
 
-    [Fact]
-    public void CompressionTrial_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionTrial_SetProperties()
     {
         var trial = new CompressionTrial<double>
         {

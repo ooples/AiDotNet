@@ -1,6 +1,7 @@
 using AiDotNet.DistributedTraining;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 
@@ -16,36 +17,36 @@ public class DistributedTrainingDeepMathIntegrationTests
     // ActivationCheckpointConfig: Defaults
     // ============================
 
-    [Fact]
-    public void ActivationCheckpointConfig_Defaults_Disabled()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_Defaults_Disabled()
     {
         var config = new ActivationCheckpointConfig();
         Assert.False(config.Enabled);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_Defaults_CheckpointEveryTenLayers()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_Defaults_CheckpointEveryTenLayers()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Equal(10, config.CheckpointEveryNLayers);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_Defaults_RecomputeStrategyNone()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_Defaults_RecomputeStrategyNone()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Equal(RecomputeStrategy.None, config.RecomputeStrategy);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_Defaults_MaxActivationsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_Defaults_MaxActivationsZero()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Equal(0, config.MaxActivationsInMemory);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_Defaults_CheckpointFirstLayerTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_Defaults_CheckpointFirstLayerTrue()
     {
         var config = new ActivationCheckpointConfig();
         Assert.True(config.CheckpointFirstLayer);
@@ -55,8 +56,8 @@ public class DistributedTrainingDeepMathIntegrationTests
     // ActivationCheckpointConfig: Property Setting
     // ============================
 
-    [Fact]
-    public void ActivationCheckpointConfig_SetAll()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_SetAll()
     {
         var config = new ActivationCheckpointConfig
         {
@@ -78,37 +79,37 @@ public class DistributedTrainingDeepMathIntegrationTests
     // ActivationCheckpointConfig: Validation
     // ============================
 
-    [Fact]
-    public void ActivationCheckpointConfig_CheckpointEveryNLayers_ZeroThrows()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_CheckpointEveryNLayers_ZeroThrows()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Throws<ArgumentOutOfRangeException>(() => config.CheckpointEveryNLayers = 0);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_CheckpointEveryNLayers_NegativeThrows()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_CheckpointEveryNLayers_NegativeThrows()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Throws<ArgumentOutOfRangeException>(() => config.CheckpointEveryNLayers = -1);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_CheckpointEveryNLayers_OneIsValid()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_CheckpointEveryNLayers_OneIsValid()
     {
         var config = new ActivationCheckpointConfig();
         config.CheckpointEveryNLayers = 1;
         Assert.Equal(1, config.CheckpointEveryNLayers);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_MaxActivationsInMemory_NegativeThrows()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_MaxActivationsInMemory_NegativeThrows()
     {
         var config = new ActivationCheckpointConfig();
         Assert.Throws<ArgumentOutOfRangeException>(() => config.MaxActivationsInMemory = -1);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_MaxActivationsInMemory_ZeroIsValid()
+    [Fact(Timeout = 120000)]
+    public async Task ActivationCheckpointConfig_MaxActivationsInMemory_ZeroIsValid()
     {
         var config = new ActivationCheckpointConfig();
         config.MaxActivationsInMemory = 0;
@@ -131,8 +132,8 @@ public class DistributedTrainingDeepMathIntegrationTests
     // RecomputeStrategy Enum
     // ============================
 
-    [Fact]
-    public void RecomputeStrategy_HasThreeValues()
+    [Fact(Timeout = 120000)]
+    public async Task RecomputeStrategy_HasThreeValues()
     {
         var values = (((RecomputeStrategy[])Enum.GetValues(typeof(RecomputeStrategy))));
         Assert.Equal(3, values.Length);
@@ -151,8 +152,8 @@ public class DistributedTrainingDeepMathIntegrationTests
     // InMemoryCommunicationBackend: Construction
     // ============================
 
-    [Fact]
-    public void InMemoryBackend_Construction_RankAndWorldSize()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_Construction_RankAndWorldSize()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4);
         Assert.Equal(0, backend.Rank);
@@ -172,8 +173,8 @@ public class DistributedTrainingDeepMathIntegrationTests
         Assert.Equal(worldSize, backend.WorldSize);
     }
 
-    [Fact]
-    public void InMemoryBackend_Initialize_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_Initialize_Succeeds()
     {
         var envId = Guid.NewGuid().ToString("N");
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
@@ -181,8 +182,8 @@ public class DistributedTrainingDeepMathIntegrationTests
         // Initialize should not throw for a single-process backend
     }
 
-    [Fact]
-    public void InMemoryBackend_FloatType_Constructs()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_FloatType_Constructs()
     {
         var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 2);
         Assert.Equal(0, backend.Rank);
@@ -193,8 +194,8 @@ public class DistributedTrainingDeepMathIntegrationTests
     // InMemoryCommunicationBackend: Broadcast (single rank)
     // ============================
 
-    [Fact]
-    public void InMemoryBackend_Broadcast_SingleProcess_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_Broadcast_SingleProcess_PreservesData()
     {
         var envId = Guid.NewGuid().ToString("N");
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);

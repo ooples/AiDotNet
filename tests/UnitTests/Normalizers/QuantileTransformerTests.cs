@@ -4,13 +4,14 @@ using AiDotNet.Models;
 using AiDotNet.Enums;
 using Xunit;
 using System;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Normalizers
 {
     public class QuantileTransformerTests
     {
-        [Fact]
-        public void Constructor_WithValidUniformDistribution_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidUniformDistribution_Succeeds()
         {
             // Act
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -19,8 +20,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.NotNull(transformer);
         }
 
-        [Fact]
-        public void Constructor_WithValidNormalDistribution_Succeeds()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidNormalDistribution_Succeeds()
         {
             // Act
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 100);
@@ -29,16 +30,16 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.NotNull(transformer);
         }
 
-        [Fact]
-        public void Constructor_WithTooFewQuantiles_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithTooFewQuantiles_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 5));
         }
 
-        [Fact]
-        public void NormalizeOutput_WithUniformDistribution_MapsToZeroOne()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithUniformDistribution_MapsToZeroOne()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(normalized[normalized.Length - 1] > 0.8, "Largest value should map close to 1");
         }
 
-        [Fact]
-        public void NormalizeOutput_WithNormalDistribution_TransformsData()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithNormalDistribution_TransformsData()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 100);
@@ -93,8 +94,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 "Most values should fall within 3 standard deviations");
         }
 
-        [Fact]
-        public void NormalizeOutput_WithSkewedData_HandlesOutliers()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithSkewedData_HandlesOutliers()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -122,8 +123,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(distinctValues.Count > 3, "Values should be reasonably spread out");
         }
 
-        [Fact]
-        public void NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void Denormalize_WithUniformDistribution_RestoresApproximateValues()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_WithUniformDistribution_RestoresApproximateValues()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 1000);
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void Denormalize_WithNormalDistribution_RestoresApproximateValues()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_WithNormalDistribution_RestoresApproximateValues()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 1000);
@@ -192,8 +193,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void Denormalize_Coefficients_ThrowsNotSupportedException()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_Coefficients_ThrowsNotSupportedException()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>();
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 transformer.Denormalize(coefficients, xParams, yParams));
         }
 
-        [Fact]
-        public void Denormalize_Intercept_ThrowsNotSupportedException()
+        [Fact(Timeout = 60000)]
+        public async Task Denormalize_Intercept_ThrowsNotSupportedException()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>();
@@ -222,8 +223,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 transformer.Denormalize(xMatrix, y, coefficients, xParams, yParams));
         }
 
-        [Fact]
-        public void NormalizeOutput_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var transformer = new QuantileTransformer<float, Matrix<float>, Vector<float>>(OutputDistribution.Uniform, 100);
@@ -240,8 +241,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void NormalizeOutput_WithTensor_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithTensor_WorksCorrectly()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Tensor<double>>(OutputDistribution.Uniform, 100);
@@ -259,8 +260,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void NormalizeInput_WithTensor_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeInput_WithTensor_WorksCorrectly()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Tensor<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -278,8 +279,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(2, parametersList.Count);
         }
 
-        [Fact]
-        public void NormalizeOutput_PreservesRankOrdering()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_PreservesRankOrdering()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -297,8 +298,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.True(normalized[3] < normalized[2], "15.0 should map lower than 20.0");
         }
 
-        [Fact]
-        public void RoundTrip_NormalizeAndDenormalize_ReturnsApproximateOriginal()
+        [Fact(Timeout = 60000)]
+        public async Task RoundTrip_NormalizeAndDenormalize_ReturnsApproximateOriginal()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 1000);
@@ -318,8 +319,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
             }
         }
 
-        [Fact]
-        public void NormalizeOutput_WithRepeatedValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithRepeatedValues_HandlesCorrectly()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
                 "Repeated value 5.0 should map to similar values");
         }
 
-        [Fact]
-        public void NormalizeOutput_WithExtremeOutliers_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task NormalizeOutput_WithExtremeOutliers_HandlesGracefully()
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);

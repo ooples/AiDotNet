@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Preprocessing.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Preprocessing;
 
@@ -19,8 +20,8 @@ public class ClipImagePreprocessorTests
         _preprocessor = new ClipImagePreprocessor<float>();
     }
 
-    [Fact]
-    public void Constructor_WithDefaultParameters_SetsImageSizeTo224()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultParameters_SetsImageSizeTo224()
     {
         // Act
         var preprocessor = new ClipImagePreprocessor<float>();
@@ -29,8 +30,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, preprocessor.ImageSize);
     }
 
-    [Fact]
-    public void Constructor_WithCustomImageSize_UsesCustomSize()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomImageSize_UsesCustomSize()
     {
         // Act
         var preprocessor = new ClipImagePreprocessor<float>(imageSize: 336);
@@ -39,24 +40,24 @@ public class ClipImagePreprocessorTests
         Assert.Equal(336, preprocessor.ImageSize);
     }
 
-    [Fact]
-    public void Constructor_WithZeroImageSize_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroImageSize_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ClipImagePreprocessor<float>(imageSize: 0));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeImageSize_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeImageSize_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ClipImagePreprocessor<float>(imageSize: -1));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidMeanLength_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidMeanLength_ThrowsArgumentException()
     {
         // Arrange
         var invalidMean = new float[] { 0.5f, 0.5f }; // Only 2 values instead of 3
@@ -66,8 +67,8 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(mean: invalidMean));
     }
 
-    [Fact]
-    public void Constructor_WithInvalidStdLength_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithInvalidStdLength_ThrowsArgumentException()
     {
         // Arrange
         var invalidStd = new float[] { 0.5f }; // Only 1 value instead of 3
@@ -77,16 +78,16 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(std: invalidStd));
     }
 
-    [Fact]
-    public void Preprocess_NullImage_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_NullImage_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             _preprocessor.Preprocess(null!));
     }
 
-    [Fact]
-    public void Preprocess_GrayscaleImage_ExpandsTo3Channels()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_GrayscaleImage_ExpandsTo3Channels()
     {
         // Arrange - 2D grayscale image [H, W]
         var grayscale = CreateTensor(64, 64);
@@ -101,8 +102,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
-    public void Preprocess_HWCImage_ConvertsToChannelsFirst()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_HWCImage_ConvertsToChannelsFirst()
     {
         // Arrange - [H, W, C] format (100x100x3)
         var hwcImage = CreateTensor(100, 100, 3);
@@ -118,8 +119,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
-    public void Preprocess_CHWImage_MaintainsChannelsFirst()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_CHWImage_MaintainsChannelsFirst()
     {
         // Arrange - [C, H, W] format (3x100x100)
         var chwImage = CreateTensor(3, 100, 100);
@@ -134,8 +135,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
-    public void Preprocess_AlreadyCorrectSize_MaintainsSize()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_AlreadyCorrectSize_MaintainsSize()
     {
         // Arrange - Already 224x224
         var image = CreateTensor(3, 224, 224);
@@ -149,8 +150,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
-    public void Preprocess_LargerImage_ResizesDown()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_LargerImage_ResizesDown()
     {
         // Arrange - Larger image (512x512)
         var image = CreateTensor(3, 512, 512);
@@ -164,8 +165,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
-    public void Preprocess_SmallerImage_ResizesUp()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_SmallerImage_ResizesUp()
     {
         // Arrange - Smaller image (50x50)
         var image = CreateTensor(3, 50, 50);
@@ -179,8 +180,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
-    public void Preprocess_NormalizesPixelValues()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_NormalizesPixelValues()
     {
         // Arrange - Image with values 0-255
         var image = CreateTensor(3, 100, 100);
@@ -196,8 +197,8 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 2.0f, $"Normalized value {centerValue} should be reasonable");
     }
 
-    [Fact]
-    public void Preprocess_ValuesInRange0To1_DoesNotRescale()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_ValuesInRange0To1_DoesNotRescale()
     {
         // Arrange - Image with values already 0-1
         var image = CreateTensor(3, 100, 100);
@@ -213,8 +214,8 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 3.0f, $"Normalized value should be reasonable");
     }
 
-    [Fact]
-    public void Preprocess_BatchImage_ExtractsFirstImage()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_BatchImage_ExtractsFirstImage()
     {
         // Arrange - Batch of images [N, C, H, W]
         var batch = CreateTensor(2, 3, 100, 100);
@@ -230,8 +231,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
-    public void Preprocess_SingleChannelImage_ExpandsToThreeChannels()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_SingleChannelImage_ExpandsToThreeChannels()
     {
         // Arrange - Single channel [1, H, W]
         var image = CreateTensor(1, 100, 100);
@@ -244,8 +245,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(3, result.Shape[0]);
     }
 
-    [Fact]
-    public void Preprocess_FourChannelImage_TakesFirstThreeChannels()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_FourChannelImage_TakesFirstThreeChannels()
     {
         // Arrange - RGBA image [4, H, W]
         var image = CreateTensor(4, 100, 100);
@@ -258,8 +259,8 @@ public class ClipImagePreprocessorTests
         Assert.Equal(3, result.Shape[0]);
     }
 
-    [Fact]
-    public void Preprocess_InvalidDimensions_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_InvalidDimensions_ThrowsArgumentException()
     {
         // Arrange - 5D tensor (invalid)
         var invalid = CreateTensor(1, 2, 3, 4, 5);
@@ -269,8 +270,8 @@ public class ClipImagePreprocessorTests
             _preprocessor.Preprocess(invalid));
     }
 
-    [Fact]
-    public void PreprocessBatch_ProcessesMultipleImages()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessBatch_ProcessesMultipleImages()
     {
         // Arrange
         var images = new List<Tensor<float>>
@@ -293,16 +294,16 @@ public class ClipImagePreprocessorTests
         });
     }
 
-    [Fact]
-    public void PreprocessBatch_NullImages_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessBatch_NullImages_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             _preprocessor.PreprocessBatch(null!).ToList());
     }
 
-    [Fact]
-    public void PreprocessBatch_EmptyList_ReturnsEmptyResults()
+    [Fact(Timeout = 60000)]
+    public async Task PreprocessBatch_EmptyList_ReturnsEmptyResults()
     {
         // Arrange
         var images = new List<Tensor<float>>();
@@ -314,8 +315,8 @@ public class ClipImagePreprocessorTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void Preprocess_WithCustomNormalization_UsesCustomValues()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_WithCustomNormalization_UsesCustomValues()
     {
         // Arrange
         var customMean = new float[] { 0.5f, 0.5f, 0.5f };
@@ -332,8 +333,8 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 0.1f, $"Expected ~0, got {centerValue}");
     }
 
-    [Fact]
-    public void Preprocess_ProducesConsistentResults()
+    [Fact(Timeout = 60000)]
+    public async Task Preprocess_ProducesConsistentResults()
     {
         // Arrange - Same image, same seed
         var image1 = CreateTensorWithRandomValues(3, 100, 100, seed: 42);

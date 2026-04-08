@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
@@ -91,8 +92,8 @@ public class ReptileTrainerIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -129,8 +130,8 @@ public class ReptileTrainerIntegrationTests
         Assert.All(lossHistory, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    [Fact]
-    public void MetaTrain_TrainsModelOnMultipleTasks()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_TrainsModelOnMultipleTasks()
     {
         // This test verifies the framework correctly processes multiple meta-learning tasks
 
@@ -176,8 +177,8 @@ public class ReptileTrainerIntegrationTests
         Assert.True(paramsDifferent, "Meta-training should change parameters differently than baseline");
     }
 
-    [Fact]
-    public void MetaTrain_LongTraining_TracksMetricsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_LongTraining_TracksMetricsCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -207,8 +208,8 @@ public class ReptileTrainerIntegrationTests
         Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void MetaTrain_CompletesRequiredIterations()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_CompletesRequiredIterations()
     {
         // Test specifically for the requirement: "50+ meta-iterations"
 
@@ -232,8 +233,8 @@ public class ReptileTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsPositiveInfinity(loss), "Loss should not be infinity"));
     }
 
-    [Fact]
-    public void Adapt_ProducesTaskSpecificModel()
+    [Fact(Timeout = 120000)]
+    public async Task Adapt_ProducesTaskSpecificModel()
     {
         // This test verifies that Reptile adaptation creates a task-specialized model
 
@@ -273,8 +274,8 @@ public class ReptileTrainerIntegrationTests
         Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    [Fact]
-    public void Evaluate_ProducesValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluate_ProducesValidMetrics()
     {
         // This test verifies evaluation produces valid loss values
 
@@ -354,8 +355,8 @@ public class ReptileTrainerIntegrationTests
         Assert.False(double.IsNaN(loss), $"Loss should not be NaN for epsilon={epsilon}");
     }
 
-    [Fact]
-    public void MetaTrain_WithMultipleTasksPerBatch_ProcessesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_WithMultipleTasksPerBatch_ProcessesCorrectly()
     {
         // Test Reptile with batched updates (less common but valid)
 
@@ -378,8 +379,8 @@ public class ReptileTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
-    public void Algorithm_HasCorrectName()
+    [Fact(Timeout = 120000)]
+    public async Task Algorithm_HasCorrectName()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -389,8 +390,8 @@ public class ReptileTrainerIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.Reptile, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void Algorithm_ExposesCorrectHyperparameters()
+    [Fact(Timeout = 120000)]
+    public async Task Algorithm_ExposesCorrectHyperparameters()
     {
         // Arrange
         var mockModel = CreateMockModel();

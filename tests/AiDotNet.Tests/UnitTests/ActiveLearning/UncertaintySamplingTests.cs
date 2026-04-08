@@ -1,5 +1,6 @@
 using AiDotNet.ActiveLearning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
@@ -8,8 +9,8 @@ namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 /// </summary>
 public class UncertaintySamplingTests
 {
-    [Fact]
-    public void Constructor_LeastConfidence_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_LeastConfidence_InitializesSuccessfully()
     {
         // Act
         var strategy = new UncertaintySampling<double>(
@@ -20,8 +21,8 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-LeastConfidence", strategy.Name);
     }
 
-    [Fact]
-    public void Constructor_MarginSampling_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_MarginSampling_InitializesSuccessfully()
     {
         // Act
         var strategy = new UncertaintySampling<double>(
@@ -32,8 +33,8 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-MarginSampling", strategy.Name);
     }
 
-    [Fact]
-    public void Constructor_Entropy_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_Entropy_InitializesSuccessfully()
     {
         // Act
         var strategy = new UncertaintySampling<double>(
@@ -44,8 +45,8 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-Entropy", strategy.Name);
     }
 
-    [Fact]
-    public void Constructor_DefaultParameter_UsesEntropy()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultParameter_UsesEntropy()
     {
         // Act
         var strategy = new UncertaintySampling<double>();
@@ -55,8 +56,8 @@ public class UncertaintySamplingTests
         Assert.Equal("UncertaintySampling-Entropy", strategy.Name);
     }
 
-    [Fact]
-    public void UseBatchDiversity_DefaultsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_DefaultsFalse()
     {
         // Act
         var strategy = new UncertaintySampling<double>();
@@ -65,8 +66,8 @@ public class UncertaintySamplingTests
         Assert.False(strategy.UseBatchDiversity);
     }
 
-    [Fact]
-    public void UseBatchDiversity_CanBeSet()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_CanBeSet()
     {
         // Arrange
         var strategy = new UncertaintySampling<double>();
@@ -78,8 +79,8 @@ public class UncertaintySamplingTests
         Assert.True(strategy.UseBatchDiversity);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_ReturnsEmptyInitially()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_ReturnsEmptyInitially()
     {
         // Arrange
         var strategy = new UncertaintySampling<double>();

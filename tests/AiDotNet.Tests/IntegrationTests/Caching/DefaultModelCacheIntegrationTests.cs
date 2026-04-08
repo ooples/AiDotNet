@@ -2,6 +2,7 @@ using AiDotNet.Caching;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Caching;
 
@@ -19,8 +20,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Basic CRUD Operations
 
-    [Fact]
-    public void GetCachedStepData_NonExistentKey_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_NonExistentKey_ReturnsNull()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -32,8 +33,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public void CacheStepData_ThenGet_ReturnsSameData()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_ThenGet_ReturnsSameData()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -49,8 +50,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact]
-    public void CacheStepData_OverwriteExistingKey_ReturnsNewData()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_OverwriteExistingKey_ReturnsNewData()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -68,8 +69,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.NotSame(stepData1, retrieved);
     }
 
-    [Fact]
-    public void ClearCache_RemovesAllEntries()
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_RemovesAllEntries()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -90,8 +91,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Null Key Validation
 
-    [Fact]
-    public void GetCachedStepData_NullKey_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -101,8 +102,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact]
-    public void CacheStepData_NullKey_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -113,8 +114,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact]
-    public void CacheStepData_NullStepData_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_NullStepData_ThrowsArgumentNullException()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -128,8 +129,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Multiple Keys Tests
 
-    [Fact]
-    public void Cache_MultipleKeys_EachRetrievableIndependently()
+    [Fact(Timeout = 120000)]
+    public async Task Cache_MultipleKeys_EachRetrievableIndependently()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -156,8 +157,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Thread Safety Tests
 
-    [Fact]
-    public void ConcurrentCacheOperations_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentCacheOperations_DoesNotThrow()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -204,8 +205,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact]
-    public void ConcurrentReadWrite_SameKey_ThreadSafe()
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentReadWrite_SameKey_ThreadSafe()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -240,8 +241,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact]
-    public void ConcurrentClearAndAccess_ThreadSafe()
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentClearAndAccess_ThreadSafe()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -285,8 +286,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void CacheStepData_EmptyKey_StoresSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_EmptyKey_StoresSuccessfully()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -300,8 +301,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact]
-    public void CacheStepData_VeryLongKey_StoresSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_VeryLongKey_StoresSuccessfully()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -316,8 +317,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact]
-    public void CacheStepData_SpecialCharactersInKey_StoresSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_SpecialCharactersInKey_StoresSuccessfully()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -332,8 +333,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Same(stepData, retrieved);
     }
 
-    [Fact]
-    public void ClearCache_OnEmptyCache_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_OnEmptyCache_DoesNotThrow()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -343,8 +344,8 @@ public class DefaultModelCacheIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void ClearCache_CalledMultipleTimes_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_CalledMultipleTimes_DoesNotThrow()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -364,8 +365,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Type Tests
 
-    [Fact]
-    public void ModelCache_FloatType_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_FloatType_WorksCorrectly()
     {
         // Arrange
         var cache = new DefaultModelCache<float, Matrix<float>, Vector<float>>();
@@ -387,8 +388,8 @@ public class DefaultModelCacheIntegrationTests
 
     #region Return Null vs New Verification
 
-    [Fact]
-    public void GetCachedStepData_MultipleNonExistentKeys_AllReturnNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_MultipleNonExistentKeys_AllReturnNull()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
@@ -401,8 +402,8 @@ public class DefaultModelCacheIntegrationTests
         }
     }
 
-    [Fact]
-    public void GetCachedStepData_AfterClear_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_AfterClear_ReturnsNull()
     {
         // Arrange
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();

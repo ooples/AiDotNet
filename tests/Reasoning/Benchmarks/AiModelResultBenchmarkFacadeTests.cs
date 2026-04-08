@@ -2,12 +2,13 @@ using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Reasoning.Benchmarks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Reasoning.Benchmarks;
 
 public class AiModelResultBenchmarkFacadeTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task EvaluateBenchmarkAsync_UsesPromptChain_WhenConfigured()
     {
         var benchmark = new GSM8KBenchmark<double>();

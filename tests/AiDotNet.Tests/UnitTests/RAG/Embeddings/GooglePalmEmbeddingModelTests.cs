@@ -5,13 +5,14 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class GooglePalmEmbeddingModelTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(2048, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithDefaultDimension_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultDimension_CreatesInstance()
         {
             // Arrange & Act
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -34,40 +35,40 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(2048, model.MaxTokens);
         }
 
-        [Fact]
-        public void Constructor_WithNullProjectId_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullProjectId_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GooglePalmEmbeddingModel<double>(null, "us-central1", "textembedding-gecko@001", "test-api-key"));
         }
 
-        [Fact]
-        public void Constructor_WithNullLocation_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullLocation_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GooglePalmEmbeddingModel<double>("test-project-id", null, "textembedding-gecko@001", "test-api-key"));
         }
 
-        [Fact]
-        public void Constructor_WithNullModel_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullModel_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", null, "test-api-key"));
         }
 
-        [Fact]
-        public void Constructor_WithNullApiKey_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullApiKey_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", null));
         }
 
-        [Fact]
-        public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -99,8 +100,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -124,8 +125,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
-        public void Embed_ReturnsNormalizedVector()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_ReturnsNormalizedVector()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithNullText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -154,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
-        public void Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -164,8 +165,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
-        public void Embed_WithWhitespaceText_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
-        public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -190,8 +191,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embeddings.Columns);
         }
 
-        [Fact]
-        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -200,8 +201,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
-        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");
@@ -211,8 +212,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
-        public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -232,8 +233,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<float>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -256,8 +257,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact]
-        public void Embed_WithCustomDimension_ReturnsCorrectSize()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             // Arrange
             var customDimension = 512;
@@ -271,8 +272,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(customDimension, embedding.Length);
         }
 
-        [Fact]
-        public void Embed_Deterministic_MultipleInstances()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_Deterministic_MultipleInstances()
         {
             // Arrange
             var model1 = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -290,8 +291,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void EmbedBatch_AllRowsAreNormalized()
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_AllRowsAreNormalized()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -313,8 +314,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
-        public void Embed_WithLongText_ReturnsEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task Embed_WithLongText_ReturnsEmbedding()
         {
             // Arrange
             var model = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key", 768);
@@ -328,8 +329,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
-        public void Constructor_WithDifferentLocations_CreatesInstances()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDifferentLocations_CreatesInstances()
         {
             // Arrange & Act
             var usCentralModel = new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", "test-api-key");

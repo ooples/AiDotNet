@@ -5,13 +5,14 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class ModifiedHuberLossFitnessCalculatorTests
 {
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -28,8 +29,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithConfidentCorrectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithConfidentCorrectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -46,8 +47,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithIncorrectPredictions_ReturnsPositiveValue()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithIncorrectPredictions_ReturnsPositiveValue()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -64,8 +65,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithSlightlyIncorrectPredictions_HasQuadraticLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithSlightlyIncorrectPredictions_HasQuadraticLoss()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -82,8 +83,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithVeryIncorrectPredictions_HasLinearLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithVeryIncorrectPredictions_HasLinearLoss()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -100,8 +101,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMixedPredictions_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMixedPredictions_HandlesCorrectly()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -118,8 +119,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -128,8 +129,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -141,8 +142,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -154,8 +155,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -172,8 +173,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -183,8 +184,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
@@ -194,8 +195,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultDataSetType_UsesValidation()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -205,8 +206,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithBinaryClassification_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithBinaryClassification_WorksCorrectly()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -223,8 +224,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0); // One misclassification
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithOutliers_ReturnsPositiveLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithOutliers_ReturnsPositiveLoss()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -242,8 +243,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithAllCorrectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithAllCorrectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -260,8 +261,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_BetterPredictions_LowerLoss()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_BetterPredictions_LowerLoss()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -288,8 +289,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.True(result1 < result2);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithMismatchedVectorLengths_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithMismatchedVectorLengths_ThrowsArgumentException()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -303,8 +304,8 @@ public class ModifiedHuberLossFitnessCalculatorTests
         Assert.Throws<ArgumentException>(() => calculator.CalculateFitnessScore(dataSet));
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithEmptyVectors_ReturnsNaN()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithEmptyVectors_ReturnsNaN()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();

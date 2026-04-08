@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.ModelRegistry;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TrainingInfrastructure;
 
@@ -72,8 +73,8 @@ public class ModelRegistryTests : IDisposable
 
     #region RegisterModel Tests
 
-    [Fact]
-    public void RegisterModel_WithValidInput_ReturnsModelId()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterModel_WithValidInput_ReturnsModelId()
     {
         // Arrange
         var model = new MockModel();
@@ -87,8 +88,8 @@ public class ModelRegistryTests : IDisposable
         Assert.NotEmpty(modelId);
     }
 
-    [Fact]
-    public void RegisterModel_WithTags_StoresTags()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterModel_WithTags_StoresTags()
     {
         // Arrange
         var model = new MockModel();
@@ -109,8 +110,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal("aidotnet", registeredModel.Tags["framework"]);
     }
 
-    [Fact]
-    public void RegisterModel_WithNullName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterModel_WithNullName_ThrowsArgumentException()
     {
         // Arrange
         var model = new MockModel();
@@ -120,8 +121,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => _registry.RegisterModel(null!, model, metadata));
     }
 
-    [Fact]
-    public void RegisterModel_WithNullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterModel_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var metadata = CreateTestMetadata();
@@ -134,8 +135,8 @@ public class ModelRegistryTests : IDisposable
 
     #region GetModel Tests
 
-    [Fact]
-    public void GetModel_WithoutVersion_ReturnsLatestVersion()
+    [Fact(Timeout = 60000)]
+    public async Task GetModel_WithoutVersion_ReturnsLatestVersion()
     {
         // Arrange
         var model = new MockModel();
@@ -150,8 +151,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, latestModel.Version);
     }
 
-    [Fact]
-    public void GetModel_WithSpecificVersion_ReturnsCorrectVersion()
+    [Fact(Timeout = 60000)]
+    public async Task GetModel_WithSpecificVersion_ReturnsCorrectVersion()
     {
         // Arrange
         var model = new MockModel();
@@ -166,15 +167,15 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(1, v1Model.Version);
     }
 
-    [Fact]
-    public void GetModel_WithInvalidName_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetModel_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _registry.GetModel("nonexistent-model"));
     }
 
-    [Fact]
-    public void GetModel_WithInvalidVersion_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task GetModel_WithInvalidVersion_ThrowsArgumentException()
     {
         // Arrange
         var model = new MockModel();
@@ -184,8 +185,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => _registry.GetModel("single-version", version: 99));
     }
 
-    [Fact]
-    public void GetLatestModel_ReturnsHighestVersionNumber()
+    [Fact(Timeout = 60000)]
+    public async Task GetLatestModel_ReturnsHighestVersionNumber()
     {
         // Arrange
         var model = new MockModel();
@@ -205,8 +206,8 @@ public class ModelRegistryTests : IDisposable
 
     #region CreateModelVersion Tests
 
-    [Fact]
-    public void CreateModelVersion_IncrementsVersionNumber()
+    [Fact(Timeout = 60000)]
+    public async Task CreateModelVersion_IncrementsVersionNumber()
     {
         // Arrange
         var model = new MockModel();
@@ -221,8 +222,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(3, version3);
     }
 
-    [Fact]
-    public void CreateModelVersion_WithNonExistentModel_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateModelVersion_WithNonExistentModel_ThrowsArgumentException()
     {
         // Arrange
         var model = new MockModel();
@@ -236,8 +237,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Model Stage Transition Tests
 
-    [Fact]
-    public void TransitionModelStage_ToStaging_UpdatesStage()
+    [Fact(Timeout = 60000)]
+    public async Task TransitionModelStage_ToStaging_UpdatesStage()
     {
         // Arrange
         var model = new MockModel();
@@ -251,8 +252,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(ModelStage.Staging, registeredModel.Stage);
     }
 
-    [Fact]
-    public void TransitionModelStage_ToProduction_ArchivesPreviousProduction()
+    [Fact(Timeout = 60000)]
+    public async Task TransitionModelStage_ToProduction_ArchivesPreviousProduction()
     {
         // Arrange
         var model = new MockModel();
@@ -273,8 +274,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(ModelStage.Production, v2.Stage);
     }
 
-    [Fact]
-    public void GetModelByStage_ReturnsCorrectModel()
+    [Fact(Timeout = 60000)]
+    public async Task GetModelByStage_ReturnsCorrectModel()
     {
         // Arrange
         var model = new MockModel();
@@ -294,8 +295,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, productionModel.Version);
     }
 
-    [Fact]
-    public void GetModelByStage_WhenNoModelInStage_ReturnsNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetModelByStage_WhenNoModelInStage_ReturnsNull()
     {
         // Arrange
         var model = new MockModel();
@@ -308,8 +309,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Null(productionModel);
     }
 
-    [Fact]
-    public void ArchiveModel_TransitionsToArchived()
+    [Fact(Timeout = 60000)]
+    public async Task ArchiveModel_TransitionsToArchived()
     {
         // Arrange
         var model = new MockModel();
@@ -327,8 +328,8 @@ public class ModelRegistryTests : IDisposable
 
     #region List and Search Tests
 
-    [Fact]
-    public void ListModels_ReturnsAllModelNames()
+    [Fact(Timeout = 60000)]
+    public async Task ListModels_ReturnsAllModelNames()
     {
         // Arrange
         var model = new MockModel();
@@ -346,8 +347,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("model-c", models);
     }
 
-    [Fact]
-    public void ListModels_WithFilter_ReturnsMatchingModels()
+    [Fact(Timeout = 60000)]
+    public async Task ListModels_WithFilter_ReturnsMatchingModels()
     {
         // Arrange
         var model = new MockModel();
@@ -363,8 +364,8 @@ public class ModelRegistryTests : IDisposable
         Assert.All(models, m => Assert.Contains("classification", m));
     }
 
-    [Fact]
-    public void ListModels_WithTags_ReturnsMatchingModels()
+    [Fact(Timeout = 60000)]
+    public async Task ListModels_WithTags_ReturnsMatchingModels()
     {
         // Arrange
         var model = new MockModel();
@@ -384,8 +385,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("prod-model-2", prodModels);
     }
 
-    [Fact]
-    public void ListModelVersions_ReturnsAllVersions()
+    [Fact(Timeout = 60000)]
+    public async Task ListModelVersions_ReturnsAllVersions()
     {
         // Arrange
         var model = new MockModel();
@@ -403,8 +404,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains(versions, v => v.Version == 3);
     }
 
-    [Fact]
-    public void SearchModels_ByNamePattern_ReturnsMatchingModels()
+    [Fact(Timeout = 60000)]
+    public async Task SearchModels_ByNamePattern_ReturnsMatchingModels()
     {
         // Arrange
         var model = new MockModel();
@@ -420,8 +421,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, results.Count);
     }
 
-    [Fact]
-    public void SearchModels_ByStage_ReturnsMatchingModels()
+    [Fact(Timeout = 60000)]
+    public async Task SearchModels_ByStage_ReturnsMatchingModels()
     {
         // Arrange
         var model = new MockModel();
@@ -442,8 +443,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Delete Tests
 
-    [Fact]
-    public void DeleteModelVersion_RemovesSpecificVersion()
+    [Fact(Timeout = 60000)]
+    public async Task DeleteModelVersion_RemovesSpecificVersion()
     {
         // Arrange
         var model = new MockModel();
@@ -460,8 +461,8 @@ public class ModelRegistryTests : IDisposable
         Assert.NotNull(v2);
     }
 
-    [Fact]
-    public void DeleteModelVersion_LastVersion_RemovesEntireModel()
+    [Fact(Timeout = 60000)]
+    public async Task DeleteModelVersion_LastVersion_RemovesEntireModel()
     {
         // Arrange
         var model = new MockModel();
@@ -475,8 +476,8 @@ public class ModelRegistryTests : IDisposable
         Assert.DoesNotContain("delete-last-version", models);
     }
 
-    [Fact]
-    public void DeleteModel_RemovesAllVersions()
+    [Fact(Timeout = 60000)]
+    public async Task DeleteModel_RemovesAllVersions()
     {
         // Arrange
         var model = new MockModel();
@@ -496,8 +497,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Model Comparison Tests
 
-    [Fact]
-    public void CompareModels_ReturnsMetadataDifferences()
+    [Fact(Timeout = 60000)]
+    public async Task CompareModels_ReturnsMetadataDifferences()
     {
         // Arrange
         var model = new MockModel();
@@ -523,8 +524,8 @@ public class ModelRegistryTests : IDisposable
         Assert.True(comparison.MetadataDifferences.ContainsKey("FeatureCount"));
     }
 
-    [Fact]
-    public void GetModelLineage_ReturnsLineageInfo()
+    [Fact(Timeout = 60000)]
+    public async Task GetModelLineage_ReturnsLineageInfo()
     {
         // Arrange
         var model = new MockModel();
@@ -543,8 +544,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Update Tests
 
-    [Fact]
-    public void UpdateModelMetadata_UpdatesMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task UpdateModelMetadata_UpdatesMetadata()
     {
         // Arrange
         var model = new MockModel();
@@ -564,8 +565,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(20, registeredModel.Metadata.FeatureCount);
     }
 
-    [Fact]
-    public void UpdateModelTags_AddsOrUpdatesTags()
+    [Fact(Timeout = 60000)]
+    public async Task UpdateModelTags_AddsOrUpdatesTags()
     {
         // Arrange
         var model = new MockModel();
@@ -591,8 +592,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact]
-    public void Registry_PersistsModelsToDisk()
+    [Fact(Timeout = 60000)]
+    public async Task Registry_PersistsModelsToDisk()
     {
         // Arrange
         var model = new MockModel();
@@ -606,8 +607,8 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("persistence-test", models);
     }
 
-    [Fact]
-    public void Registry_PersistsVersionsToDisk()
+    [Fact(Timeout = 60000)]
+    public async Task Registry_PersistsVersionsToDisk()
     {
         // Arrange
         var model = new MockModel();
@@ -626,8 +627,8 @@ public class ModelRegistryTests : IDisposable
 
     #region Storage Path Tests
 
-    [Fact]
-    public void GetModelStoragePath_ReturnsValidPath()
+    [Fact(Timeout = 60000)]
+    public async Task GetModelStoragePath_ReturnsValidPath()
     {
         // Arrange
         var model = new MockModel();

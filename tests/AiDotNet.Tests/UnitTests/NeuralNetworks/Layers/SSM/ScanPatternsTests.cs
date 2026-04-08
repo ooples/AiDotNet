@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class ScanPatternsTests
 {
-    [Fact]
-    public void BidirectionalScan_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int numPatches = 16;
@@ -22,8 +23,8 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void BidirectionalScan_ForwardHalfMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalScan_ForwardHalfMatchesInput()
     {
         int batchSize = 1;
         int numPatches = 4;
@@ -42,8 +43,8 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void BidirectionalScan_ReverseHalfMatchesReversed()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalScan_ReverseHalfMatchesReversed()
     {
         int batchSize = 1;
         int numPatches = 4;
@@ -63,15 +64,15 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void BidirectionalScan_ThrowsFor2DInput()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalScan_ThrowsFor2DInput()
     {
         var patches = CreateRandomTensor(new[] { 4, 8 });
         Assert.Throws<ArgumentException>(() => ScanPatterns<float>.BidirectionalScan(patches));
     }
 
-    [Fact]
-    public void CrossScan_ProducesFourOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task CrossScan_ProducesFourOutputs()
     {
         int batchSize = 2;
         int height = 4;
@@ -85,8 +86,8 @@ public class ScanPatternsTests
         Assert.Equal(4, results.Count);
     }
 
-    [Fact]
-    public void CrossScan_AllOutputsHaveCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task CrossScan_AllOutputsHaveCorrectShape()
     {
         int batchSize = 2;
         int height = 3;
@@ -103,8 +104,8 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void CrossScan_FirstDirectionMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossScan_FirstDirectionMatchesInput()
     {
         int batchSize = 1;
         int height = 2;
@@ -122,16 +123,16 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void CrossScan_ThrowsOnMismatchedDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task CrossScan_ThrowsOnMismatchedDimensions()
     {
         var patches = CreateRandomTensor(new[] { 1, 12, 4 });
 
         Assert.Throws<ArgumentException>(() => ScanPatterns<float>.CrossScan(patches, 3, 5));
     }
 
-    [Fact]
-    public void ContinuousScan_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int height = 3;
@@ -145,8 +146,8 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape.ToArray());
     }
 
-    [Fact]
-    public void ContinuousScan_EvenRowLeftToRight()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousScan_EvenRowLeftToRight()
     {
         int batchSize = 1;
         int height = 2;
@@ -162,8 +163,8 @@ public class ScanPatternsTests
         Assert.Equal(patches[new[] { 0, 2, 0 }], result[new[] { 0, 2, 0 }]);
     }
 
-    [Fact]
-    public void ContinuousScan_OddRowRightToLeft()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousScan_OddRowRightToLeft()
     {
         int batchSize = 1;
         int height = 2;
@@ -179,8 +180,8 @@ public class ScanPatternsTests
         Assert.Equal(patches[new[] { 0, 3, 0 }], result[new[] { 0, 5, 0 }]);
     }
 
-    [Fact]
-    public void SpatioTemporalScan_ProducesTwoOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task SpatioTemporalScan_ProducesTwoOutputs()
     {
         int batchSize = 1;
         int height = 2;
@@ -197,8 +198,8 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, totalPatches, dim }, results[1].Shape.ToArray());
     }
 
-    [Fact]
-    public void SpatioTemporalScan_SpatialMatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task SpatioTemporalScan_SpatialMatchesInput()
     {
         int batchSize = 1;
         int height = 2;
@@ -217,8 +218,8 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void SpatioTemporalScan_ThrowsOnDimensionMismatch()
+    [Fact(Timeout = 120000)]
+    public async Task SpatioTemporalScan_ThrowsOnDimensionMismatch()
     {
         var frames = CreateRandomTensor(new[] { 1, 10, 4 });
 
@@ -226,8 +227,8 @@ public class ScanPatternsTests
             ScanPatterns<float>.SpatioTemporalScan(frames, 2, 2, 3)); // 2*2*3=12 != 10
     }
 
-    [Fact]
-    public void MergeScanOutputs_AveragesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MergeScanOutputs_AveragesCorrectly()
     {
         int batchSize = 1;
         int numPatches = 4;
@@ -248,15 +249,15 @@ public class ScanPatternsTests
         }
     }
 
-    [Fact]
-    public void MergeScanOutputs_ThrowsOnEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task MergeScanOutputs_ThrowsOnEmpty()
     {
         Assert.Throws<ArgumentException>(() =>
             ScanPatterns<float>.MergeScanOutputs(new List<Tensor<float>>()));
     }
 
-    [Fact]
-    public void MergeScanOutputs_ThrowsOnMismatchedShapes()
+    [Fact(Timeout = 120000)]
+    public async Task MergeScanOutputs_ThrowsOnMismatchedShapes()
     {
         var output1 = CreateRandomTensor(new[] { 1, 4, 8 });
         var output2 = CreateRandomTensor(new[] { 1, 4, 16 });
@@ -265,8 +266,8 @@ public class ScanPatternsTests
             ScanPatterns<float>.MergeScanOutputs(new List<Tensor<float>> { output1, output2 }));
     }
 
-    [Fact]
-    public void CrossScan_MergeRoundTrip_PreservesShape()
+    [Fact(Timeout = 120000)]
+    public async Task CrossScan_MergeRoundTrip_PreservesShape()
     {
         int batchSize = 1;
         int height = 3;
@@ -281,8 +282,8 @@ public class ScanPatternsTests
         Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape.ToArray());
     }
 
-    [Fact]
-    public void BidirectionalScan_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalScan_Double_ProducesValidOutput()
     {
         int batchSize = 1;
         int numPatches = 8;

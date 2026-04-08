@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion;
 
@@ -11,8 +12,8 @@ public class SchedulerTests
 {
     #region DDIM Scheduler Tests
 
-    [Fact]
-    public void DDIMScheduler_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Constructor_InitializesCorrectly()
     {
         // Arrange & Act
         var config = SchedulerConfig<float>.CreateDefault();
@@ -23,8 +24,8 @@ public class SchedulerTests
         Assert.NotNull(scheduler.Config);
     }
 
-    [Fact]
-    public void DDIMScheduler_SetTimesteps_CreatesValidTimesteps()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_SetTimesteps_CreatesValidTimesteps()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -40,8 +41,8 @@ public class SchedulerTests
         Assert.Equal(50, timesteps.Length);
     }
 
-    [Fact]
-    public void DDIMScheduler_Timesteps_AreDecreasing()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Timesteps_AreDecreasing()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -59,8 +60,8 @@ public class SchedulerTests
         }
     }
 
-    [Fact]
-    public void DDIMScheduler_Step_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_Step_ProducesValidOutput()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -80,8 +81,8 @@ public class SchedulerTests
         Assert.False(ContainsInf(result), "Result should not contain Inf");
     }
 
-    [Fact]
-    public void DDIMScheduler_AddNoise_ProducesNoisySample()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_AddNoise_ProducesNoisySample()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -101,8 +102,8 @@ public class SchedulerTests
         Assert.False(VectorsEqual(original, noisy), "Noisy sample should differ from original");
     }
 
-    [Fact]
-    public void DDIMScheduler_EtaZero_IsDeterministic()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_EtaZero_IsDeterministic()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -125,8 +126,8 @@ public class SchedulerTests
 
     #region PNDM Scheduler Tests
 
-    [Fact]
-    public void PNDMScheduler_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_Constructor_InitializesCorrectly()
     {
         // Arrange & Act
         var config = SchedulerConfig<float>.CreateDefault();
@@ -136,8 +137,8 @@ public class SchedulerTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
-    public void PNDMScheduler_SetTimesteps_CreatesValidTimesteps()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_SetTimesteps_CreatesValidTimesteps()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -152,8 +153,8 @@ public class SchedulerTests
         Assert.True(timesteps.Length > 0);
     }
 
-    [Fact]
-    public void PNDMScheduler_Step_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_Step_ProducesValidOutput()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -172,8 +173,8 @@ public class SchedulerTests
         Assert.False(ContainsNaN(result), "Result should not contain NaN");
     }
 
-    [Fact]
-    public void PNDMScheduler_MultipleSteps_AccumulatesHistory()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMScheduler_MultipleSteps_AccumulatesHistory()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -198,8 +199,8 @@ public class SchedulerTests
 
     #region Scheduler Comparison Tests
 
-    [Fact]
-    public void AllSchedulers_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_ProduceDifferentResults()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -221,8 +222,8 @@ public class SchedulerTests
         Assert.False(ContainsNaN(pndmResult), "PNDM should not produce NaN");
     }
 
-    [Fact]
-    public void AllSchedulers_HandleLastTimestep()
+    [Fact(Timeout = 120000)]
+    public async Task AllSchedulers_HandleLastTimestep()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -251,8 +252,8 @@ public class SchedulerTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void DDIMScheduler_LargeMagnitude_RemainsStable()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_LargeMagnitude_RemainsStable()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -284,8 +285,8 @@ public class SchedulerTests
         Assert.False(ContainsInf(sample), "Should not overflow");
     }
 
-    [Fact]
-    public void DDIMScheduler_SmallMagnitude_RemainsStable()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_SmallMagnitude_RemainsStable()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();
@@ -317,8 +318,8 @@ public class SchedulerTests
 
     #region Config Tests
 
-    [Fact]
-    public void SchedulerConfig_CreateDefault_HasValidDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task SchedulerConfig_CreateDefault_HasValidDefaults()
     {
         // Act
         var config = SchedulerConfig<float>.CreateDefault();
@@ -327,8 +328,8 @@ public class SchedulerTests
         Assert.True(config.TrainTimesteps > 0, "Train timesteps should be positive");
     }
 
-    [Fact]
-    public void DDIMScheduler_TrainTimesteps_MatchesConfig()
+    [Fact(Timeout = 120000)]
+    public async Task DDIMScheduler_TrainTimesteps_MatchesConfig()
     {
         // Arrange
         var config = SchedulerConfig<float>.CreateDefault();

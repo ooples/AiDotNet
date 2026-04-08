@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class S6ScanGradientTest
 {
-    [Fact]
-    public void S6Scan_BackwardGradient_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task S6Scan_BackwardGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;
         var rng = new Random(42);
@@ -90,8 +91,8 @@ public class S6ScanGradientTest
             $"S6Scan gradient check failed for {failCount} x elements. Details: {errors}");
     }
 
-    [Fact]
-    public void S6Scan_BackwardDeltaGradient_MatchesNumerical()
+    [Fact(Timeout = 120000)]
+    public async Task S6Scan_BackwardDeltaGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;
         var rng = new Random(42);

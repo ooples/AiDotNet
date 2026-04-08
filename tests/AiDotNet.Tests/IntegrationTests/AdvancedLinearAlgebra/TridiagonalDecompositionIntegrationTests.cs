@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -175,8 +176,8 @@ public class TridiagonalDecompositionIntegrationTests
             "T should be tridiagonal (non-zero only on main, sub, and super diagonals)");
     }
 
-    [Fact]
-    public void TridiagonalDecomposition_SymmetricMatrix_TMatrixIsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_SymmetricMatrix_TMatrixIsSymmetric()
     {
         // Arrange
         var A = CreateSymmetricMatrix(4, seed: 789);
@@ -194,8 +195,8 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void TridiagonalDecomposition_IdentityMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -208,8 +209,8 @@ public class TridiagonalDecompositionIntegrationTests
             "Identity matrix T should be tridiagonal");
     }
 
-    [Fact]
-    public void TridiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange - Diagonal matrices are already tridiagonal
         var D = new Matrix<double>(4, 4);
@@ -223,8 +224,8 @@ public class TridiagonalDecompositionIntegrationTests
             "Diagonal matrix T should be tridiagonal");
     }
 
-    [Fact]
-    public void TridiagonalDecomposition_ZeroMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -276,8 +277,8 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void TridiagonalDecomposition_LargeMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
         var A = CreateSymmetricMatrix(10, seed: 999);
@@ -303,8 +304,8 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void TridiagonalDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task TridiagonalDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4); // Non-square

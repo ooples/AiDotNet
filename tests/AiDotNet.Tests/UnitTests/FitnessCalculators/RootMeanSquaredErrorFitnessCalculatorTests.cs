@@ -6,6 +6,7 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
@@ -27,8 +28,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         return new ErrorStats<double>(inputs);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -48,8 +49,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithSmallErrors_ReturnsSmallRMSE()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithSmallErrors_ReturnsSmallRMSE()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -70,8 +71,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 0.3, 0.5); // RMSE should be around 0.387
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithLargeErrors_ReturnsLargeRMSE()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithLargeErrors_ReturnsLargeRMSE()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -91,8 +92,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 9.5, 10.5); // RMSE should be around 10
     }
 
-    [Fact]
-    public void CalculateFitnessScore_RetrievesRMSEFromErrorStats()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_RetrievesRMSEFromErrorStats()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -112,8 +113,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 2.8, 3.2);
     }
 
-    [Fact]
-    public void IsHigherScoreBetter_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -122,8 +123,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -135,8 +136,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
-    public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -148,8 +149,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -175,8 +176,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.InRange(result, 2.3f, 2.7f); // RMSE should be around 2.5
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -185,8 +186,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact]
-    public void Constructor_WithTrainingDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -196,8 +197,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithTestDataSetType_SetsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
@@ -207,8 +208,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultDataSetType_UsesValidation()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultDataSetType_UsesValidation()
     {
         // Arrange & Act
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -218,8 +219,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithVerySmallRMSE_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithVerySmallRMSE_HandlesCorrectly()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -239,8 +240,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result < 0.001, $"Expected RMSE < 0.001, but got {result}");
     }
 
-    [Fact]
-    public void CalculateFitnessScore_WithVeryLargeRMSE_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CalculateFitnessScore_WithVeryLargeRMSE_HandlesCorrectly()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -260,8 +261,8 @@ public class RootMeanSquaredErrorFitnessCalculatorTests
         Assert.True(result > 999999.0, $"Expected RMSE > 999999, but got {result}");
     }
 
-    [Fact]
-    public void IsBetterFitness_ComparesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task IsBetterFitness_ComparesCorrectly()
     {
         // Arrange
         var calculator = new RootMeanSquaredErrorFitnessCalculator<double, Vector<double>, Vector<double>>();

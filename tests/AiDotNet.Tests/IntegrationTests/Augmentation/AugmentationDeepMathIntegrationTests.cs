@@ -5,6 +5,7 @@ using AiDotNet.Augmentation;
 using AiDotNet.Augmentation.Tabular;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Augmentation;
 
@@ -29,8 +30,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region SMOTE - Synthetic Sample Generation
 
-    [Fact]
-    public void Smote_GeneratedSamples_AreBetweenOriginals()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_GeneratedSamples_AreBetweenOriginals()
     {
         // SMOTE interpolates between a sample and its neighbor: synthetic = x + gap*(neighbor - x)
         // where gap is in [0, 1). So synthetic values must be BETWEEN the two samples.
@@ -56,8 +57,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Smote_SamplingRatio_ControlsOutputCount()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_SamplingRatio_ControlsOutputCount()
     {
         // samplingRatio=1.0 with 4 rows → ceil(4*1.0) = 4 synthetic samples
         // samplingRatio=0.5 with 4 rows → ceil(4*0.5) = 2 synthetic samples
@@ -72,8 +73,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Equal(2, syn05.Rows);
     }
 
-    [Fact]
-    public void Smote_TwoSamples_InterpolatesBetweenThem()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_TwoSamples_InterpolatesBetweenThem()
     {
         // With only 2 samples and k=1, the nearest neighbor of each sample is the other one.
         // Synthetic = sample + gap * (neighbor - sample), so all synthetics lie on the line segment.
@@ -106,8 +107,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Smote_SingleSample_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_SingleSample_ReturnsEmpty()
     {
         // Need at least 2 samples to interpolate
         var smote = new SmoteAugmenter<double>(kNeighbors: 1);
@@ -120,8 +121,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Equal(3, synthetic.Columns);
     }
 
-    [Fact]
-    public void Smote_KNeighborsClampedToMaxAvailable()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_KNeighborsClampedToMaxAvailable()
     {
         // If k=5 but only 3 samples, effective k = min(5, 3-1) = 2
         // Should not throw, just clamp
@@ -134,8 +135,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Equal(3, synthetic.Rows); // ceil(3*1.0) = 3
     }
 
-    [Fact]
-    public void Smote_ApplySmoteWithLabels_AllSyntheticHaveSameLabel()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_ApplySmoteWithLabels_AllSyntheticHaveSameLabel()
     {
         var smote = new SmoteAugmenter<double>(kNeighbors: 1, samplingRatio: 1.0);
         var data = M(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
@@ -155,8 +156,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Smote_ApplySmoteWithLabels_MixedLabels_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_ApplySmoteWithLabels_MixedLabels_Throws()
     {
         var smote = new SmoteAugmenter<double>(kNeighbors: 1, samplingRatio: 1.0);
         var data = M(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -166,21 +167,21 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => smote.ApplySmoteWithLabels(data, labels, context));
     }
 
-    [Fact]
-    public void Smote_InvalidKNeighbors_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_InvalidKNeighbors_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new SmoteAugmenter<double>(kNeighbors: 0));
     }
 
-    [Fact]
-    public void Smote_InvalidSamplingRatio_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_InvalidSamplingRatio_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new SmoteAugmenter<double>(samplingRatio: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new SmoteAugmenter<double>(samplingRatio: -1.0));
     }
 
-    [Fact]
-    public void Smote_Seeded_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_Seeded_Reproducible()
     {
         var smote = new SmoteAugmenter<double>(kNeighbors: 2, samplingRatio: 1.0);
         var data = M(new double[,] { { 1, 10 }, { 2, 20 }, { 3, 30 }, { 4, 40 } });
@@ -198,8 +199,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Smote_DistanceMatrix_IsSymmetricAndCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task Smote_DistanceMatrix_IsSymmetricAndCorrect()
     {
         // Verify distance calculation is Euclidean and symmetric
         // [0, 0], [3, 4] → distance = sqrt(9+16) = 5
@@ -232,8 +233,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region TabularMixUp - Linear Interpolation
 
-    [Fact]
-    public void MixUp_MixWithLabels_ExactInterpolation()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_MixWithLabels_ExactInterpolation()
     {
         // MixUp: mixed = lambda * data1 + (1 - lambda) * data2
         // With seeded context, lambda is deterministic
@@ -259,8 +260,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Equal(lambda, mixedLabels[1], 8);
     }
 
-    [Fact]
-    public void MixUp_LambdaFromBetaDistribution_InUnitInterval()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_LambdaFromBetaDistribution_InUnitInterval()
     {
         // Beta(alpha, alpha) distribution always produces values in [0, 1]
         var mixup = new TabularMixUp<double>(alpha: 0.2);
@@ -279,8 +280,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MixUp_SingleSample_ReturnsClone()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_SingleSample_ReturnsClone()
     {
         var mixup = new TabularMixUp<double>();
         var data = M(new double[,] { { 42, 99 } });
@@ -293,8 +294,8 @@ public class AugmentationDeepMathIntegrationTests
         AssertCell(result, 0, 1, 99.0);
     }
 
-    [Fact]
-    public void MixUp_Apply_PreservesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_Apply_PreservesDimensions()
     {
         var mixup = new TabularMixUp<double>(alpha: 0.5, probability: 1.0);
         var data = M(new double[,] {
@@ -310,8 +311,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
-    public void MixUp_MismatchedColumns_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MixUp_MismatchedColumns_Throws()
     {
         var mixup = new TabularMixUp<double>();
         var data1 = M(new double[,] { { 1, 2 } });
@@ -327,8 +328,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region FeatureNoise - Gaussian Noise Addition
 
-    [Fact]
-    public void FeatureNoise_ZeroStdDev_DataUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_ZeroStdDev_DataUnchanged()
     {
         var noise = new FeatureNoise<double>(noiseStdDev: 0.0, probability: 1.0);
         var data = M(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -345,8 +346,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureNoise_SmallStdDev_ValuesNearOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_SmallStdDev_ValuesNearOriginal()
     {
         // With stddev=0.001, noise is very small
         var noise = new FeatureNoise<double>(noiseStdDev: 0.001, probability: 1.0);
@@ -366,8 +367,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureNoise_SelectiveFeatures_OnlyNoiseOnSpecified()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_SelectiveFeatures_OnlyNoiseOnSpecified()
     {
         // Only apply noise to feature 0, leave feature 1 unchanged
         var noise = new FeatureNoise<double>(noiseStdDev: 1.0, probability: 1.0, featureIndices: new[] { 0 });
@@ -386,8 +387,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.True(feature0Changed, "Feature 0 should have noise applied");
     }
 
-    [Fact]
-    public void FeatureNoise_Seeded_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_Seeded_Reproducible()
     {
         var noise = new FeatureNoise<double>(noiseStdDev: 0.1, probability: 1.0);
         var data = M(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -404,14 +405,14 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureNoise_NegativeStdDev_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_NegativeStdDev_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureNoise<double>(noiseStdDev: -0.1));
     }
 
-    [Fact]
-    public void FeatureNoise_NoiseDistribution_ApproximatelyZeroMean()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureNoise_NoiseDistribution_ApproximatelyZeroMean()
     {
         // Over many samples, the noise should average to approximately 0
         var noise = new FeatureNoise<double>(noiseStdDev: 1.0, probability: 1.0);
@@ -437,8 +438,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region AugmentationContext - Seeding and Probability
 
-    [Fact]
-    public void AugmentationContext_ShouldApply_ProbabilityZero_NeverApplies()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_ShouldApply_ProbabilityZero_NeverApplies()
     {
         var context = new AugmentationContext<double>(seed: 42);
         for (int i = 0; i < 100; i++)
@@ -447,8 +448,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AugmentationContext_ShouldApply_ProbabilityOne_AlwaysApplies()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_ShouldApply_ProbabilityOne_AlwaysApplies()
     {
         var context = new AugmentationContext<double>(seed: 42);
         for (int i = 0; i < 100; i++)
@@ -457,8 +458,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AugmentationContext_SampleBeta_ReturnsValuesInUnitInterval()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_SampleBeta_ReturnsValuesInUnitInterval()
     {
         var context = new AugmentationContext<double>(seed: 42);
         for (int i = 0; i < 50; i++)
@@ -469,8 +470,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AugmentationContext_SampleBeta_SymmetricAlpha_MeanNearHalf()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_SampleBeta_SymmetricAlpha_MeanNearHalf()
     {
         // Beta(alpha, alpha) has mean = 0.5
         var context = new AugmentationContext<double>(seed: 42);
@@ -485,8 +486,8 @@ public class AugmentationDeepMathIntegrationTests
             $"Mean of 500 Beta(1,1) samples = {mean}, expected ~0.5");
     }
 
-    [Fact]
-    public void AugmentationContext_SampleGaussian_MeanAndStdCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AugmentationContext_SampleGaussian_MeanAndStdCorrect()
     {
         var context = new AugmentationContext<double>(seed: 42);
         double sum = 0, sumSq = 0;
@@ -514,8 +515,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region FeatureDropout
 
-    [Fact]
-    public void FeatureDropout_DropRate0_DataUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDropout_DropRate0_DataUnchanged()
     {
         var dropout = new FeatureDropout<double>(dropoutRate: 0.0, probability: 1.0);
         var data = M(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -532,8 +533,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureDropout_DropRate1_AllZeroed()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDropout_DropRate1_AllZeroed()
     {
         var dropout = new FeatureDropout<double>(dropoutRate: 1.0, probability: 1.0);
         var data = M(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -551,8 +552,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void FeatureDropout_DroppedFeaturesAreZero_NotNaN()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDropout_DroppedFeaturesAreZero_NotNaN()
     {
         var dropout = new FeatureDropout<double>(dropoutRate: 0.5, probability: 1.0);
         var data = M(new double[,] { { 100, 200, 300, 400 } });
@@ -574,8 +575,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.True(zeroCount < 4, "At least one feature should survive");
     }
 
-    [Fact]
-    public void FeatureDropout_PreservesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureDropout_PreservesDimensions()
     {
         var dropout = new FeatureDropout<double>(dropoutRate: 0.3, probability: 1.0);
         var data = M(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
@@ -591,8 +592,8 @@ public class AugmentationDeepMathIntegrationTests
 
     #region RowShuffle
 
-    [Fact]
-    public void RowShuffle_PreservesAllRows()
+    [Fact(Timeout = 120000)]
+    public async Task RowShuffle_PreservesAllRows()
     {
         var shuffle = new RowShuffle<double>(probability: 1.0);
         var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -610,8 +611,8 @@ public class AugmentationDeepMathIntegrationTests
         Assert.True(originalValues.SetEquals(resultValues), "All original values should be preserved");
     }
 
-    [Fact]
-    public void RowShuffle_Seeded_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task RowShuffle_Seeded_Reproducible()
     {
         var shuffle = new RowShuffle<double>(probability: 1.0);
         var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -625,8 +626,8 @@ public class AugmentationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void RowShuffle_PreservesRowIntegrity()
+    [Fact(Timeout = 120000)]
+    public async Task RowShuffle_PreservesRowIntegrity()
     {
         // Each row should remain as a complete unit (col0 and col1 stay together)
         var shuffle = new RowShuffle<double>(probability: 1.0);

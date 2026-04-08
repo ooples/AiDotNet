@@ -1,6 +1,7 @@
 using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
@@ -11,16 +12,16 @@ public class DeepARModelTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new DeepARModel<double>();
 
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new DeepAROptions<double>
         {
@@ -37,8 +38,8 @@ public class DeepARModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithZeroHiddenSize_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroHiddenSize_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
         {
@@ -48,8 +49,8 @@ public class DeepARModelTests
         Assert.Throws<ArgumentException>(() => new DeepARModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithNegativeHiddenSize_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeHiddenSize_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
         {
@@ -59,8 +60,8 @@ public class DeepARModelTests
         Assert.Throws<ArgumentException>(() => new DeepARModel<double>(options));
     }
 
-    [Fact]
-    public void Constructor_WithZeroNumLayers_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithZeroNumLayers_ThrowsArgumentException()
     {
         var options = new DeepAROptions<double>
         {
@@ -74,8 +75,8 @@ public class DeepARModelTests
 
     #region Training Tests
 
-    [Fact]
-    public void Train_WithValidData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithValidData_CompletesWithoutError()
     {
         var options = new DeepAROptions<double>
         {
@@ -95,8 +96,8 @@ public class DeepARModelTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Train_WithMinimalData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new DeepAROptions<double>
         {
@@ -120,8 +121,8 @@ public class DeepARModelTests
 
     #region Prediction Tests
 
-    [Fact]
-    public void PredictSingle_AfterTraining_ReturnsValidPrediction()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_AfterTraining_ReturnsValidPrediction()
     {
         var options = new DeepAROptions<double>
         {
@@ -149,8 +150,8 @@ public class DeepARModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
-    public void PredictSingle_ReturnsFiniteValues()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_ReturnsFiniteValues()
     {
         var options = new DeepAROptions<double>
         {
@@ -178,8 +179,8 @@ public class DeepARModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
-    public void Predict_WithMatrix_ReturnsValidPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new DeepAROptions<double>
         {
@@ -211,8 +212,8 @@ public class DeepARModelTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_AndDeserialize_PreservesModel()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_AndDeserialize_PreservesModel()
     {
         var options = new DeepAROptions<double>
         {
@@ -251,8 +252,8 @@ public class DeepARModelTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new DeepAROptions<float>
         {

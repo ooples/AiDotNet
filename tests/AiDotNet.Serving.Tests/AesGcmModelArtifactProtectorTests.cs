@@ -1,6 +1,7 @@
 using System.Text;
 using AiDotNet.Serving.Services;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -27,8 +28,8 @@ public class AesGcmModelArtifactProtectorTests
         Assert.Equal(expectedParamName, ex.ParamName);
     }
 
-    [Fact]
-    public void ProtectToFile_WritesHeaderAndReturnsArtifact()
+    [Fact(Timeout = 60000)]
+    public async Task ProtectToFile_WritesHeaderAndReturnsArtifact()
     {
         var protector = new AesGcmModelArtifactProtector();
 

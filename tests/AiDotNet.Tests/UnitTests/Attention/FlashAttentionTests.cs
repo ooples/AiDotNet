@@ -2,6 +2,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Attention;
 
@@ -12,8 +13,8 @@ public class FlashAttentionTests
 {
     private const double Tolerance = 1e-4;
 
-    [Fact]
-    public void FlashAttention_Forward_ProducesCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_Forward_ProducesCorrectShape()
     {
         // Arrange
         int batchSize = 2;
@@ -33,8 +34,8 @@ public class FlashAttentionTests
         Assert.Equal(headDim, output.Shape[2]);
     }
 
-    [Fact]
-    public void FlashAttention_Forward4D_ProducesCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_Forward4D_ProducesCorrectShape()
     {
         // Arrange
         int batchSize = 2;
@@ -56,8 +57,8 @@ public class FlashAttentionTests
         Assert.Equal(headDim, output.Shape[3]);
     }
 
-    [Fact]
-    public void FlashAttention_MatchesStandardAttention_3D()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_MatchesStandardAttention_3D()
     {
         // Arrange
         int batchSize = 1;
@@ -78,8 +79,8 @@ public class FlashAttentionTests
         AssertTensorsEqual(flashOutput, standardOutput, Tolerance);
     }
 
-    [Fact]
-    public void FlashAttention_WithCausalMask_MasksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_WithCausalMask_MasksCorrectly()
     {
         // Arrange
         int batchSize = 1;
@@ -112,8 +113,8 @@ public class FlashAttentionTests
         }
     }
 
-    [Fact]
-    public void FlashAttention_AttentionWeightsRowSumToOne()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_AttentionWeightsRowSumToOne()
     {
         // Arrange
         int batchSize = 1;
@@ -146,8 +147,8 @@ public class FlashAttentionTests
     }
 
 
-    [Fact]
-    public void FlashAttention_DifferentBlockSizes_ProduceSameResult()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttention_DifferentBlockSizes_ProduceSameResult()
     {
         // Arrange
         int batchSize = 1;
@@ -172,8 +173,8 @@ public class FlashAttentionTests
         AssertTensorsEqual(output2, output3, Tolerance);
     }
 
-    [Fact]
-    public void FlashAttentionLayer_Forward_ProducesCorrectShape()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttentionLayer_Forward_ProducesCorrectShape()
     {
         // Arrange
         int seqLen = 8;
@@ -195,8 +196,8 @@ public class FlashAttentionTests
 
 
 
-    [Fact]
-    public void FlashAttentionLayer_GetSetParameters_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttentionLayer_GetSetParameters_RoundTrip()
     {
         // Arrange
         int seqLen = 8;
@@ -219,8 +220,8 @@ public class FlashAttentionTests
         }
     }
 
-    [Fact]
-    public void FlashAttentionConfig_Presets_HaveExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttentionConfig_Presets_HaveExpectedValues()
     {
         // Act
         var defaultConfig = FlashAttentionConfig.Default;

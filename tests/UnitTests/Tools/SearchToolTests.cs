@@ -1,5 +1,6 @@
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Tools;
 
@@ -8,8 +9,8 @@ namespace AiDotNetTests.UnitTests.Tools;
 /// </summary>
 public class SearchToolTests
 {
-    [Fact]
-    public void Name_ReturnsSearch()
+    [Fact(Timeout = 60000)]
+    public async Task Name_ReturnsSearch()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -21,8 +22,8 @@ public class SearchToolTests
         Assert.Equal("Search", name);
     }
 
-    [Fact]
-    public void Description_ReturnsNonEmptyString()
+    [Fact(Timeout = 60000)]
+    public async Task Description_ReturnsNonEmptyString()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -51,8 +52,8 @@ public class SearchToolTests
         Assert.Contains(expectedSubstring, result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_EmptyInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_EmptyInput_ReturnsError()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -65,8 +66,8 @@ public class SearchToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_WhitespaceInput_ReturnsError()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WhitespaceInput_ReturnsError()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -78,8 +79,8 @@ public class SearchToolTests
         Assert.Contains("Error", result);
     }
 
-    [Fact]
-    public void Execute_UnknownQuery_ReturnsGenericResponse()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_UnknownQuery_ReturnsGenericResponse()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -92,8 +93,8 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result);
     }
 
-    [Fact]
-    public void Execute_CaseInsensitiveMatch_ReturnsResult()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_CaseInsensitiveMatch_ReturnsResult()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -109,8 +110,8 @@ public class SearchToolTests
         Assert.Contains("Paris", result3, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Execute_PartialMatch_ReturnsRelevantResult()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_PartialMatch_ReturnsRelevantResult()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -122,8 +123,8 @@ public class SearchToolTests
         Assert.Contains("Paris", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Constructor_WithCustomMockResults_UsesProvidedData()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomMockResults_UsesProvidedData()
     {
         // Arrange
         var customResults = new Dictionary<string, string>
@@ -142,8 +143,8 @@ public class SearchToolTests
         Assert.Equal("another result", result2);
     }
 
-    [Fact]
-    public void AddMockResult_NewQuery_AddsSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task AddMockResult_NewQuery_AddsSuccessfully()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -156,8 +157,8 @@ public class SearchToolTests
         Assert.Equal("custom result", result);
     }
 
-    [Fact]
-    public void AddMockResult_ExistingQuery_UpdatesResult()
+    [Fact(Timeout = 60000)]
+    public async Task AddMockResult_ExistingQuery_UpdatesResult()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -170,8 +171,8 @@ public class SearchToolTests
         Assert.Equal("Updated answer: Paris is the capital", result);
     }
 
-    [Fact]
-    public void RemoveMockResult_ExistingQuery_RemovesAndReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveMockResult_ExistingQuery_RemovesAndReturnsTrue()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -186,8 +187,8 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result);
     }
 
-    [Fact]
-    public void RemoveMockResult_NonExistingQuery_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task RemoveMockResult_NonExistingQuery_ReturnsFalse()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -199,8 +200,8 @@ public class SearchToolTests
         Assert.False(removed);
     }
 
-    [Fact]
-    public void ClearMockResults_RemovesAllResults()
+    [Fact(Timeout = 60000)]
+    public async Task ClearMockResults_RemovesAllResults()
     {
         // Arrange
         var searchTool = new SearchTool();
@@ -217,8 +218,8 @@ public class SearchToolTests
         Assert.Contains("no specific information available", result2);
     }
 
-    [Fact]
-    public void Execute_QueryWithExtraWhitespace_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_QueryWithExtraWhitespace_HandlesCorrectly()
     {
         // Arrange
         var searchTool = new SearchTool();

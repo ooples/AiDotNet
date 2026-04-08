@@ -12,6 +12,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Genetics
 {
@@ -228,8 +229,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             return new MockModel(paramCount);
         }
 
-        [Fact]
-        public void Constructor_WithGenes_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithGenes_InitializesCorrectly()
         {
             // Arrange
             var genes = new List<ModelParameterGene>
@@ -247,8 +248,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, individual.GetGenes().Count);
         }
 
-        [Fact]
-        public void Constructor_WithModel_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithModel_InitializesCorrectly()
         {
             // Arrange
             var model = new MockModel();
@@ -266,8 +267,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(2, individual.GetGenes().Count);
         }
 
-        [Fact]
-        public void Train_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task Train_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -285,8 +286,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.NotEqual(paramsBefore, paramsAfter); // Parameters should change after training
         }
 
-        [Fact]
-        public void GetModelMetadata_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task GetModelMetadata_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -304,8 +305,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(1, metadata.Complexity);
         }
 
-        [Fact]
-        public void GetActiveFeatureIndices_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task GetActiveFeatureIndices_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -320,8 +321,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(new[] { 0, 1, 2 }, indices);
         }
 
-        [Fact]
-        public void GetFeatureImportance_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task GetFeatureImportance_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -339,8 +340,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(0.2, importance["feature_2"]);
         }
 
-        [Fact]
-        public void SetActiveFeatureIndices_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task SetActiveFeatureIndices_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -352,8 +353,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             individual.SetActiveFeatureIndices(newIndices);
         }
 
-        [Fact]
-        public void IsFeatureUsed_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task IsFeatureUsed_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -371,8 +372,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.False(isUsed5);
         }
 
-        [Fact]
-        public void DeepCopy_CreatesIndependentCopy()
+        [Fact(Timeout = 60000)]
+        public async Task DeepCopy_CreatesIndependentCopy()
         {
             // Arrange
             var model = new MockModel();
@@ -405,8 +406,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.NotEqual(originalParams[0] + 100.0, copyParams[0], 5);
         }
 
-        [Fact]
-        public void Clone_CreatesIndependentCopy()
+        [Fact(Timeout = 60000)]
+        public async Task Clone_CreatesIndependentCopy()
         {
             // Arrange
             var model = new MockModel();
@@ -434,8 +435,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
-        public void SetParameters_UpdatesModelParameters()
+        [Fact(Timeout = 60000)]
+        public async Task SetParameters_UpdatesModelParameters()
         {
             // Arrange
             var model = new MockModel();
@@ -458,8 +459,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
-        public void ParameterCount_ReturnsCorrectCount()
+        [Fact(Timeout = 60000)]
+        public async Task ParameterCount_ReturnsCorrectCount()
         {
             // Arrange
             var model = new MockModel(5);
@@ -473,8 +474,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(5, count);
         }
 
-        [Fact]
-        public void ParameterCount_IsCached()
+        [Fact(Timeout = 60000)]
+        public async Task ParameterCount_IsCached()
         {
             // Arrange
             var model = new MockModel(5);
@@ -490,8 +491,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(5, count1);
         }
 
-        [Fact]
-        public void SetParameters_InvalidatesParameterCountCache()
+        [Fact(Timeout = 60000)]
+        public async Task SetParameters_InvalidatesParameterCountCache()
         {
             // Arrange
             var model = new MockModel(5);
@@ -513,8 +514,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, newCount);
         }
 
-        [Fact]
-        public void Predict_DelegatesToInnerModel()
+        [Fact(Timeout = 60000)]
+        public async Task Predict_DelegatesToInnerModel()
         {
             // Arrange
             var model = new MockModel();
@@ -531,8 +532,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(12.0, output[0]); // Sum is 6.0, multiplied by 2.0
         }
 
-        [Fact]
-        public void SaveAndLoadModel_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SaveAndLoadModel_WorksCorrectly()
         {
             // Arrange
             var model = new MockModel();
@@ -565,8 +566,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
-        public void SaveModel_ThrowsOnNullPath()
+        [Fact(Timeout = 60000)]
+        public async Task SaveModel_ThrowsOnNullPath()
         {
             // Arrange
             var model = new MockModel();
@@ -579,8 +580,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<ArgumentException>(() => individual.SaveModel("   "));
         }
 
-        [Fact]
-        public void LoadModel_ThrowsOnNullPath()
+        [Fact(Timeout = 60000)]
+        public async Task LoadModel_ThrowsOnNullPath()
         {
             // Arrange
             var model = new MockModel();
@@ -593,8 +594,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<ArgumentException>(() => individual.LoadModel("   "));
         }
 
-        [Fact]
-        public void LoadModel_ThrowsOnNonExistentFile()
+        [Fact(Timeout = 60000)]
+        public async Task LoadModel_ThrowsOnNonExistentFile()
         {
             // Arrange
             var model = new MockModel();
@@ -606,8 +607,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<FileNotFoundException>(() => individual.LoadModel(nonExistentFile));
         }
 
-        [Fact]
-        public void GetGenes_ReturnsGeneCollection()
+        [Fact(Timeout = 60000)]
+        public async Task GetGenes_ReturnsGeneCollection()
         {
             // Arrange
             var genes = new List<ModelParameterGene>
@@ -626,8 +627,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, retrievedGenes.Count);
         }
 
-        [Fact]
-        public void SetGenes_UpdatesGenesAndModel()
+        [Fact(Timeout = 60000)]
+        public async Task SetGenes_UpdatesGenesAndModel()
         {
             // Arrange
             var initialGenes = new List<ModelParameterGene>
@@ -652,8 +653,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, retrievedGenes.Count);
         }
 
-        [Fact]
-        public void Fitness_CanBeSetAndRetrieved()
+        [Fact(Timeout = 60000)]
+        public async Task Fitness_CanBeSetAndRetrieved()
         {
             // Arrange
             var genes = new List<ModelParameterGene> { new ModelParameterGene(0.1) };
@@ -667,8 +668,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(0.85, fitness);
         }
 
-        [Fact]
-        public void EvolvableClone_CreatesIndependentClone()
+        [Fact(Timeout = 60000)]
+        public async Task EvolvableClone_CreatesIndependentClone()
         {
             // Arrange
             var genes = new List<ModelParameterGene>

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
@@ -15,8 +16,8 @@ public class MultiInputPortTests
 
     #region CrossAttentionLayer - Port Declaration
 
-    [Fact]
-    public void CrossAttention_InputPorts_DeclaresQueryAndContext()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_InputPorts_DeclaresQueryAndContext()
     {
         var layer = new CrossAttentionLayer<double>(queryDim: 8, contextDim: 16, headCount: 2);
 
@@ -27,8 +28,8 @@ public class MultiInputPortTests
         Assert.False(layer.InputPorts[1].Required);
     }
 
-    [Fact]
-    public void CrossAttention_OutputPorts_DefaultsSingleOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_OutputPorts_DefaultsSingleOutput()
     {
         var layer = new CrossAttentionLayer<double>(queryDim: 8, contextDim: 16, headCount: 2);
 
@@ -40,8 +41,8 @@ public class MultiInputPortTests
 
     #region CrossAttentionLayer - Named Forward
 
-    [Fact]
-    public void CrossAttention_NamedForward_QueryAndContext_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_NamedForward_QueryAndContext_ProducesOutput()
     {
         int queryDim = 8, contextDim = 16, headCount = 2, seqLen = 4;
         var layer = new CrossAttentionLayer<double>(queryDim, contextDim, headCount, seqLen);
@@ -62,8 +63,8 @@ public class MultiInputPortTests
         Assert.Equal(queryDim, output.Shape[^1]); // output dim matches query dim
     }
 
-    [Fact]
-    public void CrossAttention_NamedForward_QueryOnly_FallsBackToSelfAttention()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_NamedForward_QueryOnly_FallsBackToSelfAttention()
     {
         int dim = 8, headCount = 2, seqLen = 4;
         var layer = new CrossAttentionLayer<double>(dim, dim, headCount, seqLen);
@@ -81,8 +82,8 @@ public class MultiInputPortTests
         Assert.Equal(dim, output.Shape[^1]);
     }
 
-    [Fact]
-    public void CrossAttention_NamedForward_MissingQuery_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_NamedForward_MissingQuery_Throws()
     {
         int dim = 8, headCount = 2;
         var layer = new CrossAttentionLayer<double>(dim, 16, headCount);
@@ -97,8 +98,8 @@ public class MultiInputPortTests
         Assert.Throws<ArgumentException>(() => layer.Forward(inputs));
     }
 
-    [Fact]
-    public void CrossAttention_NamedForward_MatchesPositionalForward()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_NamedForward_MatchesPositionalForward()
     {
         int queryDim = 8, contextDim = 16, headCount = 2, seqLen = 4;
         var layer = new CrossAttentionLayer<double>(queryDim, contextDim, headCount, seqLen);
@@ -128,8 +129,8 @@ public class MultiInputPortTests
 
     #region Single-Input Layer - Backward Compatibility
 
-    [Fact]
-    public void SingleInputLayer_NamedForward_WithInputKey_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SingleInputLayer_NamedForward_WithInputKey_Works()
     {
         var layer = new DenseLayer<double>(4, 8);
 
@@ -145,8 +146,8 @@ public class MultiInputPortTests
         Assert.Equal(8, output.Shape[^1]);
     }
 
-    [Fact]
-    public void SingleInputLayer_InputPorts_DefaultsSingleInput()
+    [Fact(Timeout = 120000)]
+    public async Task SingleInputLayer_InputPorts_DefaultsSingleInput()
     {
         var layer = new DenseLayer<double>(4, 8);
 
@@ -159,8 +160,8 @@ public class MultiInputPortTests
 
     #region MultiHeadAttentionLayer - Named Ports
 
-    [Fact]
-    public void MultiHeadAttention_InputPorts_DeclaresQueryKeyValue()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttention_InputPorts_DeclaresQueryKeyValue()
     {
         var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
 
@@ -173,8 +174,8 @@ public class MultiInputPortTests
         Assert.False(layer.InputPorts[2].Required);
     }
 
-    [Fact]
-    public void MultiHeadAttention_NamedForward_QueryOnly_SelfAttention()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttention_NamedForward_QueryOnly_SelfAttention()
     {
         var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
@@ -185,8 +186,8 @@ public class MultiInputPortTests
         Assert.Equal(8, output.Shape[^1]);
     }
 
-    [Fact]
-    public void MultiHeadAttention_NamedForward_QueryKeyValue_CrossAttention()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttention_NamedForward_QueryKeyValue_CrossAttention()
     {
         var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
@@ -206,8 +207,8 @@ public class MultiInputPortTests
 
     #region DecoderLayer - Named Ports
 
-    [Fact]
-    public void DecoderLayer_InputPorts_DeclaresDecoderEncoderMask()
+    [Fact(Timeout = 120000)]
+    public async Task DecoderLayer_InputPorts_DeclaresDecoderEncoderMask()
     {
         var layer = new DecoderLayer<double>(inputSize: 8, attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
 
@@ -224,8 +225,8 @@ public class MultiInputPortTests
 
     #region AddLayer / MultiplyLayer / ConcatenateLayer - Named Ports
 
-    [Fact]
-    public void AddLayer_NamedForward_TwoInputs_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_NamedForward_TwoInputs_ProducesOutput()
     {
         var layer = new AddLayer<double>(new[] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         var a = Tensor<double>.CreateRandom([1, 4]);
@@ -240,8 +241,8 @@ public class MultiInputPortTests
         Assert.Equal(4, output.Shape[^1]);
     }
 
-    [Fact]
-    public void AddLayer_NamedForward_MissingInput1_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_NamedForward_MissingInput1_Throws()
     {
         var layer = new AddLayer<double>(new[] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         var a = Tensor<double>.CreateRandom([1, 4]);
@@ -250,8 +251,8 @@ public class MultiInputPortTests
             layer.Forward(new Dictionary<string, Tensor<double>> { ["input_0"] = a }));
     }
 
-    [Fact]
-    public void MultiplyLayer_NamedForward_TwoInputs_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_NamedForward_TwoInputs_ProducesOutput()
     {
         var layer = new MultiplyLayer<double>(new[] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         var a = Tensor<double>.CreateRandom([1, 4]);
@@ -266,8 +267,8 @@ public class MultiInputPortTests
         Assert.Equal(4, output.Shape[^1]);
     }
 
-    [Fact]
-    public void ConcatenateLayer_InputPorts_DeclaresMultipleInputs()
+    [Fact(Timeout = 120000)]
+    public async Task ConcatenateLayer_InputPorts_DeclaresMultipleInputs()
     {
         // axis=0 concat: two [4]-shaped inputs → [8] output
         var layer = new ConcatenateLayer<double>(new[] { new[] { 4 }, new[] { 4 } }, axis: 0, activationFunction: (IActivationFunction<double>?)null);

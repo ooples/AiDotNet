@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.CodeTokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -30,8 +31,8 @@ public class CodeTokenizerTests
         _codeTokenizer = new CodeTokenizer(_baseTokenizer, ProgrammingLanguage.Python, splitIdentifiers: true);
     }
 
-    [Fact]
-    public void Constructor_WithValidBaseTokenizer_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidBaseTokenizer_Succeeds()
     {
         // Arrange & Act
         var tokenizer = new CodeTokenizer(_baseTokenizer);
@@ -40,8 +41,8 @@ public class CodeTokenizerTests
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
-    public void Tokenize_PythonCode_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_PythonCode_ReturnsTokens()
     {
         // Arrange
         var code = "def test():\n    return 1";
@@ -53,8 +54,8 @@ public class CodeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_EmptyCode_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_EmptyCode_ReturnsEmpty()
     {
         // Act
         var tokens = _codeTokenizer.Tokenize("");
@@ -63,8 +64,8 @@ public class CodeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_CamelCaseIdentifier_SplitsIdentifier()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_CamelCaseIdentifier_SplitsIdentifier()
     {
         // Arrange
         var code = "calculateTotalSum";
@@ -77,8 +78,8 @@ public class CodeTokenizerTests
         // Should split camelCase identifier
     }
 
-    [Fact]
-    public void Tokenize_SnakeCaseIdentifier_SplitsIdentifier()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_SnakeCaseIdentifier_SplitsIdentifier()
     {
         // Arrange
         var code = "calculate_total_sum";
@@ -91,8 +92,8 @@ public class CodeTokenizerTests
         // Should split snake_case identifier
     }
 
-    [Fact]
-    public void Tokenize_Keywords_PreservesKeywords()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_Keywords_PreservesKeywords()
     {
         // Arrange
         var code = "def class return if else";
@@ -106,8 +107,8 @@ public class CodeTokenizerTests
         Assert.Contains("class", tokens);
     }
 
-    [Fact]
-    public void Encode_ReturnsValidTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsValidTokenIds()
     {
         // Arrange
         var code = "def hello(): pass";
@@ -120,8 +121,8 @@ public class CodeTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void Decode_ReconstructsCode()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_ReconstructsCode()
     {
         // Arrange
         var code = "def test";
@@ -134,8 +135,8 @@ public class CodeTokenizerTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
-    public void Tokenize_WithCSharpLanguage_UsesCorrectKeywords()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_WithCSharpLanguage_UsesCorrectKeywords()
     {
         // Arrange
         var csharpTokenizer = new CodeTokenizer(_baseTokenizer, ProgrammingLanguage.CSharp);
@@ -150,8 +151,8 @@ public class CodeTokenizerTests
         Assert.Contains("class", tokens);
     }
 
-    [Fact]
-    public void Tokenize_WithJavaScriptLanguage_UsesCorrectKeywords()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_WithJavaScriptLanguage_UsesCorrectKeywords()
     {
         // Arrange
         var jsTokenizer = new CodeTokenizer(_baseTokenizer, ProgrammingLanguage.JavaScript);
@@ -166,8 +167,8 @@ public class CodeTokenizerTests
         Assert.Contains("return", tokens);
     }
 
-    [Fact]
-    public void Tokenize_StringLiteral_PreservesString()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_StringLiteral_PreservesString()
     {
         // Arrange
         var code = "\"Hello World\"";
@@ -179,8 +180,8 @@ public class CodeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_Numbers_PreservesNumbers()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_Numbers_PreservesNumbers()
     {
         // Arrange
         var code = "x = 123";

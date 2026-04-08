@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -10,8 +11,8 @@ public class RegressionHelperIntegrationTests
 {
     #region CenterAndScale Tests - Basic Functionality
 
-    [Fact]
-    public void CenterAndScale_SimpleData_ReturnsCorrectMeans()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SimpleData_ReturnsCorrectMeans()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -28,8 +29,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(20.0, xMean[1]);
     }
 
-    [Fact]
-    public void CenterAndScale_SimpleData_ReturnsCorrectStandardDeviations()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SimpleData_ReturnsCorrectStandardDeviations()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -47,8 +48,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(100.0, yStd, 5);
     }
 
-    [Fact]
-    public void CenterAndScale_SimpleData_XScaledHasZeroMean()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SimpleData_XScaledHasZeroMean()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -68,8 +69,8 @@ public class RegressionHelperIntegrationTests
         Assert.True(Math.Abs(col1Mean) < 1e-10, $"Column 1 mean should be 0, got {col1Mean}");
     }
 
-    [Fact]
-    public void CenterAndScale_SimpleData_YScaledHasZeroMean()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SimpleData_YScaledHasZeroMean()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -85,8 +86,8 @@ public class RegressionHelperIntegrationTests
         Assert.True(Math.Abs(yScaledMean) < 1e-10, $"yScaled mean should be 0, got {yScaledMean}");
     }
 
-    [Fact]
-    public void CenterAndScale_SimpleData_XScaledHasUnitVariance()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SimpleData_XScaledHasUnitVariance()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -113,8 +114,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Shape Preservation
 
-    [Fact]
-    public void CenterAndScale_PreservesMatrixShape()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_PreservesMatrixShape()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -133,8 +134,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(x.Columns, xStd.Length);
     }
 
-    [Fact]
-    public void CenterAndScale_SingleRow_ReturnsNaN()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SingleRow_ReturnsNaN()
     {
         // With a single row, standard deviation is 0, causing division by zero
         var x = new Matrix<double>(new double[,]
@@ -156,8 +157,8 @@ public class RegressionHelperIntegrationTests
         Assert.True(double.IsNaN(xScaled[0, 2]));
     }
 
-    [Fact]
-    public void CenterAndScale_SingleColumn_Works()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SingleColumn_Works()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -178,8 +179,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Float Type
 
-    [Fact]
-    public void CenterAndScale_Float_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_Float_ReturnsCorrectValues()
     {
         var x = new Matrix<float>(new float[,]
         {
@@ -201,8 +202,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Different Data Distributions
 
-    [Fact]
-    public void CenterAndScale_NegativeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_NegativeValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -223,8 +224,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
-    public void CenterAndScale_LargeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_LargeValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -245,8 +246,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
-    public void CenterAndScale_SmallValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_SmallValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
         {
@@ -267,8 +268,8 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
-    public void CenterAndScale_MixedScaleFeatures_NormalizesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_MixedScaleFeatures_NormalizesCorrectly()
     {
         // Features with vastly different scales
         var x = new Matrix<double>(new double[,]
@@ -297,8 +298,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Known Values
 
-    [Fact]
-    public void CenterAndScale_KnownValues_VerifyCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_KnownValues_VerifyCalculation()
     {
         // Use simple values for easy manual verification
         var x = new Matrix<double>(new double[,]
@@ -329,8 +330,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Large Dataset
 
-    [Fact]
-    public void CenterAndScale_LargeDataset_PerformsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_LargeDataset_PerformsCorrectly()
     {
         int rows = 1000;
         int cols = 50;
@@ -374,8 +375,8 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Reversibility
 
-    [Fact]
-    public void CenterAndScale_CanBeReversed()
+    [Fact(Timeout = 120000)]
+    public async Task CenterAndScale_CanBeReversed()
     {
         var x = new Matrix<double>(new double[,]
         {

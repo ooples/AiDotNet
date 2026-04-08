@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -32,8 +33,8 @@ public abstract class ContinualLearningTestBase
     // EWC: L = λ/2 * Σ F_i (θ_i - θ*_i)² >= 0 since F_i >= 0 and squared terms >= 0
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IsNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsNonNegative()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -53,8 +54,8 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 2: Regularization loss is finite
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IsFinite()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsFinite()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -75,8 +76,8 @@ public abstract class ContinualLearningTestBase
     // This is a fundamental property of quadratic regularization.
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IncreasesWithParameterDeviation()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IncreasesWithParameterDeviation()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -112,8 +113,8 @@ public abstract class ContinualLearningTestBase
     // L(λ) = λ * g(θ), so L(2λ) ≈ 2 * L(λ) for the same parameters.
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_ScalesWithLambda()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_ScalesWithLambda()
     {
         var strategy1 = CreateStrategy();
         var strategy2 = CreateStrategy();
@@ -156,8 +157,8 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 5: Modified gradients have same length as input
     // =========================================================================
 
-    [Fact]
-    public void ModifyGradients_PreservesLength()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_PreservesLength()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -179,8 +180,8 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 6: Modified gradients are finite
     // =========================================================================
 
-    [Fact]
-    public void ModifyGradients_AreFinite()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_AreFinite()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -207,8 +208,8 @@ public abstract class ContinualLearningTestBase
     // Gradient projection should not increase the gradient magnitude.
     // =========================================================================
 
-    [Fact]
-    public void ModifyGradients_DoesNotIncreaseNorm()
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_DoesNotIncreaseNorm()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
@@ -246,8 +247,8 @@ public abstract class ContinualLearningTestBase
     // VCL just shifts the prior to the last posterior — loss may decrease.
     // =========================================================================
 
-    [Fact]
-    public void ComputeLoss_IncreasesWithMoreTasks()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IncreasesWithMoreTasks()
     {
         var strategy = CreateStrategy();
 
@@ -291,8 +292,8 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 9: Lambda is non-negative
     // =========================================================================
 
-    [Fact]
-    public void Lambda_IsNonNegative()
+    [Fact(Timeout = 60000)]
+    public async Task Lambda_IsNonNegative()
     {
         var strategy = CreateStrategy();
         Assert.True(strategy.Lambda >= 0,
@@ -303,8 +304,8 @@ public abstract class ContinualLearningTestBase
     // INVARIANT 10: Reset clears state without errors
     // =========================================================================
 
-    [Fact]
-    public void Reset_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DoesNotThrow()
     {
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();

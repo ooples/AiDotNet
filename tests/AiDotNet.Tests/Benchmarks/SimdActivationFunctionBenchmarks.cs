@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.NumericOperations;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Benchmarks;
 
@@ -23,8 +24,8 @@ public class SimdActivationFunctionBenchmarks
 
     #region Correctness Tests
 
-    [Fact]
-    public void ReLU_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ReLU_Float_ProducesCorrectOutput()
     {
         // Arrange
         var input = new float[] { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, -0.5f, 0.5f };
@@ -41,8 +42,8 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact]
-    public void ReLU_Double_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ReLU_Double_ProducesCorrectOutput()
     {
         // Arrange
         var input = new double[] { -2.0, -1.0, 0.0, 1.0, 2.0, -0.5, 0.5 };
@@ -59,8 +60,8 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact]
-    public void LeakyReLU_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task LeakyReLU_Float_ProducesCorrectOutput()
     {
         // Arrange
         float alpha = 0.01f;
@@ -78,8 +79,8 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact]
-    public void LeakyReLU_Double_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task LeakyReLU_Double_ProducesCorrectOutput()
     {
         // Arrange
         double alpha = 0.01;
@@ -97,8 +98,8 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact]
-    public void ELU_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task ELU_Float_ProducesCorrectOutput()
     {
         // Arrange
         float alpha = 1.0f;
@@ -117,8 +118,8 @@ public class SimdActivationFunctionBenchmarks
         Assert.Equal(2.0f, output[4], precision: 5); // ELU(2) = 2
     }
 
-    [Fact]
-    public void GELU_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task GELU_Float_ProducesCorrectOutput()
     {
         // Arrange
         var input = new float[] { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f };
@@ -137,8 +138,8 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(output[4] > 1.5f);
     }
 
-    [Fact]
-    public void Swish_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task Swish_Float_ProducesCorrectOutput()
     {
         // Arrange
         var input = new float[] { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f };
@@ -155,8 +156,8 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(output[4] > 0);
     }
 
-    [Fact]
-    public void Mish_Float_ProducesCorrectOutput()
+    [Fact(Timeout = 60000)]
+    public async Task Mish_Float_ProducesCorrectOutput()
     {
         // Arrange
         var input = new float[] { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f };
@@ -287,8 +288,8 @@ public class SimdActivationFunctionBenchmarks
 
     #region Performance Sanity Checks
 
-    [Fact]
-    public void ReLU_Float_PerformanceSanityCheck()
+    [Fact(Timeout = 60000)]
+    public async Task ReLU_Float_PerformanceSanityCheck()
     {
         // This test ensures the SIMD implementation completes in reasonable time
         // Arrange
@@ -315,8 +316,8 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(avgMs < 10, $"ReLU took {avgMs}ms per iteration, expected < 10ms for {LargeSize} elements");
     }
 
-    [Fact]
-    public void GELU_Float_PerformanceSanityCheck()
+    [Fact(Timeout = 60000)]
+    public async Task GELU_Float_PerformanceSanityCheck()
     {
         // Arrange
         var random = RandomHelper.CreateSeededRandom(42);
@@ -342,8 +343,8 @@ public class SimdActivationFunctionBenchmarks
         Assert.True(avgMs < 50, $"GELU took {avgMs}ms per iteration, expected < 50ms for {LargeSize} elements");
     }
 
-    [Fact]
-    public void AllActivations_Float_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task AllActivations_Float_CompletesWithoutError()
     {
         // This test ensures all activation functions work on various sizes
         var random = RandomHelper.CreateSeededRandom(42);
@@ -369,8 +370,8 @@ public class SimdActivationFunctionBenchmarks
 
     #region Double Precision Tests
 
-    [Fact]
-    public void AllActivations_Double_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task AllActivations_Double_CompletesWithoutError()
     {
         // This test ensures all activation functions work on various sizes for double
         var random = RandomHelper.CreateSeededRandom(42);
@@ -392,8 +393,8 @@ public class SimdActivationFunctionBenchmarks
         }
     }
 
-    [Fact]
-    public void ReLU_Double_PerformanceSanityCheck()
+    [Fact(Timeout = 60000)]
+    public async Task ReLU_Double_PerformanceSanityCheck()
     {
         // Arrange
         var random = RandomHelper.CreateSeededRandom(42);

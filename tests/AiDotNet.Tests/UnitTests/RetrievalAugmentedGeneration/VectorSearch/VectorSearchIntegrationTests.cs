@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 {
@@ -12,8 +13,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
     {
         #region End-to-End Search Pipeline Tests
 
-        [Fact]
-        public void EndToEnd_SearchPipeline_WithFlatIndex_ReturnsAccurateResults()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_SearchPipeline_WithFlatIndex_ReturnsAccurateResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -38,8 +39,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             }
         }
 
-        [Fact]
-        public void EndToEnd_SearchPipeline_WithIVFIndex_ReturnsReasonableResults()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_SearchPipeline_WithIVFIndex_ReturnsReasonableResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.True(results.Count <= 10);
         }
 
-        [Fact]
-        public void EndToEnd_SearchPipeline_WithHNSWIndex_ReturnsReasonableResults()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_SearchPipeline_WithHNSWIndex_ReturnsReasonableResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -79,8 +80,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(10, results.Count);
         }
 
-        [Fact]
-        public void EndToEnd_SearchPipeline_WithLSHIndex_ReturnsReasonableResults()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_SearchPipeline_WithLSHIndex_ReturnsReasonableResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -103,8 +104,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Multi-Vector Search Tests
 
-        [Fact]
-        public void MultiVectorSearch_WithDifferentMetrics_ProducesDifferentResults()
+        [Fact(Timeout = 120000)]
+        public async Task MultiVectorSearch_WithDifferentMetrics_ProducesDifferentResults()
         {
             // Arrange
             var cosineMetric = new CosineSimilarityMetric<double>();
@@ -130,8 +131,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             // (though some results may overlap)
         }
 
-        [Fact]
-        public void MultiVectorSearch_WithMultipleQueries_HandlesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task MultiVectorSearch_WithMultipleQueries_HandlesCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -153,8 +154,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Filtered Search Tests
 
-        [Fact]
-        public void FilteredSearch_ByRemovingVectors_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task FilteredSearch_ByRemovingVectors_WorksCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -185,8 +186,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Recall and Accuracy Tests
 
-        [Fact]
-        public void Recall_FlatIndexVsApproximateIndexes_FlatHasPerfectRecall()
+        [Fact(Timeout = 120000)]
+        public async Task Recall_FlatIndexVsApproximateIndexes_FlatHasPerfectRecall()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -216,8 +217,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.True(overlap > 0);
         }
 
-        [Fact]
-        public void Recall_IncreasingProbes_ImprovesRecall()
+        [Fact(Timeout = 120000)]
+        public async Task Recall_IncreasingProbes_ImprovesRecall()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -251,8 +252,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Performance and Scale Tests
 
-        [Fact]
-        public void LargeScale_SearchWithThousandsOfVectors_CompletesSuccessfully()
+        [Fact(Timeout = 120000)]
+        public async Task LargeScale_SearchWithThousandsOfVectors_CompletesSuccessfully()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -272,8 +273,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(1000, index.Count);
         }
 
-        [Fact]
-        public void HighDimensional_SearchWith512Dimensions_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task HighDimensional_SearchWith512Dimensions_WorksCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -306,8 +307,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Edge Cases and Robustness Tests
 
-        [Fact]
-        public void RobustnessTest_AddRemoveAddCycle_MaintainsConsistency()
+        [Fact(Timeout = 120000)]
+        public async Task RobustnessTest_AddRemoveAddCycle_MaintainsConsistency()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(10, results.Count);
         }
 
-        [Fact]
-        public void NumericalStability_WithVerySmallVectors_WorksCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task NumericalStability_WithVerySmallVectors_WorksCorrectly()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
@@ -360,8 +361,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void ComparisonTest_AllIndexTypes_ReturnValidResults()
+        [Fact(Timeout = 120000)]
+        public async Task ComparisonTest_AllIndexTypes_ReturnValidResults()
         {
             // Arrange
             var metric = new CosineSimilarityMetric<double>();

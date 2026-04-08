@@ -2,6 +2,7 @@ using AiDotNet.PointCloud.Data;
 using AiDotNet.PointCloud.Models;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PointCloud;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.PointCloud;
 /// </summary>
 public class PointNetTests
 {
-    [Fact]
-    public void PointNet_Construction_CreatesModel()
+    [Fact(Timeout = 60000)]
+    public async Task PointNet_Construction_CreatesModel()
     {
         // Arrange & Act
         var pointNet = new PointNet<double>(numClasses: 10);
@@ -20,8 +21,8 @@ public class PointNetTests
         Assert.NotNull(pointNet);
     }
 
-    [Fact]
-    public void PointNet_ExtractGlobalFeatures_ReturnsFeatureVector()
+    [Fact(Timeout = 60000)]
+    public async Task PointNet_ExtractGlobalFeatures_ReturnsFeatureVector()
     {
         // Arrange
         var pointNet = new PointNet<double>(numClasses: 10);
@@ -35,8 +36,8 @@ public class PointNetTests
         Assert.True(features.Length > 0);
     }
 
-    [Fact]
-    public void PointNet_ClassifyPointCloud_ReturnsClassProbabilities()
+    [Fact(Timeout = 60000)]
+    public async Task PointNet_ClassifyPointCloud_ReturnsClassProbabilities()
     {
         // Arrange
         var pointNet = new PointNet<double>(numClasses: 10);
@@ -50,8 +51,8 @@ public class PointNetTests
         Assert.Equal(10, probabilities.Length);
     }
 
-    [Fact]
-    public void PointCloudData_FromCoordinates_CreatesPointCloud()
+    [Fact(Timeout = 60000)]
+    public async Task PointCloudData_FromCoordinates_CreatesPointCloud()
     {
         // Arrange
         var coordinates = new Matrix<double>(10, 3);
@@ -71,8 +72,8 @@ public class PointNetTests
         Assert.Equal(3, pointCloudData.NumFeatures);
     }
 
-    [Fact]
-    public void PointCloudData_GetCoordinates_ExtractsPositions()
+    [Fact(Timeout = 60000)]
+    public async Task PointCloudData_GetCoordinates_ExtractsPositions()
     {
         // Arrange
         var data = new double[10 * 6];  // 10 points with XYZ + RGB
@@ -97,8 +98,8 @@ public class PointNetTests
         Assert.Equal(3, coordinates.Shape[1]);
     }
 
-    [Fact]
-    public void PointCloudData_GetFeatures_ExtractsAdditionalFeatures()
+    [Fact(Timeout = 60000)]
+    public async Task PointCloudData_GetFeatures_ExtractsAdditionalFeatures()
     {
         // Arrange
         var data = new double[10 * 6];  // 10 points with XYZ + RGB

@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Statistical;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -26,8 +27,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region ZScoreDetector Tests
 
-    [Fact]
-    public void ZScore_HandCalculated_SymmetricData_ScoresMatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_HandCalculated_SymmetricData_ScoresMatchFormula()
     {
         // Data: [1, 3, 5, 7, 9] symmetric around 5
         // mean = 25/5 = 5.0
@@ -48,8 +49,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(4.0 / std, scores[4], Tolerance);  // |9-5|/sqrt(8)
     }
 
-    [Fact]
-    public void ZScore_UsesPopulationStd_NotSampleStd()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_UsesPopulationStd_NotSampleStd()
     {
         // Data: [2, 4, 6]
         // mean = 4, pop_var = (4+16+36)/3 - 16 = 8/3, pop_std = sqrt(8/3)
@@ -68,8 +69,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(2.0 / popStd, scores[2], Tolerance);
     }
 
-    [Fact]
-    public void ZScore_FittedStatistics_MatchExpected()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_FittedStatistics_MatchExpected()
     {
         var data = ToMatrix1D([10, 20, 30, 40, 50]);
         var detector = new ZScoreDetector<double>(contamination: 0.3);
@@ -82,8 +83,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(200.0), detector.StandardDeviations![0], Tolerance);
     }
 
-    [Fact]
-    public void ZScore_ConstantFeature_SkippedInScoring()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_ConstantFeature_SkippedInScoring()
     {
         var data = ToMatrix(new double[,]
         {
@@ -104,8 +105,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, scores[2], Tolerance);
     }
 
-    [Fact]
-    public void ZScore_MultiFeature_UsesMaxAbsZAcrossFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_MultiFeature_UsesMaxAbsZAcrossFeatures()
     {
         // Feature 1: constant (skipped), Feature 2: [0,0,0,0,100]
         // Feature 2: mean=20, pop_var=(0+0+0+0+10000)/5-400=1600, std=40
@@ -127,8 +128,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(2.0, scores[4], Tolerance);
     }
 
-    [Fact]
-    public void ZScore_Predict_UsesZThreshold_NotContamination()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_Predict_UsesZThreshold_NotContamination()
     {
         // Data: [0,0,0,0,0,0,0,0,0,100]
         // mean=10, pop_var=(10000)/10-100=900, std=30
@@ -145,8 +146,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(1.0, predictions[0], Tolerance);
     }
 
-    [Fact]
-    public void ZScore_SymmetricScores_ForSymmetricData()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_SymmetricScores_ForSymmetricData()
     {
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
         var detector = new ZScoreDetector<double>(contamination: 0.3);
@@ -163,8 +164,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region MADDetector Tests
 
-    [Fact]
-    public void MAD_HandCalculated_EvenN_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_HandCalculated_EvenN_MatchesFormula()
     {
         // Data: [1..10], Median=(5+6)/2=5.5
         // |x-5.5|: [4.5,3.5,2.5,1.5,0.5,0.5,1.5,2.5,3.5,4.5]
@@ -182,8 +183,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(4.5 / scaledMAD, scores[9], Tolerance);
     }
 
-    [Fact]
-    public void MAD_HandCalculated_OddN_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_HandCalculated_OddN_MatchesFormula()
     {
         // Data: [1,3,5,7,9], Median=5
         // |x-5|: [4,2,0,2,4], sorted: [0,2,2,4,4], rawMAD=2
@@ -202,8 +203,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(4.0 / scaledMAD, scores[4], Tolerance);
     }
 
-    [Fact]
-    public void MAD_CustomScaleFactor_UsedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_CustomScaleFactor_UsedCorrectly()
     {
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
         var detector = new MADDetector<double>(madThreshold: 3.5, scaleFactor: 1.0, contamination: 0.3);
@@ -216,8 +217,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, scores[2], Tolerance);
     }
 
-    [Fact]
-    public void MAD_ConstantData_ScoresZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_ConstantData_ScoresZero()
     {
         // All values=5 → MAD=0 clamped to 1e-10, but deviation=0 so score=0
         var data = ToMatrix1D([5, 5, 5, 5, 5]);
@@ -229,8 +230,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(0.0, scores[i], Tolerance);
     }
 
-    [Fact]
-    public void MAD_RobustToOutliers_MedianAndMADUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_RobustToOutliers_MedianAndMADUnchanged()
     {
         // Clean: [1..9], Median=5, rawMAD=2
         var dataClean = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -249,8 +250,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(scoresClean[i], scoresOutlier[i], Tolerance);
     }
 
-    [Fact]
-    public void MAD_SymmetricScores_ForSymmetricData()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_SymmetricScores_ForSymmetricData()
     {
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
         var detector = new MADDetector<double>(contamination: 0.3);
@@ -265,8 +266,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region ModifiedZScoreDetector Tests
 
-    [Fact]
-    public void ModifiedZScore_HandCalculated_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_HandCalculated_MatchesFormula()
     {
         // Data: [1,3,5,7,9], Median=5, rawMAD=2
         // ModifiedZ(x) = 0.6745 * |x-5| / 2
@@ -285,8 +286,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(k * 4.0 / rawMAD, scores[4], Tolerance);
     }
 
-    [Fact]
-    public void ModifiedZScore_FittedStatistics_MatchExpected()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_FittedStatistics_MatchExpected()
     {
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
         var detector = new ModifiedZScoreDetector<double>(contamination: 0.3);
@@ -296,8 +297,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(2.0, detector.MADs![0], Tolerance);
     }
 
-    [Fact]
-    public void ModifiedZScore_ConstantFeature_Skipped()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_ConstantFeature_Skipped()
     {
         var data = ToMatrix(new double[,]
         {
@@ -318,8 +319,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(0.0, scores[2], Tolerance);
     }
 
-    [Fact]
-    public void ModifiedZScore_Predict_UsesModifiedZThreshold()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedZScore_Predict_UsesModifiedZThreshold()
     {
         // Data: [1..9, 100], Median=5.5, rawMAD=2.5
         // ModifiedZ(100) = 0.6745*94.5/2.5 = 25.496 >> 3.5
@@ -338,8 +339,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region IQRDetector Tests
 
-    [Fact]
-    public void IQR_HandCalculated_QuartilesAndBounds_MatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_HandCalculated_QuartilesAndBounds_MatchFormula()
     {
         // Data: [2,4,6,8,10,12,14,16,50] (sorted, n=9)
         // Q1: pos=(9-1)*0.25=2.0 → index=2, frac=0 → Q1=6
@@ -356,8 +357,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(26.0, detector.UpperBounds![0], Tolerance);
     }
 
-    [Fact]
-    public void IQR_PointsWithinBounds_ScoreIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_PointsWithinBounds_ScoreIsZero()
     {
         var data = ToMatrix1D([2, 4, 6, 8, 10, 12, 14, 16, 50]);
         var detector = new IQRDetector<double>(multiplier: 1.5, contamination: 0.2);
@@ -370,8 +371,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(0.0, scores[i], Tolerance);
     }
 
-    [Fact]
-    public void IQR_OutlierScore_MatchesNormalizedDeviation()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_OutlierScore_MatchesNormalizedDeviation()
     {
         var data = ToMatrix1D([2, 4, 6, 8, 10, 12, 14, 16, 50]);
         var detector = new IQRDetector<double>(multiplier: 1.5, contamination: 0.2);
@@ -383,8 +384,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(3.0, scores[8], Tolerance);
     }
 
-    [Fact]
-    public void IQR_QuartileInterpolation_FractionalPosition()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_QuartileInterpolation_FractionalPosition()
     {
         // Data: [1,2,3,4,5,6,7,8] (n=8)
         // Q1: pos=(8-1)*0.25=1.75 → sorted[1]*0.25+sorted[2]*0.75 = 2*0.25+3*0.75 = 2.75
@@ -399,8 +400,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(3.5, detector.IQR![0], Tolerance);
     }
 
-    [Fact]
-    public void IQR_Multiplier3_WiderBounds()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_Multiplier3_WiderBounds()
     {
         // Same data, k=3: LB=6-3*8=-18, UB=14+3*8=38
         // score(50) = (50-38)/8 = 1.5
@@ -415,8 +416,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(1.5, scores[8], Tolerance);
     }
 
-    [Fact]
-    public void IQR_ConstantFeature_Skipped()
+    [Fact(Timeout = 120000)]
+    public async Task IQR_ConstantFeature_Skipped()
     {
         var data = ToMatrix(new double[,]
         {
@@ -439,8 +440,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region PercentileDetector Tests
 
-    [Fact]
-    public void Percentile_HandCalculated_ThresholdsMatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_HandCalculated_ThresholdsMatchFormula()
     {
         // Data: [1..10], P5: idx=(5/100)*9=0.45 → 1+0.45*1=1.45
         // P95: idx=(95/100)*9=8.55 → 9+0.55*1=9.55, Range=8.1
@@ -460,8 +461,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(0.45 / 8.1, scores[9], Tolerance);
     }
 
-    [Fact]
-    public void Percentile_CustomPercentiles_MatchFormula()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_CustomPercentiles_MatchFormula()
     {
         // P10: idx=0.9 → 1*0.1+2*0.9=1.9
         // P90: idx=8.1 → 9*0.9+10*0.1=9.1, Range=7.2
@@ -475,8 +476,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(0.9 / 7.2, scores[9], Tolerance);
     }
 
-    [Fact]
-    public void Percentile_WithinBounds_ScoreIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_WithinBounds_ScoreIsZero()
     {
         // P0=1, P100=10 → all values within bounds
         var data = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -488,8 +489,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(0.0, scores[i], Tolerance);
     }
 
-    [Fact]
-    public void Percentile_OutlierScore_ProportionalToDistance()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_OutlierScore_ProportionalToDistance()
     {
         // Data: [1..9, 100]
         // P95: idx=8.55 → 9+0.55*91=59.05, P5: 1+0.45*1=1.45, Range=57.6
@@ -506,8 +507,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region GrubbsTestDetector Tests
 
-    [Fact]
-    public void Grubbs_ScoresIdenticalToZScores()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_ScoresIdenticalToZScores()
     {
         // G = |x-mean|/std, same formula as Z-score
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
@@ -524,8 +525,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(gScores[i], zScores[i], Tolerance);
     }
 
-    [Fact]
-    public void Grubbs_HandCalculated_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_HandCalculated_MatchesFormula()
     {
         // Data: [2,4,6], mean=4, pop_std=sqrt(8/3)
         var data = ToMatrix1D([2, 4, 6]);
@@ -540,16 +541,16 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(2.0 / std, scores[2], Tolerance);
     }
 
-    [Fact]
-    public void Grubbs_MinimumSamples_RequiresAtLeast3()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_MinimumSamples_RequiresAtLeast3()
     {
         var data2 = ToMatrix1D([1, 2]);
         var detector = new GrubbsTestDetector<double>();
         Assert.Throws<ArgumentException>(() => detector.Fit(data2));
     }
 
-    [Fact]
-    public void Grubbs_ConstantFeature_Skipped()
+    [Fact(Timeout = 120000)]
+    public async Task Grubbs_ConstantFeature_Skipped()
     {
         var data = ToMatrix(new double[,]
         {
@@ -570,8 +571,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact]
-    public void MAD_And_ModifiedZ_ProduceSameScores()
+    [Fact(Timeout = 120000)]
+    public async Task MAD_And_ModifiedZ_ProduceSameScores()
     {
         // MAD score = |x-med|/(1.4826*rawMAD)
         // ModifiedZ = 0.6745*|x-med|/rawMAD = |x-med|/(rawMAD*1.4826...)
@@ -590,8 +591,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(madScores[i], modZScores[i], MediumTolerance);
     }
 
-    [Fact]
-    public void ZScore_And_Grubbs_ProduceSameScores()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_And_Grubbs_ProduceSameScores()
     {
         var data = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
@@ -607,8 +608,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(zScores[i], gScores[i], Tolerance);
     }
 
-    [Fact]
-    public void AllDetectors_ConstantData_ScoresZero()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_ConstantData_ScoresZero()
     {
         var data = ToMatrix1D([5, 5, 5, 5, 5]);
 
@@ -638,8 +639,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
             Assert.Equal(0.0, pct.ScoreAnomalies(data)[i], Tolerance);
     }
 
-    [Fact]
-    public void AllDetectors_OutlierScoredHigherThanInliers()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_OutlierScoredHigherThanInliers()
     {
         var vals = new double[] { 0, 0.1, -0.1, 0.2, -0.2, 0.05, -0.05, 0.15, -0.15, 100 };
         var data = ToMatrix1D(vals);
@@ -667,8 +668,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllDetectors_RepeatedFit_SameResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_RepeatedFit_SameResults()
     {
         var data = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
@@ -686,8 +687,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
 
     #region Edge Cases and Validation Tests
 
-    [Fact]
-    public void AllDetectors_NegativeValues_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_NegativeValues_WorkCorrectly()
     {
         var data = ToMatrix1D([-10, -8, -6, -4, -2, 0, 2, 4, 6, 8]);
 
@@ -702,8 +703,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(scores[0], scores[9], Tolerance);
     }
 
-    [Fact]
-    public void SetThreshold_FromContamination_CorrectPercentile()
+    [Fact(Timeout = 120000)]
+    public async Task SetThreshold_FromContamination_CorrectPercentile()
     {
         // contamination=0.2, n=10: numOutliers=Ceiling(2)=2, thresholdIndex=8
         var data = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -723,8 +724,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Equal(expectedThreshold, detector.Threshold, Tolerance);
     }
 
-    [Fact]
-    public void Contamination_Validation_ThrowsForInvalidValues()
+    [Fact(Timeout = 120000)]
+    public async Task Contamination_Validation_ThrowsForInvalidValues()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ZScoreDetector<double>(contamination: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ZScoreDetector<double>(contamination: -0.1));
@@ -733,8 +734,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new MADDetector<double>(contamination: -0.1));
     }
 
-    [Fact]
-    public void Threshold_Validation_ThrowsForInvalidValues()
+    [Fact(Timeout = 120000)]
+    public async Task Threshold_Validation_ThrowsForInvalidValues()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ZScoreDetector<double>(zThreshold: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ZScoreDetector<double>(zThreshold: -1));
@@ -747,16 +748,16 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new GrubbsTestDetector<double>(alpha: 1));
     }
 
-    [Fact]
-    public void Percentile_Validation_ThrowsForInvalidValues()
+    [Fact(Timeout = 120000)]
+    public async Task Percentile_Validation_ThrowsForInvalidValues()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PercentileDetector<double>(lowPercentile: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PercentileDetector<double>(highPercentile: 101));
         Assert.Throws<ArgumentException>(() => new PercentileDetector<double>(lowPercentile: 90, highPercentile: 10));
     }
 
-    [Fact]
-    public void AllDetectors_ScoreBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_ScoreBeforeFit_Throws()
     {
         var data = ToMatrix1D([1, 2, 3]);
 
@@ -767,8 +768,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => new PercentileDetector<double>().ScoreAnomalies(data));
     }
 
-    [Fact]
-    public void AllDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_PredictBeforeFit_Throws()
     {
         var data = ToMatrix1D([1, 2, 3]);
 
@@ -779,8 +780,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => new PercentileDetector<double>().Predict(data));
     }
 
-    [Fact]
-    public void AllDetectors_IsFitted_TrueAfterFit()
+    [Fact(Timeout = 120000)]
+    public async Task AllDetectors_IsFitted_TrueAfterFit()
     {
         var data = ToMatrix1D([1, 2, 3, 4, 5]);
 
@@ -800,8 +801,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         Assert.True(mad.IsFitted);
     }
 
-    [Fact]
-    public void ZScore_ScoresScaleWithOutlierMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task ZScore_ScoresScaleWithOutlierMagnitude()
     {
         var data1 = ToMatrix1D([0, 0, 0, 0, 0, 0, 0, 0, 0, 10]);
         var data2 = ToMatrix1D([0, 0, 0, 0, 0, 0, 0, 0, 0, 100]);

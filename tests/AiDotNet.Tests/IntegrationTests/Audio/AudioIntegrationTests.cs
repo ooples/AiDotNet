@@ -4,6 +4,7 @@ using AiDotNet.Audio.Effects;
 using AiDotNet.Audio.Features;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Audio;
 
@@ -18,8 +19,8 @@ public class AudioIntegrationTests
 
     #region AudioFeatureOptions - Defaults
 
-    [Fact]
-    public void AudioFeatureOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_DefaultValues()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -29,22 +30,22 @@ public class AudioIntegrationTests
         Assert.True(options.CenterPad);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_EffectiveWindowLength_DefaultsToFftSize()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_EffectiveWindowLength_DefaultsToFftSize()
     {
         var options = new AudioFeatureOptions();
         Assert.Equal(options.FftSize, options.EffectiveWindowLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_EffectiveWindowLength_UsesExplicitValue()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_EffectiveWindowLength_UsesExplicitValue()
     {
         var options = new AudioFeatureOptions { WindowLength = 256 };
         Assert.Equal(256, options.EffectiveWindowLength);
     }
 
-    [Fact]
-    public void AudioFeatureOptions_MutableProperties()
+    [Fact(Timeout = 120000)]
+    public async Task AudioFeatureOptions_MutableProperties()
     {
         var options = new AudioFeatureOptions
         {
@@ -63,8 +64,8 @@ public class AudioIntegrationTests
 
     #region MfccOptions - Defaults
 
-    [Fact]
-    public void MfccOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_DefaultValues()
     {
         var options = new MfccOptions();
         Assert.Equal(13, options.NumCoefficients);
@@ -76,16 +77,16 @@ public class AudioIntegrationTests
         Assert.Null(options.FMax);
     }
 
-    [Fact]
-    public void MfccOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_InheritsAudioFeatureOptions()
     {
         var options = new MfccOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
         Assert.Equal(16000, options.SampleRate);
     }
 
-    [Fact]
-    public void MfccOptions_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task MfccOptions_CustomValues()
     {
         var options = new MfccOptions
         {
@@ -110,8 +111,8 @@ public class AudioIntegrationTests
 
     #region ChromaOptions - Defaults
 
-    [Fact]
-    public void ChromaOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_DefaultValues()
     {
         var options = new ChromaOptions();
         Assert.True(options.Normalize);
@@ -119,15 +120,15 @@ public class AudioIntegrationTests
         Assert.Equal(7, options.NumOctaves);
     }
 
-    [Fact]
-    public void ChromaOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_InheritsAudioFeatureOptions()
     {
         var options = new ChromaOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
     }
 
-    [Fact]
-    public void ChromaOptions_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaOptions_CustomValues()
     {
         var options = new ChromaOptions
         {
@@ -144,16 +145,16 @@ public class AudioIntegrationTests
 
     #region SpectralFeatureOptions - Defaults
 
-    [Fact]
-    public void SpectralFeatureOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureOptions_DefaultValues()
     {
         var options = new SpectralFeatureOptions();
         Assert.Equal(SpectralFeatureType.Basic, options.FeatureTypes);
         Assert.Equal(0.85, options.RolloffPercentage, Tolerance);
     }
 
-    [Fact]
-    public void SpectralFeatureOptions_InheritsAudioFeatureOptions()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureOptions_InheritsAudioFeatureOptions()
     {
         var options = new SpectralFeatureOptions();
         Assert.IsAssignableFrom<AudioFeatureOptions>(options);
@@ -163,14 +164,14 @@ public class AudioIntegrationTests
 
     #region SpectralFeatureType Enum
 
-    [Fact]
-    public void SpectralFeatureType_None_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_None_IsZero()
     {
         Assert.Equal(0, (int)SpectralFeatureType.None);
     }
 
-    [Fact]
-    public void SpectralFeatureType_Basic_IsCombination()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_Basic_IsCombination()
     {
         var basic = SpectralFeatureType.Basic;
         Assert.True(basic.HasFlag(SpectralFeatureType.Centroid));
@@ -182,8 +183,8 @@ public class AudioIntegrationTests
         Assert.False(basic.HasFlag(SpectralFeatureType.ZeroCrossingRate));
     }
 
-    [Fact]
-    public void SpectralFeatureType_All_IncludesEverything()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_All_IncludesEverything()
     {
         var all = SpectralFeatureType.All;
         Assert.True(all.HasFlag(SpectralFeatureType.Centroid));
@@ -195,8 +196,8 @@ public class AudioIntegrationTests
         Assert.True(all.HasFlag(SpectralFeatureType.ZeroCrossingRate));
     }
 
-    [Fact]
-    public void SpectralFeatureType_FlagsArePowersOfTwo()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureType_FlagsArePowersOfTwo()
     {
         Assert.Equal(1, (int)SpectralFeatureType.Centroid);
         Assert.Equal(2, (int)SpectralFeatureType.Bandwidth);
@@ -211,8 +212,8 @@ public class AudioIntegrationTests
 
     #region WindowType Enum
 
-    [Fact]
-    public void WindowType_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task WindowType_AllValues()
     {
         var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
         Assert.Equal(4, values.Length);
@@ -226,46 +227,46 @@ public class AudioIntegrationTests
 
     #region MfccExtractor - Construction and Feature Dimension
 
-    [Fact]
-    public void MfccExtractor_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_DefaultConstruction_DoesNotThrow()
     {
         var extractor = new MfccExtractor<double>();
         Assert.NotNull(extractor);
         Assert.Equal("MFCC", extractor.Name);
     }
 
-    [Fact]
-    public void MfccExtractor_DefaultFeatureDimension_Is13()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_DefaultFeatureDimension_Is13()
     {
         var extractor = new MfccExtractor<double>();
         Assert.Equal(13, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void MfccExtractor_WithDelta_DoublesDimension()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_WithDelta_DoublesDimension()
     {
         var options = new MfccOptions { NumCoefficients = 13, AppendDelta = true };
         var extractor = new MfccExtractor<double>(options);
         Assert.Equal(26, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void MfccExtractor_WithDeltaAndDeltaDelta_TriplesDimension()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_WithDeltaAndDeltaDelta_TriplesDimension()
     {
         var options = new MfccOptions { NumCoefficients = 13, AppendDelta = true, AppendDeltaDelta = true };
         var extractor = new MfccExtractor<double>(options);
         Assert.Equal(39, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void MfccExtractor_ImplementsInterface()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_ImplementsInterface()
     {
         var extractor = new MfccExtractor<double>();
         Assert.IsAssignableFrom<IAudioFeatureExtractor<double>>(extractor);
     }
 
-    [Fact]
-    public void MfccExtractor_SampleRateFromOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_SampleRateFromOptions()
     {
         var options = new MfccOptions { SampleRate = 22050 };
         var extractor = new MfccExtractor<double>(options);
@@ -276,30 +277,30 @@ public class AudioIntegrationTests
 
     #region ChromaExtractor - Construction
 
-    [Fact]
-    public void ChromaExtractor_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_DefaultConstruction_DoesNotThrow()
     {
         var extractor = new ChromaExtractor<double>();
         Assert.NotNull(extractor);
         Assert.Equal("Chroma", extractor.Name);
     }
 
-    [Fact]
-    public void ChromaExtractor_FeatureDimension_Is12()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_FeatureDimension_Is12()
     {
         var extractor = new ChromaExtractor<double>();
         Assert.Equal(12, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void ChromaExtractor_ImplementsInterface()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_ImplementsInterface()
     {
         var extractor = new ChromaExtractor<double>();
         Assert.IsAssignableFrom<IAudioFeatureExtractor<double>>(extractor);
     }
 
-    [Fact]
-    public void ChromaExtractor_GetPitchClassName_AllNotes()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_GetPitchClassName_AllNotes()
     {
         Assert.Equal("C", ChromaExtractor<double>.GetPitchClassName(0));
         Assert.Equal("C#", ChromaExtractor<double>.GetPitchClassName(1));
@@ -315,8 +316,8 @@ public class AudioIntegrationTests
         Assert.Equal("B", ChromaExtractor<double>.GetPitchClassName(11));
     }
 
-    [Fact]
-    public void ChromaExtractor_GetPitchClassName_WrapsAround()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_GetPitchClassName_WrapsAround()
     {
         Assert.Equal("C", ChromaExtractor<double>.GetPitchClassName(12));
         Assert.Equal("A", ChromaExtractor<double>.GetPitchClassName(21));
@@ -326,24 +327,24 @@ public class AudioIntegrationTests
 
     #region SpectralFeatureExtractor - Construction
 
-    [Fact]
-    public void SpectralFeatureExtractor_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_DefaultConstruction_DoesNotThrow()
     {
         var extractor = new SpectralFeatureExtractor<double>();
         Assert.NotNull(extractor);
         Assert.Equal("SpectralFeatures", extractor.Name);
     }
 
-    [Fact]
-    public void SpectralFeatureExtractor_BasicFeatures_CorrectDimension()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_BasicFeatures_CorrectDimension()
     {
         var extractor = new SpectralFeatureExtractor<double>();
         // Basic = Centroid + Bandwidth + Rolloff + Flux + Flatness = 5 features
         Assert.Equal(5, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void SpectralFeatureExtractor_AllFeatures_CorrectDimension()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_AllFeatures_CorrectDimension()
     {
         var options = new SpectralFeatureOptions { FeatureTypes = SpectralFeatureType.All };
         var extractor = new SpectralFeatureExtractor<double>(options);
@@ -351,16 +352,16 @@ public class AudioIntegrationTests
         Assert.Equal(12, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void SpectralFeatureExtractor_SingleFeature_DimensionOne()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_SingleFeature_DimensionOne()
     {
         var options = new SpectralFeatureOptions { FeatureTypes = SpectralFeatureType.Centroid };
         var extractor = new SpectralFeatureExtractor<double>(options);
         Assert.Equal(1, extractor.FeatureDimension);
     }
 
-    [Fact]
-    public void SpectralFeatureExtractor_ImplementsInterface()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_ImplementsInterface()
     {
         var extractor = new SpectralFeatureExtractor<double>();
         Assert.IsAssignableFrom<IAudioFeatureExtractor<double>>(extractor);
@@ -370,16 +371,16 @@ public class AudioIntegrationTests
 
     #region Compressor - Construction
 
-    [Fact]
-    public void Compressor_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_DefaultConstruction_DoesNotThrow()
     {
         var compressor = new Compressor<double>();
         Assert.NotNull(compressor);
         Assert.Equal("Compressor", compressor.Name);
     }
 
-    [Fact]
-    public void Compressor_DefaultParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_DefaultParameters()
     {
         var compressor = new Compressor<double>();
         Assert.Equal(44100, compressor.SampleRate);
@@ -387,8 +388,8 @@ public class AudioIntegrationTests
         Assert.Equal(1.0, compressor.Mix, Tolerance);
     }
 
-    [Fact]
-    public void Compressor_CustomParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_CustomParameters()
     {
         var compressor = new Compressor<double>(
             sampleRate: 48000,
@@ -403,8 +404,8 @@ public class AudioIntegrationTests
         Assert.Equal(0.8, compressor.Mix, Tolerance);
     }
 
-    [Fact]
-    public void Compressor_HasExpectedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_HasExpectedParameters()
     {
         var compressor = new Compressor<double>();
         Assert.True(compressor.Parameters.ContainsKey("threshold"));
@@ -415,16 +416,16 @@ public class AudioIntegrationTests
         Assert.True(compressor.Parameters.ContainsKey("knee"));
     }
 
-    [Fact]
-    public void Compressor_ProcessSample_SilenceRemainsQuiet()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_ProcessSample_SilenceRemainsQuiet()
     {
         var compressor = new Compressor<double>();
         var result = compressor.ProcessSample(0.0);
         Assert.True(Math.Abs(result) < 0.01, $"Silent input should produce near-silent output, got {result}");
     }
 
-    [Fact]
-    public void Compressor_ProcessSample_SignPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_ProcessSample_SignPreserved()
     {
         var compressor = new Compressor<double>(thresholdDb: -6.0, ratio: 4.0);
         // Process a few samples to warm up the envelope
@@ -441,8 +442,8 @@ public class AudioIntegrationTests
         Assert.True(negativeResult <= 0, "Negative input should yield negative output");
     }
 
-    [Fact]
-    public void Compressor_Bypass_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_Bypass_ReturnsInput()
     {
         var compressor = new Compressor<double>();
         compressor.Bypass = true;
@@ -450,8 +451,8 @@ public class AudioIntegrationTests
         Assert.Equal(0.75, result, Tolerance);
     }
 
-    [Fact]
-    public void Compressor_Reset_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_Reset_DoesNotThrow()
     {
         var compressor = new Compressor<double>();
         compressor.ProcessSample(0.5);
@@ -461,8 +462,8 @@ public class AudioIntegrationTests
         Assert.True(Math.Abs(result) < 0.1);
     }
 
-    [Fact]
-    public void Compressor_GetGainReduction_ReturnsNonPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_GetGainReduction_ReturnsNonPositive()
     {
         var compressor = new Compressor<double>(thresholdDb: -20.0, ratio: 4.0);
         // Process some loud samples
@@ -473,8 +474,8 @@ public class AudioIntegrationTests
         Assert.True(gainReduction <= 0, $"Gain reduction should be non-positive, got {gainReduction}");
     }
 
-    [Fact]
-    public void Compressor_LatencySamples_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Compressor_LatencySamples_IsZero()
     {
         var compressor = new Compressor<double>();
         Assert.Equal(0, compressor.LatencySamples);
@@ -484,16 +485,16 @@ public class AudioIntegrationTests
 
     #region Reverb - Construction
 
-    [Fact]
-    public void Reverb_DefaultConstruction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_DefaultConstruction_DoesNotThrow()
     {
         var reverb = new Reverb<double>();
         Assert.NotNull(reverb);
         Assert.Equal("Reverb", reverb.Name);
     }
 
-    [Fact]
-    public void Reverb_DefaultParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_DefaultParameters()
     {
         var reverb = new Reverb<double>();
         Assert.Equal(44100, reverb.SampleRate);
@@ -501,8 +502,8 @@ public class AudioIntegrationTests
         Assert.False(reverb.Bypass);
     }
 
-    [Fact]
-    public void Reverb_CustomParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_CustomParameters()
     {
         var reverb = new Reverb<double>(
             sampleRate: 48000,
@@ -516,8 +517,8 @@ public class AudioIntegrationTests
         Assert.Equal(0.5, reverb.Mix, Tolerance);
     }
 
-    [Fact]
-    public void Reverb_HasExpectedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_HasExpectedParameters()
     {
         var reverb = new Reverb<double>();
         Assert.True(reverb.Parameters.ContainsKey("roomSize"));
@@ -527,8 +528,8 @@ public class AudioIntegrationTests
         Assert.True(reverb.Parameters.ContainsKey("diffusion"));
     }
 
-    [Fact]
-    public void Reverb_ProcessSample_SilenceInSilenceOut()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_ProcessSample_SilenceInSilenceOut()
     {
         var reverb = new Reverb<double>();
         // Process many silent samples
@@ -539,15 +540,15 @@ public class AudioIntegrationTests
         }
     }
 
-    [Fact]
-    public void Reverb_TailSamples_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_TailSamples_IsPositive()
     {
         var reverb = new Reverb<double>(decayTime: 2.0);
         Assert.True(reverb.TailSamples > 0, "Reverb tail should be positive");
     }
 
-    [Fact]
-    public void Reverb_Bypass_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_Bypass_ReturnsInput()
     {
         var reverb = new Reverb<double>();
         reverb.Bypass = true;
@@ -555,16 +556,16 @@ public class AudioIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
-    public void Reverb_Reset_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_Reset_DoesNotThrow()
     {
         var reverb = new Reverb<double>();
         reverb.ProcessSample(0.8);
         reverb.Reset();
     }
 
-    [Fact]
-    public void Reverb_ProcessTensor_ReturnsSameLength()
+    [Fact(Timeout = 120000)]
+    public async Task Reverb_ProcessTensor_ReturnsSameLength()
     {
         var reverb = new Reverb<double>();
         var input = new Tensor<double>(new[] { 100 });
@@ -579,8 +580,8 @@ public class AudioIntegrationTests
 
     #region ParametricEqualizer - Construction
 
-    [Fact]
-    public void ParametricEQ_DefaultConstruction_HasFiveBands()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_DefaultConstruction_HasFiveBands()
     {
         var eq = new ParametricEqualizer<double>();
         Assert.NotNull(eq);
@@ -588,8 +589,8 @@ public class AudioIntegrationTests
         Assert.Equal(5, eq.Bands.Count);
     }
 
-    [Fact]
-    public void ParametricEQ_DefaultBands_HaveCorrectTypes()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_DefaultBands_HaveCorrectTypes()
     {
         var eq = new ParametricEqualizer<double>();
         Assert.Equal(EqFilterType.LowShelf, eq.Bands[0].FilterType);
@@ -599,8 +600,8 @@ public class AudioIntegrationTests
         Assert.Equal(EqFilterType.HighShelf, eq.Bands[4].FilterType);
     }
 
-    [Fact]
-    public void ParametricEQ_DefaultBands_HaveCorrectFrequencies()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_DefaultBands_HaveCorrectFrequencies()
     {
         var eq = new ParametricEqualizer<double>();
         Assert.Equal(80, eq.Bands[0].Frequency);
@@ -610,8 +611,8 @@ public class AudioIntegrationTests
         Assert.Equal(10000, eq.Bands[4].Frequency);
     }
 
-    [Fact]
-    public void ParametricEQ_DefaultBands_GainIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_DefaultBands_GainIsZero()
     {
         var eq = new ParametricEqualizer<double>();
         foreach (var band in eq.Bands)
@@ -620,24 +621,24 @@ public class AudioIntegrationTests
         }
     }
 
-    [Fact]
-    public void ParametricEQ_AddBand_IncreasesCount()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_AddBand_IncreasesCount()
     {
         var eq = new ParametricEqualizer<double>();
         eq.AddBand(2000, 3.0, 1.5, EqFilterType.Peak);
         Assert.Equal(6, eq.Bands.Count);
     }
 
-    [Fact]
-    public void ParametricEQ_RemoveBand_DecreasesCount()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_RemoveBand_DecreasesCount()
     {
         var eq = new ParametricEqualizer<double>();
         eq.RemoveBand(0);
         Assert.Equal(4, eq.Bands.Count);
     }
 
-    [Fact]
-    public void ParametricEQ_SetBand_UpdatesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_SetBand_UpdatesParameters()
     {
         var eq = new ParametricEqualizer<double>();
         eq.SetBand(2, 2000, 6.0, 2.0);
@@ -646,8 +647,8 @@ public class AudioIntegrationTests
         Assert.Equal(2.0, eq.Bands[2].Q);
     }
 
-    [Fact]
-    public void ParametricEQ_ProcessSample_FlatEQ_Passthrough()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_ProcessSample_FlatEQ_Passthrough()
     {
         var eq = new ParametricEqualizer<double>();
         // With all gains at 0 dB, signal should pass through mostly unchanged
@@ -657,8 +658,8 @@ public class AudioIntegrationTests
             $"Flat EQ should approximately pass through signal, got {result}");
     }
 
-    [Fact]
-    public void ParametricEQ_Bypass_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_Bypass_ReturnsInput()
     {
         var eq = new ParametricEqualizer<double>();
         eq.Bypass = true;
@@ -666,8 +667,8 @@ public class AudioIntegrationTests
         Assert.Equal(0.75, result, Tolerance);
     }
 
-    [Fact]
-    public void ParametricEQ_Reset_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ParametricEQ_Reset_DoesNotThrow()
     {
         var eq = new ParametricEqualizer<double>();
         eq.ProcessSample(0.5);
@@ -678,8 +679,8 @@ public class AudioIntegrationTests
 
     #region EqFilterType Enum
 
-    [Fact]
-    public void EqFilterType_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task EqFilterType_AllValues()
     {
         var values = (((EqFilterType[])Enum.GetValues(typeof(EqFilterType))));
         Assert.Equal(7, values.Length);
@@ -696,8 +697,8 @@ public class AudioIntegrationTests
 
     #region EqBand - Construction and Processing
 
-    [Fact]
-    public void EqBand_StoresProperties()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_StoresProperties()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 3.0, 1.5, EqFilterType.Peak);
@@ -707,8 +708,8 @@ public class AudioIntegrationTests
         Assert.Equal(EqFilterType.Peak, band.FilterType);
     }
 
-    [Fact]
-    public void EqBand_FrequencyClamped()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_FrequencyClamped()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 5, 0, 1.0, EqFilterType.Peak);
@@ -716,8 +717,8 @@ public class AudioIntegrationTests
         Assert.Equal(20, band.Frequency);
     }
 
-    [Fact]
-    public void EqBand_GainClamped()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_GainClamped()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 50.0, 1.0, EqFilterType.Peak);
@@ -725,8 +726,8 @@ public class AudioIntegrationTests
         Assert.Equal(24, band.GainDb);
     }
 
-    [Fact]
-    public void EqBand_QClamped()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_QClamped()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 0, 0.01, EqFilterType.Peak);
@@ -734,8 +735,8 @@ public class AudioIntegrationTests
         Assert.Equal(0.1, band.Q, Tolerance);
     }
 
-    [Fact]
-    public void EqBand_SetParameters_Updates()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_SetParameters_Updates()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 0, 1.0, EqFilterType.Peak);
@@ -745,8 +746,8 @@ public class AudioIntegrationTests
         Assert.Equal(2.0, band.Q);
     }
 
-    [Fact]
-    public void EqBand_Process_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_Process_DoesNotThrow()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 3.0, 1.0, EqFilterType.Peak);
@@ -755,8 +756,8 @@ public class AudioIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
-    public void EqBand_Reset_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task EqBand_Reset_DoesNotThrow()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
         var band = new EqBand<double>(numOps, 44100, 1000, 3.0, 1.0, EqFilterType.Peak);
@@ -771,8 +772,8 @@ public class AudioIntegrationTests
 
     #region AudioEvent - Construction and Properties
 
-    [Fact]
-    public void AudioEvent_RequiredAndInitProperties()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEvent_RequiredAndInitProperties()
     {
         var evt = new AudioEvent
         {
@@ -787,8 +788,8 @@ public class AudioIntegrationTests
         Assert.Equal(3.0, evt.EndTime, Tolerance);
     }
 
-    [Fact]
-    public void AudioEvent_Duration_Computed()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEvent_Duration_Computed()
     {
         var evt = new AudioEvent
         {
@@ -800,8 +801,8 @@ public class AudioIntegrationTests
         Assert.Equal(3.5, evt.Duration, Tolerance);
     }
 
-    [Fact]
-    public void AudioEvent_ToString_ContainsLabel()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEvent_ToString_ContainsLabel()
     {
         var evt = new AudioEvent
         {
@@ -814,8 +815,8 @@ public class AudioIntegrationTests
         Assert.Contains("DogBark", str);
     }
 
-    [Fact]
-    public void AudioEvent_ZeroDuration()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEvent_ZeroDuration()
     {
         var evt = new AudioEvent
         {
@@ -831,8 +832,8 @@ public class AudioIntegrationTests
 
     #region AudioGenOptions - Defaults
 
-    [Fact]
-    public void AudioGenOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenOptions_DefaultValues()
     {
         var options = new AudioGenOptions();
         Assert.Equal(AudioGenModelSize.Medium, options.ModelSize);
@@ -851,8 +852,8 @@ public class AudioIntegrationTests
         Assert.NotNull(options.OnnxOptions);
     }
 
-    [Fact]
-    public void AudioGenOptions_CustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenOptions_CustomValues()
     {
         var options = new AudioGenOptions
         {
@@ -876,8 +877,8 @@ public class AudioIntegrationTests
 
     #region AudioGenResult - Properties
 
-    [Fact]
-    public void AudioGenResult_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenResult_Properties()
     {
         var result = new AudioGenResult<double>
         {
@@ -896,8 +897,8 @@ public class AudioIntegrationTests
         Assert.Equal(500, result.ProcessingTimeMs);
     }
 
-    [Fact]
-    public void AudioGenResult_DefaultPrompt()
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenResult_DefaultPrompt()
     {
         var result = new AudioGenResult<double>
         {
@@ -910,8 +911,8 @@ public class AudioIntegrationTests
 
     #region AudioGenModelSize Enum
 
-    [Fact]
-    public void AudioGenModelSize_AllValues()
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenModelSize_AllValues()
     {
         var values = (((AudioGenModelSize[])Enum.GetValues(typeof(AudioGenModelSize))));
         Assert.Equal(3, values.Length);
@@ -924,8 +925,8 @@ public class AudioIntegrationTests
 
     #region ASTOptions - Defaults
 
-    [Fact]
-    public void ASTOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ASTOptions_DefaultValues()
     {
         var options = new ASTOptions();
         Assert.Equal(16000, options.SampleRate);
@@ -958,8 +959,8 @@ public class AudioIntegrationTests
 
     #region Cross-Module - Audio Effects Process Tensor
 
-    [Fact]
-    public void AudioEffects_Process_SineWave()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEffects_Process_SineWave()
     {
         // Generate a 1kHz sine wave at 44100 Hz
         int sampleRate = 44100;
@@ -981,8 +982,8 @@ public class AudioIntegrationTests
         Assert.Equal(numSamples, eqOutput.Length);
     }
 
-    [Fact]
-    public void AudioEffects_SetParameter_ChangesValue()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEffects_SetParameter_ChangesValue()
     {
         var compressor = new Compressor<double>();
         compressor.SetParameter("threshold", -10.0);
@@ -990,8 +991,8 @@ public class AudioIntegrationTests
         Assert.Equal(-10.0, value, Tolerance);
     }
 
-    [Fact]
-    public void AudioEffects_GetParameter_NonExistent_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task AudioEffects_GetParameter_NonExistent_ReturnsZero()
     {
         var compressor = new Compressor<double>();
         var value = compressor.GetParameter("nonexistent");
@@ -1002,8 +1003,8 @@ public class AudioIntegrationTests
 
     #region Cross-Module - Feature Extractors with Synthetic Audio
 
-    [Fact]
-    public void MfccExtractor_Extract_SyntheticAudio_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task MfccExtractor_Extract_SyntheticAudio_ReturnsCorrectShape()
     {
         var options = new MfccOptions { SampleRate = 16000, FftSize = 512, HopLength = 160 };
         var extractor = new MfccExtractor<double>(options);
@@ -1022,8 +1023,8 @@ public class AudioIntegrationTests
         Assert.True(features.Shape[0] > 0, "Should have at least one frame");
     }
 
-    [Fact]
-    public void ChromaExtractor_Extract_SyntheticAudio_Returns12PitchClasses()
+    [Fact(Timeout = 120000)]
+    public async Task ChromaExtractor_Extract_SyntheticAudio_Returns12PitchClasses()
     {
         var options = new ChromaOptions { SampleRate = 16000, FftSize = 2048, HopLength = 512 };
         var extractor = new ChromaExtractor<double>(options);
@@ -1041,8 +1042,8 @@ public class AudioIntegrationTests
         Assert.True(features.Shape[0] > 0, "Should have at least one frame");
     }
 
-    [Fact]
-    public void SpectralFeatureExtractor_Extract_SyntheticAudio_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralFeatureExtractor_Extract_SyntheticAudio_ReturnsCorrectShape()
     {
         var options = new SpectralFeatureOptions
         {
@@ -1070,8 +1071,8 @@ public class AudioIntegrationTests
 
     #region Cross-Module - ConstantQTransform
 
-    [Fact]
-    public void ConstantQTransform_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task ConstantQTransform_Construction_DoesNotThrow()
     {
         var cqt = new ConstantQTransform<double>(
             sampleRate: 22050,

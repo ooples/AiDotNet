@@ -3,6 +3,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using AiDotNet.Regularization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -19,8 +20,8 @@ public class LinearRegressionIntegrationTests
 
     #region SimpleRegression Tests
 
-    [Fact]
-    public void SimpleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
     {
         // Arrange: y = 2x + 3 (slope=2, intercept=3)
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -36,8 +37,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(3.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void SimpleRegression_Train_WithoutIntercept_RecoversSlopeOnly()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Train_WithoutIntercept_RecoversSlopeOnly()
     {
         // Arrange: y = 3x (no intercept)
         var options = new RegressionOptions<double> { UseIntercept = false };
@@ -53,8 +54,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(0.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void SimpleRegression_Predict_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -73,8 +74,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(23.0, predictions[2], Tolerance); // 2*10 + 3
     }
 
-    [Fact]
-    public void SimpleRegression_Train_NoisyData_FitsTrend()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Train_NoisyData_FitsTrend()
     {
         // Arrange: y ~ 2x + 3 with noise
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -92,8 +93,8 @@ public class LinearRegressionIntegrationTests
             $"Intercept should be close to 3.0, got {regression.Intercept}");
     }
 
-    [Fact]
-    public void SimpleRegression_Train_MultipleColumns_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Train_MultipleColumns_ThrowsException()
     {
         // Arrange
         var regression = new SimpleRegression<double>();
@@ -108,8 +109,8 @@ public class LinearRegressionIntegrationTests
 
     #region MultipleRegression Tests
 
-    [Fact]
-    public void MultipleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
     {
         // Arrange: y = 2*x1 + 3*x2 + 5 (coefficients: 2, 3; intercept: 5)
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -133,8 +134,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(5.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void MultipleRegression_Train_WithoutIntercept_RecoversCoefficientsOnly()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Train_WithoutIntercept_RecoversCoefficientsOnly()
     {
         // Arrange: y = 2*x1 + 3*x2 (no intercept)
         var options = new RegressionOptions<double> { UseIntercept = false };
@@ -158,8 +159,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(0.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void MultipleRegression_Predict_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -184,8 +185,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(18.0, predictions[1], Tolerance); // 2*5 + 3*1 + 5
     }
 
-    [Fact]
-    public void MultipleRegression_Train_ManyFeatures_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Train_ManyFeatures_HandlesCorrectly()
     {
         // Arrange: 10 features
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -232,8 +233,8 @@ public class LinearRegressionIntegrationTests
 
     #region RidgeRegression Tests
 
-    [Fact]
-    public void RidgeRegression_Train_WithRegularization_ShrinkCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_Train_WithRegularization_ShrinkCoefficients()
     {
         // Arrange
         var optionsNoReg = new RidgeRegressionOptions<double> { Alpha = 0.0, UseIntercept = true };
@@ -268,8 +269,8 @@ public class LinearRegressionIntegrationTests
             $"High regularization should shrink coefficients: norm with reg ({normHighReg}) should be < norm without ({normNoReg})");
     }
 
-    [Fact]
-    public void RidgeRegression_Train_ZeroAlpha_MatchesOLS()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_Train_ZeroAlpha_MatchesOLS()
     {
         // Arrange
         var ridgeOptions = new RidgeRegressionOptions<double> { Alpha = 0.0, UseIntercept = true };
@@ -298,8 +299,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(ols.Intercept, ridge.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void RidgeRegression_Predict_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
         var options = new RidgeRegressionOptions<double> { Alpha = 0.1, UseIntercept = true };
@@ -324,8 +325,8 @@ public class LinearRegressionIntegrationTests
             $"Prediction should be between 20 and 30, got {predictions[0]}");
     }
 
-    [Fact]
-    public void RidgeRegression_GetModelMetadata_IncludesAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_GetModelMetadata_IncludesAlpha()
     {
         // Arrange
         var options = new RidgeRegressionOptions<double> { Alpha = 1.5, UseIntercept = true };
@@ -346,8 +347,8 @@ public class LinearRegressionIntegrationTests
 
     #region LassoRegression Tests
 
-    [Fact]
-    public void LassoRegression_Train_WithHighRegularization_ProducesSparseCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task LassoRegression_Train_WithHighRegularization_ProducesSparseCoefficients()
     {
         // Arrange
         var options = new LassoRegressionOptions<double> { Alpha = 10.0, UseIntercept = true, MaxIterations = 1000 };
@@ -376,8 +377,8 @@ public class LinearRegressionIntegrationTests
             $"First coefficient ({coef1Abs}) should be larger than second ({coef2Abs})");
     }
 
-    [Fact]
-    public void LassoRegression_Train_LowRegularization_RecoversTrueCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task LassoRegression_Train_LowRegularization_RecoversTrueCoefficients()
     {
         // Arrange
         var options = new LassoRegressionOptions<double> { Alpha = 0.001, UseIntercept = true, MaxIterations = 1000 };
@@ -406,8 +407,8 @@ public class LinearRegressionIntegrationTests
 
     #region ElasticNetRegression Tests
 
-    [Fact]
-    public void ElasticNetRegression_Train_L1RatioZero_BehavesLikeRidge()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNetRegression_Train_L1RatioZero_BehavesLikeRidge()
     {
         // Arrange - L1Ratio = 0 means pure L2 (Ridge)
         var elasticOptions = new ElasticNetRegressionOptions<double>
@@ -441,8 +442,8 @@ public class LinearRegressionIntegrationTests
             $"First coefficients should be similar: ElasticNet={elastic.Coefficients[0]}, Ridge={ridge.Coefficients[0]}");
     }
 
-    [Fact]
-    public void ElasticNetRegression_Train_L1RatioOne_BehavesLikeLasso()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNetRegression_Train_L1RatioOne_BehavesLikeLasso()
     {
         // Arrange - L1Ratio = 1 means pure L1 (Lasso)
         var elasticOptions = new ElasticNetRegressionOptions<double>
@@ -481,8 +482,8 @@ public class LinearRegressionIntegrationTests
             $"First coefficients should be similar: ElasticNet={elastic.Coefficients[0]}, Lasso={lasso.Coefficients[0]}");
     }
 
-    [Fact]
-    public void ElasticNetRegression_Train_MixedRatio_CombinesBothPenalties()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNetRegression_Train_MixedRatio_CombinesBothPenalties()
     {
         // Arrange
         var options = new ElasticNetRegressionOptions<double>
@@ -516,8 +517,8 @@ public class LinearRegressionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void SimpleRegression_Train_TwoPoints_FindsExactLine()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_Train_TwoPoints_FindsExactLine()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -533,8 +534,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(5.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void MultipleRegression_Train_LargeValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Train_LargeValues_HandlesCorrectly()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -556,8 +557,8 @@ public class LinearRegressionIntegrationTests
             $"First coefficient should be close to 2.0, got {regression.Coefficients[0]}");
     }
 
-    [Fact]
-    public void MultipleRegression_Train_SmallValues_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Train_SmallValues_HandlesCorrectly()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -579,8 +580,8 @@ public class LinearRegressionIntegrationTests
         Assert.True(!double.IsInfinity(regression.Coefficients[0]), "Coefficient should not be Infinity");
     }
 
-    [Fact]
-    public void RidgeRegression_Train_IllConditionedMatrix_HandlesWithRegularization()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_Train_IllConditionedMatrix_HandlesWithRegularization()
     {
         // Arrange - create nearly collinear features
         var options = new RidgeRegressionOptions<double> { Alpha = 1.0, UseIntercept = true };
@@ -607,8 +608,8 @@ public class LinearRegressionIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void SimpleRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };
@@ -627,8 +628,8 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(regression.Intercept, newRegression.Intercept, Tolerance);
     }
 
-    [Fact]
-    public void MultipleRegression_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var options = new RegressionOptions<double> { UseIntercept = true };

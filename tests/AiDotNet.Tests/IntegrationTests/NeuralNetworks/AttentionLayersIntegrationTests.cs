@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 using AiDotNet.Interfaces;
@@ -14,8 +15,8 @@ public class AttentionLayersIntegrationTests
 {
     #region AttentionLayer Tests
 
-    [Fact]
-    public void AttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [batch, features]
         int inputSize = 64;
@@ -31,8 +32,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AttentionLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seq, features]
         int inputSize = 64;
@@ -49,8 +50,8 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void AttentionLayer_CrossAttention_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_CrossAttention_ProducesValidOutput()
     {
         // Arrange - cross-attention with separate query and key/value inputs
         int inputSize = 64;
@@ -67,8 +68,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AttentionLayer_MaskedAttention_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_MaskedAttention_ProducesValidOutput()
     {
         // Arrange - attention with mask
         int inputSize = 32;
@@ -86,8 +87,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputSize = 32;
@@ -109,8 +110,8 @@ public class AttentionLayersIntegrationTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact]
-    public void SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
         int seqLen = 16;
@@ -126,8 +127,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedDim]
         int seqLen = 16;
@@ -143,8 +144,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_ForwardPass_4D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_4D_ProducesValidOutput()
     {
         // Arrange - 4D input [batch1, batch2, seqLen, embedDim]
         int seqLen = 8;
@@ -161,8 +162,8 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void SelfAttentionLayer_MultiHeadConfiguration_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_MultiHeadConfiguration_Works()
     {
         // Arrange - embedDim must be divisible by headCount
         int seqLen = 16;
@@ -179,8 +180,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int seqLen = 8;
@@ -202,8 +203,8 @@ public class AttentionLayersIntegrationTests
 
     #region MultiHeadAttentionLayer Tests
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
         int seqLen = 16;
@@ -219,8 +220,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedDim]
         int seqLen = 16;
@@ -236,8 +237,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_ForwardPass_5D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_5D_ProducesValidOutput()
     {
         // Arrange - 5D input [batch1, batch2, batch3, seqLen, embedDim]
         int seqLen = 4;
@@ -254,8 +255,8 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void MultiHeadAttentionLayer_CrossAttention_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_CrossAttention_ProducesValidOutput()
     {
         // Arrange - cross-attention with separate query and key/value
         int seqLen = 8;
@@ -272,8 +273,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int seqLen = 8;
@@ -295,8 +296,8 @@ public class AttentionLayersIntegrationTests
 
     #region FlashAttentionLayer Tests
 
-    [Fact]
-    public void FlashAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FlashAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [seqLen, embedDim]
         int seqLen = 8;
@@ -313,8 +314,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FlashAttentionLayer_ForwardPass_4D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FlashAttentionLayer_ForwardPass_4D_ProducesValidOutput()
     {
         // Arrange - 4D input [batch1, batch2, seqLen, embedDim]
         int seqLen = 6;
@@ -336,8 +337,8 @@ public class AttentionLayersIntegrationTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact]
-    public void CrossAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int queryDim = 64;
@@ -355,8 +356,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CrossAttentionLayer_ForwardPass_DifferentContextLength_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ForwardPass_DifferentContextLength_ProducesValidOutput()
     {
         // Arrange - context can have different sequence length
         int queryDim = 32;
@@ -376,8 +377,8 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int dim = 32;
@@ -400,8 +401,8 @@ public class AttentionLayersIntegrationTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
-    public void GraphAttentionLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - graph attention with node features and adjacency matrix
         int inputFeatures = 32;
@@ -420,8 +421,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GraphAttentionLayer_ForwardPass_BatchedInput_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_ForwardPass_BatchedInput_ProducesValidOutput()
     {
         // Arrange - batched graph input
         int inputFeatures = 32;
@@ -442,8 +443,8 @@ public class AttentionLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
         int inputFeatures = 16;
@@ -469,8 +470,8 @@ public class AttentionLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void AttentionLayer_SingleBatch_Works()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_SingleBatch_Works()
     {
         // Arrange
         int inputSize = 32;
@@ -485,8 +486,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_SingleHead_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_SingleHead_Works()
     {
         // Arrange - single attention head
         int seqLen = 8;
@@ -502,8 +503,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_LargeHeadCount_Works()
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_LargeHeadCount_Works()
     {
         // Arrange - many attention heads
         int seqLen = 8;
@@ -520,8 +521,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GraphAttentionLayer_SingleHead_Works()
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_SingleHead_Works()
     {
         // Arrange
         int inputFeatures = 16;
@@ -539,8 +540,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AttentionLayer_AuxiliaryLoss_Works()
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_AuxiliaryLoss_Works()
     {
         // Arrange
         int inputSize = 32;
@@ -558,8 +559,8 @@ public class AttentionLayersIntegrationTests
         Assert.False(float.IsNaN(auxLoss));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_AuxiliaryLoss_Works()
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_AuxiliaryLoss_Works()
     {
         // Arrange
         int seqLen = 8;

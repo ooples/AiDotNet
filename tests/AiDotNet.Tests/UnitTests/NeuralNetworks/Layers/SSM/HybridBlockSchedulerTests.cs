@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class HybridBlockSchedulerTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesScheduler()
     {
         int seqLen = 8;
         int modelDim = 32;
@@ -26,8 +27,8 @@ public class HybridBlockSchedulerTests
         Assert.Equal(HybridSchedulePattern.JambaStyle, scheduler.SchedulePattern);
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnEmptyBlocks()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsOnEmptyBlocks()
     {
         Assert.Throws<ArgumentException>(() =>
             new HybridBlockScheduler<float>(
@@ -35,8 +36,8 @@ public class HybridBlockSchedulerTests
                 HybridSchedulePattern.JambaStyle, 32));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnMismatchedArrays()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsOnMismatchedArrays()
     {
         var blocks = CreateMambaBlocks(8, 32, 3);
         var isAttention = new bool[] { false, false }; // Wrong length
@@ -46,8 +47,8 @@ public class HybridBlockSchedulerTests
                 8, blocks, isAttention, HybridSchedulePattern.JambaStyle, 32));
     }
 
-    [Fact]
-    public void Constructor_ThrowsOnInvalidModelDimension()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsOnInvalidModelDimension()
     {
         var blocks = CreateMambaBlocks(8, 32, 2);
         var isAttention = new bool[] { false, false };
@@ -57,8 +58,8 @@ public class HybridBlockSchedulerTests
                 8, blocks, isAttention, HybridSchedulePattern.JambaStyle, 0));
     }
 
-    [Fact]
-    public void Forward_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_3D_ProducesValidOutput()
     {
         int batchSize = 2;
         int seqLen = 4;
@@ -77,8 +78,8 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Forward_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_2D_ProducesValidOutput()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -98,8 +99,8 @@ public class HybridBlockSchedulerTests
 
 
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -124,8 +125,8 @@ public class HybridBlockSchedulerTests
         }
     }
 
-    [Fact]
-    public void SetParameters_ThrowsOnWrongLength()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
     {
         var blocks = CreateMambaBlocks(4, 32, 2);
         var isAttention = new bool[] { false, false };
@@ -136,8 +137,8 @@ public class HybridBlockSchedulerTests
         Assert.Throws<ArgumentException>(() => scheduler.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrue()
     {
         var blocks = CreateMambaBlocks(4, 32, 2);
         var isAttention = new bool[] { false, false };
@@ -148,8 +149,8 @@ public class HybridBlockSchedulerTests
         Assert.True(scheduler.SupportsTraining);
     }
 
-    [Fact]
-    public void GetMetadata_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetadata_ContainsExpectedKeys()
     {
         var blocks = CreateMambaBlocks(4, 32, 3);
         var isAttention = new bool[] { false, true, false };
@@ -171,8 +172,8 @@ public class HybridBlockSchedulerTests
         Assert.Equal("2", metadata["SSMBlocks"]);
     }
 
-    [Fact]
-    public void ResetState_AllowsReuse()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_AllowsReuse()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -223,8 +224,8 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CreateJambaSchedule_CreatesCorrectPattern()
+    [Fact(Timeout = 120000)]
+    public async Task CreateJambaSchedule_CreatesCorrectPattern()
     {
         var scheduler = HybridBlockScheduler<float>.CreateJambaSchedule(
             sequenceLength: 8, modelDimension: 32, numLayers: 8,
@@ -244,8 +245,8 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CreateZambaSchedule_InterleavesAttentionWithMamba()
+    [Fact(Timeout = 120000)]
+    public async Task CreateZambaSchedule_InterleavesAttentionWithMamba()
     {
         var scheduler = HybridBlockScheduler<float>.CreateZambaSchedule(
             sequenceLength: 8, modelDimension: 32, numLayers: 6,
@@ -265,8 +266,8 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CreateSambaSchedule_AlternatesMambaAndAttention()
+    [Fact(Timeout = 120000)]
+    public async Task CreateSambaSchedule_AlternatesMambaAndAttention()
     {
         var scheduler = HybridBlockScheduler<float>.CreateSambaSchedule(
             sequenceLength: 8, modelDimension: 32, numLayers: 4,
@@ -286,8 +287,8 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CreateJambaSchedule_ThrowsOnInvalidParameters()
+    [Fact(Timeout = 120000)]
+    public async Task CreateJambaSchedule_ThrowsOnInvalidParameters()
     {
         Assert.Throws<ArgumentException>(() =>
             HybridBlockScheduler<float>.CreateJambaSchedule(8, 32, numLayers: 0));
@@ -297,8 +298,8 @@ public class HybridBlockSchedulerTests
     }
 
 
-    [Fact]
-    public void Forward_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int modelDim = 32;

@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.KnowledgeDistillation;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.KnowledgeDistillation;
 
@@ -16,8 +17,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Softmax with Temperature - Verified through Loss
 
-    [Fact]
-    public void DistillationLoss_IdenticalStudentTeacher_SoftLossIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_IdenticalStudentTeacher_SoftLossIsZero()
     {
         // When student and teacher have identical logits, KL divergence is 0
         // So soft loss = 0, and without labels, total loss = 0
@@ -33,8 +34,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void DistillationLoss_SoftOnly_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_SoftOnly_HandCalculated()
     {
         // No true labels -> only soft loss
         // student logits = [2, 1], teacher logits = [1, 2], T = 1.0
@@ -77,8 +78,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(expected, result, RelaxedTol);
     }
 
-    [Fact]
-    public void DistillationLoss_HigherTemperature_SofterDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_HigherTemperature_SofterDistribution()
     {
         // Higher temperature should produce softer distributions
         // With identical student/teacher, loss is always 0
@@ -108,8 +109,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region KL Divergence Properties
 
-    [Fact]
-    public void DistillationLoss_KLDivergence_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_KLDivergence_NonNegative()
     {
         // KL divergence is always >= 0 (Gibbs' inequality)
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.0);
@@ -139,8 +140,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DistillationLoss_KLDivergence_ZeroForIdentical()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_KLDivergence_ZeroForIdentical()
     {
         var loss = new DistillationLoss<double>(temperature: 5.0, alpha: 0.0);
 
@@ -161,8 +162,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Cross-Entropy and Combined Loss
 
-    [Fact]
-    public void DistillationLoss_WithLabels_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_WithLabels_HandCalculated()
     {
         // student logits = [2, 0], teacher logits = [2, 0], T=1, alpha=0.5
         // true labels = [1, 0] (one-hot)
@@ -195,8 +196,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(expected, result, RelaxedTol);
     }
 
-    [Fact]
-    public void DistillationLoss_AlphaZero_OnlySoftLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_AlphaZero_OnlySoftLoss()
     {
         // alpha = 0 means only soft loss
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.0);
@@ -217,8 +218,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(withoutLabels, withLabels, Tol);
     }
 
-    [Fact]
-    public void DistillationLoss_AlphaOne_OnlyHardLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_AlphaOne_OnlyHardLoss()
     {
         // alpha = 1 means only hard loss
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 1.0);
@@ -245,8 +246,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(expected, result, RelaxedTol);
     }
 
-    [Fact]
-    public void DistillationLoss_TSquaredScaling_Effect()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_TSquaredScaling_Effect()
     {
         // T^2 scaling: soft loss should be scaled by T^2
         // For identical student/teacher, soft loss = 0 regardless of T
@@ -272,8 +273,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Gradient Verification
 
-    [Fact]
-    public void DistillationLoss_Gradient_IdenticalLogits_ZeroGradient()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Gradient_IdenticalLogits_ZeroGradient()
     {
         // When student = teacher, soft gradient should be zero
         var loss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
@@ -289,8 +290,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DistillationLoss_Gradient_SoftOnly_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Gradient_SoftOnly_HandCalculated()
     {
         // Soft gradient = (student_soft - teacher_soft) * T^2 / batch_size
         // student logits = [2, 0], teacher logits = [0, 2], T=1
@@ -315,8 +316,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(expectedGrad0, gradient[0, 0], RelaxedTol);
     }
 
-    [Fact]
-    public void DistillationLoss_Gradient_SumsToZero_SoftGradient()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Gradient_SumsToZero_SoftGradient()
     {
         // For softmax-based gradient, the sum across classes should be approximately 0
         // because softmax probabilities sum to 1 on both sides
@@ -344,8 +345,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Batch Processing
 
-    [Fact]
-    public void DistillationLoss_BatchOf2_IsAverageOfIndividualLosses()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_BatchOf2_IsAverageOfIndividualLosses()
     {
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.0);
 
@@ -381,8 +382,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact]
-    public void DistillationLoss_InvalidTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_InvalidTemperature_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new DistillationLoss<double>(temperature: 0));
@@ -390,8 +391,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             new DistillationLoss<double>(temperature: -1));
     }
 
-    [Fact]
-    public void DistillationLoss_InvalidAlpha_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_InvalidAlpha_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new DistillationLoss<double>(alpha: -0.1));
@@ -399,8 +400,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             new DistillationLoss<double>(alpha: 1.1));
     }
 
-    [Fact]
-    public void DistillationLoss_MismatchedDimensions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_MismatchedDimensions_Throws()
     {
         var loss = new DistillationLoss<double>();
 
@@ -411,8 +412,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             loss.ComputeLoss(student, teacher));
     }
 
-    [Fact]
-    public void DistillationLoss_MismatchedBatchSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_MismatchedBatchSize_Throws()
     {
         var loss = new DistillationLoss<double>();
 
@@ -423,8 +424,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             loss.ComputeLoss(student, teacher));
     }
 
-    [Fact]
-    public void DistillationLoss_LabelDimensionMismatch_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_LabelDimensionMismatch_Throws()
     {
         var loss = new DistillationLoss<double>();
 
@@ -436,8 +437,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             loss.ComputeLoss(student, teacher, labels));
     }
 
-    [Fact]
-    public void DistillationLoss_NullStudent_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_NullStudent_Throws()
     {
         var loss = new DistillationLoss<double>();
         var teacher = new Matrix<double>(1, 3);
@@ -446,8 +447,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             loss.ComputeLoss(null!, teacher));
     }
 
-    [Fact]
-    public void DistillationLoss_NullTeacher_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_NullTeacher_Throws()
     {
         var loss = new DistillationLoss<double>();
         var student = new Matrix<double>(1, 3);
@@ -456,8 +457,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
             loss.ComputeLoss(student, null!));
     }
 
-    [Fact]
-    public void DistillationLoss_LargeLogits_NumericalStability()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_LargeLogits_NumericalStability()
     {
         // Large logit values should not cause overflow due to max subtraction trick
         var loss = new DistillationLoss<double>(temperature: 1.0, alpha: 0.0);
@@ -474,8 +475,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.True(result >= 0, $"Loss should be non-negative: {result}");
     }
 
-    [Fact]
-    public void DistillationLoss_VerySimilarLogits_SmallLoss()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_VerySimilarLogits_SmallLoss()
     {
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.0);
 
@@ -494,16 +495,16 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Temperature and Alpha Property Tests
 
-    [Fact]
-    public void DistillationLoss_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_DefaultValues()
     {
         var loss = new DistillationLoss<double>();
         Assert.Equal(3.0, loss.Temperature, Tol);
         Assert.Equal(0.3, loss.Alpha, Tol);
     }
 
-    [Fact]
-    public void DistillationLoss_TemperatureProperty_CanBeChanged()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_TemperatureProperty_CanBeChanged()
     {
         var loss = new DistillationLoss<double>(temperature: 2.0);
         Assert.Equal(2.0, loss.Temperature, Tol);
@@ -514,8 +515,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => loss.Temperature = 0);
     }
 
-    [Fact]
-    public void DistillationLoss_AlphaProperty_CanBeChanged()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_AlphaProperty_CanBeChanged()
     {
         var loss = new DistillationLoss<double>(alpha: 0.5);
         Assert.Equal(0.5, loss.Alpha, Tol);
@@ -531,8 +532,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Gradient Consistency with Loss
 
-    [Fact]
-    public void DistillationLoss_GradientShape_MatchesInput()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_GradientShape_MatchesInput()
     {
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.5);
 
@@ -554,8 +555,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         Assert.Equal(4, gradient.Columns);
     }
 
-    [Fact]
-    public void DistillationLoss_NumericalGradient_ApproximatesAnalytic()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_NumericalGradient_ApproximatesAnalytic()
     {
         // Verify gradient using finite differences
         var loss = new DistillationLoss<double>(temperature: 2.0, alpha: 0.0);
@@ -596,8 +597,8 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void DistillationLoss_Float_ProducesReasonableResult()
+    [Fact(Timeout = 120000)]
+    public async Task DistillationLoss_Float_ProducesReasonableResult()
     {
         var loss = new DistillationLoss<float>(temperature: 2.0, alpha: 0.3);
 

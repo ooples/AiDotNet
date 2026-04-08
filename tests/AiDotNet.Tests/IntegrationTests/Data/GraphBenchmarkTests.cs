@@ -11,8 +11,8 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class GraphBenchmarkTests
 {
-    [Fact]
-    public void Qm9Options_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Qm9Options_DefaultValues()
     {
         var options = new Qm9DataLoaderOptions();
         Assert.True(options.AutoDownload);
@@ -20,16 +20,16 @@ public class GraphBenchmarkTests
         Assert.Null(options.MaxSamples);
     }
 
-    [Fact]
-    public void ZincOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ZincOptions_DefaultValues()
     {
         var options = new ZincDataLoaderOptions();
         Assert.True(options.AutoDownload);
         Assert.True(options.UseSubset);
     }
 
-    [Fact]
-    public void ProteinOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProteinOptions_DefaultValues()
     {
         var options = new ProteinDataLoaderOptions();
         Assert.Equal(8.0, options.ContactThreshold);
@@ -37,16 +37,16 @@ public class GraphBenchmarkTests
         Assert.Equal(384, options.NumClasses);
     }
 
-    [Fact]
-    public void Wikidata5mOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Wikidata5mOptions_DefaultValues()
     {
         var options = new Wikidata5mDataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
         Assert.Equal(128, options.EmbeddingDimension);
     }
 
-    [Fact]
-    public void TemporalGraphOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task TemporalGraphOptions_DefaultValues()
     {
         var options = new TemporalGraphDataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
@@ -54,7 +54,7 @@ public class GraphBenchmarkTests
         Assert.Equal(172, options.EdgeFeatureDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ProteinDataLoader_LoadsCsvData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "protein_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -100,7 +100,7 @@ public class GraphBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Wikidata5mDataLoader_LoadsTriplets()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "wikidata_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -137,7 +137,7 @@ public class GraphBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task TemporalGraphDataLoader_LoadsInteractions()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "temporal_test_" + Guid.NewGuid().ToString("N")[..8]);

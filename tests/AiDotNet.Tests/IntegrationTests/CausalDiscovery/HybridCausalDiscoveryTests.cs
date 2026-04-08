@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery.Hybrid;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -27,8 +28,8 @@ public class HybridCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void MMHC_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task MMHC_FindsCausalStructure()
     {
         var algo = new MMHCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -36,8 +37,8 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void GFCI_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task GFCI_FindsCausalStructure()
     {
         var algo = new GFCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -45,8 +46,8 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void H2PC_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task H2PC_FindsCausalStructure()
     {
         var algo = new H2PCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -54,8 +55,8 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void PCNOTEARS_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task PCNOTEARS_FindsCausalStructure()
     {
         var algo = new PCNOTEARSAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -63,8 +64,8 @@ public class HybridCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void RSMAX2_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task RSMAX2_FindsCausalStructure()
     {
         var algo = new RSMAX2Algorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

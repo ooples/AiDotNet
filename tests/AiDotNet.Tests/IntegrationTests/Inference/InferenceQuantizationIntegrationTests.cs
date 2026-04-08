@@ -4,6 +4,7 @@ using AiDotNet.Deployment.Optimization.Quantization.Formats;
 using AiDotNet.Inference.Quantization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
@@ -18,8 +19,8 @@ public class InferenceQuantizationIntegrationTests
 
     #region INT8 Quantization - Scale Computation Golden References
 
-    [Fact]
-    public void Int8_PerRowScale_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_PerRowScale_GoldenReference()
     {
         // Row [0.5, -1.0, 0.25, 0.75]: maxAbs = 1.0
         // scale = maxAbs / 127 = 1.0 / 127 ≈ 0.007874
@@ -37,8 +38,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(95, result.Weights[3]);
     }
 
-    [Fact]
-    public void Int8_PerRowScale_MultipleRows_IndependentScales()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_PerRowScale_MultipleRows_IndependentScales()
     {
         // Row 0: [10, -5] → maxAbs=10, scale=10/127
         // Row 1: [0.1, -0.05] → maxAbs=0.1, scale=0.1/127
@@ -59,8 +60,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(-64, result.Weights[3]);
     }
 
-    [Fact]
-    public void Int8_RoundTrip_SmallError()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_RoundTrip_SmallError()
     {
         // Quantize and dequantize should introduce only small quantization error
         // Error bound: maxAbs / 127 per element (half a quantization step)
@@ -90,8 +91,8 @@ public class InferenceQuantizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Int8_ZeroRow_ScaleIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_ZeroRow_ScaleIsOne()
     {
         // All zeros: maxAbs=0, scale=1 (fallback)
         float[] data = { 0f, 0f, 0f };
@@ -103,8 +104,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(0, result.Weights[2]);
     }
 
-    [Fact]
-    public void Int8_Clamping_LargeValues()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_Clamping_LargeValues()
     {
         // Values that would exceed [-127, 127] after scaling should be clamped
         // Row: [100, -100, 50, -50]: maxAbs=100, scale=100/127
@@ -119,8 +120,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(-64, result.Weights[3]);
     }
 
-    [Fact]
-    public void Int8_TensorOverload_MatchesSpanOverload()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_TensorOverload_MatchesSpanOverload()
     {
         float[] data = { 1.0f, -0.5f, 0.3f, -0.8f, 0.2f, 0.9f };
         var tensor = new Tensor<float>(new[] { 2, 3 });
@@ -145,8 +146,8 @@ public class InferenceQuantizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void Int8_InvalidDimensions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_InvalidDimensions_Throws()
     {
         float[] data = { 1f, 2f, 3f };
 
@@ -156,8 +157,8 @@ public class InferenceQuantizationIntegrationTests
             Int8WeightOnlyQuantization.QuantizePerRow(data.AsSpan(), rows: 1, cols: 0));
     }
 
-    [Fact]
-    public void Int8_SpanTooSmall_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_SpanTooSmall_Throws()
     {
         float[] data = { 1f, 2f };
 
@@ -165,16 +166,16 @@ public class InferenceQuantizationIntegrationTests
             Int8WeightOnlyQuantization.QuantizePerRow(data.AsSpan(), rows: 2, cols: 3));
     }
 
-    [Fact]
-    public void Int8_TensorNot2D_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_TensorNot2D_Throws()
     {
         var tensor1d = new Tensor<float>(new[] { 4 });
 
         Assert.Throws<ArgumentException>(() => Int8WeightOnlyQuantization.QuantizePerRow(tensor1d));
     }
 
-    [Fact]
-    public void Int8_SymmetricValues_SymmetricQuantization()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_SymmetricValues_SymmetricQuantization()
     {
         // +X and -X should quantize to +q and -q (symmetric)
         float[] data = { 2.5f, -2.5f, 1.25f, -1.25f };
@@ -188,8 +189,8 @@ public class InferenceQuantizationIntegrationTests
 
     #region FP8 E4M3 Encoding/Decoding Golden References
 
-    [Fact]
-    public void FP8_E4M3_Zero_EncodesDecode()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_Zero_EncodesDecode()
     {
         byte encoded = FP8Quantizer<float, float[], float[]>.E4M3ToByte(0.0);
         Assert.Equal(0, encoded);
@@ -198,8 +199,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(0.0, decoded);
     }
 
-    [Fact]
-    public void FP8_E4M3_One_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_One_GoldenReference()
     {
         // 1.0 = sign:0, exp:0111 (7=bias), mantissa:000
         // byte = 0|0111|000 = 0x38
@@ -210,8 +211,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(1.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E4M3_NegativeOne_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_NegativeOne_GoldenReference()
     {
         // -1.0 = sign:1, exp:0111, mantissa:000
         // byte = 1|0111|000 = 0xB8
@@ -222,8 +223,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(-1.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E4M3_MaxValue_Is448()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_MaxValue_Is448()
     {
         // E4M3 max = 448 (per NVIDIA spec)
         // exp=15 (max normal), mantissa=110 (6/8 = 0.75) since 111=7 is NaN
@@ -232,8 +233,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(448.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E4M3_NaN_Encoding()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_NaN_Encoding()
     {
         // NaN = exp=15, mantissa=7 → byte = 0|1111|111 = 0x7F
         byte encoded = FP8Quantizer<float, float[], float[]>.E4M3ToByte(double.NaN);
@@ -243,8 +244,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.True(double.IsNaN(decoded));
     }
 
-    [Fact]
-    public void FP8_E4M3_RoundTrip_CommonValues()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_RoundTrip_CommonValues()
     {
         // Test round-trip for values representable exactly in E4M3
         double[] exactValues = { 0.5, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 448.0 };
@@ -258,8 +259,8 @@ public class InferenceQuantizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FP8_E4M3_RoundTrip_NegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_RoundTrip_NegativeValues()
     {
         double[] negValues = { -0.5, -1.0, -2.0, -128.0, -448.0 };
 
@@ -272,8 +273,8 @@ public class InferenceQuantizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FP8_E4M3_Overflow_ClampedToMax()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_Overflow_ClampedToMax()
     {
         // Values > 448 should be clamped to 448
         byte encoded = FP8Quantizer<float, float[], float[]>.E4M3ToByte(1000.0);
@@ -285,8 +286,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(-448.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E4M3_Subnormal_SmallValues()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_Subnormal_SmallValues()
     {
         // Subnormal: exp=0, mantissa != 0
         // value = mantissa/8 * 2^(-6)
@@ -298,8 +299,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(minSubnormal, decoded, 1e-8);
     }
 
-    [Fact]
-    public void FP8_E4M3_Underflow_BecomesZero()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E4M3_Underflow_BecomesZero()
     {
         // Very small values below min subnormal should underflow to zero
         byte encoded = FP8Quantizer<float, float[], float[]>.E4M3ToByte(1e-10);
@@ -310,8 +311,8 @@ public class InferenceQuantizationIntegrationTests
 
     #region FP8 E5M2 Encoding/Decoding Golden References
 
-    [Fact]
-    public void FP8_E5M2_Zero_EncodesDecodes()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_Zero_EncodesDecodes()
     {
         byte encoded = FP8Quantizer<float, float[], float[]>.E5M2ToByte(0.0);
         Assert.Equal(0, encoded);
@@ -320,8 +321,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(0.0, decoded);
     }
 
-    [Fact]
-    public void FP8_E5M2_One_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_One_GoldenReference()
     {
         // 1.0 = sign:0, exp:01111 (15=bias), mantissa:00
         // byte = 0|01111|00 = 0x3C
@@ -332,8 +333,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(1.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E5M2_NaN_Encoding()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_NaN_Encoding()
     {
         byte encoded = FP8Quantizer<float, float[], float[]>.E5M2ToByte(double.NaN);
         // NaN pattern
@@ -341,8 +342,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.True(double.IsNaN(decoded));
     }
 
-    [Fact]
-    public void FP8_E5M2_Infinity_Encoding()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_Infinity_Encoding()
     {
         // +Inf = exp=31, mantissa=0 → byte = 0|11111|00 = 0x7C
         byte posInf = FP8Quantizer<float, float[], float[]>.E5M2ToByte(double.PositiveInfinity);
@@ -359,8 +360,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.True(double.IsNegativeInfinity(decodedNeg));
     }
 
-    [Fact]
-    public void FP8_E5M2_MaxValue_Is57344()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_MaxValue_Is57344()
     {
         // E5M2 max = 57344 per spec
         // exp=30 (max normal), mantissa=11 (3/4 = 0.75)
@@ -369,8 +370,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(57344.0, decoded, Tolerance);
     }
 
-    [Fact]
-    public void FP8_E5M2_RoundTrip_CommonValues()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_E5M2_RoundTrip_CommonValues()
     {
         // E5M2 has 2 mantissa bits → representable: 1.0, 1.25, 1.5, 1.75 * 2^exp
         double[] exactValues = { 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0, 16.0, 256.0, 1024.0 };
@@ -387,8 +388,8 @@ public class InferenceQuantizationIntegrationTests
 
     #region FP8 Weight-Only Quantization Round-Trip Tests
 
-    [Fact]
-    public void FP8_WeightOnly_PerRowScale_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_WeightOnly_PerRowScale_GoldenReference()
     {
         // Row [10.0, -5.0, 2.5]: maxAbs=10, scale=10/448
         // Scaled values: 10*(448/10)=448, -5*(448/10)=-224, 2.5*(448/10)=112
@@ -401,8 +402,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(3, result.Cols);
     }
 
-    [Fact]
-    public void FP8_WeightOnly_RoundTrip_SmallError()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_WeightOnly_RoundTrip_SmallError()
     {
         // Quantize and dequantize should preserve values within FP8 precision
         float[] original = { 1.0f, -0.5f, 0.25f, -2.0f, 0.0f, 3.5f };
@@ -426,8 +427,8 @@ public class InferenceQuantizationIntegrationTests
         }
     }
 
-    [Fact]
-    public void FP8_WeightOnly_ZeroRow_ScaleIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_WeightOnly_ZeroRow_ScaleIsOne()
     {
         float[] data = { 0f, 0f, 0f };
         var result = FP8WeightOnlyQuantization.QuantizePerRow(data.AsSpan(), rows: 1, cols: 3);
@@ -435,8 +436,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.Equal(1f, result.Scales[0]);
     }
 
-    [Fact]
-    public void FP8_WeightOnly_InvalidDimensions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_WeightOnly_InvalidDimensions_Throws()
     {
         float[] data = { 1f, 2f, 3f };
 
@@ -446,8 +447,8 @@ public class InferenceQuantizationIntegrationTests
             FP8WeightOnlyQuantization.QuantizePerRow(data.AsSpan(), rows: 1, cols: 0));
     }
 
-    [Fact]
-    public void FP8_WeightOnly_SpanTooSmall_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_WeightOnly_SpanTooSmall_Throws()
     {
         float[] data = { 1f };
 
@@ -455,8 +456,8 @@ public class InferenceQuantizationIntegrationTests
             FP8WeightOnlyQuantization.QuantizePerRow(data.AsSpan(), rows: 2, cols: 3));
     }
 
-    [Fact]
-    public void FP8_Dequantize_GoldenReference()
+    [Fact(Timeout = 120000)]
+    public async Task FP8_Dequantize_GoldenReference()
     {
         // Manually encode 1.0 as E4M3, then dequantize with scale=2.0
         // E4M3ToByte(1.0) = 0x38, ByteToE4M3(0x38) = 1.0
@@ -470,8 +471,8 @@ public class InferenceQuantizationIntegrationTests
 
     #region INT8 vs FP8 Comparison Tests
 
-    [Fact]
-    public void Int8VsFP8_SimilarScaleForUniformData()
+    [Fact(Timeout = 120000)]
+    public async Task Int8VsFP8_SimilarScaleForUniformData()
     {
         // For uniform data, both should produce similar scales
         float[] data = { 1.0f, -0.5f, 0.3f, -0.8f };
@@ -490,8 +491,8 @@ public class InferenceQuantizationIntegrationTests
         Assert.True(fp8Result.Scales[0] < int8Result.Scales[0]);
     }
 
-    [Fact]
-    public void Int8_LargeMatrix_AllValuesInRange()
+    [Fact(Timeout = 120000)]
+    public async Task Int8_LargeMatrix_AllValuesInRange()
     {
         // Stress test: 10x10 matrix with varying magnitudes
         int rows = 10, cols = 10;

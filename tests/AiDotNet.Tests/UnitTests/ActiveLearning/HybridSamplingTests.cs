@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
@@ -27,8 +28,8 @@ public class HybridSamplingTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_ValidStrategies_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidStrategies_InitializesCorrectly()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -41,15 +42,15 @@ public class HybridSamplingTests
         Assert.Equal(2, hybrid.Strategies.Count);
     }
 
-    [Fact]
-    public void Constructor_NullStrategies_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullStrategies_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new HybridSampling<double>(null!));
     }
 
-    [Fact]
-    public void Constructor_EmptyStrategies_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_EmptyStrategies_ThrowsArgumentException()
     {
         // Arrange
         var strategies = new List<(IActiveLearningStrategy<double>, double)>();
@@ -77,8 +78,8 @@ public class HybridSamplingTests
 
     #region Name Property Tests
 
-    [Fact]
-    public void Name_MultipleStrategies_ContainsAllStrategyNames()
+    [Fact(Timeout = 60000)]
+    public async Task Name_MultipleStrategies_ContainsAllStrategyNames()
     {
         // Arrange
         var strategies = new List<(IActiveLearningStrategy<double>, double)>
@@ -97,8 +98,8 @@ public class HybridSamplingTests
         Assert.Contains("Hybrid", name);
     }
 
-    [Fact]
-    public void Name_ContainsCombinationMethod()
+    [Fact(Timeout = 60000)]
+    public async Task Name_ContainsCombinationMethod()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -115,8 +116,8 @@ public class HybridSamplingTests
 
     #region Strategies Property Tests
 
-    [Fact]
-    public void Strategies_ReturnsReadOnlyList()
+    [Fact(Timeout = 60000)]
+    public async Task Strategies_ReturnsReadOnlyList()
     {
         // Arrange
         var strategies = CreateStrategies(count: 3);
@@ -129,8 +130,8 @@ public class HybridSamplingTests
         Assert.Equal(3, returnedStrategies.Count);
     }
 
-    [Fact]
-    public void Strategies_PreservesWeights()
+    [Fact(Timeout = 60000)]
+    public async Task Strategies_PreservesWeights()
     {
         // Arrange
         var strategies = new List<(IActiveLearningStrategy<double>, double)>
@@ -152,8 +153,8 @@ public class HybridSamplingTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact]
-    public void UseBatchDiversity_DefaultValue_IsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_DefaultValue_IsFalse()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -163,8 +164,8 @@ public class HybridSamplingTests
         Assert.False(hybrid.UseBatchDiversity);
     }
 
-    [Fact]
-    public void UseBatchDiversity_SetToTrue_UpdatesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task UseBatchDiversity_SetToTrue_UpdatesCorrectly()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -181,8 +182,8 @@ public class HybridSamplingTests
 
     #region CreateUncertaintyDiversity Tests
 
-    [Fact]
-    public void CreateUncertaintyDiversity_DefaultWeights_CreatesHybridSampler()
+    [Fact(Timeout = 60000)]
+    public async Task CreateUncertaintyDiversity_DefaultWeights_CreatesHybridSampler()
     {
         // Act
         var hybrid = HybridSampling<double>.CreateUncertaintyDiversity();
@@ -192,8 +193,8 @@ public class HybridSamplingTests
         Assert.Equal(2, hybrid.Strategies.Count);
     }
 
-    [Fact]
-    public void CreateUncertaintyDiversity_CustomWeights_AppliesWeights()
+    [Fact(Timeout = 60000)]
+    public async Task CreateUncertaintyDiversity_CustomWeights_AppliesWeights()
     {
         // Act
         var hybrid = HybridSampling<double>.CreateUncertaintyDiversity(
@@ -209,8 +210,8 @@ public class HybridSamplingTests
 
     #region SelectSamples Tests
 
-    [Fact]
-    public void SelectSamples_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -221,8 +222,8 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(null!, pool, batchSize: 3));
     }
 
-    [Fact]
-    public void SelectSamples_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -233,8 +234,8 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact]
-    public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -249,8 +250,8 @@ public class HybridSamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -265,8 +266,8 @@ public class HybridSamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
-    public void SelectSamples_ReturnsUniqueIndices()
+    [Fact(Timeout = 60000)]
+    public async Task SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -303,8 +304,8 @@ public class HybridSamplingTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact]
-    public void ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -315,8 +316,8 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(null!, pool));
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -327,8 +328,8 @@ public class HybridSamplingTests
         Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -343,8 +344,8 @@ public class HybridSamplingTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact]
-    public void ComputeInformativenessScores_ReturnsNonNegativeScores()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -388,8 +389,8 @@ public class HybridSamplingTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact]
-    public void GetSelectionStatistics_BeforeAnySelection_ReturnsInitialStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_BeforeAnySelection_ReturnsInitialStatistics()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -407,8 +408,8 @@ public class HybridSamplingTests
         Assert.Equal(2.0, stats["NumStrategies"]);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
         var strategies = CreateStrategies(count: 3);
@@ -426,8 +427,8 @@ public class HybridSamplingTests
         Assert.Equal(3.0, stats["NumStrategies"]);
     }
 
-    [Fact]
-    public void GetSelectionStatistics_IncludesIndividualStrategyStats()
+    [Fact(Timeout = 60000)]
+    public async Task GetSelectionStatistics_IncludesIndividualStrategyStats()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -449,8 +450,8 @@ public class HybridSamplingTests
 
     #region Combination Method Tests
 
-    [Fact]
-    public void WeightedSum_CombinesScoresCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task WeightedSum_CombinesScoresCorrectly()
     {
         // Arrange
         var strategies = new List<(IActiveLearningStrategy<double>, double)>
@@ -473,8 +474,8 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact]
-    public void Product_CombinesScoresCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Product_CombinesScoresCorrectly()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -493,8 +494,8 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact]
-    public void RankFusion_CombinesScoresCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task RankFusion_CombinesScoresCorrectly()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -513,8 +514,8 @@ public class HybridSamplingTests
         }
     }
 
-    [Fact]
-    public void Maximum_SelectsHighestScoreAcrossStrategies()
+    [Fact(Timeout = 60000)]
+    public async Task Maximum_SelectsHighestScoreAcrossStrategies()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -529,8 +530,8 @@ public class HybridSamplingTests
         Assert.Equal(10, scores.Length);
     }
 
-    [Fact]
-    public void Minimum_SelectsLowestScoreAcrossStrategies()
+    [Fact(Timeout = 60000)]
+    public async Task Minimum_SelectsLowestScoreAcrossStrategies()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);
@@ -549,8 +550,8 @@ public class HybridSamplingTests
 
     #region Integration Tests
 
-    [Fact]
-    public void HybridSampling_CompleteWorkflow_ExecutesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task HybridSampling_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
         var hybrid = HybridSampling<double>.CreateUncertaintyDiversity();
@@ -571,8 +572,8 @@ public class HybridSamplingTests
         Assert.NotNull(stats2);
     }
 
-    [Fact]
-    public void HybridSampling_MultipleStrategies_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task HybridSampling_MultipleStrategies_WorksCorrectly()
     {
         // Arrange
         var strategies = new List<(IActiveLearningStrategy<double>, double)>
@@ -594,8 +595,8 @@ public class HybridSamplingTests
         Assert.Equal(3.0, stats["NumStrategies"]);
     }
 
-    [Fact]
-    public void HybridSampling_DifferentCombinationMethods_ProduceDifferentResults()
+    [Fact(Timeout = 60000)]
+    public async Task HybridSampling_DifferentCombinationMethods_ProduceDifferentResults()
     {
         // Arrange
         var strategies = CreateStrategies(count: 2);

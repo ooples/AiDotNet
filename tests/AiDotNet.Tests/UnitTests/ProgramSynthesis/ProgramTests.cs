@@ -1,6 +1,7 @@
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class ProgramTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidParameters_CreatesInstance()
     {
         // Arrange
         const string sourceCode = "def add(a, b):\n    return a + b";
@@ -28,8 +29,8 @@ public class ProgramTests
         Assert.Equal(2, program.Complexity);
     }
 
-    [Fact]
-    public void Constructor_DefaultConstructor_CreatesEmptyProgram()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_DefaultConstructor_CreatesEmptyProgram()
     {
         // Act
         var program = new Program<double>();
@@ -43,8 +44,8 @@ public class ProgramTests
         Assert.Equal(0, program.Complexity);
     }
 
-    [Fact]
-    public void Properties_SettersAndGetters_WorkCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Properties_SettersAndGetters_WorkCorrectly()
     {
         // Arrange
         var program = new Program<double>();
@@ -68,8 +69,8 @@ public class ProgramTests
         Assert.Equal(5.5, program.ExecutionTimeMs);
     }
 
-    [Fact]
-    public void ToString_ReturnsFormattedString()
+    [Fact(Timeout = 60000)]
+    public async Task ToString_ReturnsFormattedString()
     {
         // Arrange
         var program = new Program<double>(
@@ -90,8 +91,8 @@ public class ProgramTests
         Assert.Contains("x = 5", result);
     }
 
-    [Fact]
-    public void ErrorMessage_WhenSet_StoresCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task ErrorMessage_WhenSet_StoresCorrectly()
     {
         // Arrange
         var program = new Program<double>("invalid code", ProgramLanguage.Python, false);

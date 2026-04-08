@@ -2,6 +2,7 @@ using AiDotNet.Agents;
 using AiDotNet.Interfaces;
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Agents;
 
@@ -10,8 +11,8 @@ namespace AiDotNetTests.UnitTests.Agents;
 /// </summary>
 public class PlanAndExecuteAgentTests
 {
-    [Fact]
-    public void Constructor_WithValidChatModel_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidChatModel_InitializesSuccessfully()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -25,8 +26,8 @@ public class PlanAndExecuteAgentTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact]
-    public void Constructor_WithTools_InitializesWithTools()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTools_InitializesWithTools()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -42,8 +43,8 @@ public class PlanAndExecuteAgentTests
         Assert.Equal("Calculator", agent.Tools[0].Name);
     }
 
-    [Fact]
-    public void Constructor_WithAllowPlanRevisionFalse_CreateStrictAgent()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithAllowPlanRevisionFalse_CreateStrictAgent()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -56,15 +57,15 @@ public class PlanAndExecuteAgentTests
         // Agent should not revise plan on errors (tested in execution)
     }
 
-    [Fact]
-    public void Constructor_WithNullChatModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new PlanAndExecuteAgent<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -76,7 +77,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -88,7 +89,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithValidPlan_ExecutesSteps()
     {
         // Arrange
@@ -124,7 +125,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("EXECUTION PHASE", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithInvalidMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -136,7 +137,7 @@ public class PlanAndExecuteAgentTests
             agent.RunAsync("Test query", maxIterations: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_UpdatesScratchpad()
     {
         // Arrange
@@ -165,7 +166,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("Plan created", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithNoPlan_ReturnsErrorMessage()
     {
         // Arrange
@@ -181,7 +182,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("unable to create a plan", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithMultipleSteps_ExecutesInOrder()
     {
         // Arrange
@@ -224,7 +225,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("Step 3", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithFallbackParsing_HandlesNonJsonPlan()
     {
         // Arrange
@@ -244,7 +245,7 @@ public class PlanAndExecuteAgentTests
         // Fallback parser should extract numbered steps
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithFinalStepInPlan_ReturnsImmediately()
     {
         // Arrange
@@ -272,7 +273,7 @@ public class PlanAndExecuteAgentTests
         Assert.Contains("PLAN COMPLETED", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithToolNotFound_ReturnsErrorInResult()
     {
         // Arrange

@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Genetics;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Genetics;
 
@@ -32,8 +33,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value);
     }
 
-    [Fact]
-    public void BinaryGene_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new BinaryGene(1);
@@ -46,8 +47,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Value, clone.Value);
     }
 
-    [Fact]
-    public void BinaryGene_Clone_MutationDoesNotAffectOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryGene_Clone_MutationDoesNotAffectOriginal()
     {
         // Arrange
         var original = new BinaryGene(0);
@@ -61,8 +62,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1, mutatedClone.Value); // Mutated value is flipped
     }
 
-    [Fact]
-    public void BinaryGene_Flip_CorrectlyInvertsValue()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryGene_Flip_CorrectlyInvertsValue()
     {
         // Arrange
         var gene0 = new BinaryGene(0);
@@ -95,8 +96,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact]
-    public void RealGene_DefaultStepSize_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task RealGene_DefaultStepSize_IsPositive()
     {
         // Arrange & Act
         var gene = new RealGene(0.0);
@@ -119,8 +120,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(stepSize, gene.StepSize, Tolerance);
     }
 
-    [Fact]
-    public void RealGene_Clone_CopiesValueAndStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task RealGene_Clone_CopiesValueAndStepSize()
     {
         // Arrange
         var original = new RealGene(3.14159, 0.25);
@@ -134,8 +135,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.StepSize, clone.StepSize, Tolerance);
     }
 
-    [Fact]
-    public void RealGene_Mutation_StepSizeAffectsMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task RealGene_Mutation_StepSizeAffectsMagnitude()
     {
         // Arrange - Test that step size is used in mutation
         var gene = new RealGene(0.0, 0.1);
@@ -154,8 +155,8 @@ public class GeneTypesIntegrationTests
             $"Mutation with step size 0.1 should typically stay within bounds. Got: {mutatedValue}");
     }
 
-    [Fact]
-    public void RealGene_StepSizeAdaptation_OneFifthRule()
+    [Fact(Timeout = 120000)]
+    public async Task RealGene_StepSizeAdaptation_OneFifthRule()
     {
         // Arrange - Test the 1/5 success rule adaptation
         var gene = new RealGene(0.0, 1.0);
@@ -200,8 +201,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(index, gene.Index);
     }
 
-    [Fact]
-    public void PermutationGene_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new PermutationGene(42);
@@ -214,8 +215,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Index, clone.Index);
     }
 
-    [Fact]
-    public void PermutationGene_ValidPermutation_HasUniqueIndices()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationGene_ValidPermutation_HasUniqueIndices()
     {
         // Arrange - Create a valid permutation of 10 elements
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -235,8 +236,8 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range");
     }
 
-    [Fact]
-    public void PermutationGene_SwapMutation_PreservesValidPermutation()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationGene_SwapMutation_PreservesValidPermutation()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -254,8 +255,8 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range after swap mutation");
     }
 
-    [Fact]
-    public void PermutationGene_InversionMutation_PreservesValidPermutation()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationGene_InversionMutation_PreservesValidPermutation()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -273,8 +274,8 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range after inversion mutation");
     }
 
-    [Fact]
-    public void PermutationGene_OrderCrossover_ProducesValidOffspring()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationGene_OrderCrossover_ProducesValidOffspring()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -301,8 +302,8 @@ public class GeneTypesIntegrationTests
 
     #region NodeGene Tests (Genetic Programming)
 
-    [Fact]
-    public void NodeGene_Function_HasCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Function_HasCorrectType()
     {
         // Arrange & Act
         var functionNode = new NodeGene(GeneticNodeType.Function, "+");
@@ -314,8 +315,8 @@ public class GeneTypesIntegrationTests
         Assert.Empty(functionNode.Children);
     }
 
-    [Fact]
-    public void NodeGene_Terminal_HasCorrectType()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Terminal_HasCorrectType()
     {
         // Arrange & Act
         var terminalNode = new NodeGene(GeneticNodeType.Terminal, "x");
@@ -325,8 +326,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal("x", terminalNode.Value);
     }
 
-    [Fact]
-    public void NodeGene_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new NodeGene(GeneticNodeType.Function, "*");
@@ -344,8 +345,8 @@ public class GeneTypesIntegrationTests
         Assert.NotSame(original.Children[0], clone.Children[0]);
     }
 
-    [Fact]
-    public void NodeGene_Clone_DeepClonesChildren()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Clone_DeepClonesChildren()
     {
         // Arrange - Create a tree: + (x, * (y, 2))
         var root = new NodeGene(GeneticNodeType.Function, "+");
@@ -366,8 +367,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal("y", clone.Children[1].Children[0].Value);
     }
 
-    [Fact]
-    public void NodeGene_Equals_ReturnsTrueForIdenticalTrees()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Equals_ReturnsTrueForIdenticalTrees()
     {
         // Arrange
         var node1 = new NodeGene(GeneticNodeType.Function, "+");
@@ -382,8 +383,8 @@ public class GeneTypesIntegrationTests
         Assert.True(node1.Equals(node2));
     }
 
-    [Fact]
-    public void NodeGene_Equals_ReturnsFalseForDifferentTrees()
+    [Fact(Timeout = 120000)]
+    public async Task NodeGene_Equals_ReturnsFalseForDifferentTrees()
     {
         // Arrange
         var node1 = new NodeGene(GeneticNodeType.Function, "+");
@@ -414,8 +415,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact]
-    public void ModelParameterGene_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = new ModelParameterGene<double>(5, 2.718);
@@ -429,8 +430,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact]
-    public void ModelParameterGene_OrderByIndex_MaintainsCorrectOrder()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_OrderByIndex_MaintainsCorrectOrder()
     {
         // Arrange
         var genes = new List<ModelParameterGene<double>>
@@ -457,8 +458,8 @@ public class GeneTypesIntegrationTests
 
     #region BinaryIndividual Tests
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsInt_CorrectBinaryToIntConversion()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsInt_CorrectBinaryToIntConversion()
     {
         // Arrange - Create individual representing binary (little-endian: bit 0 is LSB)
         var genes = new List<BinaryGene>
@@ -478,8 +479,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(10, value);
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueBetweenZeroAndOne()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -493,8 +494,8 @@ public class GeneTypesIntegrationTests
             $"Normalized value should be in [0,1], got: {normalized}");
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueMapped_MapsToCorrectRange()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueMapped_MapsToCorrectRange()
     {
         // Arrange - All 1s = max value
         var genes = new List<BinaryGene>
@@ -512,8 +513,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(max, mapped, Tolerance);
     }
 
-    [Fact]
-    public void BinaryIndividual_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -534,8 +535,8 @@ public class GeneTypesIntegrationTests
 
     #region RealValuedIndividual Tests
 
-    [Fact]
-    public void RealValuedIndividual_Constructor_InitializesWithinRange()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_Constructor_InitializesWithinRange()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -553,8 +554,8 @@ public class GeneTypesIntegrationTests
             "All values should be within specified range");
     }
 
-    [Fact]
-    public void RealValuedIndividual_UpdateStepSizes_HighSuccessIncreasesStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_UpdateStepSizes_HighSuccessIncreasesStepSize()
     {
         // Arrange
         var genes = new List<RealGene>
@@ -575,8 +576,8 @@ public class GeneTypesIntegrationTests
             "High success rate should increase step size");
     }
 
-    [Fact]
-    public void RealValuedIndividual_UpdateStepSizes_LowSuccessDecreasesStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_UpdateStepSizes_LowSuccessDecreasesStepSize()
     {
         // Arrange
         var genes = new List<RealGene>
@@ -597,8 +598,8 @@ public class GeneTypesIntegrationTests
             "Low success rate should decrease step size");
     }
 
-    [Fact]
-    public void RealValuedIndividual_Clone_PreservesFitness()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_Clone_PreservesFitness()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -617,8 +618,8 @@ public class GeneTypesIntegrationTests
 
     #region PermutationIndividual Tests
 
-    [Fact]
-    public void PermutationIndividual_FisherYatesShuffle_ProducesUniformDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_FisherYatesShuffle_ProducesUniformDistribution()
     {
         // Arrange - Create many permutations and verify distribution
         int size = 5;
@@ -652,8 +653,8 @@ public class GeneTypesIntegrationTests
         }
     }
 
-    [Fact]
-    public void PermutationIndividual_OrderCrossover_InheritsSubsequenceFromParent1()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_OrderCrossover_InheritsSubsequenceFromParent1()
     {
         // Arrange - Create specific permutations for predictable testing
         var parent1Genes = new List<PermutationGene>
@@ -683,8 +684,8 @@ public class GeneTypesIntegrationTests
 
     #region TreeIndividual Tests
 
-    [Fact]
-    public void TreeIndividual_Create_WithRandomGeneration()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Create_WithRandomGeneration()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -698,8 +699,8 @@ public class GeneTypesIntegrationTests
         Assert.True(tree.GetDepth() >= 0, "Tree should have non-negative depth");
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_ConstantReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_ConstantReturnsValue()
     {
         // Arrange - Create a simple terminal node tree
         var root = new NodeGene(GeneticNodeType.Terminal, "5.0");
@@ -713,8 +714,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_VariableReturnsValue()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_VariableReturnsValue()
     {
         // Arrange
         var root = new NodeGene(GeneticNodeType.Terminal, "x");
@@ -728,8 +729,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(3.5, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_AdditionWorks()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_AdditionWorks()
     {
         // Arrange - Tree: x + 2.0
         var root = new NodeGene(GeneticNodeType.Function, "+");
@@ -745,8 +746,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_MultiplicationWorks()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_MultiplicationWorks()
     {
         // Arrange - Tree: x * 3.0
         var root = new NodeGene(GeneticNodeType.Function, "*");
@@ -762,8 +763,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(12.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_ProtectedDivisionHandlesZero()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_ProtectedDivisionHandlesZero()
     {
         // Arrange - Tree: x / 0
         var root = new NodeGene(GeneticNodeType.Function, "/");
@@ -779,8 +780,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_GetDepth_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_GetDepth_CalculatesCorrectly()
     {
         // Arrange - Tree: + (x, * (y, 2))
         var root = new NodeGene(GeneticNodeType.Function, "+");
@@ -798,8 +799,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(2, depth);
     }
 
-    [Fact]
-    public void TreeIndividual_GetExpression_ReturnsCorrectString()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_GetExpression_ReturnsCorrectString()
     {
         // Arrange - Tree: x + 2.0
         var root = new NodeGene(GeneticNodeType.Function, "+");
@@ -814,8 +815,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal("(x + 2.0)", expr);
     }
 
-    [Fact]
-    public void TreeIndividual_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Clone_CreatesDeepCopy()
     {
         // Arrange
         var root = new NodeGene(GeneticNodeType.Function, "+");
@@ -834,8 +835,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.GetExpression(), clone.GetExpression());
     }
 
-    [Fact]
-    public void TreeIndividual_PointMutation_ChangesNode()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_PointMutation_ChangesNode()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -859,8 +860,8 @@ public class GeneTypesIntegrationTests
 
     #region MultiObjectiveRealIndividual Tests
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Constructor_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Constructor_InitializesCorrectly()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -873,8 +874,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(dimensions, individual.GetGenes().Count);
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_SetAndGetObjectiveValues()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_SetAndGetObjectiveValues()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -894,8 +895,8 @@ public class GeneTypesIntegrationTests
         }
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_RankAndCrowdingDistance()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_RankAndCrowdingDistance()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -910,8 +911,8 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1.5, individual.GetCrowdingDistance(), Tolerance);
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Dominance_CorrectlyIdentified()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Dominance_CorrectlyIdentified()
     {
         // Arrange - Create two individuals for dominance comparison
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -932,8 +933,8 @@ public class GeneTypesIntegrationTests
         Assert.False(individual2DominatesIndividual1, "Individual with higher objective values should not dominate");
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Clone_PreservesFitness()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Clone_PreservesFitness()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);

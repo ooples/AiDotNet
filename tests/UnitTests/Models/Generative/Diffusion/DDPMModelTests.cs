@@ -2,6 +2,7 @@ using Xunit;
 using AiDotNet.Models.Generative.Diffusion;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.LinearAlgebra;
+using System.Threading.Tasks;
 
 namespace UnitTests.Models.Generative.Diffusion
 {
@@ -15,8 +16,8 @@ namespace UnitTests.Models.Generative.Diffusion
                 => sample; // identity
         }
 
-        [Fact]
-        public void Predict_Uses_Scheduler()
+        [Fact(Timeout = 120000)]
+        public async Task Predict_Uses_Scheduler()
         {
             var scheduler = new NoopScheduler();
             var model = new DDPMModel<double>(scheduler);

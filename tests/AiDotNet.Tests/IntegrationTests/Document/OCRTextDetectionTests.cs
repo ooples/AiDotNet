@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class OCRTextDetectionTests
 
     #region CRAFT Tests
 
-    [Fact]
-    public void CRAFT_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new CRAFT<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void CRAFT_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new CRAFT<double>(arch, imageSize: 64);
@@ -55,8 +56,8 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void CRAFT_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new CRAFT<double>(arch, imageSize: 64);
@@ -65,8 +66,8 @@ public class OCRTextDetectionTests
         Assert.NotNull(meta.AdditionalInfo);
     }
 
-    [Fact]
-    public void CRAFT_GetModelSummary_ContainsModelName()
+    [Fact(Timeout = 120000)]
+    public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
         var model = new CRAFT<double>(arch, imageSize: 64);
@@ -78,16 +79,16 @@ public class OCRTextDetectionTests
 
     #region DBNet Tests
 
-    [Fact]
-    public void DBNet_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DBNet<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DBNet_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new DBNet<double>(arch, imageSize: 64);
@@ -98,8 +99,8 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DBNet_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DBNet<double>(arch, imageSize: 64);
@@ -111,16 +112,16 @@ public class OCRTextDetectionTests
 
     #region EAST Tests
 
-    [Fact]
-    public void EAST_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new EAST<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void EAST_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new EAST<double>(arch, imageSize: 64);
@@ -131,8 +132,8 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void EAST_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new EAST<double>(arch, imageSize: 64);
@@ -144,16 +145,16 @@ public class OCRTextDetectionTests
 
     #region PSENet Tests
 
-    [Fact]
-    public void PSENet_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new PSENet<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void PSENet_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new PSENet<double>(arch, imageSize: 64);
@@ -164,8 +165,8 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void PSENet_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new PSENet<double>(arch, imageSize: 64);
@@ -177,8 +178,8 @@ public class OCRTextDetectionTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllTextDetectors_SupportedDocumentTypes_NotNone()
+    [Fact(Timeout = 120000)]
+    public async Task AllTextDetectors_SupportedDocumentTypes_NotNone()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]

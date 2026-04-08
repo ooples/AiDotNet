@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Training.Factories;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Training;
 
@@ -16,8 +17,8 @@ public class TrainingDeepMathIntegrationTests
     // LossType Enum: Coverage
     // ============================
 
-    [Fact]
-    public void LossType_HasExpectedCount()
+    [Fact(Timeout = 120000)]
+    public async Task LossType_HasExpectedCount()
     {
         var values = (((LossType[])Enum.GetValues(typeof(LossType))));
         // At minimum the factory handles 33 types + a few that require specialized constructors
@@ -28,8 +29,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: MSE Mathematical Properties
     // ============================
 
-    [Fact]
-    public void MSE_LossFunction_PerfectPrediction_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_LossFunction_PerfectPrediction_ZeroLoss()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -39,8 +40,8 @@ public class TrainingDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact]
-    public void MSE_LossFunction_KnownValues()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_LossFunction_KnownValues()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         // MSE = mean((predicted - actual)^2)
@@ -52,8 +53,8 @@ public class TrainingDeepMathIntegrationTests
         Assert.Equal(1.0, result, 1e-10);
     }
 
-    [Fact]
-    public void MSE_LossFunction_Symmetric()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_LossFunction_Symmetric()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         var a = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -68,8 +69,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: MAE Mathematical Properties
     // ============================
 
-    [Fact]
-    public void MAE_LossFunction_PerfectPrediction_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_LossFunction_PerfectPrediction_ZeroLoss()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanAbsoluteError);
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -79,8 +80,8 @@ public class TrainingDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact]
-    public void MAE_LossFunction_KnownValues()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_LossFunction_KnownValues()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanAbsoluteError);
         // MAE = mean(|predicted - actual|)
@@ -96,8 +97,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: RMSE = sqrt(MSE)
     // ============================
 
-    [Fact]
-    public void RMSE_LossFunction_EqualsSquareRootOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_LossFunction_EqualsSquareRootOfMSE()
     {
         var mse = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         var rmse = LossFunctionFactory<double>.Create(LossType.RootMeanSquaredError);
@@ -114,8 +115,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: Hinge Loss Properties
     // ============================
 
-    [Fact]
-    public void Hinge_PerfectClassification_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task Hinge_PerfectClassification_ZeroLoss()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.Hinge);
         // Hinge: max(0, 1 - y*f(x))
@@ -131,8 +132,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: LogCosh Properties
     // ============================
 
-    [Fact]
-    public void LogCosh_PerfectPrediction_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_PerfectPrediction_ZeroLoss()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.LogCosh);
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -142,8 +143,8 @@ public class TrainingDeepMathIntegrationTests
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact]
-    public void LogCosh_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task LogCosh_AlwaysNonNegative()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.LogCosh);
         var predicted = new Vector<double>(new double[] { 10.0, -5.0, 3.0 });
@@ -196,8 +197,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: MSE Derivative
     // ============================
 
-    [Fact]
-    public void MSE_Derivative_PerfectPrediction_ZeroDerivative()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Derivative_PerfectPrediction_ZeroDerivative()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -210,8 +211,8 @@ public class TrainingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MSE_Derivative_PositiveError_PositiveDerivative()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Derivative_PositiveError_PositiveDerivative()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         // When predicted > actual, gradient should be positive
@@ -222,8 +223,8 @@ public class TrainingDeepMathIntegrationTests
         Assert.True(derivative[0] > 0, $"Derivative should be positive when predicted > actual, got {derivative[0]}");
     }
 
-    [Fact]
-    public void MSE_Derivative_NegativeError_NegativeDerivative()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_Derivative_NegativeError_NegativeDerivative()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         // When predicted < actual, gradient should be negative
@@ -238,8 +239,8 @@ public class TrainingDeepMathIntegrationTests
     // Loss Functions: MSE Derivative Length
     // ============================
 
-    [Fact]
-    public void MSE_DerivativeLength_MatchesPredictedLength()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_DerivativeLength_MatchesPredictedLength()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.MeanSquaredError);
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });

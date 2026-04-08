@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
 {
@@ -14,8 +15,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
     /// </summary>
     public class JaccardLossFitnessCalculatorTests
     {
-        [Fact]
-        public void Constructor_WithDefaultDataSetType_UsesValidation()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultDataSetType_UsesValidation()
         {
             // Arrange & Act
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter); // Jaccard loss: lower is better
         }
 
-        [Fact]
-        public void Constructor_WithTrainingDataSetType_UsesTraining()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithTrainingDataSetType_UsesTraining()
         {
             // Arrange & Act
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNoOverlap_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNoOverlap_ReturnsOne()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPartialOverlap_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPartialOverlap_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -93,8 +94,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.33333333333333331, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithProbabilisticPredictions_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithProbabilisticPredictions_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -114,8 +115,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.39130434782608703, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithAllZeros_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithAllZeros_ReturnsOne()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.999);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -155,8 +156,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.5, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.33333333f, result, 5);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithImbalancedData_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithImbalancedData_HandlesCorrectly()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -196,8 +197,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.15, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -207,8 +208,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             var calculator = new JaccardLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Validation);
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10); // Perfect predictions
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             var calculator = new JaccardLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Testing);
@@ -249,8 +250,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10); // No overlap
         }
 
-        [Fact]
-        public void IsHigherScoreBetter_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsHigherScoreBetter_ReturnsFalse()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -259,8 +260,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -274,8 +275,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result); // Lower score is better for loss functions
         }
 
-        [Fact]
-        public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -289,8 +290,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(result); // Higher score is worse for loss functions
         }
 
-        [Fact]
-        public void CalculateFitnessScore_ObjectDetectionScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_ObjectDetectionScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating bounding box IoU scenario
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -311,8 +312,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.27272727272727271, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithMixedValues_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithMixedValues_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -332,8 +333,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.64754098360655738, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -351,8 +352,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.0 && result <= 1.0);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithHighOverlap_ReturnsLowLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithHighOverlap_ReturnsLowLoss()
         {
             // Arrange
             var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -370,8 +371,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result < 0.15); // Loss should be less than 15%
         }
 
-        [Fact]
-        public void CalculateFitnessScore_CompareWithDiceMetric_ShowsDifference()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_CompareWithDiceMetric_ShowsDifference()
         {
             // Arrange
             var jaccardCalculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>();

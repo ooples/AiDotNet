@@ -22,8 +22,8 @@ public class LanguageModelsIntegrationTests
 
     #region OpenAIChatModel Constructor Tests
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithValidApiKey_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithValidApiKey_CreatesInstance()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
 
@@ -31,28 +31,28 @@ public class LanguageModelsIntegrationTests
         Assert.Equal("gpt-3.5-turbo", model.ModelName);
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithCustomModelName_SetsModelName()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithCustomModelName_SetsModelName()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4");
 
         Assert.Equal("gpt-4", model.ModelName);
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new OpenAIChatModel<double>(null!));
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>(string.Empty));
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>("   "));
     }
@@ -143,8 +143,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithCustomHttpClient_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithCustomHttpClient_Succeeds()
     {
         using var httpClient = new HttpClient();
         var model = new OpenAIChatModel<double>(ValidApiKey, httpClient: httpClient);
@@ -152,8 +152,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void OpenAIChatModel_Constructor_WithCustomEndpoint_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Constructor_WithCustomEndpoint_Succeeds()
     {
         var model = new OpenAIChatModel<double>(
             ValidApiKey,
@@ -166,64 +166,64 @@ public class LanguageModelsIntegrationTests
 
     #region OpenAIChatModel MaxContextTokens Tests
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT35Turbo_Returns4096()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT35Turbo_Returns4096()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-3.5-turbo");
         Assert.Equal(4096, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT35Turbo16K_Returns16384()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT35Turbo16K_Returns16384()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-3.5-turbo-16k");
         Assert.Equal(16384, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4_Returns8192()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4_Returns8192()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4");
         Assert.Equal(8192, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT432K_Returns32768()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT432K_Returns32768()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4-32k");
         Assert.Equal(32768, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4Turbo_Returns128000()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4Turbo_Returns128000()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4-turbo");
         Assert.Equal(128000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4TurboPreview_Returns128000()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4TurboPreview_Returns128000()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4-turbo-preview");
         Assert.Equal(128000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4o_Returns128000()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4o_Returns128000()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4o");
         Assert.Equal(128000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4oMini_Returns128000()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4oMini_Returns128000()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4o-mini");
         Assert.Equal(128000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_UnknownModel_Returns4096Default()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_UnknownModel_Returns4096Default()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "unknown-model");
         Assert.Equal(4096, model.MaxContextTokens);
@@ -232,40 +232,40 @@ public class LanguageModelsIntegrationTests
     // BUG TEST: OpenAI is missing newer models (o1, o1-mini, o3-mini, gpt-4o-2024-08-06)
     // These tests will fail until the source code is updated
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_O1_ShouldReturnCorrectTokens()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_O1_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "o1");
         // o1 has 200k context window per OpenAI documentation
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_O1Mini_ShouldReturnCorrectTokens()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_O1Mini_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "o1-mini");
         // o1-mini has 200k context window per OpenAI documentation
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_O3Mini_ShouldReturnCorrectTokens()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_O3Mini_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "o3-mini");
         // o3-mini has 200k context window
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4o_2024_08_06_ShouldReturnCorrectTokens()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4o_2024_08_06_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4o-2024-08-06");
         // This is a dated version of gpt-4o, should have 128k tokens
         Assert.Equal(128000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxContextTokens_GPT4_1106_Preview_ShouldReturnCorrectTokens()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxContextTokens_GPT4_1106_Preview_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-4-1106-preview");
         // GPT-4 turbo preview (dated version) has 128k tokens
@@ -276,15 +276,15 @@ public class LanguageModelsIntegrationTests
 
     #region OpenAIChatModel MaxGenerationTokens Tests
 
-    [Fact]
-    public void OpenAIChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void OpenAIChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, maxTokens: 500);
         Assert.Equal(500, model.MaxGenerationTokens);
@@ -294,8 +294,8 @@ public class LanguageModelsIntegrationTests
 
     #region AnthropicChatModel Constructor Tests
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithValidApiKey_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithValidApiKey_CreatesInstance()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
 
@@ -303,28 +303,28 @@ public class LanguageModelsIntegrationTests
         Assert.Equal("claude-3-sonnet-20240229", model.ModelName);
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithCustomModelName_SetsModelName()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithCustomModelName_SetsModelName()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-opus-20240229");
 
         Assert.Equal("claude-3-opus-20240229", model.ModelName);
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new AnthropicChatModel<double>(null!));
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new AnthropicChatModel<double>(string.Empty));
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new AnthropicChatModel<double>("   "));
     }
@@ -399,8 +399,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithCustomHttpClient_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithCustomHttpClient_Succeeds()
     {
         using var httpClient = new HttpClient();
         var model = new AnthropicChatModel<double>(ValidApiKey, httpClient: httpClient);
@@ -408,8 +408,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_Constructor_WithCustomEndpoint_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_Constructor_WithCustomEndpoint_Succeeds()
     {
         var model = new AnthropicChatModel<double>(
             ValidApiKey,
@@ -422,57 +422,57 @@ public class LanguageModelsIntegrationTests
 
     #region AnthropicChatModel MaxContextTokens Tests
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude3Opus_Returns200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude3Opus_Returns200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-opus-20240229");
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude3Sonnet_Returns200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude3Sonnet_Returns200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-sonnet-20240229");
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude3Haiku_Returns200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude3Haiku_Returns200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-haiku-20240307");
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude21_Returns200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude21_Returns200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-2.1");
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude20_Returns100000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude20_Returns100000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-2.0");
         Assert.Equal(100000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude2_Returns100000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude2_Returns100000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-2");
         Assert.Equal(100000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_ClaudeInstant_Returns100000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_ClaudeInstant_Returns100000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-instant-1.2");
         Assert.Equal(100000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_UnknownModel_Returns100000Default()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_UnknownModel_Returns100000Default()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "unknown-model");
         Assert.Equal(100000, model.MaxContextTokens);
@@ -481,24 +481,24 @@ public class LanguageModelsIntegrationTests
     // BUG TEST: Anthropic is missing Claude 3.5 models
     // These tests will fail until the source code is updated
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude35Sonnet_ShouldReturn200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude35Sonnet_ShouldReturn200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-5-sonnet-20241022");
         // Claude 3.5 Sonnet has 200k context window
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude35Haiku_ShouldReturn200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude35Haiku_ShouldReturn200000()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3-5-haiku-20241022");
         // Claude 3.5 Haiku has 200k context window
         Assert.Equal(200000, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxContextTokens_Claude35Sonnet_Latest_ShouldReturn200000()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxContextTokens_Claude35Sonnet_Latest_ShouldReturn200000()
     {
         // Users might use shorthand model names
         var model = new AnthropicChatModel<double>(ValidApiKey, modelName: "claude-3.5-sonnet");
@@ -510,15 +510,15 @@ public class LanguageModelsIntegrationTests
 
     #region AnthropicChatModel MaxGenerationTokens Tests
 
-    [Fact]
-    public void AnthropicChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey, maxTokens: 500);
         Assert.Equal(500, model.MaxGenerationTokens);
@@ -528,8 +528,8 @@ public class LanguageModelsIntegrationTests
 
     #region AzureOpenAIChatModel Constructor Tests
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithValidParameters_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithValidParameters_CreatesInstance()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint,
@@ -540,64 +540,64 @@ public class LanguageModelsIntegrationTests
         Assert.Equal($"azure-{ValidDeploymentName}", model.ModelName);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithNullEndpoint_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithNullEndpoint_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(null!, ValidApiKey, ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithEmptyEndpoint_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithEmptyEndpoint_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(string.Empty, ValidApiKey, ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithWhitespaceEndpoint_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithWhitespaceEndpoint_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>("   ", ValidApiKey, ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithNullApiKey_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, null!, ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithEmptyApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, string.Empty, ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, "   ", ValidDeploymentName));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithNullDeploymentName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithNullDeploymentName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, ValidApiKey, null!));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithEmptyDeploymentName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithEmptyDeploymentName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, ValidApiKey, string.Empty));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithWhitespaceDeploymentName_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithWhitespaceDeploymentName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new AzureOpenAIChatModel<double>(ValidEndpoint, ValidApiKey, "   "));
@@ -654,8 +654,8 @@ public class LanguageModelsIntegrationTests
                 ValidEndpoint, ValidApiKey, ValidDeploymentName, presencePenalty: penalty));
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithCustomApiVersion_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithCustomApiVersion_Succeeds()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName,
@@ -664,8 +664,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_WithCustomHttpClient_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_WithCustomHttpClient_Succeeds()
     {
         using var httpClient = new HttpClient();
         var model = new AzureOpenAIChatModel<double>(
@@ -675,8 +675,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_Constructor_TrimsEndpointTrailingSlash()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_Constructor_TrimsEndpointTrailingSlash()
     {
         var model = new AzureOpenAIChatModel<double>(
             $"{ValidEndpoint}/", ValidApiKey, ValidDeploymentName);
@@ -688,8 +688,8 @@ public class LanguageModelsIntegrationTests
 
     #region AzureOpenAIChatModel Property Tests
 
-    [Fact]
-    public void AzureOpenAIChatModel_ModelName_IncludesDeploymentName()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_ModelName_IncludesDeploymentName()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, "my-custom-deployment");
@@ -697,8 +697,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal("azure-my-custom-deployment", model.ModelName);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_MaxContextTokens_DefaultValue_Returns8192()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_MaxContextTokens_DefaultValue_Returns8192()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
@@ -706,8 +706,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal(8192, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_MaxContextTokens_CustomValue_ReturnsCustomValue()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_MaxContextTokens_CustomValue_ReturnsCustomValue()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName,
@@ -716,8 +716,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal(16384, model.MaxContextTokens);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_MaxGenerationTokens_DefaultValue_Returns2048()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
@@ -725,8 +725,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_MaxGenerationTokens_CustomValue_ReturnsCustomValue()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName,
@@ -739,44 +739,44 @@ public class LanguageModelsIntegrationTests
 
     #region Cross-Model Type Parameter Tests
 
-    [Fact]
-    public void OpenAIChatModel_WithFloatTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_WithFloatTypeParameter_CreatesInstance()
     {
         var model = new OpenAIChatModel<float>(ValidApiKey);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void OpenAIChatModel_WithDecimalTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_WithDecimalTypeParameter_CreatesInstance()
     {
         var model = new OpenAIChatModel<decimal>(ValidApiKey);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_WithFloatTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_WithFloatTypeParameter_CreatesInstance()
     {
         var model = new AnthropicChatModel<float>(ValidApiKey);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_WithDecimalTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_WithDecimalTypeParameter_CreatesInstance()
     {
         var model = new AnthropicChatModel<decimal>(ValidApiKey);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_WithFloatTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_WithFloatTypeParameter_CreatesInstance()
     {
         var model = new AzureOpenAIChatModel<float>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_WithDecimalTypeParameter_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_WithDecimalTypeParameter_CreatesInstance()
     {
         var model = new AzureOpenAIChatModel<decimal>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
@@ -787,44 +787,44 @@ public class LanguageModelsIntegrationTests
 
     #region Interface Implementation Tests
 
-    [Fact]
-    public void OpenAIChatModel_ImplementsIChatModel()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_ImplementsIChatModel()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.IsAssignableFrom<AiDotNet.Interfaces.IChatModel<double>>(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_ImplementsIChatModel()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_ImplementsIChatModel()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
         Assert.IsAssignableFrom<AiDotNet.Interfaces.IChatModel<double>>(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_ImplementsIChatModel()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_ImplementsIChatModel()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
         Assert.IsAssignableFrom<AiDotNet.Interfaces.IChatModel<double>>(model);
     }
 
-    [Fact]
-    public void OpenAIChatModel_ImplementsILanguageModel()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_ImplementsILanguageModel()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.IsAssignableFrom<AiDotNet.Interfaces.ILanguageModel<double>>(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_ImplementsILanguageModel()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_ImplementsILanguageModel()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
         Assert.IsAssignableFrom<AiDotNet.Interfaces.ILanguageModel<double>>(model);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_ImplementsILanguageModel()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_ImplementsILanguageModel()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
@@ -835,42 +835,42 @@ public class LanguageModelsIntegrationTests
 
     #region Generate Method Input Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(string.Empty));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithWhitespacePrompt_ThrowsArgumentException()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(string.Empty));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AzureOpenAIChatModel_GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         var model = new AzureOpenAIChatModel<double>(
@@ -878,7 +878,7 @@ public class LanguageModelsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AzureOpenAIChatModel_GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         var model = new AzureOpenAIChatModel<double>(
@@ -890,7 +890,7 @@ public class LanguageModelsIntegrationTests
 
     #region Token Estimation and Limit Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_PromptExceedsMaxTokens_ThrowsArgumentException()
     {
         // Create model with small context window to test token limit validation
@@ -903,7 +903,7 @@ public class LanguageModelsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(longPrompt));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_PromptExceedsMaxTokens_ThrowsArgumentException()
     {
         // Create model - Claude has 200000 token context window
@@ -916,7 +916,7 @@ public class LanguageModelsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => model.GenerateAsync(longPrompt));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AzureOpenAIChatModel_GenerateAsync_PromptExceedsMaxTokens_ThrowsArgumentException()
     {
         // Create model with default 8192 context window
@@ -930,7 +930,7 @@ public class LanguageModelsIntegrationTests
     }
 
     // Token estimation edge case tests
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChatModel_GenerateAsync_NearLimitPrompt_AcceptsPrompt()
     {
         // Create mock handler that returns an error response (simulating invalid API key)
@@ -1004,8 +1004,8 @@ public class LanguageModelsIntegrationTests
 
     #region Default Values Tests
 
-    [Fact]
-    public void OpenAIChatModel_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_DefaultValues_AreCorrect()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
 
@@ -1014,8 +1014,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AnthropicChatModel_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_DefaultValues_AreCorrect()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
 
@@ -1024,8 +1024,8 @@ public class LanguageModelsIntegrationTests
         Assert.Equal(2048, model.MaxGenerationTokens);
     }
 
-    [Fact]
-    public void AzureOpenAIChatModel_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AzureOpenAIChatModel_DefaultValues_AreCorrect()
     {
         var model = new AzureOpenAIChatModel<double>(
             ValidEndpoint, ValidApiKey, ValidDeploymentName);
@@ -1075,8 +1075,8 @@ public class LanguageModelsIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void AnthropicChatModel_MaxTokens_BoundaryValues_Succeed()
+    [Fact(Timeout = 120000)]
+    public async Task AnthropicChatModel_MaxTokens_BoundaryValues_Succeed()
     {
         var modelMin = new AnthropicChatModel<double>(ValidApiKey, maxTokens: 1);
         Assert.NotNull(modelMin);
@@ -1092,7 +1092,7 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests that cancellation is properly respected during generation.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithCancelledToken_ThrowsOperationCancelledException()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
@@ -1103,7 +1103,7 @@ public class LanguageModelsIntegrationTests
             () => model.GenerateAsync("Test prompt", cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_WithCancelledToken_ThrowsOperationCancelledException()
     {
         var model = new AnthropicChatModel<double>(ValidApiKey);
@@ -1114,7 +1114,7 @@ public class LanguageModelsIntegrationTests
             () => model.GenerateAsync("Test prompt", cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AzureOpenAIChatModel_GenerateAsync_WithCancelledToken_ThrowsOperationCancelledException()
     {
         var model = new AzureOpenAIChatModel<double>(
@@ -1129,8 +1129,8 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests the synchronous Generate method wrapper.
     /// </summary>
-    [Fact]
-    public void OpenAIChatModel_Generate_WithValidPrompt_ExecutesSynchronously()
+    [Fact(Timeout = 120000)]
+    public async Task OpenAIChatModel_Generate_WithValidPrompt_ExecutesSynchronously()
     {
         // Create mock handler that returns an error response
         var mockHandler = new MockHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
@@ -1150,7 +1150,7 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests the GenerateResponseAsync alias method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateResponseAsync_IsAliasForGenerateAsync()
     {
         // Create mock handler that returns an error response
@@ -1180,7 +1180,7 @@ public class LanguageModelsIntegrationTests
     /// Tests that OpenAI model correctly formats and sends API requests.
     /// Uses a mock handler to capture and verify the request.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_SendsCorrectHeaders()
     {
         // Arrange
@@ -1211,7 +1211,7 @@ public class LanguageModelsIntegrationTests
         Assert.Equal("Test response", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_SendsCorrectHeaders()
     {
         // Arrange
@@ -1245,7 +1245,7 @@ public class LanguageModelsIntegrationTests
         Assert.Equal("Test response", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AzureOpenAIChatModel_GenerateAsync_SendsCorrectHeaders()
     {
         // Arrange
@@ -1282,7 +1282,7 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests that API errors are properly handled and wrapped.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithApiError_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -1307,7 +1307,7 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests that empty responses are handled correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task OpenAIChatModel_GenerateAsync_WithEmptyChoices_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -1332,7 +1332,7 @@ public class LanguageModelsIntegrationTests
         Assert.Contains("no choices", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_WithEmptyContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -1360,7 +1360,7 @@ public class LanguageModelsIntegrationTests
     /// <summary>
     /// Tests that Anthropic correctly joins multiple content blocks.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AnthropicChatModel_GenerateAsync_WithMultipleContentBlocks_JoinsWithNewline()
     {
         // Arrange

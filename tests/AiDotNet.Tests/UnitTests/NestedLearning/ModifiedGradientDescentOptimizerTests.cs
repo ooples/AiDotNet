@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NestedLearning
 {
     public class ModifiedGradientDescentOptimizerTests
     {
-        [Fact]
-        public void Constructor_WithValidLearningRate_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidLearningRate_InitializesCorrectly()
         {
             // Arrange & Act
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
@@ -19,8 +20,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(0.01, optimizer.LearningRate);
         }
 
-        [Fact]
-        public void UpdateMatrix_ImplementsEquation27Correctly()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateMatrix_ImplementsEquation27Correctly()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
@@ -68,8 +69,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(hasChanged, "Weights should change after update");
         }
 
-        [Fact]
-        public void UpdateMatrix_WithZeroInput_OnlyAppliesGradientTerm()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateMatrix_WithZeroInput_OnlyAppliesGradientTerm()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact]
-        public void UpdateVector_ImplementsModifiedGDForVectors()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateVector_ImplementsModifiedGDForVectors()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
@@ -147,8 +148,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(hasChanged, "Parameters should change after update");
         }
 
-        [Fact]
-        public void UpdateVector_WithSmallLearningRate_GradientTermIsSmall()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateVector_WithSmallLearningRate_GradientTermIsSmall()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.001); // Small LR
@@ -186,8 +187,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact]
-        public void UpdateMatrix_MultipleUpdates_ConvergesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateMatrix_MultipleUpdates_ConvergesParameters()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
@@ -225,8 +226,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.True(totalChange > 0.01, "Parameters should change over multiple updates");
         }
 
-        [Fact]
-        public void LearningRate_Getter_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task LearningRate_Getter_ReturnsCorrectValue()
         {
             // Arrange
             var optimizer1 = new ModifiedGradientDescentOptimizer<double>(0.001);
@@ -237,8 +238,8 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(0.1, optimizer2.LearningRate);
         }
 
-        [Fact]
-        public void UpdateMatrix_DifferentFromStandardGD_DueToModificationTerm()
+        [Fact(Timeout = 60000)]
+        public async Task UpdateMatrix_DifferentFromStandardGD_DueToModificationTerm()
         {
             // Arrange
             var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);

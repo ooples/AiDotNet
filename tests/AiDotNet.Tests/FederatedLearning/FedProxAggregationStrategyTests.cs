@@ -1,12 +1,13 @@
 using AiDotNet.FederatedLearning.Aggregators;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedProxAggregationStrategyTests
 {
-    [Fact]
-    public void Aggregate_ReturnsWeightedAverage()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_ReturnsWeightedAverage()
     {
         var aggregator = new FedProxAggregationStrategy<double>(mu: 0.5);
 

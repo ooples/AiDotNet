@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Tokenization
 {
     public class VocabularyTests
     {
-        [Fact]
-        public void Constructor_CreatesVocabularyWithUnkToken()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_CreatesVocabularyWithUnkToken()
         {
             // Arrange & Act
             var vocab = new Vocabulary("[UNK]");
@@ -19,8 +20,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(vocab.ContainsToken("[UNK]"));
         }
 
-        [Fact]
-        public void AddToken_AddsNewToken()
+        [Fact(Timeout = 60000)]
+        public async Task AddToken_AddsNewToken()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -34,8 +35,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(id, vocab.GetTokenId("hello"));
         }
 
-        [Fact]
-        public void AddToken_ReturnsSameIdForDuplicateToken()
+        [Fact(Timeout = 60000)]
+        public async Task AddToken_ReturnsSameIdForDuplicateToken()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -49,8 +50,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(2, vocab.Size);
         }
 
-        [Fact]
-        public void GetTokenId_ReturnsUnkIdForUnknownToken()
+        [Fact(Timeout = 60000)]
+        public async Task GetTokenId_ReturnsUnkIdForUnknownToken()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -63,8 +64,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(unkId, unknownId);
         }
 
-        [Fact]
-        public void GetToken_ReturnsTokenForValidId()
+        [Fact(Timeout = 60000)]
+        public async Task GetToken_ReturnsTokenForValidId()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -77,8 +78,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal("hello", token);
         }
 
-        [Fact]
-        public void GetToken_ReturnsNullForInvalidId()
+        [Fact(Timeout = 60000)]
+        public async Task GetToken_ReturnsNullForInvalidId()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -90,8 +91,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Null(token);
         }
 
-        [Fact]
-        public void AddTokens_AddsMultipleTokens()
+        [Fact(Timeout = 60000)]
+        public async Task AddTokens_AddsMultipleTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -107,8 +108,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.True(vocab.ContainsToken("test"));
         }
 
-        [Fact]
-        public void GetAllTokens_ReturnsAllTokens()
+        [Fact(Timeout = 60000)]
+        public async Task GetAllTokens_ReturnsAllTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -124,8 +125,8 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("world", allTokens);
         }
 
-        [Fact]
-        public void Clear_RemovesAllTokens()
+        [Fact(Timeout = 60000)]
+        public async Task Clear_RemovesAllTokens()
         {
             // Arrange
             var vocab = new Vocabulary("[UNK]");
@@ -141,15 +142,15 @@ namespace AiDotNet.Tests.Tokenization
 
         #region PR #757 Bug Fix Tests - Parameter Validation
 
-        [Fact]
-        public void Constructor_FromDictionary_ThrowsOnNullTokenToId()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_FromDictionary_ThrowsOnNullTokenToId()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new Vocabulary((Dictionary<string, int>)null!));
         }
 
-        [Fact]
-        public void AddTokens_ThrowsOnNullTokens()
+        [Fact(Timeout = 60000)]
+        public async Task AddTokens_ThrowsOnNullTokens()
         {
             var vocab = new Vocabulary("[UNK]");
 

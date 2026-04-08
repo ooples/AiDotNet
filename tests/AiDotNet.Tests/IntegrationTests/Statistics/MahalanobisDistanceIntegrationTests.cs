@@ -1,6 +1,7 @@
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -20,8 +21,8 @@ public class MahalanobisDistanceIntegrationTests
     /// With identity covariance matrix, Mahalanobis distance equals Euclidean distance.
     /// Verified: sqrt(3² + 4²) = 5.0
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_IdentityCovariance_EqualsEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_IdentityCovariance_EqualsEuclidean()
     {
         // Arrange - Identity inverse covariance matrix
         var invCov = new Matrix<double>(new double[,]
@@ -43,8 +44,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Without covariance matrix, falls back to Euclidean distance.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_NoCovariance_FallsBackToEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_NoCovariance_FallsBackToEuclidean()
     {
         // Arrange
         var metric = new MahalanobisDistance<double>();
@@ -73,8 +74,8 @@ public class MahalanobisDistanceIntegrationTests
     /// Explanation: Variance of 4 in first dimension means distance is scaled by 1/sqrt(4) = 0.5
     /// d = sqrt((4/sqrt(4))² + (3/sqrt(1))²) = sqrt(4 + 9) = sqrt(13) ≈ 3.6055
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_DiagonalCovariance_ScalesByVariance()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_DiagonalCovariance_ScalesByVariance()
     {
         // Arrange - Diagonal covariance: var1=4, var2=1
         // Inverse: diag(1/4, 1/1)
@@ -102,8 +103,8 @@ public class MahalanobisDistanceIntegrationTests
     ///
     /// Equal variance of 2 scales distance by 1/sqrt(2).
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_UniformVariance_ScalesUniformly()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_UniformVariance_ScalesUniformly()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -134,8 +135,8 @@ public class MahalanobisDistanceIntegrationTests
     ///
     /// With positive correlation, points along the diagonal are "closer" than Euclidean would suggest.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_PositiveCorrelation_DiagonalPointsCloser()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_PositiveCorrelation_DiagonalPointsCloser()
     {
         // Arrange - Covariance matrix with rho=0.5
         // cov = [[1, 0.5], [0.5, 1]]
@@ -164,8 +165,8 @@ public class MahalanobisDistanceIntegrationTests
     ///
     /// With high positive correlation, moving perpendicular to the correlation direction is "far".
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_HighCorrelation_PerpendicularPointsFar()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_HighCorrelation_PerpendicularPointsFar()
     {
         // Arrange - High correlation (rho=0.8)
         // cov = [[1, 0.8], [0.8, 1]]
@@ -196,8 +197,8 @@ public class MahalanobisDistanceIntegrationTests
     ///
     /// With negative correlation, points along anti-diagonal are closer.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_NegativeCorrelation_AntiDiagonalCloser()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_NegativeCorrelation_AntiDiagonalCloser()
     {
         // Arrange - Negative correlation (rho=-0.5)
         var invCov = new Matrix<double>(new double[,]
@@ -228,8 +229,8 @@ public class MahalanobisDistanceIntegrationTests
     ///
     /// sqrt(2² * 1 + 2² * 0.5 + 2² * 0.25) = sqrt(4 + 2 + 1) = sqrt(7)
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_3D_DiagonalCovariance()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_3D_DiagonalCovariance()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -253,8 +254,8 @@ public class MahalanobisDistanceIntegrationTests
     /// 3D identity should equal Euclidean.
     /// sqrt(3² + 4² + 0²) = 5.0
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_3D_Identity_EqualsEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_3D_Identity_EqualsEuclidean()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -282,8 +283,8 @@ public class MahalanobisDistanceIntegrationTests
     /// Test that FitFromData correctly estimates covariance from synthetic data.
     /// Use perfectly correlated data (y = x) which should have correlation coefficient ~1.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_FitFromData_CapturesCorrelation()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_FitFromData_CapturesCorrelation()
     {
         // Arrange - Data where y = x (perfect positive correlation)
         var data = new Matrix<double>(new double[,]
@@ -317,8 +318,8 @@ public class MahalanobisDistanceIntegrationTests
     /// Test FitFromData with independent features.
     /// With uncorrelated data, should approximate Euclidean behavior.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_FitFromData_UncorrelatedData()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_FitFromData_UncorrelatedData()
     {
         // Arrange - Uncorrelated data (random-ish pattern)
         var data = new Matrix<double>(new double[,]
@@ -351,8 +352,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// FitFromData should throw if fewer samples than features.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_FitFromData_InsufficientSamples_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_FitFromData_InsufficientSamples_ThrowsException()
     {
         // Arrange - 2 samples, 3 features (insufficient)
         var data = new Matrix<double>(new double[,]
@@ -373,8 +374,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_IdenticalPoints_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -396,8 +397,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Different length vectors should throw ArgumentException.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_DifferentLengthVectors_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_DifferentLengthVectors_ThrowsException()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -416,8 +417,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Mismatched covariance matrix dimensions should throw.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_MismatchedCovarianceDimensions_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_MismatchedCovarianceDimensions_ThrowsException()
     {
         // Arrange - 2x2 covariance but 3D vectors
         var invCov = new Matrix<double>(new double[,]
@@ -436,8 +437,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Null inverse covariance in constructor should throw.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_NullInverseCovariance_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_NullInverseCovariance_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new MahalanobisDistance<double>(null!));
@@ -450,8 +451,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Mahalanobis distance should be symmetric: d(a, b) = d(b, a)
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_IsSymmetric()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -479,8 +480,8 @@ public class MahalanobisDistanceIntegrationTests
     /// Mahalanobis distance should satisfy triangle inequality:
     /// d(a, c) <= d(a, b) + d(b, c)
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_SatisfiesTriangleInequality()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_SatisfiesTriangleInequality()
     {
         // Arrange
         var invCov = new Matrix<double>(new double[,]
@@ -510,8 +511,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Test with float type to ensure generic implementation works.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_FloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_FloatType_ReturnsCorrectValue()
     {
         // Arrange
         var invCov = new Matrix<float>(new float[,]
@@ -537,8 +538,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Test that the Name property returns correct value.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_Name_ReturnsMahalanobis()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_Name_ReturnsMahalanobis()
     {
         // Arrange
         var metric = new MahalanobisDistance<double>();
@@ -550,8 +551,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Test that InverseCovarianceMatrix property can be set and retrieved.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_SetInverseCovarianceMatrix_Updates()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_SetInverseCovarianceMatrix_Updates()
     {
         // Arrange
         var metric = new MahalanobisDistance<double>();
@@ -579,8 +580,8 @@ public class MahalanobisDistanceIntegrationTests
     /// <summary>
     /// Mahalanobis with identity should match Euclidean for high-dimensional vectors.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_HighDimensional_IdentityMatchesEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_HighDimensional_IdentityMatchesEuclidean()
     {
         // Arrange - 5D identity
         var invCov = new Matrix<double>(new double[,]

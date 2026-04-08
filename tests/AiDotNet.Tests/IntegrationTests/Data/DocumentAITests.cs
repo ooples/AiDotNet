@@ -11,8 +11,8 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class DocumentAITests
 {
-    [Fact]
-    public void DocVqaOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task DocVqaOptions_DefaultValues()
     {
         var options = new DocVqaDataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
@@ -21,8 +21,8 @@ public class DocumentAITests
         Assert.Equal(128, options.MaxAnswerLength);
     }
 
-    [Fact]
-    public void PubLayNetOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PubLayNetOptions_DefaultValues()
     {
         var options = new PubLayNetDataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
@@ -30,8 +30,8 @@ public class DocumentAITests
         Assert.Equal(5, options.NumClasses);
     }
 
-    [Fact]
-    public void Ade20kOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task Ade20kOptions_DefaultValues()
     {
         var options = new Ade20kDataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
@@ -39,8 +39,8 @@ public class DocumentAITests
         Assert.True(options.Normalize);
     }
 
-    [Fact]
-    public void CelebAOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CelebAOptions_DefaultValues()
     {
         var options = new CelebADataLoaderOptions();
         Assert.Equal(DatasetSplit.Train, options.Split);
@@ -49,7 +49,7 @@ public class DocumentAITests
         Assert.True(options.Normalize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task DocVqaDataLoader_LoadsImageDataWithAnswers()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "docvqa_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -118,7 +118,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CelebADataLoader_LoadsFaceImages()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "celeba_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -172,7 +172,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Ade20kDataLoader_LoadsSegmentationData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "ade20k_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -215,7 +215,7 @@ public class DocumentAITests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PubLayNetDataLoader_LoadsLayoutData()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "publaynet_test_" + Guid.NewGuid().ToString("N")[..8]);

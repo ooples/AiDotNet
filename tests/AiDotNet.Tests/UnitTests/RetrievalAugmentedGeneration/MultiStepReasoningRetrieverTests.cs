@@ -6,6 +6,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -59,8 +60,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var mockRetriever = CreateMockRetriever();
@@ -70,8 +71,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_WithValidArguments_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(multiStepRetriever);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidMaxSteps_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidMaxSteps_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -113,8 +114,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiStepReasoningRetriever<double>(generator, mockRetriever, maxSteps: 25));
         }
 
-        [Fact]
-        public void RetrieveMultiStep_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep(null!, 10));
         }
 
-        [Fact]
-        public void RetrieveMultiStep_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -139,8 +140,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep("   ", 10));
         }
 
-        [Fact]
-        public void RetrieveMultiStep_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 multiStepRetriever.RetrieveMultiStep("test query", -1));
         }
 
-        [Fact]
-        public void RetrieveMultiStep_WithValidQuery_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_WithValidQuery_ReturnsResult()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -179,8 +180,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(docList.Count <= 10);
         }
 
-        [Fact]
-        public void RetrieveMultiStep_TracksReasoningSteps()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_TracksReasoningSteps()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -206,8 +207,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
-        public void RetrieveMultiStep_GeneratesReasoningTrace()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_GeneratesReasoningTrace()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -225,8 +226,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Original Query", result.ReasoningTrace);
         }
 
-        [Fact]
-        public void RetrieveMultiStep_WithMetadataFilters_ReturnsResults()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveMultiStep_WithMetadataFilters_ReturnsResults()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.Documents);
         }
 
-        [Fact]
-        public void ReasoningStepResult_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task ReasoningStepResult_HasAllRequiredProperties()
         {
             // Arrange
             var stepResult = new MultiStepReasoningRetriever<double>.ReasoningStepResult
@@ -266,8 +267,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, stepResult.StepNumber);
         }
 
-        [Fact]
-        public void MultiStepReasoningResult_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task MultiStepReasoningResult_HasAllRequiredProperties()
         {
             // Arrange
             var result = new MultiStepReasoningRetriever<double>.MultiStepReasoningResult
@@ -324,8 +325,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var mockRetriever = CreateMockRetriever();
@@ -335,8 +336,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ToolAugmentedReasoningRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -346,8 +347,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ToolAugmentedReasoningRetriever<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_RegistersDefaultTools()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_RegistersDefaultTools()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -360,8 +361,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(toolRetriever);
         }
 
-        [Fact]
-        public void RegisterTool_WithNullName_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RegisterTool_WithNullName_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -373,8 +374,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RegisterTool(null!, input => "output"));
         }
 
-        [Fact]
-        public void RegisterTool_WithNullFunction_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task RegisterTool_WithNullFunction_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -386,8 +387,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RegisterTool("test_tool", null!));
         }
 
-        [Fact]
-        public void RegisterTool_WithValidArguments_RegistersSuccessfully()
+        [Fact(Timeout = 60000)]
+        public async Task RegisterTool_WithValidArguments_RegistersSuccessfully()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -401,8 +402,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(toolRetriever);
         }
 
-        [Fact]
-        public void RetrieveWithTools_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithTools_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -414,8 +415,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 toolRetriever.RetrieveWithTools(null!, 10));
         }
 
-        [Fact]
-        public void RetrieveWithTools_WithValidQuery_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithTools_WithValidQuery_ReturnsResult()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -434,8 +435,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(result.ReasoningTrace);
         }
 
-        [Fact]
-        public void RetrieveWithTools_TracksToolInvocations()
+        [Fact(Timeout = 60000)]
+        public async Task RetrieveWithTools_TracksToolInvocations()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -452,8 +453,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Tool invocations may be empty if LLM didn't request tools
         }
 
-        [Fact]
-        public void ToolInvocation_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task ToolInvocation_HasAllRequiredProperties()
         {
             // Arrange
             var invocation = new ToolAugmentedReasoningRetriever<double>.ToolInvocation
@@ -471,8 +472,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(invocation.Success);
         }
 
-        [Fact]
-        public void ToolAugmentedResult_HasAllRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task ToolAugmentedResult_HasAllRequiredProperties()
         {
             // Arrange
             var result = new ToolAugmentedReasoningRetriever<double>.ToolAugmentedResult

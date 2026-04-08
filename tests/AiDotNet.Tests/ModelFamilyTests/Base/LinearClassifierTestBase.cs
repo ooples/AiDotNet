@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact]
-    public void LinearSeparable_HighAccuracy()
+    [Fact(Timeout = 60000)]
+    public async Task LinearSeparable_HighAccuracy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -45,8 +46,8 @@ public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact]
-    public void Predictions_ShouldBeValidLabels()
+    [Fact(Timeout = 60000)]
+    public async Task Predictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

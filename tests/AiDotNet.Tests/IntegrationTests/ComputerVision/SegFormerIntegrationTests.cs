@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -19,8 +20,8 @@ public class SegFormerIntegrationTests
 {
     #region Native Mode Construction
 
-    [Fact]
-    public void Constructor_NativeMode_CreatesModelWithCorrectProperties()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_CreatesModelWithCorrectProperties()
     {
         // Arrange & Act
         var architecture = CreateArchitecture(64, 64, 3);
@@ -34,8 +35,8 @@ public class SegFormerIntegrationTests
         Assert.Equal(150, model.NumClasses);
     }
 
-    [Fact]
-    public void Constructor_NativeMode_WithCustomNumClasses_SetsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_WithCustomNumClasses_SetsCorrectly()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture, numClasses: 21);
@@ -60,8 +61,8 @@ public class SegFormerIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void Constructor_NativeMode_B0HasFewerLayersThanB5()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_B0HasFewerLayersThanB5()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var modelB0 = new SegFormer<double>(architecture, modelSize: SegFormerModelSize.B0);
@@ -75,8 +76,8 @@ public class SegFormerIntegrationTests
             $"B5 should have more parameters ({b5Params}) than B0 ({b0Params})");
     }
 
-    [Fact]
-    public void Constructor_NativeMode_InitializesLayers()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_NativeMode_InitializesLayers()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture);
@@ -89,8 +90,8 @@ public class SegFormerIntegrationTests
 
     #region ONNX Mode Construction
 
-    [Fact]
-    public void Constructor_OnnxMode_WithNullPath_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_OnnxMode_WithNullPath_ThrowsArgumentException()
     {
         var architecture = CreateArchitecture(64, 64, 3);
 
@@ -98,8 +99,8 @@ public class SegFormerIntegrationTests
             new SegFormer<double>(architecture, onnxModelPath: ""));
     }
 
-    [Fact]
-    public void Constructor_OnnxMode_WithNonExistentPath_ThrowsFileNotFoundException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_OnnxMode_WithNonExistentPath_ThrowsFileNotFoundException()
     {
         var architecture = CreateArchitecture(64, 64, 3);
 
@@ -107,8 +108,8 @@ public class SegFormerIntegrationTests
             new SegFormer<double>(architecture, onnxModelPath: "/nonexistent/path/model.onnx"));
     }
 
-    [Fact]
-    public void Constructor_OnnxMode_WithInvalidOnnxFile_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_OnnxMode_WithInvalidOnnxFile_ThrowsInvalidOperationException()
     {
         // Create a temp file that isn't a valid ONNX model
         var tempFile = Path.GetTempFileName();
@@ -132,8 +133,8 @@ public class SegFormerIntegrationTests
 
     #region Predict
 
-    [Fact]
-    public void Predict_NativeMode_WithBatchedInput_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_NativeMode_WithBatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
         var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
@@ -147,8 +148,8 @@ public class SegFormerIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
-    [Fact]
-    public void Predict_NativeMode_WithUnbatchedInput_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Predict_NativeMode_WithUnbatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
         var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
@@ -166,8 +167,8 @@ public class SegFormerIntegrationTests
 
     #region Train
 
-    [Fact]
-    public void Train_NativeMode_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Train_NativeMode_DoesNotThrow()
     {
         var architecture = CreateArchitecture(32, 32, 3);
         var model = new SegFormer<double>(architecture, numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -186,8 +187,8 @@ public class SegFormerIntegrationTests
 
     #region SupportsTraining
 
-    [Fact]
-    public void SupportsTraining_NativeMode_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_NativeMode_ReturnsTrue()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture);
@@ -199,8 +200,8 @@ public class SegFormerIntegrationTests
 
     #region GetModelMetadata
 
-    [Fact]
-    public void GetModelMetadata_ReturnsCorrectModelType()
+    [Fact(Timeout = 120000)]
+    public async Task GetModelMetadata_ReturnsCorrectModelType()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture, numClasses: 21, modelSize: SegFormerModelSize.B2);
@@ -217,8 +218,8 @@ public class SegFormerIntegrationTests
 
     #region Serialization
 
-    [Fact]
-    public void Serialization_RoundTrip_PreservesConfig()
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_RoundTrip_PreservesConfig()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(
@@ -237,8 +238,8 @@ public class SegFormerIntegrationTests
 
     #region CreateNewInstance
 
-    [Fact]
-    public void CreateNewInstance_NativeMode_CreatesWorkingCopy()
+    [Fact(Timeout = 120000)]
+    public async Task CreateNewInstance_NativeMode_CreatesWorkingCopy()
     {
         var architecture = CreateArchitecture(32, 32, 3);
         var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
@@ -258,8 +259,8 @@ public class SegFormerIntegrationTests
 
     #region Custom Architecture Layers
 
-    [Fact]
-    public void Constructor_WithCustomLayers_UsesProvidedLayers()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomLayers_UsesProvidedLayers()
     {
         // Create an architecture with custom layers
         var customLayers = new List<ILayer<double>>
@@ -293,8 +294,8 @@ public class SegFormerIntegrationTests
 
     #region Dispose
 
-    [Fact]
-    public void Dispose_NativeMode_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Dispose_NativeMode_DoesNotThrow()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture);
@@ -303,8 +304,8 @@ public class SegFormerIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Dispose_CalledTwice_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Dispose_CalledTwice_DoesNotThrow()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(architecture);
@@ -318,8 +319,8 @@ public class SegFormerIntegrationTests
 
     #region Options
 
-    [Fact]
-    public void GetOptions_ReturnsSegFormerOptions()
+    [Fact(Timeout = 120000)]
+    public async Task GetOptions_ReturnsSegFormerOptions()
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var customOptions = new SegFormerOptions { Seed = 42 };

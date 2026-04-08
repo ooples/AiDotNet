@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -189,8 +190,8 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void BidiagonalDecomposition_IdentityMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -203,8 +204,8 @@ public class BidiagonalDecompositionIntegrationTests
             "Identity matrix B should be bidiagonal");
     }
 
-    [Fact]
-    public void BidiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
         var D = new Matrix<double>(4, 4);
@@ -224,8 +225,8 @@ public class BidiagonalDecompositionIntegrationTests
             $"Diagonal matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void BidiagonalDecomposition_ZeroMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -278,8 +279,8 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact]
-    public void BidiagonalDecomposition_TallMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
         var A = CreateTestMatrix(6, 3);
@@ -293,8 +294,8 @@ public class BidiagonalDecompositionIntegrationTests
         Assert.Equal(3, bidiag.V.Rows);
     }
 
-    [Fact]
-    public void BidiagonalDecomposition_WideMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
         var A = CreateTestMatrix(3, 6);
@@ -312,8 +313,8 @@ public class BidiagonalDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void BidiagonalDecomposition_LargeMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task BidiagonalDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(10, 10, seed: 999);

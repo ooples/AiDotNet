@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.Engines.Gpu;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Engines;
 
@@ -25,8 +26,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region Default Values Tests
 
-    [Fact]
-    public void GpuExecutionOptions_DefaultConstructor_HasExpectedDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_DefaultConstructor_HasExpectedDefaults()
     {
         // Act
         var options = new GpuExecutionOptions();
@@ -49,8 +50,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.True(options.CacheCompiledGraphs);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_AllPropertiesAreSettable()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_AllPropertiesAreSettable()
     {
         // Arrange
         var options = new GpuExecutionOptions();
@@ -108,8 +109,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(mode, options.ExecutionMode);
     }
 
-    [Fact]
-    public void GpuExecutionMode_EnumValuesAreDistinct()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionMode_EnumValuesAreDistinct()
     {
         var values = (GpuExecutionMode[])Enum.GetValues(typeof(GpuExecutionMode));
         var uniqueValues = values.Distinct().ToArray();
@@ -117,16 +118,16 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(values.Length, uniqueValues.Length);
     }
 
-    [Fact]
-    public void GpuExecutionMode_HasExpectedCount()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionMode_HasExpectedCount()
     {
         // 4 modes: Eager, Deferred, ScopedDeferred, Auto
         var values = (GpuExecutionMode[])Enum.GetValues(typeof(GpuExecutionMode));
         Assert.Equal(4, values.Length);
     }
 
-    [Fact]
-    public void GpuExecutionMode_EagerIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionMode_EagerIsZero()
     {
         // Eager should be 0 for default fallback
         Assert.Equal(0, (int)GpuExecutionMode.Eager);
@@ -136,8 +137,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void Validate_DefaultOptions_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_DefaultOptions_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions();
@@ -146,8 +147,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void Validate_NegativeMinGpuElements_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NegativeMinGpuElements_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { MinGpuElements = -1 };
@@ -157,8 +158,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("MinGpuElements", ex.Message);
     }
 
-    [Fact]
-    public void Validate_ZeroMinGpuElements_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ZeroMinGpuElements_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions { MinGpuElements = 0 };
@@ -167,8 +168,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void Validate_ZeroMaxComputeStreams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ZeroMaxComputeStreams_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { MaxComputeStreams = 0 };
@@ -178,8 +179,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("MaxComputeStreams", ex.Message);
     }
 
-    [Fact]
-    public void Validate_NegativeMaxMemoryUsage_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NegativeMaxMemoryUsage_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { MaxMemoryUsage = -0.1 };
@@ -189,8 +190,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("MaxMemoryUsage", ex.Message);
     }
 
-    [Fact]
-    public void Validate_MaxMemoryUsageOverOne_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_MaxMemoryUsageOverOne_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { MaxMemoryUsage = 1.1 };
@@ -200,8 +201,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("MaxMemoryUsage", ex.Message);
     }
 
-    [Fact]
-    public void Validate_MaxMemoryUsageAtZero_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_MaxMemoryUsageAtZero_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions { MaxMemoryUsage = 0.0 };
@@ -210,8 +211,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void Validate_MaxMemoryUsageAtOne_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_MaxMemoryUsageAtOne_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions { MaxMemoryUsage = 1.0 };
@@ -220,8 +221,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void Validate_ZeroTransferStreams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ZeroTransferStreams_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { TransferStreams = 0 };
@@ -231,8 +232,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("TransferStreams", ex.Message);
     }
 
-    [Fact]
-    public void Validate_ZeroGraphBatchSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ZeroGraphBatchSize_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { GraphBatchSize = 0 };
@@ -242,8 +243,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("GraphBatchSize", ex.Message);
     }
 
-    [Fact]
-    public void Validate_BothForceGpuAndForceCpu_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_BothForceGpuAndForceCpu_Throws()
     {
         // Arrange
         var options = new GpuExecutionOptions { ForceGpu = true, ForceCpu = true };
@@ -253,8 +254,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Contains("ForceGpu", ex.Message);
     }
 
-    [Fact]
-    public void Validate_ForceGpuOnly_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ForceGpuOnly_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions { ForceGpu = true, ForceCpu = false };
@@ -263,8 +264,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void Validate_ForceCpuOnly_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ForceCpuOnly_DoesNotThrow()
     {
         // Arrange
         var options = new GpuExecutionOptions { ForceGpu = false, ForceCpu = true };
@@ -277,8 +278,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
-    public void Clone_DefaultOptions_CopiesAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_DefaultOptions_CopiesAllValues()
     {
         // Arrange
         var original = new GpuExecutionOptions();
@@ -304,8 +305,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(original.CacheCompiledGraphs, clone.CacheCompiledGraphs);
     }
 
-    [Fact]
-    public void Clone_CustomOptions_CopiesAllValues()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_CustomOptions_CopiesAllValues()
     {
         // Arrange
         var original = new GpuExecutionOptions
@@ -346,8 +347,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.False(clone.CacheCompiledGraphs);
     }
 
-    [Fact]
-    public void Clone_ReturnsDifferentInstance()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ReturnsDifferentInstance()
     {
         // Arrange
         var original = new GpuExecutionOptions();
@@ -359,8 +360,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.NotSame(original, clone);
     }
 
-    [Fact]
-    public void Clone_ChangingCloneDoesNotAffectOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ChangingCloneDoesNotAffectOriginal()
     {
         // Arrange
         var original = new GpuExecutionOptions { MinGpuElements = 1000 };
@@ -374,8 +375,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(2000, clone.MinGpuElements);
     }
 
-    [Fact]
-    public void Clone_ChangingOriginalDoesNotAffectClone()
+    [Fact(Timeout = 120000)]
+    public async Task Clone_ChangingOriginalDoesNotAffectClone()
     {
         // Arrange
         var original = new GpuExecutionOptions { MinGpuElements = 1000 };
@@ -393,8 +394,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void GpuExecutionOptions_MinGpuElementsAtZero_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_MinGpuElementsAtZero_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { MinGpuElements = 0 };
@@ -404,8 +405,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(0, options.MinGpuElements);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_LargeMinGpuElements_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_LargeMinGpuElements_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { MinGpuElements = int.MaxValue };
@@ -415,8 +416,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(int.MaxValue, options.MinGpuElements);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_SingleStream_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_SingleStream_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { MaxComputeStreams = 1 };
@@ -426,8 +427,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(1, options.MaxComputeStreams);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_ManyStreams_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_ManyStreams_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { MaxComputeStreams = 100 };
@@ -437,8 +438,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(100, options.MaxComputeStreams);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_VerySmallMaxMemoryUsage_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_VerySmallMaxMemoryUsage_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { MaxMemoryUsage = 0.01 };
@@ -448,8 +449,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(0.01, options.MaxMemoryUsage, Tolerance);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_SmallGraphBatchSize_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_SmallGraphBatchSize_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { GraphBatchSize = 1 };
@@ -459,8 +460,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(1, options.GraphBatchSize);
     }
 
-    [Fact]
-    public void GpuExecutionOptions_LargeGraphBatchSize_IsValid()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_LargeGraphBatchSize_IsValid()
     {
         // Arrange & Act
         var options = new GpuExecutionOptions { GraphBatchSize = 1024 };
@@ -474,8 +475,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region Configuration Scenario Tests
 
-    [Fact]
-    public void GpuExecutionOptions_HighPerformanceConfig_Validates()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_HighPerformanceConfig_Validates()
     {
         // Arrange - optimized for high-end GPUs
         var options = new GpuExecutionOptions
@@ -498,8 +499,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void GpuExecutionOptions_DebugConfig_Validates()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_DebugConfig_Validates()
     {
         // Arrange - optimized for debugging
         var options = new GpuExecutionOptions
@@ -522,8 +523,8 @@ public class GpuExecutionOptionsIntegrationTests
         options.Validate();
     }
 
-    [Fact]
-    public void GpuExecutionOptions_MemoryConstrainedConfig_Validates()
+    [Fact(Timeout = 120000)]
+    public async Task GpuExecutionOptions_MemoryConstrainedConfig_Validates()
     {
         // Arrange - low memory configuration
         var options = new GpuExecutionOptions
@@ -543,8 +544,8 @@ public class GpuExecutionOptionsIntegrationTests
 
     #region FromEnvironment Tests
 
-    [Fact]
-    public void FromEnvironment_NoVariablesSet_ReturnsDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task FromEnvironment_NoVariablesSet_ReturnsDefaults()
     {
         // Act
         var options = GpuExecutionOptions.FromEnvironment();
@@ -558,8 +559,8 @@ public class GpuExecutionOptionsIntegrationTests
         Assert.Equal(GpuExecutionMode.Auto, options.ExecutionMode);
     }
 
-    [Fact]
-    public void FromEnvironment_ReturnsValidOptions()
+    [Fact(Timeout = 120000)]
+    public async Task FromEnvironment_ReturnsValidOptions()
     {
         // Act
         var options = GpuExecutionOptions.FromEnvironment();

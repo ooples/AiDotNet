@@ -2,13 +2,14 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.Serving.Sandboxing.Execution;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class CompilationDiagnosticParserTests
 {
-    [Fact]
-    public void Parse_GccJson_DocumentRootAndLineRoots()
+    [Fact(Timeout = 60000)]
+    public async Task Parse_GccJson_DocumentRootAndLineRoots()
     {
         var json = """
         {
@@ -43,8 +44,8 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(CompilationDiagnosticSeverity.Info, multi[1].Severity);
     }
 
-    [Fact]
-    public void Parse_RustcJson_ExtractsPrimarySpan()
+    [Fact(Timeout = 60000)]
+    public async Task Parse_RustcJson_ExtractsPrimarySpan()
     {
         var payload = """
         {"message":"mismatched types","level":"error","code":{"code":"E0308"},"spans":[{"file_name":"main.rs","line_start":10,"column_start":2,"is_primary":true}]}
@@ -59,8 +60,8 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(2, diagnostics[0].Column);
     }
 
-    [Fact]
-    public void Parse_JavacText_ParsesWarningsAndErrors()
+    [Fact(Timeout = 60000)]
+    public async Task Parse_JavacText_ParsesWarningsAndErrors()
     {
         var text = """
         Main.java:12: error: cannot find symbol
@@ -76,8 +77,8 @@ public sealed class CompilationDiagnosticParserTests
         Assert.Equal(CompilationDiagnosticSeverity.Warning, diagnostics[1].Severity);
     }
 
-    [Fact]
-    public void Parse_DotNetBuildText_ParsesCSharpDiagnostics()
+    [Fact(Timeout = 60000)]
+    public async Task Parse_DotNetBuildText_ParsesCSharpDiagnostics()
     {
         var text = "Program.cs(3,5): error CS1002: ; expected\nProgram.cs(4,1): warning CS0168: The variable 'x' is declared but never used";
 

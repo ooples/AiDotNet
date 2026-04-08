@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -72,8 +73,8 @@ public class ComplexMatrixDecompositionIntegrationTests
         Assert.Equal(size, complexDecomp.A.Columns);
     }
 
-    [Fact]
-    public void ComplexMatrixDecomposition_A_HasZeroImaginaryParts()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexMatrixDecomposition_A_HasZeroImaginaryParts()
     {
         // Arrange
         var A = CreateDiagonallyDominantMatrix(3);
@@ -93,8 +94,8 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void ComplexMatrixDecomposition_A_RealPartsMatchOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexMatrixDecomposition_A_RealPartsMatchOriginal()
     {
         // Arrange
         var A = CreateDiagonallyDominantMatrix(3);
@@ -160,8 +161,8 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void ComplexMatrixDecomposition_Invert_HasZeroImaginaryParts()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexMatrixDecomposition_Invert_HasZeroImaginaryParts()
     {
         // Arrange
         var A = CreateDiagonallyDominantMatrix(3);
@@ -182,8 +183,8 @@ public class ComplexMatrixDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void ComplexMatrixDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task ComplexMatrixDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(3);

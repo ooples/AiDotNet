@@ -6,6 +6,7 @@ using AiDotNet.ReinforcementLearning.Agents;
 using AiDotNet.ReinforcementLearning.Policies;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
@@ -16,8 +17,8 @@ public class PoliciesIntegrationTests
     private const int DiscreteActionSize = 3;
     private const int ContinuousActionSize = 2;
 
-    [Fact]
-    public void DiscretePolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DiscretePolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new DiscretePolicy<double>(
             CreateNetwork(StateSize, DiscreteActionSize),
@@ -36,8 +37,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void ContinuousPolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new ContinuousPolicy<double>(
             CreateNetwork(StateSize, ContinuousActionSize * 2),
@@ -57,8 +58,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void DeterministicPolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new DeterministicPolicy<double>(
             CreateNetwork(StateSize, ContinuousActionSize),
@@ -77,8 +78,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void DeterministicPolicy_InvalidActionSize_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicy_InvalidActionSize_Throws()
     {
         var policy = new DeterministicPolicy<double>(
             CreateNetwork(StateSize, outputSize: 1),
@@ -90,8 +91,8 @@ public class PoliciesIntegrationTests
         Assert.Throws<ArgumentException>(() => policy.SelectAction(state, training: false));
     }
 
-    [Fact]
-    public void BetaPolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task BetaPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new BetaPolicy<double>(
             CreateNetwork(StateSize, ContinuousActionSize * 2),
@@ -112,8 +113,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void MixedPolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task MixedPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new MixedPolicy<double>(
             CreateNetwork(StateSize, DiscreteActionSize),
@@ -138,8 +139,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void MultiModalPolicy_SelectActionAndLogProb_ReturnValidOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task MultiModalPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         int components = 2;
         int outputSize = components * (1 + 2 * ContinuousActionSize);
@@ -163,8 +164,8 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
-    public void PolicyOptions_CanStoreCustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task PolicyOptions_CanStoreCustomValues()
     {
         var loss = new MeanSquaredErrorLoss<double>();
 
@@ -278,8 +279,8 @@ public class PoliciesIntegrationTests
         Assert.Equal(23, multiModal.Seed);
     }
 
-    [Fact]
-    public void ReinforcementLearningOptions_InitValues_AreStored()
+    [Fact(Timeout = 120000)]
+    public async Task ReinforcementLearningOptions_InitValues_AreStored()
     {
         var loss = new MeanSquaredErrorLoss<double>();
 

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -18,8 +19,8 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // A TTS model ignoring its text conditioning is broken.
     // =====================================================
 
-    [Fact]
-    public void DifferentText_DifferentAudio()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentText_DifferentAudio()
     {
         var network = CreateNetwork();
 
@@ -48,8 +49,8 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // TTS models must produce audio output of positive length.
     // =====================================================
 
-    [Fact]
-    public void Output_ShouldBeNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task Output_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -66,8 +67,8 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // Extreme values produce clipping or distortion.
     // =====================================================
 
-    [Fact]
-    public void OutputValues_ShouldBeBounded()
+    [Fact(Timeout = 120000)]
+    public async Task OutputValues_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -91,8 +92,8 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     // A TTS model with high variance is unstable.
     // =====================================================
 
-    [Fact]
-    public void SpeakerConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task SpeakerConsistency()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

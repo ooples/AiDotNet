@@ -3,6 +3,7 @@ using AiDotNet.ContinualLearning.Config;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
 using Xunit.Abstractions;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests;
 
@@ -15,8 +16,8 @@ public class DiagnosticTest
         _output = output;
     }
 
-    [Fact]
-    public void DiagnoseNumericOperations()
+    [Fact(Timeout = 60000)]
+    public async Task DiagnoseNumericOperations()
     {
         // Test MathHelper directly
         var numOps = MathHelper.GetNumericOperations<double>();
@@ -39,8 +40,8 @@ public class DiagnosticTest
         Assert.Equal(0.001, result);
     }
 
-    [Fact]
-    public void DiagnoseIsValid()
+    [Fact(Timeout = 60000)]
+    public async Task DiagnoseIsValid()
     {
         var config = new ContinualLearnerConfig<double>();
 

@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
@@ -15,8 +16,8 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 /// </summary>
 public class TeacherModelFactoryTests
 {
-    [Fact]
-    public void CreateTeacher_NeuralNetwork_WithModel_ReturnsTeacherModelWrapper()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_NeuralNetwork_WithModel_ReturnsTeacherModelWrapper()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -33,8 +34,8 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
-    public void CreateTeacher_NeuralNetwork_WithoutModel_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_NeuralNetwork_WithoutModel_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -43,8 +44,8 @@ public class TeacherModelFactoryTests
         Assert.Contains("Model is required", exception.Message);
     }
 
-    [Fact]
-    public void CreateTeacher_Ensemble_WithModels_ReturnsEnsembleTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Ensemble_WithModels_ReturnsEnsembleTeacher()
     {
         // Arrange
         var model1 = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -65,8 +66,8 @@ public class TeacherModelFactoryTests
         Assert.IsType<EnsembleTeacherModel<double>>(teacher);
     }
 
-    [Fact]
-    public void CreateTeacher_Ensemble_WithoutModels_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Ensemble_WithoutModels_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -75,8 +76,8 @@ public class TeacherModelFactoryTests
         Assert.Contains("Ensemble models are required", exception.Message);
     }
 
-    [Fact]
-    public void CreateTeacher_Pretrained_WithModel_ReturnsPretrainedTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Pretrained_WithModel_ReturnsPretrainedTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -92,8 +93,8 @@ public class TeacherModelFactoryTests
         Assert.IsType<PretrainedTeacherModel<double>>(teacher);
     }
 
-    [Fact]
-    public void CreateTeacher_Transformer_WithModel_ReturnsTransformerTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Transformer_WithModel_ReturnsTransformerTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -109,8 +110,8 @@ public class TeacherModelFactoryTests
         Assert.IsType<TransformerTeacherModel<double>>(teacher);
     }
 
-    [Fact]
-    public void CreateTeacher_MultiModal_WithModels_ReturnsMultiModalTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_MultiModal_WithModels_ReturnsMultiModalTeacher()
     {
         // Arrange
         var model1 = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -131,8 +132,8 @@ public class TeacherModelFactoryTests
         Assert.IsType<MultiModalTeacherModel<double>>(teacher);
     }
 
-    [Fact]
-    public void CreateTeacher_Adaptive_WithModel_ReturnsAdaptiveTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Adaptive_WithModel_ReturnsAdaptiveTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -149,8 +150,8 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
-    public void CreateTeacher_Online_WithModel_ReturnsOnlineTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Online_WithModel_ReturnsOnlineTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -166,8 +167,8 @@ public class TeacherModelFactoryTests
         Assert.IsType<OnlineTeacherModel<double>>(teacher);
     }
 
-    [Fact]
-    public void CreateTeacher_Curriculum_WithModel_ReturnsCurriculumTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Curriculum_WithModel_ReturnsCurriculumTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -184,8 +185,8 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
-    public void CreateTeacher_Self_WithoutModel_ReturnsSelfTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Self_WithoutModel_ReturnsSelfTeacher()
     {
         // Arrange & Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
@@ -198,8 +199,8 @@ public class TeacherModelFactoryTests
         Assert.Equal(10, teacher.OutputDimension);
     }
 
-    [Fact]
-    public void CreateTeacher_Quantized_WithModel_ReturnsQuantizedTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Quantized_WithModel_ReturnsQuantizedTeacher()
     {
         // Arrange
         var mockModel = new MockFullModel(inputDim: 10, outputDim: 5);
@@ -216,8 +217,8 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
-    public void CreateTeacher_Distributed_WithModels_ReturnsDistributedTeacher()
+    [Fact(Timeout = 60000)]
+    public async Task CreateTeacher_Distributed_WithModels_ReturnsDistributedTeacher()
     {
         // Arrange
         var model1 = new MockFullModel(inputDim: 10, outputDim: 5);

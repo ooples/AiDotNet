@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.DistributedTraining;
 
@@ -18,15 +19,15 @@ public class DistributedTrainingValidationTests
 
     #region ShardingConfiguration Validation Tests
 
-    [Fact]
-    public void ShardingConfiguration_Constructor_ThrowsOnNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_Constructor_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new ShardingConfiguration<double>(null!));
     }
 
-    [Fact]
-    public void ShardingConfiguration_Constructor_ThrowsOnZeroLearningRate()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_Constructor_ThrowsOnZeroLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
 
@@ -34,8 +35,8 @@ public class DistributedTrainingValidationTests
             new ShardingConfiguration<double>(backend, learningRate: 0));
     }
 
-    [Fact]
-    public void ShardingConfiguration_Constructor_ThrowsOnNegativeLearningRate()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_Constructor_ThrowsOnNegativeLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
 
@@ -43,8 +44,8 @@ public class DistributedTrainingValidationTests
             new ShardingConfiguration<double>(backend, learningRate: -0.01));
     }
 
-    [Fact]
-    public void ShardingConfiguration_Constructor_AcceptsValidLearningRate()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_Constructor_AcceptsValidLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
 
@@ -54,22 +55,22 @@ public class DistributedTrainingValidationTests
         Assert.Same(backend, config.CommunicationBackend);
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateDefault_ThrowsOnNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateDefault_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ShardingConfiguration<double>.CreateDefault(null!));
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForHighBandwidth_ThrowsOnNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateForHighBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ShardingConfiguration<double>.CreateForHighBandwidth(null!));
     }
 
-    [Fact]
-    public void ShardingConfiguration_CreateForLowBandwidth_ThrowsOnNullBackend()
+    [Fact(Timeout = 60000)]
+    public async Task ShardingConfiguration_CreateForLowBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ShardingConfiguration<double>.CreateForLowBandwidth(null!));
@@ -79,8 +80,8 @@ public class DistributedTrainingValidationTests
 
     #region PipelineParallelModel Validation Tests
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_ThrowsOnZeroMicroBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_ThrowsOnZeroMicroBatchSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -93,8 +94,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_ThrowsOnNegativeMicroBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_ThrowsOnNegativeMicroBatchSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -107,8 +108,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_AcceptsMinimumMicroBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_AcceptsMinimumMicroBatchSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -123,8 +124,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_AcceptsLargeMicroBatchSize()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_AcceptsLargeMicroBatchSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -143,8 +144,8 @@ public class DistributedTrainingValidationTests
 
     #region HybridShardedModel Validation Tests
 
-    [Fact]
-    public void HybridShardedModel_Constructor_ThrowsOnZeroPipelineParallelSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_ThrowsOnZeroPipelineParallelSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -158,8 +159,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_ThrowsOnNegativePipelineParallelSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_ThrowsOnNegativePipelineParallelSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -173,8 +174,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_ThrowsOnZeroTensorParallelSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_ThrowsOnZeroTensorParallelSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -188,8 +189,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_ThrowsOnNegativeTensorParallelSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_ThrowsOnNegativeTensorParallelSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -203,8 +204,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_AcceptsMinimumValidSizes()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_AcceptsMinimumValidSizes()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -219,8 +220,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_ThrowsWhenSizesDontMatchWorldSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_ThrowsWhenSizesDontMatchWorldSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8);
@@ -235,8 +236,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void HybridShardedModel_Constructor_AcceptsMatchingWorldSize()
+    [Fact(Timeout = 60000)]
+    public async Task HybridShardedModel_Constructor_AcceptsMatchingWorldSize()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8);
@@ -256,50 +257,50 @@ public class DistributedTrainingValidationTests
 
     #region InMemoryCommunicationBackend Validation Tests
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeRank()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeRank()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: -1, worldSize: 4));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnRankExceedsWorldSize()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnRankExceedsWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 4, worldSize: 4));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnZeroWorldSize()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnZeroWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 0));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeWorldSize()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: -1));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnEmptyEnvironmentId()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnEmptyEnvironmentId()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: ""));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_ThrowsOnWhitespaceEnvironmentId()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_ThrowsOnWhitespaceEnvironmentId()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: "   "));
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_AcceptsValidParameters()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_AcceptsValidParameters()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4);
 
@@ -307,8 +308,8 @@ public class DistributedTrainingValidationTests
         Assert.Equal(4, backend.WorldSize);
     }
 
-    [Fact]
-    public void InMemoryCommunicationBackend_Constructor_AcceptsCustomEnvironmentId()
+    [Fact(Timeout = 60000)]
+    public async Task InMemoryCommunicationBackend_Constructor_AcceptsCustomEnvironmentId()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: "test-env-1");
 
@@ -322,8 +323,8 @@ public class DistributedTrainingValidationTests
 
     #region Pipeline Schedule Tests
 
-    [Fact]
-    public void GPipeSchedule_GetSchedule_ProducesCorrectPhases()
+    [Fact(Timeout = 60000)]
+    public async Task GPipeSchedule_GetSchedule_ProducesCorrectPhases()
     {
         var schedule = new GPipeSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
@@ -350,8 +351,8 @@ public class DistributedTrainingValidationTests
             "GPipe should have all forwards before all backwards.");
     }
 
-    [Fact]
-    public void OneForwardOneBackward_GetSchedule_InterleavesFB()
+    [Fact(Timeout = 60000)]
+    public async Task OneForwardOneBackward_GetSchedule_InterleavesFB()
     {
         var schedule = new OneForwardOneBackwardSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 1, numStages: 4, numMicroBatches: 8);
@@ -384,8 +385,8 @@ public class DistributedTrainingValidationTests
         Assert.True(foundSteadyState, "1F1B should have a steady-state phase with alternating F/B.");
     }
 
-    [Fact]
-    public void ZeroBubbleH1_GetSchedule_SplitsBackward()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroBubbleH1_GetSchedule_SplitsBackward()
     {
         var schedule = new ZeroBubbleH1Schedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 4, numMicroBatches: 8);
@@ -402,8 +403,8 @@ public class DistributedTrainingValidationTests
         Assert.False(hasRegularBackward, "ZB-H1 should not emit combined Backward operations.");
     }
 
-    [Fact]
-    public void ZeroBubbleH2_GetSchedule_SplitsBackward()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroBubbleH2_GetSchedule_SplitsBackward()
     {
         var schedule = new ZeroBubbleH2Schedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 4, numMicroBatches: 8);
@@ -417,8 +418,8 @@ public class DistributedTrainingValidationTests
         Assert.True(hasBackwardWeight, "ZB-H2 should emit BackwardWeight operations.");
     }
 
-    [Fact]
-    public void ZeroBubbleV_GetSchedule_UsesTwoVirtualStages()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroBubbleV_GetSchedule_UsesTwoVirtualStages()
     {
         var schedule = new ZeroBubbleVSchedule<double>();
 
@@ -436,8 +437,8 @@ public class DistributedTrainingValidationTests
         Assert.True(hasVStage1, "ZB-V should have operations for virtual stage 1.");
     }
 
-    [Fact]
-    public void Interleaved1F1B_GetSchedule_DepthFirstOrder()
+    [Fact(Timeout = 60000)]
+    public async Task Interleaved1F1B_GetSchedule_DepthFirstOrder()
     {
         var schedule = new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
@@ -453,15 +454,15 @@ public class DistributedTrainingValidationTests
             "Interleaved 1F1B should use both virtual stages.");
     }
 
-    [Fact]
-    public void Interleaved1F1B_Constructor_ThrowsOnSingleVirtualStage()
+    [Fact(Timeout = 60000)]
+    public async Task Interleaved1F1B_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 1));
     }
 
-    [Fact]
-    public void LoopedBFS_GetSchedule_BreadthFirstOrder()
+    [Fact(Timeout = 60000)]
+    public async Task LoopedBFS_GetSchedule_BreadthFirstOrder()
     {
         var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
@@ -487,8 +488,8 @@ public class DistributedTrainingValidationTests
             "Looped BFS should process all vStage 0 operations before vStage 1.");
     }
 
-    [Fact]
-    public void LoopedBFS_Constructor_ThrowsOnSingleVirtualStage()
+    [Fact(Timeout = 60000)]
+    public async Task LoopedBFS_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LoopedBFSSchedule<double>(virtualStagesPerRank: 1));
@@ -551,8 +552,8 @@ public class DistributedTrainingValidationTests
         Assert.Equal(0.0, fraction);
     }
 
-    [Fact]
-    public void ZeroBubbleH2_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroBubbleH2_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
         var schedule = new ZeroBubbleH2Schedule<double>();
         double fraction = schedule.EstimateBubbleFraction(numStages: 4, numMicroBatches: 4);
@@ -560,8 +561,8 @@ public class DistributedTrainingValidationTests
         Assert.Equal(0.0, fraction);
     }
 
-    [Fact]
-    public void ZeroBubbleV_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
+    [Fact(Timeout = 60000)]
+    public async Task ZeroBubbleV_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
         var schedule = new ZeroBubbleVSchedule<double>();
         double fraction = schedule.EstimateBubbleFraction(numStages: 4, numMicroBatches: 4);
@@ -573,22 +574,22 @@ public class DistributedTrainingValidationTests
 
     #region LoadBalancedPartitionStrategy Tests
 
-    [Fact]
-    public void LoadBalancedPartitionStrategy_Constructor_ThrowsWhenFirstBoundaryNonZero()
+    [Fact(Timeout = 60000)]
+    public async Task LoadBalancedPartitionStrategy_Constructor_ThrowsWhenFirstBoundaryNonZero()
     {
         Assert.Throws<ArgumentException>(() =>
             new LoadBalancedPartitionStrategy<double>(new[] { 5, 100, 300 }));
     }
 
-    [Fact]
-    public void LoadBalancedPartitionStrategy_Constructor_ThrowsOnNonIncreasing()
+    [Fact(Timeout = 60000)]
+    public async Task LoadBalancedPartitionStrategy_Constructor_ThrowsOnNonIncreasing()
     {
         Assert.Throws<ArgumentException>(() =>
             new LoadBalancedPartitionStrategy<double>(new[] { 0, 100, 50 }));
     }
 
-    [Fact]
-    public void LoadBalancedPartitionStrategy_ComputePartition_CoversAllParameters()
+    [Fact(Timeout = 60000)]
+    public async Task LoadBalancedPartitionStrategy_ComputePartition_CoversAllParameters()
     {
         var strategy = new LoadBalancedPartitionStrategy<double>(new[] { 0, 100, 300 });
         var partitions = strategy.ComputePartition(totalParameters: 500, numStages: 2);
@@ -604,8 +605,8 @@ public class DistributedTrainingValidationTests
         Assert.Equal(partitions[0].StartIndex + partitions[0].Size, partitions[1].StartIndex);
     }
 
-    [Fact]
-    public void LoadBalancedPartitionStrategy_AutoDetect_ProducesValidPartitions()
+    [Fact(Timeout = 60000)]
+    public async Task LoadBalancedPartitionStrategy_AutoDetect_ProducesValidPartitions()
     {
         var strategy = new LoadBalancedPartitionStrategy<double>(estimatedLayerSize: 100);
         var partitions = strategy.ComputePartition(totalParameters: 500, numStages: 3);
@@ -620,16 +621,16 @@ public class DistributedTrainingValidationTests
 
     #region ActivationCheckpointConfig Tests
 
-    [Fact]
-    public void ActivationCheckpointConfig_DefaultRecomputeStrategy_IsNone()
+    [Fact(Timeout = 60000)]
+    public async Task ActivationCheckpointConfig_DefaultRecomputeStrategy_IsNone()
     {
         var config = new ActivationCheckpointConfig();
 
         Assert.Equal(RecomputeStrategy.None, config.RecomputeStrategy);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_CheckpointEveryNLayers_ThrowsOnZero()
+    [Fact(Timeout = 60000)]
+    public async Task ActivationCheckpointConfig_CheckpointEveryNLayers_ThrowsOnZero()
     {
         var config = new ActivationCheckpointConfig();
 
@@ -637,8 +638,8 @@ public class DistributedTrainingValidationTests
             config.CheckpointEveryNLayers = 0);
     }
 
-    [Fact]
-    public void ActivationCheckpointConfig_MaxActivationsInMemory_ThrowsOnNegative()
+    [Fact(Timeout = 60000)]
+    public async Task ActivationCheckpointConfig_MaxActivationsInMemory_ThrowsOnNegative()
     {
         var config = new ActivationCheckpointConfig();
 
@@ -646,8 +647,8 @@ public class DistributedTrainingValidationTests
             config.MaxActivationsInMemory = -1);
     }
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_AcceptsCheckpointingWithNoneStrategy()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_AcceptsCheckpointingWithNoneStrategy()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -667,8 +668,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_Constructor_ThrowsOnCheckpointingWithSelectiveStrategy()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_Constructor_ThrowsOnCheckpointingWithSelectiveStrategy()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -691,8 +692,8 @@ public class DistributedTrainingValidationTests
 
     #region PipelineParallelModel Metadata Tests
 
-    [Fact]
-    public void PipelineParallelModel_GetModelMetadata_IncludesScheduleInfo()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_GetModelMetadata_IncludesScheduleInfo()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
@@ -710,8 +711,8 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
-    public void PipelineParallelModel_DefaultSchedule_IsGPipe()
+    [Fact(Timeout = 60000)]
+    public async Task PipelineParallelModel_DefaultSchedule_IsGPipe()
     {
         var model = CreateMockModel();
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);

@@ -3,6 +3,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.PointCloud.Models;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.PointCloud;
 
@@ -11,8 +12,8 @@ namespace AiDotNet.Tests.IntegrationTests.PointCloud;
 /// </summary>
 public class PointCloudIntegrationTests
 {
-    [Fact]
-    public void PointNet_Train_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PointNet_Train_ProducesFiniteOutput()
     {
         var options = new PointNetOptions
         {
@@ -37,8 +38,8 @@ public class PointCloudIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
-    public void PointNetPlusPlus_Train_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PointNetPlusPlus_Train_ProducesFiniteOutput()
     {
         var options = new PointNetPlusPlusOptions
         {
@@ -68,8 +69,8 @@ public class PointCloudIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
-    public void DGCNN_Train_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DGCNN_Train_ProducesFiniteOutput()
     {
         var options = new DGCNNOptions
         {

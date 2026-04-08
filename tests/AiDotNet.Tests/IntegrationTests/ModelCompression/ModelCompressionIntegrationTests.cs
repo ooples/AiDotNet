@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using AiDotNet.Pruning;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelCompression;
 
@@ -17,8 +18,8 @@ public class ModelCompressionIntegrationTests
 
     #region DeepCompression Pipeline Tests
 
-    [Fact]
-    public void DeepCompression_VectorPipeline_CompressesAndDecompresses()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCompression_VectorPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create weights with known distribution
         var weights = new Vector<double>(new double[]
@@ -68,8 +69,8 @@ public class ModelCompressionIntegrationTests
         Assert.True(preservedCount >= 4, "At least 4 large weights should be preserved");
     }
 
-    [Fact]
-    public void DeepCompression_MatrixPipeline_CompressesAndDecompresses()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCompression_MatrixPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create a weight matrix
         var weights = new Matrix<double>(4, 4);
@@ -100,8 +101,8 @@ public class ModelCompressionIntegrationTests
         Assert.True(ratio > 0, $"Compression ratio {ratio} should be positive");
     }
 
-    [Fact]
-    public void DeepCompression_TensorPipeline_CompressesAndDecompresses()
+    [Fact(Timeout = 120000)]
+    public async Task DeepCompression_TensorPipeline_CompressesAndDecompresses()
     {
         // Arrange - Create a 3D tensor (simulating conv filter) and flatten to vector
         var shape = new int[] { 2, 3, 4 };
@@ -131,8 +132,8 @@ public class ModelCompressionIntegrationTests
 
     #region Pruning Integration Tests
 
-    [Fact]
-    public void PruningStrategies_AllStrategiesProduceValidMasks()
+    [Fact(Timeout = 120000)]
+    public async Task PruningStrategies_AllStrategiesProduceValidMasks()
     {
         // Arrange
         var weights = new Matrix<double>(5, 5);
@@ -172,8 +173,8 @@ public class ModelCompressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void GradientPruning_WithGradients_ProducesValidMask()
+    [Fact(Timeout = 120000)]
+    public async Task GradientPruning_WithGradients_ProducesValidMask()
     {
         // Arrange
         var weights = new Matrix<double>(4, 4);
@@ -201,8 +202,8 @@ public class ModelCompressionIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
-    public void StructuredSparsity_2to4_CreatesValidPattern()
+    [Fact(Timeout = 120000)]
+    public async Task StructuredSparsity_2to4_CreatesValidPattern()
     {
         // Arrange - Create tensor for structured sparsity
         var tensor = new Tensor<double>(new int[] { 1, 8 }); // 8 elements = 2 groups of 4
@@ -219,8 +220,8 @@ public class ModelCompressionIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 2);
     }
 
-    [Fact]
-    public void NtoMSparsity_4to8_CreatesValidPattern()
+    [Fact(Timeout = 120000)]
+    public async Task NtoMSparsity_4to8_CreatesValidPattern()
     {
         // Arrange
         var tensor = new Tensor<double>(new int[] { 1, 16 }); // 16 elements = 2 groups of 8
@@ -241,8 +242,8 @@ public class ModelCompressionIntegrationTests
 
     #region Compression + Pruning Combined Pipeline
 
-    [Fact]
-    public void SparsePruning_ThenDeepCompression_AchievesHighCompression()
+    [Fact(Timeout = 120000)]
+    public async Task SparsePruning_ThenDeepCompression_AchievesHighCompression()
     {
         // Arrange
         var weights = new Vector<double>(100);
@@ -277,8 +278,8 @@ public class ModelCompressionIntegrationTests
 
     #region Weight Clustering Compression Tests
 
-    [Fact]
-    public void WeightClustering_ReducesUniqueValues()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_ReducesUniqueValues()
     {
         // Arrange
         var weights = new Vector<double>(50);
@@ -305,8 +306,8 @@ public class ModelCompressionIntegrationTests
 
     #region Huffman Encoding Compression Tests
 
-    [Fact]
-    public void HuffmanEncoding_CompressesRepetitiveData()
+    [Fact(Timeout = 120000)]
+    public async Task HuffmanEncoding_CompressesRepetitiveData()
     {
         // Arrange - Create data with repetitive patterns (good for Huffman)
         var weights = new Vector<double>(100);
@@ -333,8 +334,8 @@ public class ModelCompressionIntegrationTests
 
     #region Low-Rank Factorization Tests
 
-    [Fact]
-    public void LowRankFactorization_CompressesVector()
+    [Fact(Timeout = 120000)]
+    public async Task LowRankFactorization_CompressesVector()
     {
         // Arrange - Create a low-rank matrix (should compress well) and flatten to vector
         var matrix = new Matrix<double>(10, 10);
@@ -370,8 +371,8 @@ public class ModelCompressionIntegrationTests
 
     #region Product Quantization Tests
 
-    [Fact]
-    public void ProductQuantization_CompressesVectors()
+    [Fact(Timeout = 120000)]
+    public async Task ProductQuantization_CompressesVectors()
     {
         // Arrange
         var weights = new Vector<double>(64);
@@ -395,8 +396,8 @@ public class ModelCompressionIntegrationTests
 
     #region Compression Analyzer Tests
 
-    [Fact]
-    public void CompressionAnalyzer_RecommendsAppropriateStrategy()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionAnalyzer_RecommendsAppropriateStrategy()
     {
         // Arrange - Create sparse weights (should recommend pruning)
         var sparseWeights = new Vector<double>(100);
@@ -419,8 +420,8 @@ public class ModelCompressionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
-    public void Compression_EmptyInput_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Compression_EmptyInput_ThrowsArgumentException()
     {
         // Arrange
         var compression = new DeepCompression<double>();
@@ -430,8 +431,8 @@ public class ModelCompressionIntegrationTests
         Assert.Throws<ArgumentException>(() => compression.Compress(emptyVector));
     }
 
-    [Fact]
-    public void CreateMask_InvalidSparsity_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CreateMask_InvalidSparsity_ThrowsArgumentException()
     {
         // Arrange
         var strategy = new MagnitudePruningStrategy<double>();

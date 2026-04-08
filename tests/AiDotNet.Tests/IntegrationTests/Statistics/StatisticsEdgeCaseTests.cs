@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -35,8 +36,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Single value: Mean, Min, Max should all equal that value.
     /// </summary>
-    [Fact]
-    public void BasicStats_SingleValue_AllStatsEqualValue()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_SingleValue_AllStatsEqualValue()
     {
         // Arrange
         var stats = CreateBasicStats(new[] { 42.0 });
@@ -51,8 +52,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two values: Median should be the average of both.
     /// </summary>
-    [Fact]
-    public void BasicStats_TwoValues_MedianIsAverage()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_TwoValues_MedianIsAverage()
     {
         // Arrange
         var stats = CreateBasicStats(new[] { 10.0, 20.0 });
@@ -67,8 +68,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All same values: Variance and StdDev should be 0.
     /// </summary>
-    [Fact]
-    public void BasicStats_AllSameValues_ZeroVariance()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_AllSameValues_ZeroVariance()
     {
         // Arrange
         var stats = CreateBasicStats(new[] { 5.0, 5.0, 5.0, 5.0, 5.0 });
@@ -83,8 +84,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Large dataset (1000 values) should compute correctly.
     /// </summary>
-    [Fact]
-    public void BasicStats_LargeDataset_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_LargeDataset_ComputesCorrectly()
     {
         // Arrange - 1000 values from 1 to 1000
         var values = new double[1000];
@@ -104,8 +105,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very large values should be handled without overflow.
     /// </summary>
-    [Fact]
-    public void BasicStats_VeryLargeValues_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_VeryLargeValues_HandledCorrectly()
     {
         // Arrange - Values near max double
         var values = new[] { 1e100, 2e100, 3e100 };
@@ -120,8 +121,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very small values should be handled without underflow.
     /// </summary>
-    [Fact]
-    public void BasicStats_VerySmallValues_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_VerySmallValues_HandledCorrectly()
     {
         // Arrange - Values near machine epsilon
         var values = new[] { 1e-100, 2e-100, 3e-100 };
@@ -136,8 +137,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Negative values should be handled correctly.
     /// </summary>
-    [Fact]
-    public void BasicStats_AllNegativeValues_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_AllNegativeValues_HandledCorrectly()
     {
         // Arrange
         var values = new[] { -5.0, -3.0, -1.0, -7.0, -9.0 };
@@ -153,8 +154,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Mixed positive and negative values.
     /// </summary>
-    [Fact]
-    public void BasicStats_MixedPositiveNegative_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_MixedPositiveNegative_HandledCorrectly()
     {
         // Arrange
         var values = new[] { -10.0, -5.0, 0.0, 5.0, 10.0 };
@@ -175,8 +176,8 @@ public class StatisticsEdgeCaseTests
     /// Two values: Q1, Q2, Q3 should be interpolated.
     /// Verified with NumPy: np.percentile([1, 5], [25, 50, 75]) = [2.0, 3.0, 4.0]
     /// </summary>
-    [Fact]
-    public void Quartile_TwoValues_InterpolatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_TwoValues_InterpolatesCorrectly()
     {
         // Arrange
         var data = new Vector<double>(new[] { 1.0, 5.0 });
@@ -193,8 +194,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All same values: All quartiles should equal that value.
     /// </summary>
-    [Fact]
-    public void Quartile_AllSameValues_AllQuartilesEqual()
+    [Fact(Timeout = 120000)]
+    public async Task Quartile_AllSameValues_AllQuartilesEqual()
     {
         // Arrange
         var data = new Vector<double>(new[] { 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0 });
@@ -215,8 +216,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Single dimension: Euclidean distance equals absolute difference.
     /// </summary>
-    [Fact]
-    public void EuclideanDistance_SingleDimension_EqualsAbsDiff()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_SingleDimension_EqualsAbsDiff()
     {
         // Arrange
         var a = new Vector<double>(new[] { -5.0 });
@@ -233,8 +234,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// High-dimensional sparse vectors.
     /// </summary>
-    [Fact]
-    public void EuclideanDistance_SparseVectors_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_SparseVectors_ComputesCorrectly()
     {
         // Arrange - Mostly zeros with one non-zero
         var a = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
@@ -251,8 +252,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very small differences.
     /// </summary>
-    [Fact]
-    public void EuclideanDistance_VerySmallDifferences_HandledCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EuclideanDistance_VerySmallDifferences_HandledCorrectly()
     {
         // Arrange
         var a = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -270,8 +271,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Cosine distance for unit vectors.
     /// </summary>
-    [Fact]
-    public void CosineDistance_UnitVectors_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CosineDistance_UnitVectors_ComputesCorrectly()
     {
         // Arrange - Unit vectors at 60 degrees
         var a = new Vector<double>(new[] { 1.0, 0.0 });
@@ -305,8 +306,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two data points: Metrics should still compute.
     /// </summary>
-    [Fact]
-    public void PredictionStats_TwoDataPoints_ComputesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_TwoDataPoints_ComputesMetrics()
     {
         // Arrange
         var actual = new[] { 1.0, 5.0 };
@@ -323,8 +324,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very large errors should still compute finite metrics.
     /// </summary>
-    [Fact]
-    public void PredictionStats_LargeErrors_ComputesFiniteMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_LargeErrors_ComputesFiniteMetrics()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -343,8 +344,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Perfect negative correlation (predictions reversed).
     /// </summary>
-    [Fact]
-    public void PredictionStats_PerfectNegativeCorrelation_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_PerfectNegativeCorrelation_ReturnsNegativeOne()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -361,8 +362,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very similar values with small differences.
     /// </summary>
-    [Fact]
-    public void PredictionStats_SmallDifferences_HighR2()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_SmallDifferences_HighR2()
     {
         // Arrange
         var actual = new[] { 100.0, 200.0, 300.0, 400.0, 500.0 };
@@ -392,8 +393,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two data points: Error metrics should compute correctly.
     /// </summary>
-    [Fact]
-    public void ErrorStats_TwoDataPoints_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_TwoDataPoints_ComputesCorrectly()
     {
         // Arrange
         var actual = new[] { 1.0, 5.0 };
@@ -412,8 +413,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All predictions exact: All error metrics should be zero.
     /// </summary>
-    [Fact]
-    public void ErrorStats_PerfectPredictions_AllZeroErrors()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_PerfectPredictions_AllZeroErrors()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -432,8 +433,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Negative actual values: Error metrics should still compute.
     /// </summary>
-    [Fact]
-    public void ErrorStats_NegativeActualValues_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_NegativeActualValues_ComputesCorrectly()
     {
         // Arrange
         var actual = new[] { -5.0, -3.0, -1.0, 1.0, 3.0 };
@@ -456,8 +457,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Variance should always be non-negative.
     /// </summary>
-    [Fact]
-    public void BasicStats_Variance_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Variance_AlwaysNonNegative()
     {
         // Test with various datasets
         var datasets = new[]
@@ -482,8 +483,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Mean should be between Min and Max.
     /// </summary>
-    [Fact]
-    public void BasicStats_Mean_BetweenMinAndMax()
+    [Fact(Timeout = 120000)]
+    public async Task BasicStats_Mean_BetweenMinAndMax()
     {
         // Test with various datasets
         var datasets = new[]
@@ -504,8 +505,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Pearson correlation should be in [-1, 1].
     /// </summary>
-    [Fact]
-    public void PredictionStats_PearsonCorrelation_InValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task PredictionStats_PearsonCorrelation_InValidRange()
     {
         // Test with various datasets
         var testCases = new[]
@@ -527,8 +528,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// MSE should equal MAE² when all errors have the same magnitude.
     /// </summary>
-    [Fact]
-    public void ErrorStats_ConstantError_MSEEqualsMAESquared()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_ConstantError_MSEEqualsMAESquared()
     {
         // Arrange - All errors are exactly 2
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -546,8 +547,8 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// RMSE should equal sqrt(MSE).
     /// </summary>
-    [Fact]
-    public void ErrorStats_RMSE_EqualsSqrtMSE()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorStats_RMSE_EqualsSqrtMSE()
     {
         // Arrange
         var actual = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };

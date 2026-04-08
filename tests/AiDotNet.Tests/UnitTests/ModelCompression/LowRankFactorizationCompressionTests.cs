@@ -2,13 +2,14 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class LowRankFactorizationCompressionTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new LowRankFactorizationCompression<double>(
@@ -21,16 +22,16 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithNegativeTargetRank_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeTargetRank_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new LowRankFactorizationCompression<double>(targetRank: -1));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidEnergyThreshold_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidEnergyThreshold_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -39,16 +40,16 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new LowRankFactorizationCompression<double>(energyThreshold: 1.5));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidMaxIterations_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidMaxIterations_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new LowRankFactorizationCompression<double>(maxIterations: 0));
         }
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(
@@ -66,8 +67,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<LowRankFactorizationMetadata<double>>(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>();
@@ -76,8 +77,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>();
@@ -87,8 +88,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
-        public void Compress_ProducesLowRankFactorizationMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ProducesLowRankFactorizationMetadata()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(9, lrMetadata.OriginalLength);
         }
 
-        [Fact]
-        public void Decompress_ReconstructsApproximateWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>();
@@ -138,8 +139,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void GetCompressedSize_ReturnsCorrectSize()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsCorrectSize()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(
@@ -159,8 +160,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<float>(
@@ -177,8 +178,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Compress_WithSpecificRank_RespectsRank()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithSpecificRank_RespectsRank()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(targetRank: 2);
@@ -197,8 +198,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(lrMetadata.Rank <= 2);
         }
 
-        [Fact]
-        public void Metadata_GetMetadataSize_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
             var metadata = new LowRankFactorizationMetadata<double>(10, 10, 5, 100);
@@ -210,8 +211,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(size > 0);
         }
 
-        [Fact]
-        public void Compress_WithLargeWeights_CompletesInReasonableTime()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithLargeWeights_CompletesInReasonableTime()
         {
             // Arrange
             var compression = new LowRankFactorizationCompression<double>(

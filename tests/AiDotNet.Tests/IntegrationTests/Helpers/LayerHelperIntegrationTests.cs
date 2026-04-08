@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.NeuralOperators;
 using AiDotNet.UncertaintyQuantification.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -17,8 +18,8 @@ public class LayerHelperIntegrationTests
 {
     #region CreateDefaultLayers Tests
 
-    [Fact]
-    public void CreateDefaultLayers_BasicArchitecture_CreatesCorrectLayerStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_BasicArchitecture_CreatesCorrectLayerStructure()
     {
         // CreateDefaultLayers(arch, hiddenLayerCount=1, hiddenLayerSize=64, outputSize=1)
         // Expected: DenseLayer(10,64) + DenseLayer(64,1) = 2 layers
@@ -47,8 +48,8 @@ public class LayerHelperIntegrationTests
         });
     }
 
-    [Fact]
-    public void CreateDefaultLayers_ClassificationTask_CreatesCorrectLayerStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_ClassificationTask_CreatesCorrectLayerStructure()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -67,8 +68,8 @@ public class LayerHelperIntegrationTests
         Assert.Equal(5, lastOutputSize);
     }
 
-    [Fact]
-    public void CreateDefaultLayers_Float_WorksWithDifferentNumericType()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_Float_WorksWithDifferentNumericType()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
@@ -83,8 +84,8 @@ public class LayerHelperIntegrationTests
         Assert.True(layers[0].ParameterCount > 0, "Float layer should have parameters");
     }
 
-    [Fact]
-    public void CreateDefaultLayers_CustomHiddenLayers_CreatesCorrectCount()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_CustomHiddenLayers_CreatesCorrectCount()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -103,8 +104,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultCNNLayers Tests
 
-    [Fact]
-    public void CreateDefaultCNNLayers_TwoDimensionalInput_NormalizesTo3DAndCreatesLayers()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCNNLayers_TwoDimensionalInput_NormalizesTo3DAndCreatesLayers()
     {
         // 2D input should be normalized to [1, height, width] internally
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -129,8 +130,8 @@ public class LayerHelperIntegrationTests
         Assert.IsType<DenseLayer<double>>(layers[^1]);
     }
 
-    [Fact]
-    public void CreateDefaultCNNLayers_ThreeDimensionalColorImage_CreatesCorrectStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCNNLayers_ThreeDimensionalColorImage_CreatesCorrectStructure()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional,
@@ -155,8 +156,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultResNetLayers Tests
 
-    [Fact]
-    public void CreateDefaultResNetLayers_OneDimensionalInput_CreatesMLPResNet()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultResNetLayers_OneDimensionalInput_CreatesMLPResNet()
     {
         // 1D input uses Dense layers with residual connections
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -181,8 +182,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultAttentionLayers Tests
 
-    [Fact]
-    public void CreateDefaultAttentionLayers_SequenceInput_CreatesTransformerArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultAttentionLayers_SequenceInput_CreatesTransformerArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -217,8 +218,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultAutoEncoderLayers Tests
 
-    [Fact]
-    public void CreateDefaultAutoEncoderLayers_StandardInput_CreatesSymmetricArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultAutoEncoderLayers_StandardInput_CreatesSymmetricArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -248,8 +249,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultVAELayers Tests
 
-    [Fact]
-    public void CreateDefaultVAELayers_StandardInput_CreatesEncoderDecoderWithLatent()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultVAELayers_StandardInput_CreatesEncoderDecoderWithLatent()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -274,8 +275,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultDeepBeliefNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultDeepBeliefNetworkLayers_StandardInput_CreatesRBMStack()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepBeliefNetworkLayers_StandardInput_CreatesRBMStack()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -301,8 +302,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultDeepQNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultDeepQNetworkLayers_ReinforcementLearning_CreatesMLPForQValues()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepQNetworkLayers_ReinforcementLearning_CreatesMLPForQValues()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -330,8 +331,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultESNLayers Tests
 
-    [Fact]
-    public void CreateDefaultESNLayers_StandardParams_CreatesReservoirArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultESNLayers_StandardParams_CreatesReservoirArchitecture()
     {
         var layers = LayerHelper<double>.CreateDefaultESNLayers(
             inputSize: 10,
@@ -348,8 +349,8 @@ public class LayerHelperIntegrationTests
         Assert.IsType<DenseLayer<double>>(layers[0]);
     }
 
-    [Fact]
-    public void CreateDefaultESNLayers_CustomSpectralRadius_CreatesValidReservoir()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultESNLayers_CustomSpectralRadius_CreatesValidReservoir()
     {
         var layers = LayerHelper<double>.CreateDefaultESNLayers(
             inputSize: 10,
@@ -371,8 +372,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultGRULayers Tests
 
-    [Fact]
-    public void CreateDefaultGRULayers_SequenceInput_CreatesGRUArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGRULayers_SequenceInput_CreatesGRUArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -396,8 +397,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultLSTMNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultLSTMNetworkLayers_SequenceInput_CreatesLSTMArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLSTMNetworkLayers_SequenceInput_CreatesLSTMArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -421,8 +422,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultRNNLayers Tests
 
-    [Fact]
-    public void CreateDefaultRNNLayers_SequenceInput_CreatesRNNArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultRNNLayers_SequenceInput_CreatesRNNArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -446,8 +447,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultGNNLayers Tests
 
-    [Fact]
-    public void CreateDefaultGNNLayers_GraphInput_CreatesGNNArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGNNLayers_GraphInput_CreatesGNNArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -471,8 +472,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultFeedForwardLayers Tests
 
-    [Fact]
-    public void CreateDefaultFeedForwardLayers_StandardInput_CreatesMLPStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFeedForwardLayers_StandardInput_CreatesMLPStructure()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -496,8 +497,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultNeuralNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultNeuralNetworkLayers_Classification_CreatesLayersWithActivations()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Classification_CreatesLayersWithActivations()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -516,8 +517,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is ActivationLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultNeuralNetworkLayers_Regression_NoOutputActivation()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Regression_NoOutputActivation()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -538,8 +539,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultBayesianNeuralNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultBayesianNeuralNetworkLayers_StandardInput_CreatesBayesianLayers()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultBayesianNeuralNetworkLayers_StandardInput_CreatesBayesianLayers()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -566,8 +567,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultRBFNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultRBFNetworkLayers_StandardInput_CreatesRBFArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultRBFNetworkLayers_StandardInput_CreatesRBFArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -587,8 +588,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultELMLayers Tests
 
-    [Fact]
-    public void CreateDefaultELMLayers_StandardInput_CreatesELMArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultELMLayers_StandardInput_CreatesELMArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -613,8 +614,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultPINNLayers Tests
 
-    [Fact]
-    public void CreateDefaultPINNLayers_StandardInput_CreatesPINNArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultPINNLayers_StandardInput_CreatesPINNArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -641,8 +642,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultDeepRitzLayers Tests
 
-    [Fact]
-    public void CreateDefaultDeepRitzLayers_StandardInput_CreatesResidualStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepRitzLayers_StandardInput_CreatesResidualStructure()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -662,8 +663,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultCapsuleNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultCapsuleNetworkLayers_ImageInput_CreatesCapsuleArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCapsuleNetworkLayers_ImageInput_CreatesCapsuleArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -689,8 +690,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultNodeClassificationLayers Tests
 
-    [Fact]
-    public void CreateDefaultNodeClassificationLayers_GraphInput_CreatesGCNArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNodeClassificationLayers_GraphInput_CreatesGCNArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -711,8 +712,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultLinkPredictionLayers Tests
 
-    [Fact]
-    public void CreateDefaultLinkPredictionLayers_GraphInput_CreatesEncoderStructure()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLinkPredictionLayers_GraphInput_CreatesEncoderStructure()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -736,8 +737,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultGraphClassificationLayers Tests
 
-    [Fact]
-    public void CreateDefaultGraphClassificationLayers_GraphInput_CreatesPoolingArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGraphClassificationLayers_GraphInput_CreatesPoolingArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -759,8 +760,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultDeepOperatorNetworkLayers Tests
 
-    [Fact]
-    public void CreateDefaultDeepOperatorNetworkLayers_StandardParams_CreatesBranchAndTrunk()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepOperatorNetworkLayers_StandardParams_CreatesBranchAndTrunk()
     {
         var (branchLayers, trunkLayers) = LayerHelper<double>.CreateDefaultDeepOperatorNetworkLayers(
             branchInputSize: 10,
@@ -778,8 +779,8 @@ public class LayerHelperIntegrationTests
         Assert.IsType<DenseLayer<double>>(trunkList[^1]);
     }
 
-    [Fact]
-    public void CreateDefaultDeepOperatorNetworkLayers_CustomHiddenLayers_ScalesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepOperatorNetworkLayers_CustomHiddenLayers_ScalesCorrectly()
     {
         var (branchLayers, trunkLayers) = LayerHelper<double>.CreateDefaultDeepOperatorNetworkLayers(
             branchInputSize: 20,
@@ -800,8 +801,8 @@ public class LayerHelperIntegrationTests
 
     #region CreateDefaultFourierNeuralOperatorLayers Tests
 
-    [Fact]
-    public void CreateDefaultFourierNeuralOperatorLayers_StandardInput_CreatesFNOArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFourierNeuralOperatorLayers_StandardInput_CreatesFNOArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -819,8 +820,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is FourierLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultFourierNeuralOperatorLayers_CustomParams_ScalesFourierLayers()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFourierNeuralOperatorLayers_CustomParams_ScalesFourierLayers()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -844,8 +845,8 @@ public class LayerHelperIntegrationTests
 
     #region NetworkComplexity Tests
 
-    [Fact]
-    public void CreateDefaultNeuralNetworkLayers_SimpleComplexity_HasFewerLayersThanDeep()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_SimpleComplexity_HasFewerLayersThanDeep()
     {
         var simpleArch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -879,8 +880,8 @@ public class LayerHelperIntegrationTests
 
     #region Different Numeric Types Tests
 
-    [Fact]
-    public void CreateDefaultNeuralNetworkLayers_Double_HasTrainableParameters()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Double_HasTrainableParameters()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -900,8 +901,8 @@ public class LayerHelperIntegrationTests
         Assert.True(totalParams > 0, $"Total parameters should be positive, got {totalParams}");
     }
 
-    [Fact]
-    public void CreateDefaultNeuralNetworkLayers_Float_HasTrainableParameters()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Float_HasTrainableParameters()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
@@ -919,8 +920,8 @@ public class LayerHelperIntegrationTests
 
     #region Sequence Models Tests
 
-    [Fact]
-    public void CreateDefaultLSTMNetworkLayers_ReturnSequence_ContainsLSTM()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLSTMNetworkLayers_ReturnSequence_ContainsLSTM()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -936,8 +937,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is LSTMLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultGRULayers_ReturnSequence_ContainsGRU()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGRULayers_ReturnSequence_ContainsGRU()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -957,8 +958,8 @@ public class LayerHelperIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
-    public void CreateDefaultLayers_MinimalInput_ProducesValidOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_MinimalInput_ProducesValidOutputShape()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -976,8 +977,8 @@ public class LayerHelperIntegrationTests
         Assert.Equal(1, totalOutput);
     }
 
-    [Fact]
-    public void CreateDefaultLayers_LargeInput_ScalesParametersAppropriately()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_LargeInput_ScalesParametersAppropriately()
     {
         var smallArch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1001,8 +1002,8 @@ public class LayerHelperIntegrationTests
             $"Large input ({largeParams} params) should have more parameters than small ({smallParams} params)");
     }
 
-    [Fact]
-    public void CreateDefaultLayers_BinaryClassification_OutputsSingleValue()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_BinaryClassification_OutputsSingleValue()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1024,8 +1025,8 @@ public class LayerHelperIntegrationTests
 
     #region Additional Architecture Tests
 
-    [Fact]
-    public void CreateDefaultOccupancyLayers_StandardInput_CreatesDenseStack()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultOccupancyLayers_StandardInput_CreatesDenseStack()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1049,8 +1050,8 @@ public class LayerHelperIntegrationTests
         Assert.Equal(1, outputSize);
     }
 
-    [Fact]
-    public void CreateDefaultOccupancyTemporalLayers_StandardInput_CreatesTemporalArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultOccupancyTemporalLayers_StandardInput_CreatesTemporalArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -1074,8 +1075,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is DropoutLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultDeepBoltzmannMachineLayers_StandardInput_CreatesRBMStack()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepBoltzmannMachineLayers_StandardInput_CreatesRBMStack()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1098,8 +1099,8 @@ public class LayerHelperIntegrationTests
         Assert.Equal(4, rbmCount);
     }
 
-    [Fact]
-    public void CreateDefaultVariationalPINNLayers_StandardInput_CreatesValidArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultVariationalPINNLayers_StandardInput_CreatesValidArchitecture()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1113,8 +1114,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is DenseLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultGraphGenerationLayers_StandardInput_CreatesGraphGenerativeModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGraphGenerationLayers_StandardInput_CreatesGraphGenerativeModel()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.TwoDimensional,
@@ -1130,8 +1131,8 @@ public class LayerHelperIntegrationTests
         Assert.All(layers, l => Assert.IsType<GraphConvolutionalLayer<double>>(l));
     }
 
-    [Fact]
-    public void CreateDefaultHamiltonianLayers_StandardInput_CreatesPhysicsInformedModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultHamiltonianLayers_StandardInput_CreatesPhysicsInformedModel()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1149,8 +1150,8 @@ public class LayerHelperIntegrationTests
         Assert.True(totalParams > 0, $"Should have parameters, got {totalParams}");
     }
 
-    [Fact]
-    public void CreateDefaultLagrangianLayers_StandardInput_CreatesPhysicsInformedModel()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLagrangianLayers_StandardInput_CreatesPhysicsInformedModel()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1164,8 +1165,8 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is DenseLayer<double>);
     }
 
-    [Fact]
-    public void CreateDefaultUniversalDELayers_StandardInput_CreatesDiffEqSolver()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultUniversalDELayers_StandardInput_CreatesDiffEqSolver()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -1183,8 +1184,8 @@ public class LayerHelperIntegrationTests
 
     #region Cross-Architecture Consistency Tests
 
-    [Fact]
-    public void AllLayerCreators_ProduceLayersWithValidOutputShapes()
+    [Fact(Timeout = 120000)]
+    public async Task AllLayerCreators_ProduceLayersWithValidOutputShapes()
     {
         // Verify all non-buggy architectures produce layers with valid output shapes
         var architectures = new Dictionary<string, List<ILayer<double>>>();

@@ -8,6 +8,7 @@ using AiDotNet.Data.Formats;
 using AiDotNet.Data.Sampling;
 using AiDotNet.Data.Pipeline;
 using AiDotNet.Data.Loaders;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Data;
 
@@ -15,8 +16,8 @@ public class AdvancedPipelineTests
 {
     // ==================== LMDB Dataset Tests ====================
 
-    [Fact]
-    public void LmdbDataset_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task LmdbDataset_DefaultOptions()
     {
         var options = new LmdbDatasetOptions();
         Assert.Equal("", options.DataPath);
@@ -25,8 +26,8 @@ public class AdvancedPipelineTests
         Assert.Equal(128, options.MaxReaders);
     }
 
-    [Fact]
-    public void LmdbDataset_WriteAndRead()
+    [Fact(Timeout = 120000)]
+    public async Task LmdbDataset_WriteAndRead()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"lmdb_test_{Guid.NewGuid():N}");
         try
@@ -61,8 +62,8 @@ public class AdvancedPipelineTests
 
     // ==================== HDF5 Dataset Tests ====================
 
-    [Fact]
-    public void Hdf5Dataset_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task Hdf5Dataset_DefaultOptions()
     {
         var options = new Hdf5DatasetOptions();
         Assert.Equal("", options.FilePath);
@@ -71,8 +72,8 @@ public class AdvancedPipelineTests
         Assert.Equal(1000, options.ChunkSize);
     }
 
-    [Fact]
-    public void Hdf5Dataset_WriteAndRead()
+    [Fact(Timeout = 120000)]
+    public async Task Hdf5Dataset_WriteAndRead()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), $"hdf5_test_{Guid.NewGuid():N}.h5");
         try
@@ -114,8 +115,8 @@ public class AdvancedPipelineTests
         }
     }
 
-    [Fact]
-    public void Hdf5Dataset_ReadSlice()
+    [Fact(Timeout = 120000)]
+    public async Task Hdf5Dataset_ReadSlice()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), $"hdf5_slice_{Guid.NewGuid():N}.h5");
         try
@@ -142,8 +143,8 @@ public class AdvancedPipelineTests
 
     // ==================== Arrow Dataset Tests ====================
 
-    [Fact]
-    public void ArrowDataset_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ArrowDataset_DefaultOptions()
     {
         var options = new ArrowDatasetOptions();
         Assert.Equal("", options.DataPath);
@@ -153,8 +154,8 @@ public class AdvancedPipelineTests
         Assert.Equal(1024, options.BatchSize);
     }
 
-    [Fact]
-    public void ArrowDataset_WriteAndRead()
+    [Fact(Timeout = 120000)]
+    public async Task ArrowDataset_WriteAndRead()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), $"arrow_test_{Guid.NewGuid():N}.arrow");
         try
@@ -189,8 +190,8 @@ public class AdvancedPipelineTests
         }
     }
 
-    [Fact]
-    public void ArrowDataset_ReadBatch()
+    [Fact(Timeout = 120000)]
+    public async Task ArrowDataset_ReadBatch()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), $"arrow_batch_{Guid.NewGuid():N}.arrow");
         try
@@ -221,8 +222,8 @@ public class AdvancedPipelineTests
 
     // ==================== Elastic Distributed Sampler Tests ====================
 
-    [Fact]
-    public void ElasticDistributedSampler_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticDistributedSampler_DefaultOptions()
     {
         var options = new ElasticDistributedSamplerOptions();
         Assert.Equal(1, options.NumReplicas);
@@ -231,8 +232,8 @@ public class AdvancedPipelineTests
         Assert.True(options.DropLast);
     }
 
-    [Fact]
-    public void ElasticDistributedSampler_SingleWorker()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticDistributedSampler_SingleWorker()
     {
         var sampler = new ElasticDistributedSampler(new ElasticDistributedSamplerOptions
         {
@@ -248,8 +249,8 @@ public class AdvancedPipelineTests
         Assert.Equal(10, indices.Count);
     }
 
-    [Fact]
-    public void ElasticDistributedSampler_TwoWorkers_NonOverlapping()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticDistributedSampler_TwoWorkers_NonOverlapping()
     {
         var sampler0 = new ElasticDistributedSampler(new ElasticDistributedSamplerOptions
         {
@@ -280,8 +281,8 @@ public class AdvancedPipelineTests
         Assert.Equal(10, all.Count);
     }
 
-    [Fact]
-    public void ElasticDistributedSampler_Rescale()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticDistributedSampler_Rescale()
     {
         var sampler = new ElasticDistributedSampler(new ElasticDistributedSamplerOptions
         {
@@ -301,8 +302,8 @@ public class AdvancedPipelineTests
 
     // ==================== Mid-Epoch Checkpointer Tests ====================
 
-    [Fact]
-    public void MidEpochCheckpointer_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MidEpochCheckpointer_DefaultOptions()
     {
         var options = new MidEpochCheckpointerOptions();
         Assert.Equal(100, options.SaveEveryNBatches);
@@ -310,8 +311,8 @@ public class AdvancedPipelineTests
         Assert.Equal("checkpoint", options.FilePrefix);
     }
 
-    [Fact]
-    public void MidEpochCheckpointer_SaveAndLoad()
+    [Fact(Timeout = 120000)]
+    public async Task MidEpochCheckpointer_SaveAndLoad()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"ckpt_test_{Guid.NewGuid():N}");
         try
@@ -341,8 +342,8 @@ public class AdvancedPipelineTests
         }
     }
 
-    [Fact]
-    public void MidEpochCheckpointer_RotatesOldCheckpoints()
+    [Fact(Timeout = 120000)]
+    public async Task MidEpochCheckpointer_RotatesOldCheckpoints()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"ckpt_rotate_{Guid.NewGuid():N}");
         try
@@ -373,8 +374,8 @@ public class AdvancedPipelineTests
 
     // ==================== Multi-Source Mixer Tests ====================
 
-    [Fact]
-    public void MultiSourceMixer_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task MultiSourceMixer_DefaultOptions()
     {
         var options = new MultiSourceMixerOptions();
         Assert.Null(options.Weights);
@@ -383,8 +384,8 @@ public class AdvancedPipelineTests
         Assert.Equal(1000, options.BufferSize);
     }
 
-    [Fact]
-    public void MultiSourceMixer_EqualWeights()
+    [Fact(Timeout = 120000)]
+    public async Task MultiSourceMixer_EqualWeights()
     {
         var mixer = new MultiSourceMixer<int>(3, new MultiSourceMixerOptions { Seed = 42 });
 
@@ -398,8 +399,8 @@ public class AdvancedPipelineTests
         Assert.Equal(1.0 / 3.0, w0, 5);
     }
 
-    [Fact]
-    public void MultiSourceMixer_CustomWeights()
+    [Fact(Timeout = 120000)]
+    public async Task MultiSourceMixer_CustomWeights()
     {
         var mixer = new MultiSourceMixer<int>(2, new MultiSourceMixerOptions
         {
@@ -411,8 +412,8 @@ public class AdvancedPipelineTests
         Assert.Equal(0.25, mixer.GetWeight(1), 5);
     }
 
-    [Fact]
-    public void MultiSourceMixer_SelectSourceDistribution()
+    [Fact(Timeout = 120000)]
+    public async Task MultiSourceMixer_SelectSourceDistribution()
     {
         var mixer = new MultiSourceMixer<int>(2, new MultiSourceMixerOptions
         {
@@ -432,8 +433,8 @@ public class AdvancedPipelineTests
 
     // ==================== Prefetch Data Loader Tests ====================
 
-    [Fact]
-    public void PrefetchDataLoader_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task PrefetchDataLoader_DefaultOptions()
     {
         var options = new PrefetchDataLoaderOptions();
         Assert.Equal(2, options.PrefetchCount);
@@ -441,8 +442,8 @@ public class AdvancedPipelineTests
         Assert.Equal(30000, options.TimeoutMs);
     }
 
-    [Fact]
-    public void PrefetchDataLoader_SynchronousMode()
+    [Fact(Timeout = 120000)]
+    public async Task PrefetchDataLoader_SynchronousMode()
     {
         using var prefetcher = new PrefetchDataLoader<int>(new PrefetchDataLoaderOptions
         {
@@ -457,8 +458,8 @@ public class AdvancedPipelineTests
             Assert.Equal(i, result[i]);
     }
 
-    [Fact]
-    public void PrefetchDataLoader_BackgroundMode()
+    [Fact(Timeout = 120000)]
+    public async Task PrefetchDataLoader_BackgroundMode()
     {
         using var prefetcher = new PrefetchDataLoader<int>(new PrefetchDataLoaderOptions
         {
@@ -477,8 +478,8 @@ public class AdvancedPipelineTests
 
     // ==================== Caching Data Loader Tests ====================
 
-    [Fact]
-    public void CachingDataLoader_DefaultOptions()
+    [Fact(Timeout = 120000)]
+    public async Task CachingDataLoader_DefaultOptions()
     {
         var options = new CachingDataLoaderOptions();
         Assert.Equal(100, options.MaxCacheSize);
@@ -486,8 +487,8 @@ public class AdvancedPipelineTests
         Assert.Equal(MemoryCacheEvictionPolicy.LRU, options.EvictionPolicy);
     }
 
-    [Fact]
-    public void CachingDataLoader_CachesValues()
+    [Fact(Timeout = 120000)]
+    public async Task CachingDataLoader_CachesValues()
     {
         var cache = new CachingDataLoader<int, string>();
         int loadCount = 0;
@@ -502,8 +503,8 @@ public class AdvancedPipelineTests
         Assert.True(cache.HitRatio > 0.4);
     }
 
-    [Fact]
-    public void CachingDataLoader_LRUEviction()
+    [Fact(Timeout = 120000)]
+    public async Task CachingDataLoader_LRUEviction()
     {
         var cache = new CachingDataLoader<int, string>(new CachingDataLoaderOptions
         {
@@ -528,8 +529,8 @@ public class AdvancedPipelineTests
         Assert.True(cache.Contains(4));
     }
 
-    [Fact]
-    public void CachingDataLoader_Invalidate()
+    [Fact(Timeout = 120000)]
+    public async Task CachingDataLoader_Invalidate()
     {
         var cache = new CachingDataLoader<string, int>();
 
@@ -541,8 +542,8 @@ public class AdvancedPipelineTests
         Assert.False(cache.Contains("a"));
     }
 
-    [Fact]
-    public void CachingDataLoader_Clear()
+    [Fact(Timeout = 120000)]
+    public async Task CachingDataLoader_Clear()
     {
         var cache = new CachingDataLoader<int, int>();
 

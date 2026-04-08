@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery.InformationTheoretic;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
@@ -27,8 +28,8 @@ public class InformationTheoreticCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void TransferEntropy_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task TransferEntropy_FindsCausalStructure()
     {
         var algo = new TransferEntropyAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -36,8 +37,8 @@ public class InformationTheoreticCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void KraskovMI_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task KraskovMI_FindsCausalStructure()
     {
         var algo = new KraskovMIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
@@ -45,8 +46,8 @@ public class InformationTheoreticCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
-    public void OCSE_FindsCausalStructure()
+    [Fact(Timeout = 120000)]
+    public async Task OCSE_FindsCausalStructure()
     {
         var algo = new OCSEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);

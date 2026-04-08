@@ -1,12 +1,13 @@
 using AiDotNet.Reasoning.Benchmarks;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Reasoning.Benchmarks;
 
 public sealed class HumanEvalBenchmarkExecutionHelpersTests
 {
-    [Fact]
-    public void ExtractDoctestAssertions_WithExpectedOutputs_ProducesAssertStatements()
+    [Fact(Timeout = 60000)]
+    public async Task ExtractDoctestAssertions_WithExpectedOutputs_ProducesAssertStatements()
     {
         var prompt =
             "def has_close_elements(numbers, threshold):\n" +
@@ -24,8 +25,8 @@ public sealed class HumanEvalBenchmarkExecutionHelpersTests
         Assert.Contains("assert (has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)) == (True)", assertions);
     }
 
-    [Fact]
-    public void ComposePythonSubmission_WhenCompletionIsBody_IndentsIntoPrompt()
+    [Fact(Timeout = 60000)]
+    public async Task ComposePythonSubmission_WhenCompletionIsBody_IndentsIntoPrompt()
     {
         var prompt =
             "def add(a, b):\n" +
@@ -37,8 +38,8 @@ public sealed class HumanEvalBenchmarkExecutionHelpersTests
         Assert.Contains("    return a + b", submission);
     }
 
-    [Fact]
-    public void ComposePythonSubmission_WhenCompletionContainsDef_ReturnsCompletion()
+    [Fact(Timeout = 60000)]
+    public async Task ComposePythonSubmission_WhenCompletionContainsDef_ReturnsCompletion()
     {
         var completion =
             "def add(a, b):\n" +

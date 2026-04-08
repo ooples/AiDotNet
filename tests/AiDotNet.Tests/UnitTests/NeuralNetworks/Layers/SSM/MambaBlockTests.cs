@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class MambaBlockTests
 {
-    [Fact]
-    public void Constructor_ValidParameters_CreatesBlock()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesBlock()
     {
         int seqLen = 16;
         int modelDim = 64;
@@ -27,8 +28,8 @@ public class MambaBlockTests
         Assert.Equal((int)Math.Ceiling((double)modelDim / 16), block.DtRank);
     }
 
-    [Fact]
-    public void Constructor_DefaultParameters_UsesCorrectDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var block = new MambaBlock<float>(16);
 
@@ -40,37 +41,37 @@ public class MambaBlockTests
         Assert.Equal(16, block.DtRank); // ceil(256/16)
     }
 
-    [Fact]
-    public void Constructor_CustomDtRank_UsesProvidedValue()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_CustomDtRank_UsesProvidedValue()
     {
         var block = new MambaBlock<float>(16, modelDimension: 64, dtRank: 8);
 
         Assert.Equal(8, block.DtRank);
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenModelDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenStateDimensionNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 64, stateDimension: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenExpandFactorNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenExpandFactorNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 64, expandFactor: 0));
     }
 
-    [Fact]
-    public void Constructor_ThrowsWhenConvKernelNotPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenConvKernelNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new MambaBlock<float>(16, modelDimension: 64, convKernelSize: 0));
@@ -113,8 +114,8 @@ public class MambaBlockTests
 
 
 
-    [Fact]
-    public void ParameterCount_MatchesExpectedFormula()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_MatchesExpectedFormula()
     {
         int modelDim = 32;
         int stateDim = 8;
@@ -137,8 +138,8 @@ public class MambaBlockTests
         Assert.Equal(expectedParams, block.ParameterCount);
     }
 
-    [Fact]
-    public void GetParameters_SetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -162,8 +163,8 @@ public class MambaBlockTests
         }
     }
 
-    [Fact]
-    public void SetParameters_ThrowsOnWrongLength()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
     {
         var block = new MambaBlock<float>(4, 32, 8);
         var wrongParams = new Vector<float>(10); // wrong length
@@ -171,8 +172,8 @@ public class MambaBlockTests
         Assert.Throws<ArgumentException>(() => block.SetParameters(wrongParams));
     }
 
-    [Fact]
-    public void ResetState_ClearsInternalState()
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsInternalState()
     {
         var block = new MambaBlock<float>(4, 32, 8);
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
@@ -186,8 +187,8 @@ public class MambaBlockTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Forward_DeterministicWithSameParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
         int modelDim = 32;
@@ -213,8 +214,8 @@ public class MambaBlockTests
         }
     }
 
-    [Fact]
-    public void ParameterCount_IncreasesWithExpansion()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_IncreasesWithExpansion()
     {
         int modelDim = 32;
         int stateDim = 8;
@@ -226,15 +227,15 @@ public class MambaBlockTests
             $"4x expand ({block4x.ParameterCount}) should have more params than 2x ({block2x.ParameterCount})");
     }
 
-    [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrue()
     {
         var block = new MambaBlock<float>(4, 32, 8);
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void GetMetadata_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetadata_ContainsExpectedKeys()
     {
         var block = new MambaBlock<float>(8, 64, 16, expandFactor: 2, convKernelSize: 4);
 
@@ -251,8 +252,8 @@ public class MambaBlockTests
         Assert.Equal("128", metadata["InnerDimension"]);
     }
 
-    [Fact]
-    public void GetWeightAccessors_ReturnCorrectShapes()
+    [Fact(Timeout = 120000)]
+    public async Task GetWeightAccessors_ReturnCorrectShapes()
     {
         int modelDim = 64;
         int stateDim = 16;
@@ -274,8 +275,8 @@ public class MambaBlockTests
         Assert.Equal(new[] { innerDim }, dParam.Shape.ToArray());
     }
 
-    [Fact]
-    public void Forward_Double_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int modelDim = 32;

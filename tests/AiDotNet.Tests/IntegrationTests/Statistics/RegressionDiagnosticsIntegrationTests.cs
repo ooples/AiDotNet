@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -16,8 +17,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region Residuals Tests
 
-    [Fact]
-    public void Residuals_PerfectPrediction_ReturnsZeros()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_PerfectPrediction_ReturnsZeros()
     {
         var actual = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
         var predicted = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
@@ -30,8 +31,8 @@ public class RegressionDiagnosticsIntegrationTests
         }
     }
 
-    [Fact]
-    public void Residuals_ConstantOffset_ReturnsOffset()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_ConstantOffset_ReturnsOffset()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([8.0, 18.0, 28.0, 38.0, 48.0]);
@@ -45,8 +46,8 @@ public class RegressionDiagnosticsIntegrationTests
         }
     }
 
-    [Fact]
-    public void Residuals_MixedErrors_ReturnsCorrectDifferences()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_MixedErrors_ReturnsCorrectDifferences()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([12.0, 18.0, 32.0, 38.0, 52.0]);
@@ -61,8 +62,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(-2.0, residuals[4], Tolerance);
     }
 
-    [Fact]
-    public void Residuals_SumEqualsZeroForGoodModel()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_SumEqualsZeroForGoodModel()
     {
         // For a well-fitted model, residuals should sum to approximately zero
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
@@ -79,8 +80,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region Theil U Statistic Tests
 
-    [Fact]
-    public void TheilU_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_PerfectPrediction_ReturnsZero()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
@@ -90,8 +91,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TheilU_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_IsNonNegative()
     {
         var actual = Vector<double>.FromArray([10.0, 25.0, 30.0, 45.0, 50.0]);
         var predicted = Vector<double>.FromArray([12.0, 22.0, 35.0, 40.0, 55.0]);
@@ -101,8 +102,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 0, $"Theil U should be non-negative, got {result}");
     }
 
-    [Fact]
-    public void TheilU_IsLessThanOrEqualToOne_ForReasonableForecast()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_IsLessThanOrEqualToOne_ForReasonableForecast()
     {
         // Theil U < 1 means forecast is better than naive (no-change) forecast
         var actual = Vector<double>.FromArray([100.0, 110.0, 105.0, 115.0, 120.0]);
@@ -114,8 +115,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result < 1.0, $"Theil U should be < 1 for good forecast, got {result}");
     }
 
-    [Fact]
-    public void TheilU_LargerError_LargerTheilU()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_LargerError_LargerTheilU()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predictedGood = Vector<double>.FromArray([11.0, 19.0, 31.0, 39.0, 51.0]);
@@ -127,8 +128,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(theilGood < theilBad, $"Better forecast should have lower Theil U: {theilGood} vs {theilBad}");
     }
 
-    [Fact]
-    public void TheilU_CalculatesCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_CalculatesCorrectValue()
     {
         // Manual calculation:
         // actual = [10, 20, 30], predicted = [12, 18, 32]
@@ -149,8 +150,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region CRPS (Continuous Ranked Probability Score) Tests
 
-    [Fact]
-    public void CRPS_Deterministic_EqualsMeanAbsoluteError()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Deterministic_EqualsMeanAbsoluteError()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([12.0, 18.0, 32.0, 38.0, 52.0]);
@@ -161,8 +162,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(mae, crps, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_PerfectPrediction_ReturnsZero()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
@@ -172,8 +173,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_ZeroUncertainty_EqualsMeanAbsoluteError()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_ZeroUncertainty_EqualsMeanAbsoluteError()
     {
         // When stddev = 0, CRPS reduces to MAE
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
@@ -186,8 +187,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(mae, crps, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_WithUncertainty_IsNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_WithUncertainty_IsNonNegative()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0, 40.0, 50.0]);
         var predicted = Vector<double>.FromArray([12.0, 18.0, 32.0, 38.0, 52.0]);
@@ -198,8 +199,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 0, $"CRPS should be non-negative, got {result}");
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_PerfectMeanPrediction_WithUncertainty()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_PerfectMeanPrediction_WithUncertainty()
     {
         // Perfect prediction at the mean, but with some uncertainty
         // CRPS = sigma * (1/sqrt(pi)) ≈ sigma * 0.5642
@@ -215,8 +216,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.234, result, 0.01);
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_LargerUncertainty_GenerallyLargerCRPS()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_LargerUncertainty_GenerallyLargerCRPS()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0]);
         var predicted = Vector<double>.FromArray([10.0, 20.0, 30.0]);
@@ -231,8 +232,8 @@ public class RegressionDiagnosticsIntegrationTests
             $"Larger uncertainty should generally give larger CRPS: {crpsSmall} vs {crpsLarge}");
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_CalculatesCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_CalculatesCorrectValue()
     {
         // Single observation test for verification
         // y = 0, mu = 0, sigma = 1
@@ -249,8 +250,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.2337, result, 0.01);
     }
 
-    [Fact]
-    public void CRPS_Probabilistic_OneStdDevAway()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_Probabilistic_OneStdDevAway()
     {
         // y = 1, mu = 0, sigma = 1
         // z = 1
@@ -270,8 +271,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region VIF (Variance Inflation Factor) Tests
 
-    [Fact]
-    public void VIF_IdentityMatrix_ReturnsOnes()
+    [Fact(Timeout = 120000)]
+    public async Task VIF_IdentityMatrix_ReturnsOnes()
     {
         // Identity matrix means variables are uncorrelated
         // VIF should be 1 for all variables
@@ -289,8 +290,8 @@ public class RegressionDiagnosticsIntegrationTests
         }
     }
 
-    [Fact]
-    public void VIF_HighCorrelation_ReturnsHighVIF()
+    [Fact(Timeout = 120000)]
+    public async Task VIF_HighCorrelation_ReturnsHighVIF()
     {
         // Correlation matrix with high correlation (0.95) between first two variables
         var correlationMatrix = new Matrix<double>(new double[,]
@@ -308,8 +309,8 @@ public class RegressionDiagnosticsIntegrationTests
             $"Highly correlated variables should have high VIF: {result[0]}, {result[1]}");
     }
 
-    [Fact]
-    public void VIF_AllPositive()
+    [Fact(Timeout = 120000)]
+    public async Task VIF_AllPositive()
     {
         var correlationMatrix = new Matrix<double>(new double[,]
         {
@@ -331,8 +332,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region Condition Number Tests
 
-    [Fact]
-    public void ConditionNumber_IdentityMatrix_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_IdentityMatrix_ReturnsOne()
     {
         var identity = Matrix<double>.CreateIdentityMatrix(3);
         var options = new ModelStatsOptions { ConditionNumberMethod = ConditionNumberMethod.SVD };
@@ -342,8 +343,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ConditionNumber_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_IsPositive()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -358,8 +359,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 1.0, $"Condition number should be >= 1, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_IllConditionedMatrix_HighValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_IllConditionedMatrix_HighValue()
     {
         // Nearly singular matrix - should have high condition number
         var matrix = new Matrix<double>(new double[,]
@@ -374,8 +375,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result > 100, $"Ill-conditioned matrix should have high condition number, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_WellConditionedMatrix_LowValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_WellConditionedMatrix_LowValue()
     {
         // Well-conditioned symmetric positive definite matrix
         var matrix = new Matrix<double>(new double[,]
@@ -390,8 +391,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result < 10, $"Well-conditioned matrix should have low condition number, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_L1Norm_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_L1Norm_IsPositive()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -405,8 +406,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 1.0, $"L1 condition number should be >= 1, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_InfinityNorm_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_InfinityNorm_IsPositive()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -420,8 +421,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 1.0, $"Infinity norm condition number should be >= 1, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_PowerIteration_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_PowerIteration_IsPositive()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -435,8 +436,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result >= 1.0, $"Power iteration condition number should be >= 1, got {result}");
     }
 
-    [Fact]
-    public void ConditionNumber_DifferentMethods_SimilarMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_DifferentMethods_SimilarMagnitude()
     {
         var matrix = new Matrix<double>(new double[,]
         {
@@ -463,8 +464,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Residuals_FloatType_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_FloatType_ReturnsCorrectValues()
     {
         var actual = Vector<float>.FromArray([10.0f, 20.0f, 30.0f, 40.0f, 50.0f]);
         var predicted = Vector<float>.FromArray([12.0f, 18.0f, 32.0f, 38.0f, 52.0f]);
@@ -476,8 +477,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(-2.0f, residuals[2], 1e-4f);
     }
 
-    [Fact]
-    public void TheilU_FloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_FloatType_ReturnsCorrectValue()
     {
         var actual = Vector<float>.FromArray([10.0f, 20.0f, 30.0f, 40.0f, 50.0f]);
         var predicted = Vector<float>.FromArray([10.0f, 20.0f, 30.0f, 40.0f, 50.0f]);
@@ -487,8 +488,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.0f, result, 1e-4f);
     }
 
-    [Fact]
-    public void CRPS_FloatType_EqualsMeanAbsoluteError()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_FloatType_EqualsMeanAbsoluteError()
     {
         var actual = Vector<float>.FromArray([10.0f, 20.0f, 30.0f]);
         var predicted = Vector<float>.FromArray([12.0f, 18.0f, 32.0f]);
@@ -499,8 +500,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(mae, crps, 1e-4f);
     }
 
-    [Fact]
-    public void ConditionNumber_FloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_FloatType_ReturnsCorrectValue()
     {
         // Use L1Norm method which is more numerically stable for float precision
         var identity = Matrix<float>.CreateIdentityMatrix(3);
@@ -517,8 +518,8 @@ public class RegressionDiagnosticsIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Residuals_SingleElement_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_SingleElement_ReturnsCorrectValue()
     {
         var actual = Vector<double>.FromArray([10.0]);
         var predicted = Vector<double>.FromArray([8.0]);
@@ -529,8 +530,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(2.0, residuals[0], Tolerance);
     }
 
-    [Fact]
-    public void TheilU_SingleElement_PerfectPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task TheilU_SingleElement_PerfectPrediction()
     {
         var actual = Vector<double>.FromArray([10.0]);
         var predicted = Vector<double>.FromArray([10.0]);
@@ -540,8 +541,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void CRPS_EmptyVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_EmptyVectors_ReturnsZero()
     {
         var actual = Vector<double>.FromArray([]);
         var predicted = Vector<double>.FromArray([]);
@@ -552,8 +553,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void ConditionNumber_DiagonalMatrix_IsWellConditioned()
+    [Fact(Timeout = 120000)]
+    public async Task ConditionNumber_DiagonalMatrix_IsWellConditioned()
     {
         // For a well-conditioned diagonal matrix, condition number should be >= 1
         // Note: The exact ratio of max/min diagonals depends on SVD algorithm accuracy
@@ -573,8 +574,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.True(result <= 10.0, $"Well-conditioned diagonal matrix should have condition number <= 10, got {result}");
     }
 
-    [Fact]
-    public void Residuals_LargeValues_MaintainsPrecision()
+    [Fact(Timeout = 120000)]
+    public async Task Residuals_LargeValues_MaintainsPrecision()
     {
         var actual = Vector<double>.FromArray([1e10, 2e10, 3e10]);
         var predicted = Vector<double>.FromArray([1e10 + 1, 2e10 - 1, 3e10 + 2]);
@@ -586,8 +587,8 @@ public class RegressionDiagnosticsIntegrationTests
         Assert.Equal(-2.0, residuals[2], 1e-6);
     }
 
-    [Fact]
-    public void CRPS_VerySmallStdDev_ApproachesMAE()
+    [Fact(Timeout = 120000)]
+    public async Task CRPS_VerySmallStdDev_ApproachesMAE()
     {
         var actual = Vector<double>.FromArray([10.0, 20.0, 30.0]);
         var predicted = Vector<double>.FromArray([12.0, 18.0, 32.0]);

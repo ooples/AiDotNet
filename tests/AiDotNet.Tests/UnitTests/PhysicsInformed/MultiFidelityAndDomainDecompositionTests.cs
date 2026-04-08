@@ -8,6 +8,7 @@ using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed;
 
@@ -51,8 +52,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region MultiFidelityTrainingHistory Tests
 
-    [Fact]
-    public void MultiFidelityTrainingHistory_AddEpoch_TracksAllMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         // Arrange
         var history = new MultiFidelityTrainingHistory<double>();
@@ -73,8 +74,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal(0.3, history.HighFidelityLosses[0]);
     }
 
-    [Fact]
-    public void MultiFidelityTrainingHistory_ImplementsInterface()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityTrainingHistory_ImplementsInterface()
     {
         // Arrange & Act
         var history = new MultiFidelityTrainingHistory<double>();
@@ -88,8 +89,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region DomainDecompositionTrainingHistory Tests
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_AddEpoch_TracksAllMetrics()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionTrainingHistory_AddEpoch_TracksAllMetrics()
     {
         // Arrange
         var history = new DomainDecompositionTrainingHistory<double>(3);
@@ -110,8 +111,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal(0.3, history.SubdomainLosses[0][0]);
     }
 
-    [Fact]
-    public void DomainDecompositionTrainingHistory_ImplementsInterface()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionTrainingHistory_ImplementsInterface()
     {
         // Arrange & Act
         var history = new DomainDecompositionTrainingHistory<double>(2);
@@ -125,8 +126,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region MultiFidelityPINN Tests
 
-    [Fact]
-    public void MultiFidelityPINN_Constructor_CreatesDefaultLowFidelityNetwork()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityPINN_Constructor_CreatesDefaultLowFidelityNetwork()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -154,8 +155,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.False(pinn.IsLowFidelityFrozen);
     }
 
-    [Fact]
-    public void MultiFidelityPINN_SetLowFidelityData_StoresData()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityPINN_SetLowFidelityData_StoresData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -183,8 +184,8 @@ public class MultiFidelityAndDomainDecompositionTests
         pinn.SetLowFidelityData(inputs, outputs);
     }
 
-    [Fact]
-    public void MultiFidelityPINN_SetHighFidelityData_StoresData()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityPINN_SetHighFidelityData_StoresData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -212,8 +213,8 @@ public class MultiFidelityAndDomainDecompositionTests
         pinn.SetHighFidelityData(inputs, outputs);
     }
 
-    [Fact]
-    public void MultiFidelityPINN_SetLowFidelityFrozen_ChangesState()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityPINN_SetLowFidelityFrozen_ChangesState()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -241,8 +242,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.True(pinn.IsLowFidelityFrozen);
     }
 
-    [Fact]
-    public void MultiFidelityPINN_SolveMultiFidelity_ThrowsWithoutData()
+    [Fact(Timeout = 60000)]
+    public async Task MultiFidelityPINN_SolveMultiFidelity_ThrowsWithoutData()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -272,8 +273,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region DomainDecompositionPINN Tests
 
-    [Fact]
-    public void DomainDecompositionPINN_Constructor_CreatesSubdomainNetworks()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionPINN_Constructor_CreatesSubdomainNetworks()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -315,8 +316,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.NotNull(pinn.GetSubdomainNetwork(1));
     }
 
-    [Fact]
-    public void DomainDecompositionPINN_Constructor_ThrowsWithNoSubdomains()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionPINN_Constructor_ThrowsWithNoSubdomains()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -342,8 +343,8 @@ public class MultiFidelityAndDomainDecompositionTests
                 emptySubdomains));
     }
 
-    [Fact]
-    public void DomainDecompositionPINN_GetSubdomainNetwork_ThrowsOnInvalidIndex()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionPINN_GetSubdomainNetwork_ThrowsOnInvalidIndex()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -377,8 +378,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Throws<ArgumentOutOfRangeException>(() => pinn.GetSubdomainNetwork(2));
     }
 
-    [Fact]
-    public void DomainDecompositionPINN_GetGlobalSolution_ThrowsForPointOutsideDomain()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionPINN_GetGlobalSolution_ThrowsForPointOutsideDomain()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -412,8 +413,8 @@ public class MultiFidelityAndDomainDecompositionTests
             pinn.GetGlobalSolution(new double[] { 2.0, 2.0 }));
     }
 
-    [Fact]
-    public void DomainDecompositionPINN_GetGlobalSolution_ReturnsForPointInsideDomain()
+    [Fact(Timeout = 60000)]
+    public async Task DomainDecompositionPINN_GetGlobalSolution_ReturnsForPointInsideDomain()
     {
         // Arrange
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -454,8 +455,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region SubdomainDefinition Tests
 
-    [Fact]
-    public void SubdomainDefinition_Constructor_SetsProperties()
+    [Fact(Timeout = 60000)]
+    public async Task SubdomainDefinition_Constructor_SetsProperties()
     {
         // Arrange & Act
         var subdomain = new SubdomainDefinition<double>(
@@ -469,8 +470,8 @@ public class MultiFidelityAndDomainDecompositionTests
         Assert.Equal("TestDomain", subdomain.Name);
     }
 
-    [Fact]
-    public void SubdomainDefinition_Constructor_ThrowsOnDimensionMismatch()
+    [Fact(Timeout = 60000)]
+    public async Task SubdomainDefinition_Constructor_ThrowsOnDimensionMismatch()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -483,8 +484,8 @@ public class MultiFidelityAndDomainDecompositionTests
 
     #region InterfaceDefinition Tests
 
-    [Fact]
-    public void InterfaceDefinition_DefaultConstructor_InitializesProperties()
+    [Fact(Timeout = 60000)]
+    public async Task InterfaceDefinition_DefaultConstructor_InitializesProperties()
     {
         // Arrange & Act
         var iface = new InterfaceDefinition<double>

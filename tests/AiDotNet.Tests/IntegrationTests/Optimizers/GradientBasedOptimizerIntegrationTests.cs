@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 
@@ -141,8 +142,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region SGD/Gradient Descent Tests
 
-    [Fact]
-    public void GradientDescent_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task GradientDescent_UpdateFormula_MatchesDefinition()
     {
         // Test that SGD implements: params_new = params_old - learning_rate * gradient
         // Reference: Standard gradient descent formula
@@ -172,8 +173,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void GradientDescent_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task GradientDescent_ConvergesOnSphereFunction()
     {
         // SGD should converge to the minimum of the sphere function (at origin)
         // With appropriate learning rate, should make progress in each step
@@ -210,8 +211,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"SGD should reduce loss significantly. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void GradientDescent_WithZeroGradient_ParametersUnchanged()
+    [Fact(Timeout = 120000)]
+    public async Task GradientDescent_WithZeroGradient_ParametersUnchanged()
     {
         // With zero gradient, parameters should not change
 
@@ -235,8 +236,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void GradientDescent_LearningRateScalesUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task GradientDescent_LearningRateScalesUpdate()
     {
         // Test that learning rate correctly scales the update
 
@@ -271,8 +272,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Momentum Optimizer Tests
 
-    [Fact]
-    public void Momentum_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_UpdateFormula_MatchesDefinition()
     {
         // Test that Momentum implements:
         // v = momentum * v_prev + learning_rate * gradient
@@ -318,8 +319,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Momentum_AcceleratesConsistentGradients()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_AcceleratesConsistentGradients()
     {
         // With momentum, consecutive updates in the same direction should accelerate
 
@@ -352,8 +353,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Momentum_DampsOscillations()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_DampsOscillations()
     {
         // When gradient direction changes, momentum should reduce oscillation
 
@@ -393,8 +394,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.NotNull(currentWithMom);
     }
 
-    [Fact]
-    public void Momentum_ConvergesFasterThanSGD_OnIllConditionedProblem()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_ConvergesFasterThanSGD_OnIllConditionedProblem()
     {
         // Momentum should converge faster on ill-conditioned problems (high condition number)
 
@@ -448,8 +449,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Adam Optimizer Tests
 
-    [Fact]
-    public void Adam_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_UpdateFormula_MatchesDefinition()
     {
         // Test Adam update formula from the original paper:
         // m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
@@ -494,8 +495,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(expectedParam, result[0], LargeTolerance);
     }
 
-    [Fact]
-    public void Adam_BiasCorrection_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_BiasCorrection_WorksCorrectly()
     {
         // Test that bias correction properly handles the initialization bias
         // Without bias correction, initial estimates would be biased towards zero
@@ -528,8 +529,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"First Adam update ({updates[0]}) should be meaningful after bias correction");
     }
 
-    [Fact]
-    public void Adam_AdaptsToGradientMagnitudes()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_AdaptsToGradientMagnitudes()
     {
         // Adam should adapt learning rate for each parameter based on gradient history
 
@@ -564,8 +565,8 @@ public class GradientBasedOptimizerIntegrationTests
             "Parameter with large gradient should move");
     }
 
-    [Fact]
-    public void Adam_ConvergesOnRosenbrockFunction()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ConvergesOnRosenbrockFunction()
     {
         // Adam should make progress on the challenging Rosenbrock function
 
@@ -600,8 +601,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Adam should reduce Rosenbrock loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void Adam_Reset_ClearsState()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_Reset_ClearsState()
     {
         // Reset should clear all accumulated state
 
@@ -636,8 +637,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adam_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_SerializeDeserialize_PreservesState()
     {
         // Serialization should preserve complete optimizer state
 
@@ -679,8 +680,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region RMSProp Tests
 
-    [Fact]
-    public void RMSProp_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_UpdateFormula_MatchesDefinition()
     {
         // Test RMSProp update formula:
         // v_t = decay * v_{t-1} + (1 - decay) * g_t^2
@@ -721,8 +722,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(expectedParam, result[0], LargeTolerance);
     }
 
-    [Fact]
-    public void RMSProp_AdaptsLearningRate_ForDifferentGradients()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_AdaptsLearningRate_ForDifferentGradients()
     {
         // RMSProp should use larger effective learning rate for infrequent features
         // and smaller effective learning rate for frequent features
@@ -751,8 +752,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.NotEqual(0.0, current[1], Tolerance);
     }
 
-    [Fact]
-    public void RMSProp_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_ConvergesOnSphereFunction()
     {
         // Arrange
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -790,8 +791,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Adagrad Tests
 
-    [Fact]
-    public void Adagrad_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_UpdateFormula_MatchesDefinition()
     {
         // Test Adagrad update formula:
         // G_t = G_{t-1} + g_t^2  (accumulated squared gradients)
@@ -830,8 +831,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(expectedParam, result[0], LargeTolerance);
     }
 
-    [Fact]
-    public void Adagrad_LearningRateDecreases_WithAccumulation()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_LearningRateDecreases_WithAccumulation()
     {
         // Adagrad's effective learning rate should decrease as gradients accumulate
 
@@ -863,8 +864,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adagrad_ConvergesOnSparseFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_ConvergesOnSparseFeatures()
     {
         // Adagrad should work well with sparse features (some gradients are often zero)
 
@@ -904,8 +905,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region AdaDelta Tests
 
-    [Fact]
-    public void AdaDelta_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task AdaDelta_UpdateFormula_MatchesDefinition()
     {
         // Test AdaDelta update formula:
         // E[g^2]_t = rho * E[g^2]_{t-1} + (1 - rho) * g_t^2
@@ -937,8 +938,8 @@ public class GradientBasedOptimizerIntegrationTests
             "AdaDelta should move parameter opposite to positive gradient");
     }
 
-    [Fact]
-    public void AdaDelta_NoLearningRateRequired()
+    [Fact(Timeout = 120000)]
+    public async Task AdaDelta_NoLearningRateRequired()
     {
         // AdaDelta adapts learning rate automatically - no manual LR needed
 
@@ -977,8 +978,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Nesterov Accelerated Gradient Tests
 
-    [Fact]
-    public void NAG_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task NAG_UpdateFormula_MatchesDefinition()
     {
         // Test Nesterov Accelerated Gradient (NAG) update formula:
         // v_t = momentum * v_{t-1} + lr * gradient(theta_{t-1} - momentum * v_{t-1})
@@ -1008,8 +1009,8 @@ public class GradientBasedOptimizerIntegrationTests
             "NAG should move parameter opposite to positive gradient");
     }
 
-    [Fact]
-    public void NAG_OutperformsMomentum_OnConvexFunctions()
+    [Fact(Timeout = 120000)]
+    public async Task NAG_OutperformsMomentum_OnConvexFunctions()
     {
         // NAG should converge faster than standard momentum on convex problems
 
@@ -1062,8 +1063,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region AdaMax Tests
 
-    [Fact]
-    public void AdaMax_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task AdaMax_UpdateFormula_MatchesDefinition()
     {
         // Test AdaMax update formula (Adam with L-infinity norm):
         // m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
@@ -1095,8 +1096,8 @@ public class GradientBasedOptimizerIntegrationTests
             "AdaMax should decrease parameter with positive gradient");
     }
 
-    [Fact]
-    public void AdaMax_HandlesLargeGradients()
+    [Fact(Timeout = 120000)]
+    public async Task AdaMax_HandlesLargeGradients()
     {
         // AdaMax should handle large gradient spikes gracefully (unlike Adam which squares them)
 
@@ -1137,8 +1138,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region AMSGrad Tests
 
-    [Fact]
-    public void AMSGrad_MaintainsMaxSecondMoment()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_MaintainsMaxSecondMoment()
     {
         // AMSGrad maintains the maximum of past second moments
         // This ensures non-increasing learning rate sequence
@@ -1175,8 +1176,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.False(double.IsNaN(current[0]));
     }
 
-    [Fact]
-    public void AMSGrad_ConvergesBetterThanAdam_OnNonStationaryProblems()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_ConvergesBetterThanAdam_OnNonStationaryProblems()
     {
         // AMSGrad was designed to fix Adam's potential non-convergence
 
@@ -1231,8 +1232,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Nadam Tests
 
-    [Fact]
-    public void Nadam_CombinesNesterovAndAdam()
+    [Fact(Timeout = 120000)]
+    public async Task Nadam_CombinesNesterovAndAdam()
     {
         // Nadam should combine Nesterov momentum with Adam's adaptive learning rate
         // Note: Adam-family optimizers normalize gradients, so they need higher learning rates
@@ -1460,8 +1461,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllOptimizers_MoveOppositeToGradient()
+    [Fact(Timeout = 120000)]
+    public async Task AllOptimizers_MoveOppositeToGradient()
     {
         // All gradient-based optimizers should move parameters opposite to the gradient direction
         // (to minimize the objective function)
@@ -1510,8 +1511,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Comparative Performance Tests
 
-    [Fact]
-    public void CompareOptimizers_OnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task CompareOptimizers_OnSphereFunction()
     {
         // Compare convergence of different optimizers on the sphere function
 
@@ -1581,8 +1582,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Lion Optimizer Tests
 
-    [Fact]
-    public void Lion_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task Lion_UpdateFormula_MatchesDefinition()
     {
         // Test Lion update formula:
         // c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
@@ -1616,8 +1617,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(0.4, result[2], 1e-5);
     }
 
-    [Fact]
-    public void Lion_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task Lion_ConvergesOnSphereFunction()
     {
         // Lion should converge on the sphere function
         // Uses sign-based updates, so may have different convergence behavior
@@ -1655,8 +1656,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Lion should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void Lion_SignBasedUpdates_ConsistentStepSize()
+    [Fact(Timeout = 120000)]
+    public async Task Lion_SignBasedUpdates_ConsistentStepSize()
     {
         // Verify Lion's characteristic: consistent step sizes regardless of gradient magnitude
 
@@ -1694,8 +1695,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region L-BFGS Optimizer Tests
 
-    [Fact]
-    public void LBFGS_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task LBFGS_ConvergesOnSphereFunction()
     {
         // L-BFGS should converge quickly on convex quadratic functions
 
@@ -1731,8 +1732,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"L-BFGS should significantly reduce loss on sphere function. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void LBFGS_ConvergesOnRosenbrockFunction()
+    [Fact(Timeout = 120000)]
+    public async Task LBFGS_ConvergesOnRosenbrockFunction()
     {
         // L-BFGS is known to be effective on Rosenbrock function
 
@@ -1773,8 +1774,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Newton Method Optimizer Tests
 
-    [Fact]
-    public void NewtonMethod_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task NewtonMethod_ConvergesOnSphereFunction()
     {
         // Newton's Method should converge very quickly on quadratic functions
         // For the sphere function, it should theoretically converge in one step
@@ -1814,8 +1815,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region AdamW Optimizer Tests
 
-    [Fact]
-    public void AdamW_UpdateFormula_AppliesDecoupledWeightDecay()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_UpdateFormula_AppliesDecoupledWeightDecay()
     {
         // AdamW applies weight decay directly to weights, not through gradient
         // Formula: w = w - lr * (adam_update + weight_decay * w)
@@ -1843,8 +1844,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.NotEqual(parameters[2], result[2]);
     }
 
-    [Fact]
-    public void AdamW_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_ConvergesOnSphereFunction()
     {
         // Arrange
         var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -1881,8 +1882,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"AdamW should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void AdamW_WeightDecay_ReducesWeightMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task AdamW_WeightDecay_ReducesWeightMagnitude()
     {
         // Test that weight decay actually reduces weight magnitude over time
         var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -1923,8 +1924,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region FTRL Optimizer Tests
 
-    [Fact]
-    public void FTRL_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task FTRL_ConvergesOnSphereFunction()
     {
         // FTRL (Follow The Regularized Leader) should converge on simple functions
         var options = new FTRLOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -1960,8 +1961,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"FTRL should reduce loss on sphere function. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void FTRL_L1Regularization_PromotesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task FTRL_L1Regularization_PromotesSparsity()
     {
         // FTRL with L1 regularization should drive some parameters to zero
         var options = new FTRLOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2000,8 +2001,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region LAMB Optimizer Tests
 
-    [Fact]
-    public void LAMB_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_ConvergesOnSphereFunction()
     {
         // LAMB (Layer-wise Adaptive Moments for Batch training)
         var options = new LAMBOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2038,8 +2039,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"LAMB should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void LAMB_TrustRatioScaling_NormalizesUpdates()
+    [Fact(Timeout = 120000)]
+    public async Task LAMB_TrustRatioScaling_NormalizesUpdates()
     {
         // LAMB uses trust ratio = ||w|| / ||r|| where r is the Adam update
         // This should help stabilize updates for different weight magnitudes
@@ -2068,8 +2069,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region LARS Optimizer Tests
 
-    [Fact]
-    public void LARS_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task LARS_ConvergesOnSphereFunction()
     {
         // LARS (Layer-wise Adaptive Rate Scaling)
         // Note: TrustCoefficient of 0.001 is designed for large batch training (4096+).
@@ -2109,8 +2110,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"LARS should reduce loss on sphere function. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void LARS_LayerWiseScaling_AdaptsToLayerNorms()
+    [Fact(Timeout = 120000)]
+    public async Task LARS_LayerWiseScaling_AdaptsToLayerNorms()
     {
         // LARS scales learning rate by trust_coefficient * ||w|| / ||g||
         var options = new LARSOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2136,8 +2137,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region StochasticGradientDescent Optimizer Tests
 
-    [Fact]
-    public void SGD_UpdateFormula_MatchesDefinition()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_UpdateFormula_MatchesDefinition()
     {
         // SGD: w = w - lr * g
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2160,8 +2161,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_ConvergesOnSphereFunction()
     {
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2195,8 +2196,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region MiniBatchGradientDescent Optimizer Tests
 
-    [Fact]
-    public void MiniBatchGD_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task MiniBatchGD_ConvergesOnSphereFunction()
     {
         var options = new MiniBatchGradientDescentOptions<double, Vector<double>, Vector<double>>
         {
@@ -2231,8 +2232,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region BFGS Optimizer Tests
 
-    [Fact]
-    public void BFGS_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task BFGS_ConvergesOnSphereFunction()
     {
         // BFGS is a quasi-Newton method with full Hessian approximation
         var options = new BFGSOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2263,8 +2264,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"BFGS should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void BFGS_ConvergesOnRosenbrockFunction()
+    [Fact(Timeout = 120000)]
+    public async Task BFGS_ConvergesOnRosenbrockFunction()
     {
         var options = new BFGSOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2298,8 +2299,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region DFP Optimizer Tests
 
-    [Fact]
-    public void DFP_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task DFP_ConvergesOnSphereFunction()
     {
         // DFP (Davidon-Fletcher-Powell) is another quasi-Newton method
         var options = new DFPOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2334,8 +2335,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region ConjugateGradient Optimizer Tests
 
-    [Fact]
-    public void ConjugateGradient_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task ConjugateGradient_ConvergesOnSphereFunction()
     {
         var options = new ConjugateGradientOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2369,8 +2370,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region TrustRegion Optimizer Tests
 
-    [Fact]
-    public void TrustRegion_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task TrustRegion_ConvergesOnSphereFunction()
     {
         var options = new TrustRegionOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2405,8 +2406,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region LevenbergMarquardt Optimizer Tests
 
-    [Fact]
-    public void LevenbergMarquardt_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task LevenbergMarquardt_ConvergesOnSphereFunction()
     {
         var options = new LevenbergMarquardtOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2441,8 +2442,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region CoordinateDescent Optimizer Tests
 
-    [Fact]
-    public void CoordinateDescent_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task CoordinateDescent_ConvergesOnSphereFunction()
     {
         var options = new CoordinateDescentOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2476,8 +2477,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region ProximalGradientDescent Optimizer Tests
 
-    [Fact]
-    public void ProximalGradientDescent_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task ProximalGradientDescent_ConvergesOnSphereFunction()
     {
         var options = new ProximalGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2508,8 +2509,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Proximal GD should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
-    [Fact]
-    public void ProximalGradientDescent_L1Regularization_PromotesSparsity()
+    [Fact(Timeout = 120000)]
+    public async Task ProximalGradientDescent_L1Regularization_PromotesSparsity()
     {
         // Proximal GD with L1 should drive small values to zero
         var options = new ProximalGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2544,8 +2545,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region ADMM Optimizer Tests
 
-    [Fact]
-    public void ADMM_ConvergesOnSphereFunction()
+    [Fact(Timeout = 120000)]
+    public async Task ADMM_ConvergesOnSphereFunction()
     {
         // ADMM (Alternating Direction Method of Multipliers)
         var options = new ADMMOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -2581,8 +2582,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void SGD_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_SerializeDeserialize_PreservesState()
     {
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2614,8 +2615,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adagrad_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_SerializeDeserialize_PreservesState()
     {
         var options = new AdagradOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2647,8 +2648,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdaDelta_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task AdaDelta_SerializeDeserialize_PreservesState()
     {
         var options = new AdaDeltaOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2679,8 +2680,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void RMSProp_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_SerializeDeserialize_PreservesState()
     {
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2712,8 +2713,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdaMax_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task AdaMax_SerializeDeserialize_PreservesState()
     {
         var options = new AdaMaxOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2744,8 +2745,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void AMSGrad_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_SerializeDeserialize_PreservesState()
     {
         var options = new AMSGradOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2776,8 +2777,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Nadam_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task Nadam_SerializeDeserialize_PreservesState()
     {
         var options = new NadamOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2808,8 +2809,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Lion_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task Lion_SerializeDeserialize_PreservesState()
     {
         var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2840,8 +2841,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Momentum_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_SerializeDeserialize_PreservesState()
     {
         var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2871,8 +2872,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void BFGS_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task BFGS_SerializeDeserialize_PreservesState()
     {
         var options = new BFGSOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2902,8 +2903,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void LBFGS_SerializeDeserialize_PreservesState()
+    [Fact(Timeout = 120000)]
+    public async Task LBFGS_SerializeDeserialize_PreservesState()
     {
         var options = new LBFGSOptimizerOptions<double, Vector<double>, Vector<double>>
         {
@@ -2972,8 +2973,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
-    public void SGD_ZeroGradients_ReturnsUnchangedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_ZeroGradients_ReturnsUnchangedParameters()
     {
         // Zero gradients should not change parameters
         var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -2988,8 +2989,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adam_ZeroGradients_ReturnsUnchangedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_ZeroGradients_ReturnsUnchangedParameters()
     {
         // Zero gradients should not change parameters (after initialization)
         var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3006,8 +3007,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Momentum_ZeroGradients_ReturnsUnchangedParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_ZeroGradients_ReturnsUnchangedParameters()
     {
         // Zero gradients should not change parameters
         var optimizer = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3022,8 +3023,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_VerySmallGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_VerySmallGradients_UpdatesCorrectly()
     {
         // Very small gradients should still produce proportionally small updates
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3045,8 +3046,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_LargeGradients_UpdatesWithinReasonableBounds()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_LargeGradients_UpdatesWithinReasonableBounds()
     {
         // Large gradients should not cause parameters to explode
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3067,8 +3068,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adam_VerySmallGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_VerySmallGradients_UpdatesCorrectly()
     {
         // Adam should handle very small gradients without numerical issues
         var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3090,8 +3091,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void RMSProp_VerySmallGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_VerySmallGradients_UpdatesCorrectly()
     {
         // RMSProp should handle very small gradients without numerical issues
         var optimizer = new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3113,8 +3114,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Adagrad_VerySmallGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_VerySmallGradients_UpdatesCorrectly()
     {
         // Adagrad should handle very small gradients without numerical issues
         var optimizer = new AdagradOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3136,8 +3137,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_MixedSignGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_MixedSignGradients_UpdatesCorrectly()
     {
         // Mixed sign gradients should produce mixed direction updates
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3158,8 +3159,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(result[2] < 0, "Small positive gradient should cause small negative update");
     }
 
-    [Fact]
-    public void Adam_NegativeGradients_UpdatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_NegativeGradients_UpdatesCorrectly()
     {
         // Negative gradients should cause parameters to increase
         var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -3203,8 +3204,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_ConsecutiveUpdates_AccumulatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_ConsecutiveUpdates_AccumulatesCorrectly()
     {
         // Multiple updates should accumulate correctly
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3230,8 +3231,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void Momentum_BuildsVelocity_OverMultipleSteps()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_BuildsVelocity_OverMultipleSteps()
     {
         // Momentum should build up velocity over consistent gradient directions
         var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3259,8 +3260,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Later updates should be at least as large as initial: {updates[^1]} vs {updates[0]}");
     }
 
-    [Fact]
-    public void AllOptimizers_SingleDimensionParameter_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AllOptimizers_SingleDimensionParameter_WorksCorrectly()
     {
         // Test that optimizers work with single-dimension parameters
         var optimizers = new IGradientBasedOptimizer<double, Vector<double>, Vector<double>>[]
@@ -3284,8 +3285,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllOptimizers_LargeDimensionParameter_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AllOptimizers_LargeDimensionParameter_WorksCorrectly()
     {
         // Test that optimizers work with large-dimension parameters
         const int dimensions = 1000;
@@ -3324,8 +3325,8 @@ public class GradientBasedOptimizerIntegrationTests
 
     #region Multimodal Function Tests
 
-    [Fact]
-    public void Diagnostic_VectorArithmetic_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Diagnostic_VectorArithmetic_WorksCorrectly()
     {
         // This diagnostic test verifies basic vector operations work correctly
         // on both net471 and net10.0 frameworks
@@ -3369,8 +3370,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(-1.96, updated[1], 1e-10);
     }
 
-    [Fact]
-    public void Diagnostic_RastriginGradient_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Diagnostic_RastriginGradient_WorksCorrectly()
     {
         // Test that Math.Sin and Math.PI work correctly on all frameworks
         // Rastrigin gradient: grad_i = 2*x_i + 20*pi*sin(2*pi*x_i)
@@ -3573,8 +3574,8 @@ public class GradientBasedOptimizerIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGD_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_SphereFunction_ConvergesToMinimum()
     {
         // Sphere function is convex, should converge reliably
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3598,8 +3599,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-6, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void Adam_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_SphereFunction_ConvergesToMinimum()
     {
         // Adam should converge quickly on convex function
         // Default Adam learning rate (0.001) is designed for neural networks with thousands of iterations.
@@ -3625,8 +3626,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void Momentum_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Momentum_SphereFunction_ConvergesToMinimum()
     {
         // Momentum should accelerate convergence on sphere
         var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3651,8 +3652,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void SGD_RastriginFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_RastriginFunction_MakesProgress()
     {
         // Rastrigin is multimodal - optimizer should at least make progress
         // Start at [2.5, -2.5] which is NOT at a local minimum (integer coords are local minima)
@@ -3679,8 +3680,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void Adam_RastriginFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_RastriginFunction_MakesProgress()
     {
         // Adam should navigate Rastrigin better than vanilla SGD
         // Use higher learning rate and start at [2.5, -2.5] (not at local minimum)
@@ -3707,8 +3708,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void SGD_AckleyFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_AckleyFunction_MakesProgress()
     {
         // Ackley has many local minima
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3734,8 +3735,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void Adam_AckleyFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_AckleyFunction_MakesProgress()
     {
         // Use higher learning rate for this simple benchmark
         var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3761,8 +3762,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void SGD_BealeFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task SGD_BealeFunction_MakesProgress()
     {
         // Beale function has a flat region that can be challenging
         var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3788,8 +3789,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void Adam_BealeFunction_MakesProgress()
+    [Fact(Timeout = 120000)]
+    public async Task Adam_BealeFunction_MakesProgress()
     {
         // Use higher learning rate for this benchmark
         var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3815,8 +3816,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"Should make progress: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void RMSProp_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task RMSProp_SphereFunction_ConvergesToMinimum()
     {
         // RMSProp normalizes by running average of squared gradients, which stabilizes training
         // but can cause oscillation around a fixed point on simple quadratic functions.
@@ -3841,8 +3842,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-2, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void Adagrad_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Adagrad_SphereFunction_ConvergesToMinimum()
     {
         // Adagrad accumulates squared gradients, causing diminishing learning rates.
         // Use a higher initial learning rate to compensate for this characteristic.
@@ -3910,8 +3911,8 @@ public class GradientBasedOptimizerIntegrationTests
             $"{optimizerName} should reduce sphere by 99%: initial={initialValue}, final={finalValue}");
     }
 
-    [Fact]
-    public void Nadam_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task Nadam_SphereFunction_ConvergesToMinimum()
     {
         // Nadam default lr (0.002) is designed for neural networks. Use higher lr for simple benchmark.
         var options = new NadamOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3932,8 +3933,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void AMSGrad_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task AMSGrad_SphereFunction_ConvergesToMinimum()
     {
         // AMSGrad default lr (0.001) is designed for neural networks. Use higher lr for simple benchmark.
         var options = new AMSGradOptimizerOptions<double, Vector<double>, Vector<double>>
@@ -3954,8 +3955,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
     }
 
-    [Fact]
-    public void AdaDelta_SphereFunction_ConvergesToMinimum()
+    [Fact(Timeout = 120000)]
+    public async Task AdaDelta_SphereFunction_ConvergesToMinimum()
     {
         // AdaDelta has a cold-start problem: initial updates are tiny because
         // _accumulatedSquaredUpdates starts at zero. Use a moderate learning rate
@@ -3991,16 +3992,16 @@ public class GradientBasedOptimizerIntegrationTests
     /// - UpdateVector: w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*gradient
     /// - UpdateMatrix: W_{t+1} = W_t * (I - x_t*x_t^T) - η * (∇_y L ⊗ x_t)
     /// </summary>
-    [Fact]
-    public void ModifiedGD_CanInstantiate()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_CanInstantiate()
     {
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
         Assert.NotNull(optimizer);
         Assert.Equal(0.01, optimizer.LearningRate);
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_BasicOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_BasicOperation()
     {
         // Test the basic vector update operation
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
@@ -4027,8 +4028,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(anyChanged, "Parameters should be modified by the update");
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_ZeroGradient_StillProjectsParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_ZeroGradient_StillProjectsParameters()
     {
         // With zero gradient, the modified GD still projects parameters
         // w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*0 = w_t - x_t*dot(w_t,x_t)
@@ -4048,8 +4049,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(1.5, updated[2], 6);
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_LearningRateAffectsGradientTerm()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_LearningRateAffectsGradientTerm()
     {
         // Verify learning rate scales the gradient term
         var optimizerSmall = new ModifiedGradientDescentOptimizer<double>(0.01);
@@ -4069,8 +4070,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(0.0, updatedLarge[0], 6);
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateMatrix_BasicOperation()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateMatrix_BasicOperation()
     {
         // Test the matrix update operation
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
@@ -4104,8 +4105,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(anyChanged, "Matrix parameters should be modified by the update");
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_DimensionMismatch_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_DimensionMismatch_ThrowsException()
     {
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
 
@@ -4116,8 +4117,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Throws<ArgumentException>(() => optimizer.UpdateVector(parameters, input, gradient));
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_GradientDimensionMismatch_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_GradientDimensionMismatch_ThrowsException()
     {
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
 
@@ -4128,8 +4129,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Throws<ArgumentException>(() => optimizer.UpdateVector(parameters, input, gradient));
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_OrthogonalInput_NoProjection()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_OrthogonalInput_NoProjection()
     {
         // When input is orthogonal to parameters, projection term is zero
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
@@ -4149,8 +4150,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.Equal(parameters[2], updated[2], 6);
     }
 
-    [Fact]
-    public void ModifiedGD_UpdateVector_HighDimensional_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_UpdateVector_HighDimensional_WorksCorrectly()
     {
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
 
@@ -4177,8 +4178,8 @@ public class GradientBasedOptimizerIntegrationTests
         // Just verify it completes without error on high-dimensional data
     }
 
-    [Fact]
-    public void ModifiedGD_MultipleUpdates_AccumulatesChanges()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_MultipleUpdates_AccumulatesChanges()
     {
         var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
 
@@ -4202,8 +4203,8 @@ public class GradientBasedOptimizerIntegrationTests
         Assert.True(totalChange > 1.0, $"Parameters should change significantly over multiple updates, total change: {totalChange}");
     }
 
-    [Fact]
-    public void ModifiedGD_FloatType_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ModifiedGD_FloatType_WorksCorrectly()
     {
         // Verify the optimizer works with float type as well
         var optimizer = new ModifiedGradientDescentOptimizer<float>(0.1f);

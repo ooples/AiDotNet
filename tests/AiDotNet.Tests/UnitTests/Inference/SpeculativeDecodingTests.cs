@@ -1,6 +1,7 @@
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -9,8 +10,8 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class NGramDraftModelTests
 {
-    [Fact]
-    public void NGramDraftModel_Creation_InitializesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task NGramDraftModel_Creation_InitializesCorrectly()
     {
         // Act
         var model = new NGramDraftModel<float>(ngramSize: 3, vocabSize: 100);
@@ -20,8 +21,8 @@ public class NGramDraftModelTests
         Assert.Equal(8, model.MaxDraftTokens);
     }
 
-    [Fact]
-    public void NGramDraftModel_Train_LearnsPatternsFromCorpus()
+    [Fact(Timeout = 60000)]
+    public async Task NGramDraftModel_Train_LearnsPatternsFromCorpus()
     {
         // Arrange
         var model = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 10, seed: 42);
@@ -42,8 +43,8 @@ public class NGramDraftModelTests
         // The pattern should emerge
     }
 
-    [Fact]
-    public void NGramDraftModel_GenerateDraft_ProducesValidOutput()
+    [Fact(Timeout = 60000)]
+    public async Task NGramDraftModel_GenerateDraft_ProducesValidOutput()
     {
         // Arrange
         var model = new NGramDraftModel<float>(ngramSize: 3, vocabSize: 100, seed: 42);
@@ -59,8 +60,8 @@ public class NGramDraftModelTests
         Assert.Equal(100, draft.Probabilities.Columns);
     }
 
-    [Fact]
-    public void NGramDraftModel_GenerateDraft_TokenProbabilitiesAreValid()
+    [Fact(Timeout = 60000)]
+    public async Task NGramDraftModel_GenerateDraft_TokenProbabilitiesAreValid()
     {
         // Arrange
         var model = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 50, seed: 42);
@@ -76,8 +77,8 @@ public class NGramDraftModelTests
         }
     }
 
-    [Fact]
-    public void NGramDraftModel_Reset_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task NGramDraftModel_Reset_DoesNotThrow()
     {
         // Arrange
         var model = new NGramDraftModel<float>();
@@ -93,8 +94,8 @@ public class NGramDraftModelTests
 /// </summary>
 public class NeuralDraftModelTests
 {
-    [Fact]
-    public void NeuralDraftModel_Creation_Works()
+    [Fact(Timeout = 60000)]
+    public async Task NeuralDraftModel_Creation_Works()
     {
         // Arrange
         Func<Vector<int>, Vector<float>> forward = tokens =>
@@ -112,8 +113,8 @@ public class NeuralDraftModelTests
         Assert.Equal(5, model.MaxDraftTokens);
     }
 
-    [Fact]
-    public void NeuralDraftModel_GenerateDraft_ProducesTokens()
+    [Fact(Timeout = 60000)]
+    public async Task NeuralDraftModel_GenerateDraft_ProducesTokens()
     {
         // Arrange
         int callCount = 0;
@@ -136,8 +137,8 @@ public class NeuralDraftModelTests
         Assert.Equal(3, callCount); // Forward called once per draft token
     }
 
-    [Fact]
-    public void NeuralDraftModel_GenerateDraft_RespectsMaxDraftTokens()
+    [Fact(Timeout = 60000)]
+    public async Task NeuralDraftModel_GenerateDraft_RespectsMaxDraftTokens()
     {
         // Arrange
         Func<Vector<int>, Vector<float>> forward = _ => new Vector<float>(100);
@@ -181,8 +182,8 @@ public class SpeculativeDecoderTests
         };
     }
 
-    [Fact]
-    public void SpeculativeDecoder_Creation_Works()
+    [Fact(Timeout = 60000)]
+    public async Task SpeculativeDecoder_Creation_Works()
     {
         // Arrange & Act
         var decoder = new SpeculativeDecoder<float>(
@@ -193,7 +194,7 @@ public class SpeculativeDecoderTests
         Assert.Equal(5, decoder.Config.NumDraftTokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_ProducesTokens()
     {
         // Arrange
@@ -214,8 +215,8 @@ public class SpeculativeDecoderTests
         Assert.Equal(result.NumGenerated, result.NewTokens.Length);
     }
 
-    [Fact]
-    public void SpeculativeDecoder_Generate_SynchronousWorks()
+    [Fact(Timeout = 60000)]
+    public async Task SpeculativeDecoder_Generate_SynchronousWorks()
     {
         // Arrange
         var decoder = new SpeculativeDecoder<float>(
@@ -233,7 +234,7 @@ public class SpeculativeDecoderTests
         Assert.True(result.NumGenerated > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_StopsAtEOS()
     {
         // Arrange
@@ -272,7 +273,7 @@ public class SpeculativeDecoderTests
         Assert.True(ContainsToken(result.NewTokens, eosToken));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_TracksStatistics()
     {
         // Arrange
@@ -291,8 +292,8 @@ public class SpeculativeDecoderTests
         Assert.True(stats.TotalVerificationCalls > 0);
     }
 
-    [Fact]
-    public void SpeculativeDecoder_ResetStatistics_ClearsCounters()
+    [Fact(Timeout = 60000)]
+    public async Task SpeculativeDecoder_ResetStatistics_ClearsCounters()
     {
         // Arrange
         var decoder = new SpeculativeDecoder<float>(
@@ -310,7 +311,7 @@ public class SpeculativeDecoderTests
         Assert.Equal(0, stats.TotalDraftTokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_SupportsCancellation()
     {
         // Arrange
@@ -326,7 +327,7 @@ public class SpeculativeDecoderTests
             decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 100, temperature: 1.0f, cancellationToken: cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_RecordsStepStatistics()
     {
         // Arrange
@@ -347,7 +348,7 @@ public class SpeculativeDecoderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_AcceptanceRate_IsValid()
     {
         // Arrange
@@ -407,8 +408,8 @@ public class TreeSpeculativeDecoderTests
         };
     }
 
-    [Fact]
-    public void TreeSpeculativeDecoder_Creation_Works()
+    [Fact(Timeout = 60000)]
+    public async Task TreeSpeculativeDecoder_Creation_Works()
     {
         // Act
         var decoder = new TreeSpeculativeDecoder<float>(
@@ -421,7 +422,7 @@ public class TreeSpeculativeDecoderTests
         Assert.Equal(3, decoder.Config.MaxDepth);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task TreeSpeculativeDecoder_GenerateAsync_ProducesTokens()
     {
         // Arrange
@@ -446,8 +447,8 @@ public class TreeSpeculativeDecoderTests
         Assert.True(result.NewTokens.Length > 0);
     }
 
-    [Fact]
-    public void TreeSpeculativeDecoder_Generate_SynchronousWorks()
+    [Fact(Timeout = 60000)]
+    public async Task TreeSpeculativeDecoder_Generate_SynchronousWorks()
     {
         // Arrange
         var decoder = new TreeSpeculativeDecoder<float>(
@@ -461,7 +462,7 @@ public class TreeSpeculativeDecoderTests
         Assert.True(result.NumGenerated > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task TreeSpeculativeDecoder_GenerateAsync_RecordsTreeStatistics()
     {
         // Arrange
@@ -487,7 +488,7 @@ public class TreeSpeculativeDecoderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task TreeSpeculativeDecoder_AcceptanceRate_IsValid()
     {
         // Arrange
@@ -509,7 +510,7 @@ public class TreeSpeculativeDecoderTests
 /// </summary>
 public class SpeculativeDecodingIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoding_WithTrainedDraft_AchievesSpeedup()
     {
         // Arrange
@@ -556,7 +557,7 @@ public class SpeculativeDecodingIntegrationTests
         // Note: acceptance rate depends on how well draft matches target
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoding_MultipleGenerations_AccumulatesStats()
     {
         // Arrange
@@ -584,8 +585,8 @@ public class SpeculativeDecodingIntegrationTests
         Assert.True(stats.TotalVerificationCalls >= 5);
     }
 
-    [Fact]
-    public void SpeculativeDecodingConfig_DefaultValues_AreReasonable()
+    [Fact(Timeout = 60000)]
+    public async Task SpeculativeDecodingConfig_DefaultValues_AreReasonable()
     {
         // Act
         var config = new SpeculativeDecodingConfig<float>();
@@ -597,8 +598,8 @@ public class SpeculativeDecodingIntegrationTests
         Assert.False(config.AdaptiveDraftLength);
     }
 
-    [Fact]
-    public void TreeSpeculativeConfig_DefaultValues_AreReasonable()
+    [Fact(Timeout = 60000)]
+    public async Task TreeSpeculativeConfig_DefaultValues_AreReasonable()
     {
         // Act
         var config = new TreeSpeculativeConfig();
@@ -609,7 +610,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.Equal(16, config.MaxNodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_GenerateAsync_TreeMode_RecordsDraftWork()
     {
         // Arrange
@@ -653,7 +654,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.Contains(result.StepStatistics, s => s.DraftTokens > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SpeculativeDecoder_AdaptiveDraftLength_ReducesDraftTokens_WhenAcceptanceLow()
     {
         // Arrange

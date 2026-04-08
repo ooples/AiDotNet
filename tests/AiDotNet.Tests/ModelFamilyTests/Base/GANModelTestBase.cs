@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,8 +17,8 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // The generator should produce output matching the declared OutputShape.
     // =====================================================
 
-    [Fact]
-    public void GeneratorOutput_ShouldHaveCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task GeneratorOutput_ShouldHaveCorrectShape()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -39,8 +40,8 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // mode-collapsed — a fundamental GAN failure mode.
     // =====================================================
 
-    [Fact]
-    public void DifferentLatentInputs_ProduceDifferentOutputs()
+    [Fact(Timeout = 120000)]
+    public async Task DifferentLatentInputs_ProduceDifferentOutputs()
     {
         var network = CreateNetwork();
 
@@ -71,8 +72,8 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // is likely misconfigured.
     // =====================================================
 
-    [Fact]
-    public void ParameterCount_ShouldBeSubstantial()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_ShouldBeSubstantial()
     {
         var network = CreateNetwork();
         var parameters = network.GetParameters();
@@ -85,8 +86,8 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     // Generated output values should not be extreme (no exploding values).
     // =====================================================
 
-    [Fact]
-    public void OutputValues_ShouldBeInReasonableRange()
+    [Fact(Timeout = 120000)]
+    public async Task OutputValues_ShouldBeInReasonableRange()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

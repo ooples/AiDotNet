@@ -4,6 +4,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Monitoring;
 using AiDotNet.Serving.Padding;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.IntegrationTests;
 
@@ -15,8 +16,8 @@ public class ServingIntegrationTests
 {
     #region ServingOptions Tests
 
-    [Fact]
-    public void ServingOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ServingOptions_DefaultValues_AreCorrect()
     {
         var options = new ServingOptions();
 
@@ -40,8 +41,8 @@ public class ServingIntegrationTests
         Assert.Empty(options.StartupModels);
     }
 
-    [Fact]
-    public void ServingOptions_CustomValues_ArePreserved()
+    [Fact(Timeout = 120000)]
+    public async Task ServingOptions_CustomValues_ArePreserved()
     {
         var options = new ServingOptions
         {
@@ -81,8 +82,8 @@ public class ServingIntegrationTests
         Assert.Equal("/custom/models", options.ModelDirectory);
     }
 
-    [Fact]
-    public void ServingOptions_StartupModels_CanBeAdded()
+    [Fact(Timeout = 120000)]
+    public async Task ServingOptions_StartupModels_CanBeAdded()
     {
         var options = new ServingOptions();
         options.StartupModels.Add(new StartupModel
@@ -100,8 +101,8 @@ public class ServingIntegrationTests
 
     #region StartupModel Tests
 
-    [Fact]
-    public void StartupModel_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task StartupModel_DefaultValues_AreCorrect()
     {
         var model = new StartupModel();
 
@@ -111,8 +112,8 @@ public class ServingIntegrationTests
         Assert.Null(model.Sha256);
     }
 
-    [Fact]
-    public void StartupModel_CustomValues_ArePreserved()
+    [Fact(Timeout = 120000)]
+    public async Task StartupModel_CustomValues_ArePreserved()
     {
         var model = new StartupModel
         {
@@ -132,8 +133,8 @@ public class ServingIntegrationTests
 
     #region PerformanceMetrics Tests
 
-    [Fact]
-    public void PerformanceMetrics_RecordLatency_StoresSamples()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_RecordLatency_StoresSamples()
     {
         var metrics = new PerformanceMetrics(maxSamples: 100);
 
@@ -145,8 +146,8 @@ public class ServingIntegrationTests
         Assert.Equal(20.0, avgLatency);
     }
 
-    [Fact]
-    public void PerformanceMetrics_RecordLatency_TrimsSamplesWhenExceeded()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_RecordLatency_TrimsSamplesWhenExceeded()
     {
         var metrics = new PerformanceMetrics(maxSamples: 5);
 
@@ -161,8 +162,8 @@ public class ServingIntegrationTests
         Assert.Equal(70.0, avgLatency);
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetLatencyPercentile_P50_ReturnsMedian()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetLatencyPercentile_P50_ReturnsMedian()
     {
         var metrics = new PerformanceMetrics();
 
@@ -176,8 +177,8 @@ public class ServingIntegrationTests
         Assert.True(p50 >= 49 && p50 <= 51); // Should be around 50
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetLatencyPercentile_P99_ReturnsHighValue()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetLatencyPercentile_P99_ReturnsHighValue()
     {
         var metrics = new PerformanceMetrics();
 
@@ -190,8 +191,8 @@ public class ServingIntegrationTests
         Assert.True(p99 >= 98); // Should be near the top
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetLatencyPercentile_EmptySamples_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetLatencyPercentile_EmptySamples_ReturnsZero()
     {
         var metrics = new PerformanceMetrics();
 
@@ -199,8 +200,8 @@ public class ServingIntegrationTests
         Assert.Equal(0.0, p50);
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetLatencyPercentile_InvalidPercentile_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetLatencyPercentile_InvalidPercentile_ThrowsException()
     {
         var metrics = new PerformanceMetrics();
         metrics.RecordLatency(10.0);
@@ -209,8 +210,8 @@ public class ServingIntegrationTests
         Assert.Throws<ArgumentException>(() => metrics.GetLatencyPercentile(101));
     }
 
-    [Fact]
-    public void PerformanceMetrics_RecordBatch_TracksTotals()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_RecordBatch_TracksTotals()
     {
         var metrics = new PerformanceMetrics();
 
@@ -224,8 +225,8 @@ public class ServingIntegrationTests
         Assert.Equal(15.0, allMetrics["averageBatchSize"]);
     }
 
-    [Fact]
-    public void PerformanceMetrics_RecordQueueDepth_StoresSamples()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_RecordQueueDepth_StoresSamples()
     {
         var metrics = new PerformanceMetrics(maxQueueDepthSamples: 100);
 
@@ -237,8 +238,8 @@ public class ServingIntegrationTests
         Assert.Equal(10.0, avgQueueDepth);
     }
 
-    [Fact]
-    public void PerformanceMetrics_RecordBatchUtilization_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_RecordBatchUtilization_CalculatesCorrectly()
     {
         var metrics = new PerformanceMetrics();
 
@@ -250,8 +251,8 @@ public class ServingIntegrationTests
         Assert.Equal(85.0, utilization);
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetBatchUtilization_NoSamples_ReturnsHundred()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetBatchUtilization_NoSamples_ReturnsHundred()
     {
         var metrics = new PerformanceMetrics();
 
@@ -259,8 +260,8 @@ public class ServingIntegrationTests
         Assert.Equal(100.0, utilization);
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetThroughput_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetThroughput_CalculatesCorrectly()
     {
         var metrics = new PerformanceMetrics();
 
@@ -273,8 +274,8 @@ public class ServingIntegrationTests
         Assert.True(throughput > 0);
     }
 
-    [Fact]
-    public void PerformanceMetrics_GetAllMetrics_ReturnsAllKeys()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_GetAllMetrics_ReturnsAllKeys()
     {
         var metrics = new PerformanceMetrics();
         metrics.RecordBatch(10, 15.0);
@@ -296,8 +297,8 @@ public class ServingIntegrationTests
         Assert.Contains("uptimeSeconds", allMetrics.Keys);
     }
 
-    [Fact]
-    public void PerformanceMetrics_Reset_ClearsAllData()
+    [Fact(Timeout = 120000)]
+    public async Task PerformanceMetrics_Reset_ClearsAllData()
     {
         var metrics = new PerformanceMetrics();
 
@@ -318,8 +319,8 @@ public class ServingIntegrationTests
 
     #region ContinuousBatchingStrategy Tests
 
-    [Fact]
-    public void ContinuousBatchingStrategy_ShouldProcessBatch_WhenRequestsExist()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_ShouldProcessBatch_WhenRequestsExist()
     {
         var strategy = new ContinuousBatchingStrategy(
             maxConcurrency: 32,
@@ -345,8 +346,8 @@ public class ServingIntegrationTests
         Assert.True(shouldProcess2);
     }
 
-    [Fact]
-    public void ContinuousBatchingStrategy_GetOptimalBatchSize_ReturnsMinOfQueueAndConcurrency()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_GetOptimalBatchSize_ReturnsMinOfQueueAndConcurrency()
     {
         var strategy = new ContinuousBatchingStrategy(
             maxConcurrency: 32,
@@ -362,24 +363,24 @@ public class ServingIntegrationTests
         Assert.Equal(3, batchSize2); // Should be limited by queue size
     }
 
-    [Fact]
-    public void ContinuousBatchingStrategy_Name_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_Name_IsCorrect()
     {
         var strategy = new ContinuousBatchingStrategy();
 
         Assert.Equal("Continuous", strategy.Name);
     }
 
-    [Fact]
-    public void ContinuousBatchingStrategy_CurrentConcurrency_StartsAtHalfMax()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_CurrentConcurrency_StartsAtHalfMax()
     {
         var strategy = new ContinuousBatchingStrategy(maxConcurrency: 32);
 
         Assert.Equal(16, strategy.CurrentConcurrency);
     }
 
-    [Fact]
-    public void ContinuousBatchingStrategy_AdaptiveConcurrency_IncreaseOnGoodLatency()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_AdaptiveConcurrency_IncreaseOnGoodLatency()
     {
         var strategy = new ContinuousBatchingStrategy(
             maxConcurrency: 32,
@@ -394,8 +395,8 @@ public class ServingIntegrationTests
         Assert.True(strategy.CurrentConcurrency >= initialConcurrency);
     }
 
-    [Fact]
-    public void ContinuousBatchingStrategy_GetStatistics_ContainsExpectedKeys()
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousBatchingStrategy_GetStatistics_ContainsExpectedKeys()
     {
         var strategy = new ContinuousBatchingStrategy(
             maxConcurrency: 32,
@@ -415,8 +416,8 @@ public class ServingIntegrationTests
 
     #region Additional TimeoutBatchingStrategy Tests
 
-    [Fact]
-    public void TimeoutBatchingStrategy_ShouldProcessBatch_OnlyWhenTimeoutReached()
+    [Fact(Timeout = 120000)]
+    public async Task TimeoutBatchingStrategy_ShouldProcessBatch_OnlyWhenTimeoutReached()
     {
         var strategy = new TimeoutBatchingStrategy(timeoutMs: 100, maxBatchSize: 10);
 
@@ -438,8 +439,8 @@ public class ServingIntegrationTests
         Assert.True(shouldProcessAfterTimeout);
     }
 
-    [Fact]
-    public void TimeoutBatchingStrategy_GetOptimalBatchSize_ReturnsMaxBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task TimeoutBatchingStrategy_GetOptimalBatchSize_ReturnsMaxBatchSize()
     {
         var strategy = new TimeoutBatchingStrategy(timeoutMs: 100, maxBatchSize: 50);
 
@@ -448,8 +449,8 @@ public class ServingIntegrationTests
         Assert.Equal(50, batchSize);
     }
 
-    [Fact]
-    public void TimeoutBatchingStrategy_Name_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TimeoutBatchingStrategy_Name_IsCorrect()
     {
         var strategy = new TimeoutBatchingStrategy(100, 50);
 
@@ -460,8 +461,8 @@ public class ServingIntegrationTests
 
     #region Additional SizeBatchingStrategy Tests
 
-    [Fact]
-    public void SizeBatchingStrategy_GetOptimalBatchSize_ReturnsBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task SizeBatchingStrategy_GetOptimalBatchSize_ReturnsBatchSize()
     {
         var strategy = new SizeBatchingStrategy(batchSize: 32, maxWaitMs: 100);
 
@@ -470,8 +471,8 @@ public class ServingIntegrationTests
         Assert.Equal(32, batchSize);
     }
 
-    [Fact]
-    public void SizeBatchingStrategy_Name_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task SizeBatchingStrategy_Name_IsCorrect()
     {
         var strategy = new SizeBatchingStrategy(32, 100);
 
@@ -482,8 +483,8 @@ public class ServingIntegrationTests
 
     #region Additional AdaptiveBatchingStrategy Tests
 
-    [Fact]
-    public void AdaptiveBatchingStrategy_GetOptimalBatchSize_RespectsMinMax()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveBatchingStrategy_GetOptimalBatchSize_RespectsMinMax()
     {
         var strategy = new AdaptiveBatchingStrategy(
             minBatchSize: 5,
@@ -501,8 +502,8 @@ public class ServingIntegrationTests
         }
     }
 
-    [Fact]
-    public void AdaptiveBatchingStrategy_Name_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveBatchingStrategy_Name_IsCorrect()
     {
         var strategy = new AdaptiveBatchingStrategy(1, 100, 50, 20.0, 2.0);
 
@@ -513,8 +514,8 @@ public class ServingIntegrationTests
 
     #region Additional BucketBatchingStrategy Tests
 
-    [Fact]
-    public void BucketBatchingStrategy_GetBucketIndex_HandlesEdgeCases()
+    [Fact(Timeout = 120000)]
+    public async Task BucketBatchingStrategy_GetBucketIndex_HandlesEdgeCases()
     {
         var bucketSizes = new[] { 8, 16, 32 };
         var strategy = new BucketBatchingStrategy(bucketSizes, maxBatchSize: 100, maxWaitMs: 50);
@@ -529,8 +530,8 @@ public class ServingIntegrationTests
         Assert.Equal(2, strategy.GetBucketIndex(17));
     }
 
-    [Fact]
-    public void BucketBatchingStrategy_ShouldProcessBatch_WhenMaxWaitReached()
+    [Fact(Timeout = 120000)]
+    public async Task BucketBatchingStrategy_ShouldProcessBatch_WhenMaxWaitReached()
     {
         var bucketSizes = new[] { 32, 64, 128 };
         var strategy = new BucketBatchingStrategy(bucketSizes, maxBatchSize: 100, maxWaitMs: 50);
@@ -545,8 +546,8 @@ public class ServingIntegrationTests
         Assert.True(shouldProcess);
     }
 
-    [Fact]
-    public void BucketBatchingStrategy_Name_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BucketBatchingStrategy_Name_IsCorrect()
     {
         var bucketSizes = new[] { 32, 64, 128 };
         var strategy = new BucketBatchingStrategy(bucketSizes, 100, 50);
@@ -558,8 +559,8 @@ public class ServingIntegrationTests
 
     #region Additional Padding Strategy Tests
 
-    [Fact]
-    public void MinimalPaddingStrategy_PadBatch_WithSingleVector()
+    [Fact(Timeout = 120000)]
+    public async Task MinimalPaddingStrategy_PadBatch_WithSingleVector()
     {
         var strategy = new MinimalPaddingStrategy();
         var vectors = new[]
@@ -576,8 +577,8 @@ public class ServingIntegrationTests
         Assert.Equal(1.0, attentionMask[0, 4]);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_PadBatch_SelectsCorrectBucket()
+    [Fact(Timeout = 120000)]
+    public async Task BucketPaddingStrategy_PadBatch_SelectsCorrectBucket()
     {
         var bucketSizes = new[] { 8, 16, 32, 64 };
         var strategy = new BucketPaddingStrategy(bucketSizes);
@@ -592,8 +593,8 @@ public class ServingIntegrationTests
         Assert.Equal(16, paddedMatrix.Columns);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_PadBatch_HandlesLargerThanAllBuckets()
+    [Fact(Timeout = 120000)]
+    public async Task BucketPaddingStrategy_PadBatch_HandlesLargerThanAllBuckets()
     {
         var bucketSizes = new[] { 8, 16, 32 };
         var strategy = new BucketPaddingStrategy(bucketSizes);
@@ -609,8 +610,8 @@ public class ServingIntegrationTests
         Assert.True(paddedMatrix.Columns >= 50);
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_PadBatch_ConsistentSize()
+    [Fact(Timeout = 120000)]
+    public async Task FixedSizePaddingStrategy_PadBatch_ConsistentSize()
     {
         var strategy = new FixedSizePaddingStrategy(fixedLength: 20);
         var vectors = new[]
@@ -627,8 +628,8 @@ public class ServingIntegrationTests
         Assert.NotNull(attentionMask);
     }
 
-    [Fact]
-    public void PaddingStrategies_PreserveOriginalData()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingStrategies_PreserveOriginalData()
     {
         var strategies = new IPaddingStrategy[]
         {
@@ -656,8 +657,8 @@ public class ServingIntegrationTests
 
     #region Configuration Enum Tests
 
-    [Fact]
-    public void BatchingStrategyType_AllValuesExist()
+    [Fact(Timeout = 120000)]
+    public async Task BatchingStrategyType_AllValuesExist()
     {
         var values = Enum.GetValues<BatchingStrategyType>();
 
@@ -668,8 +669,8 @@ public class ServingIntegrationTests
         Assert.Contains(BatchingStrategyType.Continuous, values);
     }
 
-    [Fact]
-    public void PaddingStrategyType_AllValuesExist()
+    [Fact(Timeout = 120000)]
+    public async Task PaddingStrategyType_AllValuesExist()
     {
         var values = Enum.GetValues<PaddingStrategyType>();
 
@@ -678,8 +679,8 @@ public class ServingIntegrationTests
         Assert.Contains(PaddingStrategyType.Fixed, values);
     }
 
-    [Fact]
-    public void NumericType_AllValuesExist()
+    [Fact(Timeout = 120000)]
+    public async Task NumericType_AllValuesExist()
     {
         var values = Enum.GetValues<NumericType>();
 

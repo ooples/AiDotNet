@@ -4,13 +4,14 @@ using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.CodeTokenization;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class CodeTokenizationPipelineTests
 {
-    [Fact]
-    public void Tokenize_Sql_ProducesOffsetsAndSpans()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_Sql_ProducesOffsetsAndSpans()
     {
         var baseTokenizer = CharacterTokenizer.CreateAscii(SpecialTokens.Bert(), lowercase: false);
         var tokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.SQL, splitIdentifiers: true);
@@ -34,8 +35,8 @@ public class CodeTokenizationPipelineTests
         Assert.Equal(1, result.TokenSpans[0].Start.Column);
     }
 
-    [Fact]
-    public void TokenizeWithStructure_CSharp_IncludesAstNodes()
+    [Fact(Timeout = 60000)]
+    public async Task TokenizeWithStructure_CSharp_IncludesAstNodes()
     {
         var baseTokenizer = CharacterTokenizer.CreateAscii(SpecialTokens.Bert(), lowercase: false);
         var tokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.CSharp, splitIdentifiers: true);

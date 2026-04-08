@@ -1,5 +1,6 @@
 using AiDotNet.Memory;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Memory;
 
@@ -11,8 +12,8 @@ public class MemoryIntegrationTests
     private const double Tolerance = 1e-6;
     #region TensorPool Tests
 
-    [Fact]
-    public void TensorPool_Rent_ReturnsTensorOfRequestedShape()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_Rent_ReturnsTensorOfRequestedShape()
     {
         using var pool = new TensorPool<double>();
         var tensor = pool.Rent(new[] { 3, 4 });
@@ -23,8 +24,8 @@ public class MemoryIntegrationTests
         pool.Return(tensor);
     }
 
-    [Fact]
-    public void TensorPool_ReturnAndReRent_ReusesTensor()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_ReturnAndReRent_ReusesTensor()
     {
         using var pool = new TensorPool<double>();
         var tensor1 = pool.Rent(new[] { 5 });
@@ -42,8 +43,8 @@ public class MemoryIntegrationTests
         pool.Return(tensor2);
     }
 
-    [Fact]
-    public void TensorPool_DifferentShapes_TrackedSeparately()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_DifferentShapes_TrackedSeparately()
     {
         using var pool = new TensorPool<double>();
         var t1 = pool.Rent(new[] { 3 });
@@ -55,8 +56,8 @@ public class MemoryIntegrationTests
         Assert.True(stats.TensorBuckets >= 2);
     }
 
-    [Fact]
-    public void TensorPool_GetStatistics_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_GetStatistics_ReturnsValidData()
     {
         using var pool = new TensorPool<double>();
         var tensor = pool.Rent(new[] { 10, 10 });
@@ -69,8 +70,8 @@ public class MemoryIntegrationTests
         Assert.True(stats.MemoryUtilizationPercent >= 0);
     }
 
-    [Fact]
-    public void TensorPool_Dispose_ClearsPool()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_Dispose_ClearsPool()
     {
         var pool = new TensorPool<double>();
         var tensor = pool.Rent(new[] { 5 });
@@ -80,8 +81,8 @@ public class MemoryIntegrationTests
         Assert.Throws<ObjectDisposedException>(() => pool.Rent(new[] { 5 }));
     }
 
-    [Fact]
-    public void TensorPool_Clear_RemovesAllTensors()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_Clear_RemovesAllTensors()
     {
         using var pool = new TensorPool<double>();
         var t1 = pool.Rent(new[] { 10 });
@@ -94,8 +95,8 @@ public class MemoryIntegrationTests
         Assert.Equal(0, stats.PooledTensorCount);
     }
 
-    [Fact]
-    public void TensorPool_RentPooled_AutoReturnsOnDispose()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_RentPooled_AutoReturnsOnDispose()
     {
         using var pool = new TensorPool<double>();
 
@@ -111,8 +112,8 @@ public class MemoryIntegrationTests
             $"After auto-return, pool should have at least 1 tensor, got {stats.PooledTensorCount}");
     }
 
-    [Fact]
-    public void TensorPool_InvalidShape_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_InvalidShape_ThrowsArgumentException()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentException>(() => pool.Rent(Array.Empty<int>()));
@@ -120,8 +121,8 @@ public class MemoryIntegrationTests
         Assert.Throws<ArgumentException>(() => pool.Rent(new[] { 0 }));
     }
 
-    [Fact]
-    public void TensorPool_ConstructorWithSize_SetsMaxPoolSize()
+    [Fact(Timeout = 120000)]
+    public async Task TensorPool_ConstructorWithSize_SetsMaxPoolSize()
     {
         using var pool = new TensorPool<double>(128);
         Assert.Equal(128L * 1024 * 1024, pool.MaxPoolSizeBytes);
@@ -131,15 +132,15 @@ public class MemoryIntegrationTests
 
     #region InferenceContext Tests
 
-    [Fact]
-    public void InferenceContext_CreateDispose_Lifecycle()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_CreateDispose_Lifecycle()
     {
         using var context = new InferenceContext<double>();
         Assert.Equal(0, context.RentedTensorCount);
     }
 
-    [Fact]
-    public void InferenceContext_RentTensor_TracksRentedCount()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_RentTensor_TracksRentedCount()
     {
         using var context = new InferenceContext<double>();
         var t1 = context.Rent(new[] { 5 });
@@ -147,8 +148,8 @@ public class MemoryIntegrationTests
         Assert.Equal(2, context.RentedTensorCount);
     }
 
-    [Fact]
-    public void InferenceContext_Release_DecrementsCount()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_Release_DecrementsCount()
     {
         using var context = new InferenceContext<double>();
         var tensor = context.Rent(new[] { 5 });
@@ -158,8 +159,8 @@ public class MemoryIntegrationTests
         Assert.Equal(0, context.RentedTensorCount);
     }
 
-    [Fact]
-    public void InferenceContext_Dispose_CleansUpAllTensors()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_Dispose_CleansUpAllTensors()
     {
         var context = new InferenceContext<double>();
         var t1 = context.Rent1D(10);
@@ -172,8 +173,8 @@ public class MemoryIntegrationTests
         Assert.Throws<ObjectDisposedException>(() => context.Rent(new[] { 5 }));
     }
 
-    [Fact]
-    public void InferenceContext_RentLike_MatchesTemplateShape()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_RentLike_MatchesTemplateShape()
     {
         using var context = new InferenceContext<double>();
         var template = context.Rent(new[] { 3, 4, 5 });
@@ -181,8 +182,8 @@ public class MemoryIntegrationTests
         Assert.Equal(template.Shape.ToArray(), similar.Shape.ToArray());
     }
 
-    [Fact]
-    public void InferenceContext_Rent4D_CorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_Rent4D_CorrectShape()
     {
         using var context = new InferenceContext<double>();
         var tensor = context.Rent4D(2, 3, 8, 8);
@@ -193,16 +194,16 @@ public class MemoryIntegrationTests
         Assert.Equal(8, tensor.Shape[3]);
     }
 
-    [Fact]
-    public void InferenceContext_WithExistingPool_SharesPool()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceContext_WithExistingPool_SharesPool()
     {
         using var pool = new TensorPool<double>();
         using var context = new InferenceContext<double>(pool);
         Assert.Same(pool, context.Pool);
     }
 
-    [Fact]
-    public void InferenceScope_NestedContexts_RestoresPrevious()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceScope_NestedContexts_RestoresPrevious()
     {
         using var context1 = new InferenceContext<double>();
         using var context2 = new InferenceContext<double>();
@@ -222,8 +223,8 @@ public class MemoryIntegrationTests
         Assert.Null(InferenceScope<double>.Current);
     }
 
-    [Fact]
-    public void InferenceScope_RentOrCreate_UsesPoolWhenActive()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceScope_RentOrCreate_UsesPoolWhenActive()
     {
         using var context = new InferenceContext<double>();
         using var scope = InferenceScope<double>.Begin(context);
@@ -234,8 +235,8 @@ public class MemoryIntegrationTests
         Assert.Equal(5, tensor.Shape[0]);
     }
 
-    [Fact]
-    public void InferenceScope_RentOrCreate_AllocatesWhenInactive()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceScope_RentOrCreate_AllocatesWhenInactive()
     {
         // Ensure no scope is active
         InferenceScope<double>.Current = null;
@@ -250,8 +251,8 @@ public class MemoryIntegrationTests
 
     #region PoolingOptions Tests
 
-    [Fact]
-    public void PoolingOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task PoolingOptions_DefaultValues()
     {
         var opts = new PoolingOptions();
         Assert.Equal(256, opts.MaxPoolSizeMB);
@@ -262,15 +263,15 @@ public class MemoryIntegrationTests
         Assert.False(opts.UseWeakReferences);
     }
 
-    [Fact]
-    public void PoolingOptions_SetMaxPoolSizeMB_ConvertsToBytes()
+    [Fact(Timeout = 120000)]
+    public async Task PoolingOptions_SetMaxPoolSizeMB_ConvertsToBytes()
     {
         var opts = new PoolingOptions { MaxPoolSizeMB = 512 };
         Assert.Equal(512L * 1024 * 1024, opts.MaxPoolSizeBytes);
     }
 
-    [Fact]
-    public void PoolingOptions_CustomConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task PoolingOptions_CustomConfiguration()
     {
         var opts = new PoolingOptions
         {
@@ -292,8 +293,8 @@ public class MemoryIntegrationTests
 
     #region PoolStatistics Tests
 
-    [Fact]
-    public void PoolStatistics_Properties_SetAndGet()
+    [Fact(Timeout = 120000)]
+    public async Task PoolStatistics_Properties_SetAndGet()
     {
         var stats = new PoolStatistics
         {
@@ -309,8 +310,8 @@ public class MemoryIntegrationTests
         Assert.Equal(3, stats.TensorBuckets);
     }
 
-    [Fact]
-    public void PoolStatistics_MemoryUtilizationPercent_Calculation()
+    [Fact(Timeout = 120000)]
+    public async Task PoolStatistics_MemoryUtilizationPercent_Calculation()
     {
         var stats = new PoolStatistics
         {
@@ -320,8 +321,8 @@ public class MemoryIntegrationTests
         Assert.Equal(50.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
-    public void PoolStatistics_MemoryUtilizationPercent_ZeroMax_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task PoolStatistics_MemoryUtilizationPercent_ZeroMax_ReturnsZero()
     {
         var stats = new PoolStatistics
         {

@@ -3,6 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -14,8 +15,8 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderAccuracyTests
 {
-    [Fact]
-    public void RidgeRegression_KnownLinearData_R2AboveZero()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_KnownLinearData_R2AboveZero()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1 + noise(σ=0.1)
         // Note: The builder's default NormalOptimizer performs feature selection,
@@ -57,8 +58,8 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
-    public void DirectModel_KnownLinearData_CoefficientsRecovered()
+    [Fact(Timeout = 120000)]
+    public async Task DirectModel_KnownLinearData_CoefficientsRecovered()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1, use direct model training (no builder/optimizer)
         // to verify the model itself correctly recovers coefficients.
@@ -96,8 +97,8 @@ public class AiModelBuilderAccuracyTests
         Assert.InRange(approxIntercept, -1.0, 3.0);  // true value: 1.0
     }
 
-    [Fact]
-    public void DirectModel_PerfectLinearData_ExactPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task DirectModel_PerfectLinearData_ExactPredictions()
     {
         // Arrange: y = 5*x1 - 2*x2 with ZERO noise using direct model training.
         // Direct training bypasses the optimizer's feature selection for an exact test.
@@ -131,8 +132,8 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
-    public void RidgeRegression_SinusoidalData_R2NotTerrible()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_SinusoidalData_R2NotTerrible()
     {
         // Arrange: y = sin(x) on [0, 2π] — non-linear challenge.
         // Ridge regression can only fit a line, so R² won't be perfect,
@@ -183,8 +184,8 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
-    public void LargeDataset_PredictionStability()
+    [Fact(Timeout = 120000)]
+    public async Task LargeDataset_PredictionStability()
     {
         // Arrange: Train on 500 samples, verify prediction determinism
         var random = new Random(99);

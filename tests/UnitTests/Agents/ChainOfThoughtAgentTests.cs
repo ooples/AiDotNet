@@ -2,6 +2,7 @@ using AiDotNet.Agents;
 using AiDotNet.Interfaces;
 using AiDotNet.Tools;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Agents;
 
@@ -10,8 +11,8 @@ namespace AiDotNetTests.UnitTests.Agents;
 /// </summary>
 public class ChainOfThoughtAgentTests
 {
-    [Fact]
-    public void Constructor_WithValidChatModel_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidChatModel_InitializesSuccessfully()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -25,8 +26,8 @@ public class ChainOfThoughtAgentTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact]
-    public void Constructor_WithTools_InitializesWithTools()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithTools_InitializesWithTools()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -42,8 +43,8 @@ public class ChainOfThoughtAgentTests
         Assert.Equal("Calculator", agent.Tools[0].Name);
     }
 
-    [Fact]
-    public void Constructor_WithAllowToolsFalse_CreatesPureReasoningAgent()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithAllowToolsFalse_CreatesPureReasoningAgent()
     {
         // Arrange
         var mockChatModel = new MockChatModel<double>("Test response");
@@ -59,15 +60,15 @@ public class ChainOfThoughtAgentTests
         Assert.Single(agent.Tools);
     }
 
-    [Fact]
-    public void Constructor_WithNullChatModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new ChainOfThoughtAgent<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -79,7 +80,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -91,7 +92,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithValidQuery_ReturnsAnswer()
     {
         // Arrange
@@ -115,7 +116,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("What is the answer?", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithToolCall_ExecutesTool()
     {
         // Arrange
@@ -146,7 +147,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("Calculator", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithInvalidMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -158,7 +159,7 @@ public class ChainOfThoughtAgentTests
             agent.RunAsync("Test query", maxIterations: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_UpdatesScratchpad()
     {
         // Arrange
@@ -180,7 +181,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("Reasoning Steps", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithHttpError_ReturnsErrorMessage()
     {
         // Arrange
@@ -194,7 +195,7 @@ public class ChainOfThoughtAgentTests
         Assert.Contains("error", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_PureCoTMode_DoesNotExecuteTools()
     {
         // Arrange
@@ -219,7 +220,7 @@ public class ChainOfThoughtAgentTests
         // In pure CoT mode, even if tool_calls were present, they wouldn't execute
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task RunAsync_WithFallbackParsing_HandlesNonJsonResponse()
     {
         // Arrange

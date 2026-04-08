@@ -5,6 +5,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 
@@ -130,8 +131,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region GAN Generators (NeuralNetworkBase)
 
-    [Fact]
-    public void CTGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -156,8 +157,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTGAN");
     }
 
-    [Fact]
-    public void CopulaGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CopulaGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -181,8 +182,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CopulaGAN");
     }
 
-    [Fact]
-    public void DPCTGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DPCTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -210,8 +211,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "DPCTGAN");
     }
 
-    [Fact]
-    public void CTABGANPlusGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CTABGANPlusGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -238,8 +239,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTABGANPlus");
     }
 
-    [Fact]
-    public void PATEGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PATEGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -265,8 +266,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "PATEGAN");
     }
 
-    [Fact]
-    public void TableGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TableGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -291,8 +292,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TableGAN");
     }
 
-    [Fact]
-    public void OCTGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OCTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -314,8 +315,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "OCTGAN");
     }
 
-    [Fact]
-    public void CausalGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CausalGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -336,8 +337,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CausalGAN");
     }
 
-    [Fact]
-    public void MisGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MisGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -359,8 +360,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "MisGAN");
     }
 
-    [Fact]
-    public void MedSynthGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MedSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -390,8 +391,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region VAE Generators
 
-    [Fact]
-    public void TVAEGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TVAEGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -418,8 +419,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Diffusion Models
 
-    [Fact]
-    public void TabDDPMGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TabDDPMGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -440,8 +441,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabDDPM");
     }
 
-    [Fact]
-    public void TabSynGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TabSynGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -466,8 +467,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabSyn");
     }
 
-    [Fact]
-    public void TabFlowGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TabFlowGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -489,8 +490,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabFlow");
     }
 
-    [Fact]
-    public void AutoDiffTabGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AutoDiffTabGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -511,8 +512,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "AutoDiffTab");
     }
 
-    [Fact]
-    public void FinDiffGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task FinDiffGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -537,8 +538,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Transformer / Sequence Models
 
-    [Fact]
-    public void REaLTabFormerGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task REaLTabFormerGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -562,8 +563,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "REaLTabFormer");
     }
 
-    [Fact]
-    public void TabTransformerGenGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TabTransformerGenGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -586,8 +587,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabTransformerGen");
     }
 
-    [Fact]
-    public void TabLLMGenGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TabLLMGenGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -615,8 +616,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Graph-Based Models
 
-    [Fact]
-    public void GOGGLEGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GOGGLEGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -643,8 +644,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Temporal Models
 
-    [Fact]
-    public void TimeGANGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TimeGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -669,8 +670,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Statistical / Non-Deep Models (SyntheticTabularGeneratorBase)
 
-    [Fact]
-    public void SMOTENCGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SMOTENCGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateImbalancedData();
         var options = new SMOTENCOptions<double>
@@ -698,8 +699,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         }
     }
 
-    [Fact]
-    public void AIMGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AIMGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var options = new AIMOptions<double>
@@ -717,8 +718,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "AIM");
     }
 
-    [Fact]
-    public void BayesianNetworkSynthGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianNetworkSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var options = new BayesianNetworkSynthOptions<double>
@@ -735,8 +736,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "BayesianNetworkSynth");
     }
 
-    [Fact]
-    public void CopulaSynthGenerator_FitAndGenerate_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CopulaSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var options = new CopulaSynthOptions<double>
@@ -755,8 +756,8 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Cross-Cutting Concerns
 
-    [Fact]
-    public void AllGenerators_GenerateBeforeFit_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task AllGenerators_GenerateBeforeFit_ThrowsInvalidOperationException()
     {
         // Test that unfitted generators throw when Generate is called
         var smotenc = new SMOTENCGenerator<double>(new SMOTENCOptions<double> { Seed = Seed });
@@ -772,8 +773,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.Throws<InvalidOperationException>(() => copula.Generate(10));
     }
 
-    [Fact]
-    public void CTGANGenerator_FitWithEmptyData_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CTGANGenerator_FitWithEmptyData_ThrowsArgumentException()
     {
         var emptyData = new Matrix<double>(0, 0);
         var columns = new List<ColumnMetadata>();
@@ -784,8 +785,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.ThrowsAny<ArgumentException>(() => generator.Fit(emptyData, columns, 1));
     }
 
-    [Fact]
-    public void CTGANGenerator_GenerateZeroSamples_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task CTGANGenerator_GenerateZeroSamples_ThrowsArgumentException()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -805,8 +806,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.ThrowsAny<ArgumentException>(() => generator.Generate(0));
     }
 
-    [Fact]
-    public void CTGANGenerator_ColumnMetadata_MatchesAfterFit()
+    [Fact(Timeout = 120000)]
+    public async Task CTGANGenerator_ColumnMetadata_MatchesAfterFit()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -833,7 +834,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.True(generator.Columns[4].IsCategorical);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CTGANGenerator_FitAsync_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -856,7 +857,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTGAN_Async");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CTGANGenerator_FitAsync_SupportsCancellation()
     {
         var (data, columns) = CreateTestData();
@@ -880,8 +881,8 @@ public class SyntheticTabularGeneratorIntegrationTests
             () => generator.FitAsync(data, columns, 100, cts.Token));
     }
 
-    [Fact]
-    public void DPCTGANGenerator_PrivacyBudgetExhaustion_StopsTraining()
+    [Fact(Timeout = 120000)]
+    public async Task DPCTGANGenerator_PrivacyBudgetExhaustion_StopsTraining()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
@@ -907,8 +908,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.True(generator.CumulativeEpsilon > 0);
     }
 
-    [Fact]
-    public void SMOTENCGenerator_WithNoMinority_UsesAllData()
+    [Fact(Timeout = 120000)]
+    public async Task SMOTENCGenerator_WithNoMinority_UsesAllData()
     {
         // All rows are class 0, no minority class 1
         var random = new Random(Seed);

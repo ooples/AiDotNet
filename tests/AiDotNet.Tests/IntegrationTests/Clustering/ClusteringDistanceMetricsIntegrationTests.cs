@@ -1,12 +1,13 @@
 using AiDotNet.Clustering.DistanceMetrics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringDistanceMetricsIntegrationTests
 {
-    [Fact]
-    public void ChebyshevDistance_ComputesMaxDifference()
+    [Fact(Timeout = 120000)]
+    public async Task ChebyshevDistance_ComputesMaxDifference()
     {
         var metric = new ChebyshevDistance<double>();
         var a = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -17,8 +18,8 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Equal(2.0, distance, 1e-6);
     }
 
-    [Fact]
-    public void CosineDistance_HandlesOrthogonalAndZeroVectors()
+    [Fact(Timeout = 120000)]
+    public async Task CosineDistance_HandlesOrthogonalAndZeroVectors()
     {
         var metric = new CosineDistance<double>();
         var a = new Vector<double>(new[] { 1.0, 0.0 });
@@ -35,8 +36,8 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Equal(1.0, similarity, 1e-6);
     }
 
-    [Fact]
-    public void MinkowskiDistance_ComputesExpectedValuesAndValidatesP()
+    [Fact(Timeout = 120000)]
+    public async Task MinkowskiDistance_ComputesExpectedValuesAndValidatesP()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0 });
         var b = new Vector<double>(new[] { 3.0, 4.0 });
@@ -55,8 +56,8 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => new MinkowskiDistance<double>(0.5));
     }
 
-    [Fact]
-    public void MahalanobisDistance_FallsBackToEuclideanAndFitsFromData()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_FallsBackToEuclideanAndFitsFromData()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0 });
         var b = new Vector<double>(new[] { 4.0, 6.0 });
@@ -76,8 +77,8 @@ public class ClusteringDistanceMetricsIntegrationTests
         Assert.True(fitted > 0);
     }
 
-    [Fact]
-    public void DistanceMetricBase_ComputeToAllAndPairwiseWork()
+    [Fact(Timeout = 120000)]
+    public async Task DistanceMetricBase_ComputeToAllAndPairwiseWork()
     {
         var metric = new EuclideanDistance<double>();
         var data = new Matrix<double>(3, 2);

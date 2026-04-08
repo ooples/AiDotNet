@@ -2,13 +2,14 @@ using AiDotNet.FederatedLearning.Aggregators;
 using AiDotNet.Interfaces;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class RobustFullModelAggregationStrategyTests
 {
-    [Fact]
-    public void Median_Aggregate_IgnoresOutlier()
+    [Fact(Timeout = 60000)]
+    public async Task Median_Aggregate_IgnoresOutlier()
     {
         var aggregator = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
         var models = CreateClientModels(new[] { 0.0, 0.0, 100.0, 0.0, 0.0 });
@@ -18,8 +19,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact]
-    public void TrimmedMean_Aggregate_IgnoresOutlier()
+    [Fact(Timeout = 60000)]
+    public async Task TrimmedMean_Aggregate_IgnoresOutlier()
     {
         var aggregator = new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(trimFraction: 0.2);
         var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 0.0, 100.0 });
@@ -29,8 +30,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact]
-    public void Krum_Aggregate_SelectsCentralClient()
+    [Fact(Timeout = 60000)]
+    public async Task Krum_Aggregate_SelectsCentralClient()
     {
         var aggregator = new KrumFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(byzantineClientCount: 1);
         var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 0.0, 100.0 });
@@ -40,8 +41,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.Equal(0.0, ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0], 12);
     }
 
-    [Fact]
-    public void MultiKrum_Aggregate_AveragesSelectedCentralClients()
+    [Fact(Timeout = 60000)]
+    public async Task MultiKrum_Aggregate_AveragesSelectedCentralClients()
     {
         var aggregator = new MultiKrumFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(
             byzantineClientCount: 1,
@@ -55,8 +56,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
-    [Fact]
-    public void Bulyan_Aggregate_IgnoresExtremeOutlier()
+    [Fact(Timeout = 60000)]
+    public async Task Bulyan_Aggregate_IgnoresExtremeOutlier()
     {
         var aggregator = new BulyanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(byzantineClientCount: 1);
         var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 100.0 });
@@ -66,8 +67,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] <= 1.0);
     }
 
-    [Fact]
-    public void WinsorizedMean_Aggregate_ClipsOutlier()
+    [Fact(Timeout = 60000)]
+    public async Task WinsorizedMean_Aggregate_ClipsOutlier()
     {
         var aggregator = new WinsorizedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(winsorizeFraction: 0.2);
         var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 0.0, 100.0 });
@@ -77,8 +78,8 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] >= 0.0 && ((IParameterizable<double, Matrix<double>, Vector<double>>)aggregated).GetParameters()[0] < 100.0);
     }
 
-    [Fact]
-    public void Rfa_Aggregate_IsRobustToOutlier()
+    [Fact(Timeout = 60000)]
+    public async Task Rfa_Aggregate_IsRobustToOutlier()
     {
         var aggregator = new RfaFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(maxIterations: 5);
         var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 1.0, 100.0 });

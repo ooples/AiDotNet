@@ -9,6 +9,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -149,8 +150,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
             $"fixed-tensor-task-{seed}");
     }
 
-    [Fact]
-    public void ANIL_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task ANIL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new ANILOptions<double, Matrix<double>, Vector<double>>(model)
@@ -176,8 +177,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Length);
     }
 
-    [Fact]
-    public void BOIL_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task BOIL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new BOILOptions<double, Matrix<double>, Vector<double>>(model)
@@ -204,8 +205,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Length);
     }
 
-    [Fact]
-    public void CNAP_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task CNAP_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new CNAPOptions<double, Matrix<double>, Vector<double>>(model)
@@ -231,8 +232,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(task.QuerySetX.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void GNNMeta_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task GNNMeta_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new GNNMetaOptions<double, Matrix<double>, Vector<double>>(model)
@@ -261,8 +262,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(taskA.QuerySetX.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void iMAML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task iMAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new iMAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -288,8 +289,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(task.QuerySetX.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void LEO_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task LEO_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new LEOOptions<double, Matrix<double>, Vector<double>>(model)
@@ -318,8 +319,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Length);
     }
 
-    [Fact]
-    public void MetaOptNet_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MetaOptNet_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
@@ -346,8 +347,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(task.QuerySetX.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void SEAL_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task SEAL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new SEALOptions<double, Matrix<double>, Vector<double>>(model)
@@ -374,8 +375,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(task.QuerySetX.Rows, predictions.Length);
     }
 
-    [Fact]
-    public void MANN_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MANN_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
         var options = new MANNOptions<double, Matrix<double>, Vector<double>>(model)
@@ -404,8 +405,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Length);
     }
 
-    [Fact]
-    public void NTM_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task NTM_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new NTMOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -433,8 +434,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Shape[0]);
     }
 
-    [Fact]
-    public void RelationNetwork_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task RelationNetwork_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new RelationNetworkOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -457,8 +458,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.True(predictions.Shape.Length > 0);
     }
 
-    [Fact]
-    public void TADAM_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task TADAM_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new TADAMOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -486,8 +487,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Equal(options.NumClasses, predictions.Shape[0]);
     }
 
-    [Fact]
-    public void MANN_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task MANN_InvalidOptions_Throws()
     {
         var model = new LinearVectorModel(2);
         var options = new MANNOptions<double, Matrix<double>, Vector<double>>(model)
@@ -498,8 +499,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Throws<ArgumentException>(() => new MANNAlgorithm<double, Matrix<double>, Vector<double>>(options));
     }
 
-    [Fact]
-    public void NTM_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task NTM_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new NTMOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -510,8 +511,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Throws<ArgumentException>(() => new NTMAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact]
-    public void RelationNetwork_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task RelationNetwork_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new RelationNetworkOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -522,8 +523,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         Assert.Throws<ArgumentException>(() => new RelationNetworkAlgorithm<double, Matrix<double>, Tensor<double>>(options));
     }
 
-    [Fact]
-    public void TADAM_InvalidOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TADAM_InvalidOptions_Throws()
     {
         var model = new TensorEmbeddingModel(2, 2);
         var options = new TADAMOptions<double, Matrix<double>, Tensor<double>>(model)

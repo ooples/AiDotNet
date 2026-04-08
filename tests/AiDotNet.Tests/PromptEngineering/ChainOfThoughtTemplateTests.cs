@@ -1,13 +1,14 @@
 #nullable disable
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class ChainOfThoughtTemplateTests
 {
-    [Fact]
-    public void Constructor_WithQuestion_CreatesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithQuestion_CreatesTemplate()
     {
         // Use question constructor by specifying context parameter
         var template = new ChainOfThoughtTemplate("What is 2 + 2?", context: null);
@@ -17,8 +18,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("step by step", template.Template.ToLower());
     }
 
-    [Fact]
-    public void Constructor_WithQuestionAndContext_IncludesContext()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithQuestionAndContext_IncludesContext()
     {
         var template = new ChainOfThoughtTemplate("What is 2 + 2?", "This is a math problem.");
 
@@ -27,8 +28,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("This is a math problem.", template.Template);
     }
 
-    [Fact]
-    public void Constructor_WithExamples_IncludesExamples()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithExamples_IncludesExamples()
     {
         var examples = new[]
         {
@@ -44,8 +45,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is 5 + 5?", template.Template);
     }
 
-    [Fact]
-    public void Constructor_WithCustomTemplate_UsesCustomTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "Custom reasoning: {question}";
         var template = new ChainOfThoughtTemplate(customTemplate);
@@ -53,8 +54,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact]
-    public void Format_ReturnsFormattedTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Format_ReturnsFormattedTemplate()
     {
         var template = new ChainOfThoughtTemplate("What is {x} + {y}?");
         var variables = new Dictionary<string, string>
@@ -69,8 +70,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("3", result);
     }
 
-    [Fact]
-    public void ChainOfThoughtExample_PropertiesWork()
+    [Fact(Timeout = 60000)]
+    public async Task ChainOfThoughtExample_PropertiesWork()
     {
         var example = new ChainOfThoughtExample
         {
@@ -84,8 +85,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal("Test answer", example.Answer);
     }
 
-    [Fact]
-    public void ChainOfThoughtExample_ConstructorWithValues()
+    [Fact(Timeout = 60000)]
+    public async Task ChainOfThoughtExample_ConstructorWithValues()
     {
         var example = new ChainOfThoughtExample("Q", "R", "A");
 
@@ -94,8 +95,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Equal("A", example.Answer);
     }
 
-    [Fact]
-    public void Builder_CreatesTemplateWithQuestion()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_CreatesTemplateWithQuestion()
     {
         var template = ChainOfThoughtTemplate.Builder()
             .WithQuestion("What is the capital of France?")
@@ -105,8 +106,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is the capital of France?", template.Template);
     }
 
-    [Fact]
-    public void Builder_CreatesTemplateWithContext()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_CreatesTemplateWithContext()
     {
         var template = ChainOfThoughtTemplate.Builder()
             .WithQuestion("What is the capital?")
@@ -117,8 +118,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("European countries", template.Template);
     }
 
-    [Fact]
-    public void Builder_AddExample_IncludesExample()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_AddExample_IncludesExample()
     {
         var template = ChainOfThoughtTemplate.Builder()
             .WithQuestion("What is 10 / 2?")
@@ -130,8 +131,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("What is 10 / 2?", template.Template);
     }
 
-    [Fact]
-    public void Builder_AddExampleObject_IncludesExample()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_AddExampleObject_IncludesExample()
     {
         var example = new ChainOfThoughtExample("Q1", "R1", "A1");
         var template = ChainOfThoughtTemplate.Builder()
@@ -143,8 +144,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("Q1", template.Template);
     }
 
-    [Fact]
-    public void Builder_AddNullExample_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Builder_AddNullExample_DoesNotThrow()
     {
         var template = ChainOfThoughtTemplate.Builder()
             .WithQuestion("Test")
@@ -154,16 +155,16 @@ public class ChainOfThoughtTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void Constructor_WithNullExamples_HandlesGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullExamples_HandlesGracefully()
     {
         var template = new ChainOfThoughtTemplate("Test question", (IEnumerable<ChainOfThoughtExample>?)null, null);
 
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void Constructor_WithEmptyExamples_CreatesTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithEmptyExamples_CreatesTemplate()
     {
         var template = new ChainOfThoughtTemplate("Test question", Array.Empty<ChainOfThoughtExample>());
 
@@ -171,8 +172,8 @@ public class ChainOfThoughtTemplateTests
         Assert.Contains("Test question", template.Template);
     }
 
-    [Fact]
-    public void Template_ContainsStepByStepInstructions()
+    [Fact(Timeout = 60000)]
+    public async Task Template_ContainsStepByStepInstructions()
     {
         // Use question constructor by specifying context parameter
         var template = new ChainOfThoughtTemplate("Solve this problem", context: null);

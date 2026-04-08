@@ -1,13 +1,14 @@
 using System.Linq;
 using System.Reflection;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public sealed class ServingDtoCoverageTests
 {
-    [Fact]
-    public void Serving_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
+    [Fact(Timeout = 60000)]
+    public async Task Serving_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
     {
         var assembly = typeof(Program).Assembly;
 

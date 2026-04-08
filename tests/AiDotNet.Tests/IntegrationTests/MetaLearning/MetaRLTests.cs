@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -49,8 +50,8 @@ public class MetaRLTests
         return false;
     }
 
-    [Fact]
-    public void PEARL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task PEARL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new PEARLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -69,8 +70,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void DREAM_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task DREAM_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new DREAMOptions<double, Matrix<double>, Vector<double>>(model)
@@ -89,8 +90,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void DiscoRL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task DiscoRL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new DiscoRLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -109,8 +110,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void InContextRL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task InContextRL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new InContextRLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -129,8 +130,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void HyperNetMetaRL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task HyperNetMetaRL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new HyperNetMetaRLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -149,8 +150,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ContextMetaRL_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task ContextMetaRL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new ContextMetaRLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -169,8 +170,8 @@ public class MetaRLTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void PEARL_MultiStep_StableLoss()
+    [Fact(Timeout = 120000)]
+    public async Task PEARL_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
         var options = new PEARLOptions<double, Matrix<double>, Vector<double>>(model)

@@ -3,6 +3,7 @@ using AiDotNet.Audio.Fingerprinting;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Fingerprinting
 {
@@ -27,8 +28,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             return audio;
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_Fingerprint_ReturnsNonEmptyHash()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_Fingerprint_ReturnsNonEmptyHash()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -43,8 +44,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.Hash.Length > 0, "Fingerprint hash should not be empty");
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_SameAudio_SameFingerprint()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_SameAudio_SameFingerprint()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -60,8 +61,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_DifferentAudio_DifferentFingerprint()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_DifferentAudio_DifferentFingerprint()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -87,8 +88,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.NotEqual(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
-        public void SpectrogramFingerprinter_Fingerprint_ReturnsNonEmptyHash()
+        [Fact(Timeout = 60000)]
+        public async Task SpectrogramFingerprinter_Fingerprint_ReturnsNonEmptyHash()
         {
             // Arrange
             var fingerprinter = new SpectrogramFingerprinter<float>();
@@ -103,8 +104,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.Hash.Length > 0, "Fingerprint hash should not be empty");
         }
 
-        [Fact]
-        public void SpectrogramFingerprinter_SameAudio_SameFingerprint()
+        [Fact(Timeout = 60000)]
+        public async Task SpectrogramFingerprinter_SameAudio_SameFingerprint()
         {
             // Arrange
             var fingerprinter = new SpectrogramFingerprinter<float>();
@@ -120,8 +121,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
-        public void SpectrogramFingerprinter_HasFrameCount()
+        [Fact(Timeout = 60000)]
+        public async Task SpectrogramFingerprinter_HasFrameCount()
         {
             // Arrange
             var fingerprinter = new SpectrogramFingerprinter<float>();
@@ -134,8 +135,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.FrameCount > 0, "Should have frame count");
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_IdenticalFingerprints_HighSimilarity()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_IdenticalFingerprints_HighSimilarity()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -149,8 +150,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(1.0, similarity, 3); // Should be exactly 1.0
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_DifferentFingerprints_LowerSimilarity()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_DifferentFingerprints_LowerSimilarity()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -177,8 +178,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(similarity >= 0.0, "Similarity should be >= 0.0");
         }
 
-        [Fact]
-        public void ChromaprintFingerprinter_SimilaritySymmetric()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaprintFingerprinter_SimilaritySymmetric()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();
@@ -205,8 +206,8 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(sim1to2, sim2to1, 6);
         }
 
-        [Fact]
-        public void AudioFingerprint_HasRequiredProperties()
+        [Fact(Timeout = 60000)]
+        public async Task AudioFingerprint_HasRequiredProperties()
         {
             // Arrange
             var fingerprinter = new ChromaprintFingerprinter<float>();

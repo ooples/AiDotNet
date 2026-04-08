@@ -5,6 +5,7 @@ using Xunit;
 using Xunit.Abstractions;
 #if !NET462
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Threading.Tasks;
 #endif
 
 namespace AiDotNet.Tests;
@@ -19,7 +20,7 @@ public class DirectGpuCorrectnessTests
     }
 
 #if !NET462
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpu_ElementwiseOps_MatchCpu()
     {
@@ -66,7 +67,7 @@ public class DirectGpuCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpu_UnaryOps_MatchCpu()
     {
@@ -104,7 +105,7 @@ public class DirectGpuCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpu_Activations_MatchCpu()
     {
@@ -130,7 +131,7 @@ public class DirectGpuCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpu_Reductions_MatchCpu()
     {
@@ -157,7 +158,7 @@ public class DirectGpuCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
     public void DirectGpu_Softmax_MatchCpu()
     {
@@ -178,8 +179,8 @@ public class DirectGpuCorrectnessTests
         }
     }
 #else
-    [Fact]
-    public void DirectGpuCorrectness_NotAvailableOnNet462()
+    [Fact(Timeout = 60000)]
+    public async Task DirectGpuCorrectness_NotAvailableOnNet462()
     {
         _output.WriteLine("DirectGpu correctness tests not available on .NET Framework 4.6.2");
         Assert.True(true);

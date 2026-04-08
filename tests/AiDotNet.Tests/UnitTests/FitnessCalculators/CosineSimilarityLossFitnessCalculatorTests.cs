@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
 {
@@ -14,8 +15,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
     /// </summary>
     public class CosineSimilarityLossFitnessCalculatorTests
     {
-        [Fact]
-        public void Constructor_WithDefaultDataSetType_UsesValidation()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultDataSetType_UsesValidation()
         {
             // Arrange & Act
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter); // Cosine similarity loss: lower is better
         }
 
-        [Fact]
-        public void Constructor_WithTrainingDataSetType_UsesTraining()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithTrainingDataSetType_UsesTraining()
         {
             // Arrange & Act
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithIdenticalVectors_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithIdenticalVectors_ReturnsZero()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithOppositeVectors_ReturnsTwo()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithOppositeVectors_ReturnsTwo()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPerpendicularVectors_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPerpendicularVectors_ReturnsOne()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -91,8 +92,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithSameDirectionDifferentMagnitude_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithSameDirectionDifferentMagnitude_ReturnsZero()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -110,8 +111,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPartialAlignment_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPartialAlignment_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -132,8 +133,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.29289321881345248, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithAllZeros_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithAllZeros_ReturnsOne()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.999);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -173,8 +174,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -191,8 +192,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0f, result, 5);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -202,8 +203,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Validation);
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10); // Perfect alignment
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Testing);
@@ -244,8 +245,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10); // Perpendicular vectors
         }
 
-        [Fact]
-        public void IsHigherScoreBetter_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsHigherScoreBetter_ReturnsFalse()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -254,8 +255,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -269,8 +270,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result); // Lower score is better for loss functions
         }
 
-        [Fact]
-        public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(result); // Higher score is worse for loss functions
         }
 
-        [Fact]
-        public void CalculateFitnessScore_DocumentSimilarityScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_DocumentSimilarityScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating document vector comparison
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -308,8 +309,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.016744432707480161, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNegativeValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNegativeValues_HandlesCorrectly()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -330,8 +331,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithSmallAngles_ReturnsSmallLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithSmallAngles_ReturnsSmallLoss()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -350,8 +351,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result < 0.01);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithLargeAngles_ReturnsLargeLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithLargeAngles_ReturnsLargeLoss()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -370,8 +371,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result > 1.9);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_RecommendationSystemScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_RecommendationSystemScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating user preference vectors
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -390,8 +391,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result < 0.1); // Less than 10% loss
         }
 
-        [Fact]
-        public void CalculateFitnessScore_ImageRetrievalScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_ImageRetrievalScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating image feature vectors
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -411,8 +412,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.0 && result <= 2.0);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -430,8 +431,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.0 && result <= 2.0);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_MagnitudeInvariance_VerifiesProperty()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_MagnitudeInvariance_VerifiesProperty()
         {
             // Arrange
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -455,8 +456,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(result1, result2, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_TextEmbeddingScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_TextEmbeddingScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating word/sentence embeddings
             var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>();

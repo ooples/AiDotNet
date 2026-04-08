@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -56,8 +57,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>();
@@ -66,8 +67,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -112,8 +113,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Single Sample Validation Tests
 
-    [Fact]
-    public void Validate_EachValidationSetHasExactlyOneSample()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EachValidationSetHasExactlyOneSample()
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -134,8 +135,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_EachSampleUsedExactlyOnceForValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EachSampleUsedExactlyOnceForValidation()
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -171,8 +172,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Training Set Size Tests
 
-    [Fact]
-    public void Validate_TrainingSetHasNMinusOneSamples()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainingSetHasNMinusOneSamples()
     {
         // Arrange
         int numSamples = 10;
@@ -198,8 +199,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndValidation()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -225,8 +226,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_TrainAndValidationCoverAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainAndValidationCoverAllIndices()
     {
         // Arrange
         int numSamples = 10;
@@ -255,8 +256,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -287,8 +288,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact]
-    public void Validate_WithShuffle_StillUsesEachSampleOnce()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithShuffle_StillUsesEachSampleOnce()
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
@@ -319,8 +320,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_WithSameSeed_ProducesReproducibleResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -358,8 +359,8 @@ public class LeaveOneOutCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Validate_WithTwoSamples_CreatesTwoFolds()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithTwoSamples_CreatesTwoFolds()
     {
         // Arrange - Minimum meaningful LOO
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(

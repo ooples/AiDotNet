@@ -2,13 +2,14 @@ using AiDotNet.FederatedLearning.Selection;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class ClientSelectionStrategyTests
 {
-    [Fact]
-    public void StratifiedSelection_ReducesGroupAllocations_WhenTooManyGroups()
+    [Fact(Timeout = 60000)]
+    public async Task StratifiedSelection_ReducesGroupAllocations_WhenTooManyGroups()
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
@@ -37,8 +38,8 @@ public class ClientSelectionStrategyTests
         Assert.Equal(selected.Count, selectedGroups.Count);
     }
 
-    [Fact]
-    public void AvailabilityAwareSelection_FallsBackToHighestAvailability_WhenRandomEligibilityInsufficient()
+    [Fact(Timeout = 60000)]
+    public async Task AvailabilityAwareSelection_FallsBackToHighestAvailability_WhenRandomEligibilityInsufficient()
     {
         var strategy = new AvailabilityAwareClientSelectionStrategy(availabilityThreshold: 0.9);
 
@@ -63,8 +64,8 @@ public class ClientSelectionStrategyTests
         Assert.Contains(13, selected);
     }
 
-    [Fact]
-    public void ClusteredSelection_UsesEmbeddings_WhenProvided()
+    [Fact(Timeout = 60000)]
+    public async Task ClusteredSelection_UsesEmbeddings_WhenProvided()
     {
         var strategy = new ClusteredClientSelectionStrategy(clusterCount: 2, iterations: 2);
 
@@ -92,8 +93,8 @@ public class ClientSelectionStrategyTests
         Assert.Contains(selected, id => id == 3 || id == 4);
     }
 
-    [Fact]
-    public void WeightedRandomSelection_FallsBackToUniform_WhenNoPositiveWeights()
+    [Fact(Timeout = 60000)]
+    public async Task WeightedRandomSelection_FallsBackToUniform_WhenNoPositiveWeights()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();
 
@@ -118,8 +119,8 @@ public class ClientSelectionStrategyTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
-    public void WeightedRandomSelection_ReturnsAllCandidates_WhenDesiredExceedsCount()
+    [Fact(Timeout = 60000)]
+    public async Task WeightedRandomSelection_ReturnsAllCandidates_WhenDesiredExceedsCount()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();
 

@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
@@ -28,8 +29,8 @@ public class GQAInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_KVWeightDimensionReduced()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_KVWeightDimensionReduced()
     {
         int embDim = 64;
         int numHeads = 8;
@@ -55,8 +56,8 @@ public class GQAInferenceIntegrationTests
         Assert.Equal(qWeights.Shape[1] / 4, kWeights.Shape[1]);
     }
 
-    [Fact]
-    public void GQA_MemorySavings_VerifyParameterCount()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_MemorySavings_VerifyParameterCount()
     {
         int embDim = 256;
         int numHeads = 32;
@@ -78,8 +79,8 @@ public class GQAInferenceIntegrationTests
         Assert.True(gqaParams < mhaParams, "GQA should have fewer params than MHA");
     }
 
-    [Fact]
-    public void GQA_WithRoPE_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithRoPE_ProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;
@@ -96,8 +97,8 @@ public class GQAInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_WithALiBi_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GQA_WithALiBi_ProducesValidOutput()
     {
         int seqLen = 8;
         int embDim = 64;

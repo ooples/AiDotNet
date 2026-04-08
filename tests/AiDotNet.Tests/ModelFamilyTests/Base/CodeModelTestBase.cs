@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,8 +17,8 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // Code model outputs (embeddings, token probabilities) must be finite.
     // =====================================================
 
-    [Fact]
-    public void CodeOutput_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task CodeOutput_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -39,8 +40,8 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // Different code inputs should produce different embeddings/outputs.
     // =====================================================
 
-    [Fact]
-    public void DifferentCode_DifferentOutputs()
+    [Fact(Timeout = 60000)]
+    public async Task DifferentCode_DifferentOutputs()
     {
         var network = CreateNetwork();
 
@@ -69,8 +70,8 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     // An empty code file is a valid edge case.
     // =====================================================
 
-    [Fact]
-    public void EmptyInput_ShouldNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);

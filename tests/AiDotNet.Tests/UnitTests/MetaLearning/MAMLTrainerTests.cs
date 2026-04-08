@@ -8,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
@@ -58,8 +59,8 @@ public class MAMLTrainerTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_ValidInputs_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -72,8 +73,8 @@ public class MAMLTrainerTests
         Assert.Equal(MetaLearningAlgorithmType.MAML, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void Constructor_NullOptions_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_NullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -84,8 +85,8 @@ public class MAMLTrainerTests
 
     #region MetaTrain Tests
 
-    [Fact]
-    public void MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
+    [Fact(Timeout = 60000)]
+    public async Task MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -100,8 +101,8 @@ public class MAMLTrainerTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
-    public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
+    [Fact(Timeout = 60000)]
+    public async Task MetaTrain_WithMultipleTasks_ReturnsValidLoss()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -117,8 +118,8 @@ public class MAMLTrainerTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void MetaTrain_NullTaskBatch_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task MetaTrain_NullTaskBatch_ThrowsArgumentException()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -128,8 +129,8 @@ public class MAMLTrainerTests
         Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
     }
 
-    [Fact]
-    public void MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
     {
         // Arrange
         var emptyTasks = Array.Empty<IMetaLearningTask<double, Tensor<double>, Tensor<double>>>();
@@ -144,8 +145,8 @@ public class MAMLTrainerTests
 
     #region Adapt Tests
 
-    [Fact]
-    public void Adapt_ValidTask_ReturnsAdaptedModel()
+    [Fact(Timeout = 60000)]
+    public async Task Adapt_ValidTask_ReturnsAdaptedModel()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -159,8 +160,8 @@ public class MAMLTrainerTests
         Assert.NotNull(adaptedModel);
     }
 
-    [Fact]
-    public void Adapt_NullTask_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Adapt_NullTask_ThrowsArgumentNullException()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -174,8 +175,8 @@ public class MAMLTrainerTests
 
     #region FirstOrder Approximation Tests
 
-    [Fact]
-    public void MetaTrain_WithFirstOrderApproximation_ReturnsValidLoss()
+    [Fact(Timeout = 60000)]
+    public async Task MetaTrain_WithFirstOrderApproximation_ReturnsValidLoss()
     {
         // Arrange
         var mockModel = CreateMockModel();
@@ -203,8 +204,8 @@ public class MAMLTrainerTests
 
     #region Options Tests
 
-    [Fact]
-    public void Options_IsValid_ReturnsTrueForValidOptions()
+    [Fact(Timeout = 60000)]
+    public async Task Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -216,8 +217,8 @@ public class MAMLTrainerTests
         Assert.True(isValid);
     }
 
-    [Fact]
-    public void Options_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 60000)]
+    public async Task Options_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var options = CreateDefaultOptions();

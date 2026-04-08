@@ -1,12 +1,13 @@
 using AiDotNet.Clustering.SpatialIndex;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class SpatialIndexIntegrationTests
 {
-    [Fact]
-    public void KDTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
+    [Fact(Timeout = 120000)]
+    public async Task KDTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
     {
         var data = CreateSimpleData();
         var tree = new KDTree<double>();
@@ -21,8 +22,8 @@ public class SpatialIndexIntegrationTests
         Assert.True(results[0].Distance <= results[1].Distance);
     }
 
-    [Fact]
-    public void KDTree_QueryRadius_FindsExpectedPoints()
+    [Fact(Timeout = 120000)]
+    public async Task KDTree_QueryRadius_FindsExpectedPoints()
     {
         var data = CreateSimpleData();
         var tree = new KDTree<double>();
@@ -43,8 +44,8 @@ public class SpatialIndexIntegrationTests
         Assert.Contains(2, indices);
     }
 
-    [Fact]
-    public void KDTree_QueryRadiusIndices_MatchesRadiusQuery()
+    [Fact(Timeout = 120000)]
+    public async Task KDTree_QueryRadiusIndices_MatchesRadiusQuery()
     {
         var data = CreateSimpleData();
         var tree = new KDTree<double>();
@@ -68,8 +69,8 @@ public class SpatialIndexIntegrationTests
         }
     }
 
-    [Fact]
-    public void KDTree_QueryBeforeBuild_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task KDTree_QueryBeforeBuild_Throws()
     {
         var tree = new KDTree<double>();
         var query = CreateQueryPoint();
@@ -78,8 +79,8 @@ public class SpatialIndexIntegrationTests
         Assert.Throws<InvalidOperationException>(() => tree.QueryRadius(query, 1.0));
     }
 
-    [Fact]
-    public void BallTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
+    [Fact(Timeout = 120000)]
+    public async Task BallTree_BuildAndQueryNearest_ReturnsExpectedNeighbors()
     {
         var data = CreateSimpleData();
         var tree = new BallTree<double>();
@@ -94,8 +95,8 @@ public class SpatialIndexIntegrationTests
         Assert.True(results[0].Distance <= results[1].Distance);
     }
 
-    [Fact]
-    public void BallTree_QueryRadius_FindsExpectedPoints()
+    [Fact(Timeout = 120000)]
+    public async Task BallTree_QueryRadius_FindsExpectedPoints()
     {
         var data = CreateSimpleData();
         var tree = new BallTree<double>();
@@ -116,8 +117,8 @@ public class SpatialIndexIntegrationTests
         Assert.Contains(2, indices);
     }
 
-    [Fact]
-    public void BallTree_QueryBeforeBuild_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BallTree_QueryBeforeBuild_Throws()
     {
         var tree = new BallTree<double>();
         var query = CreateQueryPoint();

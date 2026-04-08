@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers;
 
@@ -14,8 +15,8 @@ public class MixtureOfExpertsLayerTests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithValidParameters_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -33,8 +34,8 @@ public class MixtureOfExpertsLayerTests
         Assert.True(moe.ParameterCount > 0);
     }
 
-    [Fact]
-    public void Constructor_WithEmptyExpertList_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithEmptyExpertList_ThrowsArgumentException()
     {
         // Arrange
         var experts = new List<ILayer<float>>();
@@ -45,8 +46,8 @@ public class MixtureOfExpertsLayerTests
             new MixtureOfExpertsLayer<float>(experts, router, new[] { 10 }, new[] { 10 }));
     }
 
-    [Fact]
-    public void Constructor_WithNullRouter_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullRouter_ThrowsArgumentNullException()
     {
         // Arrange
         var experts = CreateTestExperts(2, 10, 10);
@@ -58,8 +59,8 @@ public class MixtureOfExpertsLayerTests
 #pragma warning restore CS8625
     }
 
-    [Fact]
-    public void Constructor_WithInvalidTopK_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithInvalidTopK_ThrowsArgumentException()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -73,8 +74,8 @@ public class MixtureOfExpertsLayerTests
                 topK: 5)); // TopK > num experts
     }
 
-    [Fact]
-    public void Constructor_WithLoadBalancing_InitializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithLoadBalancing_InitializesCorrectly()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -98,8 +99,8 @@ public class MixtureOfExpertsLayerTests
 
     #region Forward Pass Tests
 
-    [Fact]
-    public void Forward_WithValidInput_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_WithValidInput_ReturnsCorrectShape()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -119,8 +120,8 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(10, output.Shape[1]); // Output dimension
     }
 
-    [Fact]
-    public void Forward_AllExperts_ProducesNonZeroOutput()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_AllExperts_ProducesNonZeroOutput()
     {
         // Arrange
         var experts = CreateTestExperts(3, 5, 5);
@@ -149,8 +150,8 @@ public class MixtureOfExpertsLayerTests
         Assert.True(hasNonZero, "MoE should produce non-zero output");
     }
 
-    [Fact]
-    public void Forward_TopK2_ActivatesOnlyTopExperts()
+    [Fact(Timeout = 120000)]
+    public async Task Forward_TopK2_ActivatesOnlyTopExperts()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -182,8 +183,8 @@ public class MixtureOfExpertsLayerTests
     #region Parameter Management Tests
 
 
-    [Fact]
-    public void GetParameters_ReturnsAllParameters()
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_ReturnsAllParameters()
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);
@@ -200,8 +201,8 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(moe.ParameterCount, parameters.Length);
     }
 
-    [Fact]
-    public void SetParameters_UpdatesAllParameters()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_UpdatesAllParameters()
     {
         // Arrange
         var experts = CreateTestExperts(2, 5, 5);
@@ -223,8 +224,8 @@ public class MixtureOfExpertsLayerTests
         }
     }
 
-    [Fact]
-    public void SetParameters_WithIncorrectLength_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_WithIncorrectLength_ThrowsArgumentException()
     {
         // Arrange
         var experts = CreateTestExperts(2, 5, 5);
@@ -239,8 +240,8 @@ public class MixtureOfExpertsLayerTests
         Assert.Throws<ArgumentException>(() => moe.SetParameters(wrongParams));
     }
 
-    [Fact]
-    public void ParameterCount_IncludesRouterAndAllExperts()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_IncludesRouterAndAllExperts()
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);
@@ -261,8 +262,8 @@ public class MixtureOfExpertsLayerTests
 
     #region Load Balancing Tests
 
-    [Fact]
-    public void ComputeAuxiliaryLoss_WithLoadBalancingEnabled_ReturnsNonZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeAuxiliaryLoss_WithLoadBalancingEnabled_ReturnsNonZeroLoss()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -285,8 +286,8 @@ public class MixtureOfExpertsLayerTests
         Assert.True(auxLoss >= 0.0f, "Auxiliary loss should be non-negative");
     }
 
-    [Fact]
-    public void ComputeAuxiliaryLoss_WithLoadBalancingDisabled_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeAuxiliaryLoss_WithLoadBalancingDisabled_ReturnsZero()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -306,8 +307,8 @@ public class MixtureOfExpertsLayerTests
         Assert.Equal(0.0f, auxLoss);
     }
 
-    [Fact]
-    public void ComputeAuxiliaryLoss_BeforeForward_ThrowsInvalidOperationException()
+    [Fact(Timeout = 120000)]
+    public async Task ComputeAuxiliaryLoss_BeforeForward_ThrowsInvalidOperationException()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -321,8 +322,8 @@ public class MixtureOfExpertsLayerTests
         Assert.Throws<InvalidOperationException>(() => moe.ComputeAuxiliaryLoss());
     }
 
-    [Fact]
-    public void GetAuxiliaryLossDiagnostics_AfterForward_ReturnsStatistics()
+    [Fact(Timeout = 120000)]
+    public async Task GetAuxiliaryLossDiagnostics_AfterForward_ReturnsStatistics()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -354,8 +355,8 @@ public class MixtureOfExpertsLayerTests
         }
     }
 
-    [Fact]
-    public void GetAuxiliaryLossDiagnostics_BeforeForward_ReturnsStatusMessage()
+    [Fact(Timeout = 120000)]
+    public async Task GetAuxiliaryLossDiagnostics_BeforeForward_ReturnsStatusMessage()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -373,8 +374,8 @@ public class MixtureOfExpertsLayerTests
         Assert.True(diagnostics.ContainsKey("status"));
     }
 
-    [Fact]
-    public void UseAuxiliaryLoss_CanBeToggledOnAndOff()
+    [Fact(Timeout = 120000)]
+    public async Task UseAuxiliaryLoss_CanBeToggledOnAndOff()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -394,8 +395,8 @@ public class MixtureOfExpertsLayerTests
         Assert.True(moe.UseAuxiliaryLoss);
     }
 
-    [Fact]
-    public void AuxiliaryLossWeight_CanBeModified()
+    [Fact(Timeout = 120000)]
+    public async Task AuxiliaryLossWeight_CanBeModified()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -418,8 +419,8 @@ public class MixtureOfExpertsLayerTests
     #region Integration Tests
 
 
-    [Fact]
-    public void EndToEnd_TopKRouting_BalancesExpertUsage()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_TopKRouting_BalancesExpertUsage()
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
@@ -456,8 +457,8 @@ public class MixtureOfExpertsLayerTests
             $"Expected at least 2 experts to be used with load balancing, but only {expertsUsed} were used");
     }
 
-    [Fact]
-    public void EndToEnd_SoftRouting_AllExpertsContribute()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_SoftRouting_AllExpertsContribute()
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);

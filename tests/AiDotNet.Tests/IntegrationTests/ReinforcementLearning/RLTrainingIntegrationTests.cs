@@ -6,13 +6,14 @@ using AiDotNet.ReinforcementLearning.Agents.DQN;
 using AiDotNet.ReinforcementLearning.Agents.PPO;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
 public class RLTrainingIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_DqnAgent_RunsEpisodesAndInvokesCallbacks()
     {
         var environment = new DeterministicBanditEnvironment<double>(
@@ -75,7 +76,7 @@ public class RLTrainingIntegrationTests
         Assert.Equal(environment.ActionSpaceSize, action.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_PpoAgent_RunsEpisodesAndInvokesCallbacks()
     {
         var environment = new DeterministicBanditEnvironment<double>(

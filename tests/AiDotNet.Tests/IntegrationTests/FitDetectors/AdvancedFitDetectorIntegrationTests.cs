@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.FitDetectors;
 
@@ -61,8 +62,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region AdaptiveFitDetector Tests
 
-    [Fact]
-    public void AdaptiveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -71,8 +72,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void AdaptiveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new AdaptiveFitDetectorOptions();
@@ -84,8 +85,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void AdaptiveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -100,8 +101,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void AdaptiveFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new AdaptiveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -119,8 +120,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region BayesianFitDetector Tests
 
-    [Fact]
-    public void BayesianFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -129,8 +130,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void BayesianFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new BayesianFitDetectorOptions();
@@ -142,8 +143,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void BayesianFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -158,8 +159,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void BayesianFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
@@ -177,8 +178,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region CalibratedProbabilityFitDetector Tests
 
-    [Fact]
-    public void CalibratedProbabilityFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CalibratedProbabilityFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -187,8 +188,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void CalibratedProbabilityFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task CalibratedProbabilityFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new CalibratedProbabilityFitDetectorOptions();
@@ -200,8 +201,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void CalibratedProbabilityFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task CalibratedProbabilityFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new CalibratedProbabilityFitDetector<double, Matrix<double>, Vector<double>>();
@@ -230,8 +231,8 @@ public class AdvancedFitDetectorIntegrationTests
         };
     }
 
-    [Fact]
-    public void EnsembleFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
     {
         // Arrange
         var detectors = CreateBaseDetectors();
@@ -243,8 +244,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void EnsembleFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var detectors = CreateBaseDetectors();
@@ -257,8 +258,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void EnsembleFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detectors = CreateBaseDetectors();
@@ -274,8 +275,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void EnsembleFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detectors = CreateBaseDetectors();
@@ -294,8 +295,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region FeatureImportanceFitDetector Tests
 
-    [Fact]
-    public void FeatureImportanceFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new FeatureImportanceFitDetector<double, Matrix<double>, Vector<double>>();
@@ -304,8 +305,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void FeatureImportanceFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new FeatureImportanceFitDetectorOptions();
@@ -317,8 +318,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void FeatureImportanceFitDetector_DetectFit_WithoutModel_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task FeatureImportanceFitDetector_DetectFit_WithoutModel_ThrowsException()
     {
         // Arrange
         var detector = new FeatureImportanceFitDetector<double, Matrix<double>, Vector<double>>();
@@ -334,8 +335,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region GaussianProcessFitDetector Tests
 
-    [Fact]
-    public void GaussianProcessFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -344,8 +345,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void GaussianProcessFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new GaussianProcessFitDetectorOptions();
@@ -357,8 +358,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void GaussianProcessFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -373,8 +374,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void GaussianProcessFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new GaussianProcessFitDetector<double, Matrix<double>, Vector<double>>();
@@ -392,8 +393,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region GradientBoostingFitDetector Tests
 
-    [Fact]
-    public void GradientBoostingFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoostingFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new GradientBoostingFitDetector<double, Matrix<double>, Vector<double>>();
@@ -402,8 +403,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void GradientBoostingFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoostingFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new GradientBoostingFitDetectorOptions();
@@ -415,8 +416,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void GradientBoostingFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoostingFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new GradientBoostingFitDetector<double, Matrix<double>, Vector<double>>();
@@ -431,8 +432,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void GradientBoostingFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task GradientBoostingFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new GradientBoostingFitDetector<double, Matrix<double>, Vector<double>>();
@@ -450,8 +451,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region HybridFitDetector Tests
 
-    [Fact]
-    public void HybridFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task HybridFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
     {
         // Arrange
         var residualDetector = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -465,8 +466,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void HybridFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task HybridFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var residualDetector = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -481,8 +482,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void HybridFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task HybridFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var residualDetector = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -500,8 +501,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void HybridFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task HybridFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var residualDetector = new ResidualAnalysisFitDetector<double, Matrix<double>, Vector<double>>();
@@ -522,8 +523,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region NeuralNetworkFitDetector Tests
 
-    [Fact]
-    public void NeuralNetworkFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
         var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -532,8 +533,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void NeuralNetworkFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
         var options = new NeuralNetworkFitDetectorOptions();
@@ -545,8 +546,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
-    public void NeuralNetworkFitDetector_DetectFit_WithValidData_ReturnsValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -561,8 +562,8 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
-    public void NeuralNetworkFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
@@ -580,8 +581,8 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact]
-    public void AllAdvancedDetectors_WithSameData_ProduceValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllAdvancedDetectors_WithSameData_ProduceValidResults()
     {
         // Arrange
         var evaluationData = CreateGoodFitData();
@@ -613,8 +614,8 @@ public class AdvancedFitDetectorIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllAdvancedDetectors_ReturnValidConfidenceLevels()
+    [Fact(Timeout = 120000)]
+    public async Task AllAdvancedDetectors_ReturnValidConfidenceLevels()
     {
         // Arrange
         var evaluationData = CreateGoodFitData();

@@ -4,13 +4,14 @@ using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Enums;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringEvaluationIntegrationTests
 {
-    [Fact]
-    public void ElbowMethod_ComputesElbowAndWcss()
+    [Fact(Timeout = 120000)]
+    public async Task ElbowMethod_ComputesElbowAndWcss()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var method = new ElbowMethod<double>(randomState: 42);
@@ -27,8 +28,8 @@ public class ClusteringEvaluationIntegrationTests
         }
     }
 
-    [Fact]
-    public void GapStatistic_ComputesOptimalKAndValues()
+    [Fact(Timeout = 120000)]
+    public async Task GapStatistic_ComputesOptimalKAndValues()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var method = new GapStatistic<double>(numReferences: 3, randomState: 7);
@@ -48,8 +49,8 @@ public class ClusteringEvaluationIntegrationTests
         }
     }
 
-    [Fact]
-    public void StabilityValidation_EvaluateRange_ReturnsResults()
+    [Fact(Timeout = 120000)]
+    public async Task StabilityValidation_EvaluateRange_ReturnsResults()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var validator = new StabilityValidation<double>(numSubsamples: 5, subsampleFraction: 0.75, randomState: 19);
@@ -67,8 +68,8 @@ public class ClusteringEvaluationIntegrationTests
         }
     }
 
-    [Fact]
-    public void BootstrapValidation_Evaluate_ReturnsConfidenceIntervals()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapValidation_Evaluate_ReturnsConfidenceIntervals()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var validator = new BootstrapValidation<double>(numBootstraps: 5, randomState: 11);
@@ -82,8 +83,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.True(result.Silhouette.Mean <= result.Silhouette.Upper);
     }
 
-    [Fact]
-    public void BootstrapValidation_ComputeAssignmentConfidence_ReturnsScoresInRange()
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapValidation_ComputeAssignmentConfidence_ReturnsScoresInRange()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var validator = new BootstrapValidation<double>(numBootstraps: 5, randomState: 11);
@@ -97,8 +98,8 @@ public class ClusteringEvaluationIntegrationTests
         }
     }
 
-    [Fact]
-    public void ClusteringEvaluator_EvaluateAll_ReturnsMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringEvaluator_EvaluateAll_ReturnsMetrics()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var kmeans = new KMeans<double>(new KMeansOptions<double>
@@ -123,8 +124,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.Equal(result.NumClusters, result.ClusterSizes.Length);
     }
 
-    [Fact]
-    public void ClusteringEvaluator_CompareClusterings_RanksResults()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringEvaluator_CompareClusterings_RanksResults()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var k2 = new KMeans<double>(new KMeansOptions<double>
@@ -164,8 +165,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.Contains("K3", names);
     }
 
-    [Fact]
-    public void ClusteringEvaluator_FindOptimalK_ReturnsRecommendations()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringEvaluator_FindOptimalK_ReturnsRecommendations()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var evaluator = new ClusteringEvaluator<double>();
@@ -191,8 +192,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.True(analysis.Recommendations.Count > 0);
     }
 
-    [Fact]
-    public void ClusteringAutoML_Fit_ReturnsBestResult()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringAutoML_Fit_ReturnsBestResult()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var options = new ClusteringAutoMLOptions
@@ -216,8 +217,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.True(best.Evaluation.NumClusters >= 2);
     }
 
-    [Fact]
-    public void ClusteringGridSearch_Search_ReturnsBestResult()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringGridSearch_Search_ReturnsBestResult()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var gridSearch = new ClusteringGridSearch<double>();
@@ -250,8 +251,8 @@ public class ClusteringEvaluationIntegrationTests
         Assert.Equal("Silhouette Score", result.PrimaryMetric);
     }
 
-    [Fact]
-    public void ClusteringGridSearch_SearchCV_ReturnsBestResult()
+    [Fact(Timeout = 120000)]
+    public async Task ClusteringGridSearch_SearchCV_ReturnsBestResult()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 6);
         var gridSearch = new ClusteringGridSearch<double>();

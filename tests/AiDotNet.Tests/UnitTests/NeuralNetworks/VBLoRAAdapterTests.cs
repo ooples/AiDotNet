@@ -5,6 +5,7 @@ using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
@@ -25,8 +26,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             VBLoRAAdapter<double>.ClearBanks();
         }
 
-        [Fact]
-        public void DenseLayerForward_WithNonZeroInput_ProducesNonZeroOutput()
+        [Fact(Timeout = 120000)]
+        public async Task DenseLayerForward_WithNonZeroInput_ProducesNonZeroOutput()
         {
             var layer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
             var input = new Tensor<double>(new[] { 1, 10 });
@@ -40,8 +41,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Contains(outputVector, v => v != 0.0);
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_InitializesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(adapter.IsBaseLayerFrozen);
         }
 
-        [Fact]
-        public void Constructor_CreatesSharedBanks()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_CreatesSharedBanks()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -88,8 +89,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, bankB.Columns);  // outputSize
         }
 
-        [Fact]
-        public void Constructor_WithSameBankKey_SharesBanks()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithSameBankKey_SharesBanks()
         {
             // Arrange
             var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -127,8 +128,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void Constructor_WithDifferentBankKeys_CreatesSeparateBanks()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithDifferentBankKeys_CreatesSeparateBanks()
         {
             // Arrange
             var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -172,8 +173,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.True(foundDifference, "Banks with different keys should have different random initializations");
         }
 
-        [Fact]
-        public void BankIndices_ReturnsCorrectLength()
+        [Fact(Timeout = 120000)]
+        public async Task BankIndices_ReturnsCorrectLength()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -190,8 +191,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(4, adapter.BankIndicesB.Length);
         }
 
-        [Fact]
-        public void BankIndices_WithCustomIndices_UsesProvidedValues()
+        [Fact(Timeout = 120000)]
+        public async Task BankIndices_WithCustomIndices_UsesProvidedValues()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -212,8 +213,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(customIndicesB, adapter.BankIndicesB);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidBankSizeA_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithInvalidBankSizeA_ThrowsArgumentException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -226,8 +227,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 10));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidBankSizeB_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithInvalidBankSizeB_ThrowsArgumentException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -240,8 +241,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 0));
         }
 
-        [Fact]
-        public void Constructor_WithRankExceedingBankSizeA_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithRankExceedingBankSizeA_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -254,8 +255,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 10));
         }
 
-        [Fact]
-        public void Constructor_WithRankExceedingBankSizeB_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithRankExceedingBankSizeB_ThrowsArgumentException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -268,8 +269,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeB: 2));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidIndicesA_ThrowsArgumentException()
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithInvalidIndicesA_ThrowsArgumentException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankIndicesA: invalidIndices));
         }
 
-        [Fact]
-        public void Forward_ProducesCorrectOutputShape()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_ProducesCorrectOutputShape()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -305,8 +306,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, output.Shape[1]);
         }
 
-        [Fact]
-        public void Forward_CombinesBaseAndVBLoRAOutputs()
+        [Fact(Timeout = 120000)]
+        public async Task Forward_CombinesBaseAndVBLoRAOutputs()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -333,8 +334,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(baseOutput.Shape[1], adapterOutput.Shape[1]);
         }
 
-        [Fact]
-        public void MergeToOriginalLayer_ProducesValidDenseLayer()
+        [Fact(Timeout = 120000)]
+        public async Task MergeToOriginalLayer_ProducesValidDenseLayer()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -354,8 +355,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, mergedLayer.GetOutputShape()[0]);
         }
 
-        [Fact]
-        public void MergedLayer_ProducesSameOutputAsAdapter()
+        [Fact(Timeout = 120000)]
+        public async Task MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -387,8 +388,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
         }
 
-        [Fact]
-        public void ClearBanks_WithSpecificKey_RemovesOnlyThatBank()
+        [Fact(Timeout = 120000)]
+        public async Task ClearBanks_WithSpecificKey_RemovesOnlyThatBank()
         {
             // Arrange
             var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -419,8 +420,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.NotNull(bank2A);
         }
 
-        [Fact]
-        public void ClearBanks_WithNullKey_RemovesAllBanks()
+        [Fact(Timeout = 120000)]
+        public async Task ClearBanks_WithNullKey_RemovesAllBanks()
         {
             // Arrange
             var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
@@ -451,8 +452,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Null(bank2A);
         }
 
-        [Fact]
-        public void ParameterCount_MatchesLoRAParameterCount()
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_MatchesLoRAParameterCount()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);

@@ -5,6 +5,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -22,8 +23,8 @@ public class RegressionModelMathTests
 {
     #region Direct Model Training — verifies each model type learns correctly
 
-    [Fact]
-    public void SimpleRegression_FitsLinearData_AccurateCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_FitsLinearData_AccurateCoefficients()
     {
         // y = 3x + 2 with no noise
         var x = new Matrix<double>(50, 1);
@@ -54,8 +55,8 @@ public class RegressionModelMathTests
         Assert.InRange(recoveredIntercept, 1.5, 2.5);   // true intercept: 2.0
     }
 
-    [Fact]
-    public void MultipleRegression_FitsMultiVariateData_HighR2()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_FitsMultiVariateData_HighR2()
     {
         // y = 2*x1 + 3*x2 - x3 + 5
         var (x, y) = CreateLinearData(100, new[] { 2.0, 3.0, -1.0 }, intercept: 5.0, noise: 0.01, seed: 42);
@@ -69,8 +70,8 @@ public class RegressionModelMathTests
             $"MultipleRegression R²={r2:F6} on low-noise linear data should be > 0.999");
     }
 
-    [Fact]
-    public void RidgeRegression_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 1.5, -2.0, 0.5, 3.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -83,8 +84,8 @@ public class RegressionModelMathTests
             $"RidgeRegression R²={r2:F6} on moderate-noise linear data should be > 0.95");
     }
 
-    [Fact]
-    public void LassoRegression_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task LassoRegression_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 1.5, -2.0, 0.5, 3.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -97,8 +98,8 @@ public class RegressionModelMathTests
             $"LassoRegression R²={r2:F6} on moderate-noise linear data should be > 0.90");
     }
 
-    [Fact]
-    public void ElasticNetRegression_FitsLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNetRegression_FitsLinearData_ReasonableR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 1.5, -2.0, 0.5, 3.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
@@ -111,8 +112,8 @@ public class RegressionModelMathTests
             $"ElasticNetRegression R²={r2:F6} on moderate-noise linear data should be > 0.85");
     }
 
-    [Fact]
-    public void PolynomialRegression_FitsQuadraticData_HighR2()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_FitsQuadraticData_HighR2()
     {
         // y = 2*x^2 - 3*x + 1
         var x = new Matrix<double>(60, 1);
@@ -135,8 +136,8 @@ public class RegressionModelMathTests
             $"PolynomialRegression R²={r2:F6} on quadratic data should be > 0.99");
     }
 
-    [Fact]
-    public void DecisionTreeRegression_FitsNonLinearData_ReasonableR2()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_FitsNonLinearData_ReasonableR2()
     {
         // Non-linear: y = sin(x1) + x2^2
         // Use separate train and test sets to evaluate on holdout data
@@ -152,8 +153,8 @@ public class RegressionModelMathTests
             $"DecisionTreeRegression R²={r2:F6} on holdout non-linear data should be > 0.50");
     }
 
-    [Fact]
-    public void WeightedRegression_FitsData_HighR2()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedRegression_FitsData_HighR2()
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.0, 3.0 }, intercept: 0.5, noise: 0.3, seed: 42);
 
@@ -176,8 +177,8 @@ public class RegressionModelMathTests
 
     #region Regression Serialize/Deserialize Round-Trip
 
-    [Fact]
-    public void SimpleRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task SimpleRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(50, new[] { 3.0 }, intercept: 2.0, noise: 0.0, seed: 42);
 
@@ -195,8 +196,8 @@ public class RegressionModelMathTests
         AssertPredictionsMatch(original, restoredPreds, "SimpleRegression");
     }
 
-    [Fact]
-    public void MultipleRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, 3.0, -1.0 }, intercept: 5.0, noise: 0.01, seed: 42);
 
@@ -214,8 +215,8 @@ public class RegressionModelMathTests
         AssertPredictionsMatch(original, restoredPreds, "MultipleRegression");
     }
 
-    [Fact]
-    public void RidgeRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 1.5, -2.0, 0.5 }, intercept: 1.0, noise: 0.3, seed: 42);
 
@@ -233,8 +234,8 @@ public class RegressionModelMathTests
         AssertPredictionsMatch(original, restoredPreds, "RidgeRegression");
     }
 
-    [Fact]
-    public void LassoRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task LassoRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 1.5, -2.0, 0.5 }, intercept: 1.0, noise: 0.3, seed: 42);
 
@@ -252,8 +253,8 @@ public class RegressionModelMathTests
         AssertPredictionsMatch(original, restoredPreds, "LassoRegression");
     }
 
-    [Fact]
-    public void ElasticNetRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNetRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 1.5, -2.0, 0.5 }, intercept: 1.0, noise: 0.3, seed: 42);
 
@@ -271,8 +272,8 @@ public class RegressionModelMathTests
         AssertPredictionsMatch(original, restoredPreds, "ElasticNetRegression");
     }
 
-    [Fact]
-    public void DecisionTreeRegression_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task DecisionTreeRegression_SerializeRoundTrip_PredictionsMatch()
     {
         var (x, y) = CreateNonLinearData(80, seed: 42);
 
@@ -294,8 +295,8 @@ public class RegressionModelMathTests
 
     #region Builder Integration Tests — ensures optimizer pipeline works
 
-    [Fact]
-    public void LassoRegression_ThroughBuilder_ProducesAccuratePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task LassoRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
         var coefficients = new[] { 2.0, -1.0, 3.0, 0.0 };
         var (x, y) = CreateLinearData(60, coefficients, intercept: 1.0, noise: 0.5, seed: 42);
@@ -327,8 +328,8 @@ public class RegressionModelMathTests
         }
     }
 
-    [Fact]
-    public void ElasticNet_ThroughBuilder_ProducesAccuratePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ElasticNet_ThroughBuilder_ProducesAccuratePredictions()
     {
         var coefficients = new[] { 2.0, -1.0, 3.0 };
         var (x, y) = CreateLinearData(60, coefficients, intercept: 1.0, noise: 0.5, seed: 42);
@@ -360,8 +361,8 @@ public class RegressionModelMathTests
         }
     }
 
-    [Fact]
-    public void PolynomialRegression_ThroughBuilder_ProducesAccuratePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task PolynomialRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
         // Quadratic data: y = 2x² - 3x + 1 + noise
         var random = new Random(42);
@@ -414,8 +415,8 @@ public class RegressionModelMathTests
         }
     }
 
-    [Fact]
-    public void Builder_SerializeRoundTrip_LassoRegression_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task Builder_SerializeRoundTrip_LassoRegression_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0 }, intercept: 1.0, noise: 0.3, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
@@ -446,8 +447,8 @@ public class RegressionModelMathTests
 
     #region Mathematical Properties
 
-    [Fact]
-    public void MultipleRegression_PredictionDeterminism_SameInputSameOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleRegression_PredictionDeterminism_SameInputSameOutput()
     {
         var (x, y) = CreateLinearData(50, new[] { 2.0, -1.0 }, intercept: 3.0, noise: 0.1, seed: 42);
         var model = new MultipleRegression<double>();
@@ -463,8 +464,8 @@ public class RegressionModelMathTests
         }
     }
 
-    [Fact]
-    public void RidgeRegression_HighRegularization_CoefficientsAreShrunk()
+    [Fact(Timeout = 120000)]
+    public async Task RidgeRegression_HighRegularization_CoefficientsAreShrunk()
     {
         // With very high regularization, coefficients should be close to zero
         var (x, y) = CreateLinearData(100, new[] { 5.0, -3.0, 2.0 }, intercept: 1.0, noise: 0.1, seed: 42);

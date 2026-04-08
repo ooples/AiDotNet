@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Schedulers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
 
@@ -10,8 +11,8 @@ public class PNDMSchedulerTests
 {
     #region Construction Tests
 
-    [Fact]
-    public void Constructor_WithValidConfig_CreatesScheduler()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithValidConfig_CreatesScheduler()
     {
         // Arrange
         var config = SchedulerConfig<double>.CreateDefault();
@@ -24,8 +25,8 @@ public class PNDMSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
-    public void Constructor_WithNullConfig_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(null!));
@@ -35,8 +36,8 @@ public class PNDMSchedulerTests
 
     #region SetTimesteps Tests
 
-    [Fact]
-    public void SetTimesteps_WithValidSteps_ProducesDescendingSequence()
+    [Fact(Timeout = 120000)]
+    public async Task SetTimesteps_WithValidSteps_ProducesDescendingSequence()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(
@@ -73,8 +74,8 @@ public class PNDMSchedulerTests
         Assert.True(scheduler.Timesteps.Length > 0);
     }
 
-    [Fact]
-    public void SetTimesteps_ResetsInternalState()
+    [Fact(Timeout = 120000)]
+    public async Task SetTimesteps_ResetsInternalState()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -101,8 +102,8 @@ public class PNDMSchedulerTests
 
     #region Step Tests - PRK Phase
 
-    [Fact]
-    public void Step_InPrkPhase_ReturnsFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task Step_InPrkPhase_ReturnsFiniteValues()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(
@@ -129,8 +130,8 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
-    public void Step_First4StepsArePrkMode()
+    [Fact(Timeout = 120000)]
+    public async Task Step_First4StepsArePrkMode()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(
@@ -159,8 +160,8 @@ public class PNDMSchedulerTests
 
     #region Step Tests - PLMS Phase
 
-    [Fact]
-    public void Step_InPlmsPhase_ReturnsFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task Step_InPlmsPhase_ReturnsFiniteValues()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(
@@ -192,8 +193,8 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
-    public void Step_PlmsPhaseUsesHistoryOfPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task Step_PlmsPhaseUsesHistoryOfPredictions()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(
@@ -218,8 +219,8 @@ public class PNDMSchedulerTests
 
     #region Step Tests - Validation
 
-    [Fact]
-    public void Step_WithNullModelOutput_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithNullModelOutput_ThrowsArgumentNullException()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -231,8 +232,8 @@ public class PNDMSchedulerTests
             scheduler.Step(null!, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
-    public void Step_WithNullSample_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithNullSample_ThrowsArgumentNullException()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -244,8 +245,8 @@ public class PNDMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], null!, 0.0));
     }
 
-    [Fact]
-    public void Step_WithMismatchedLengths_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Step_WithMismatchedLengths_ThrowsArgumentException()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -262,8 +263,8 @@ public class PNDMSchedulerTests
 
     #region Step Tests - Deterministic Behavior
 
-    [Fact]
-    public void Step_IsDeterministic()
+    [Fact(Timeout = 120000)]
+    public async Task Step_IsDeterministic()
     {
         // Arrange
         var config = new SchedulerConfig<double>(trainTimesteps: 100, betaStart: 0.0001, betaEnd: 0.02);
@@ -309,8 +310,8 @@ public class PNDMSchedulerTests
 
     #region State Management Tests
 
-    [Fact]
-    public void GetState_ReturnsCounterAndEtsCount()
+    [Fact(Timeout = 120000)]
+    public async Task GetState_ReturnsCounterAndEtsCount()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -326,8 +327,8 @@ public class PNDMSchedulerTests
         Assert.Equal(0, (int)etsCount!);
     }
 
-    [Fact]
-    public void GetState_AfterSteps_ReflectsProgress()
+    [Fact(Timeout = 120000)]
+    public async Task GetState_AfterSteps_ReflectsProgress()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -350,8 +351,8 @@ public class PNDMSchedulerTests
         Assert.True((int)state["ets_count"] > 0);
     }
 
-    [Fact]
-    public void LoadState_ResetsCounterToZero()
+    [Fact(Timeout = 120000)]
+    public async Task LoadState_ResetsCounterToZero()
     {
         // Arrange
         var scheduler1 = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -384,8 +385,8 @@ public class PNDMSchedulerTests
 
     #region Integration Tests
 
-    [Fact]
-    public void FullDenoisingLoop_ProducesFiniteResults()
+    [Fact(Timeout = 120000)]
+    public async Task FullDenoisingLoop_ProducesFiniteResults()
     {
         // Arrange
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -419,8 +420,8 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
-    public void FullDenoisingLoop_WithFewSteps_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task FullDenoisingLoop_WithFewSteps_WorksCorrectly()
     {
         // Arrange - PNDM is designed for fast inference with few steps
         var scheduler = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -447,8 +448,8 @@ public class PNDMSchedulerTests
 
     #region Comparison with DDIM
 
-    [Fact]
-    public void PNDMAndDDIM_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task PNDMAndDDIM_ProduceDifferentResults()
     {
         // Arrange
         var config = new SchedulerConfig<double>(trainTimesteps: 100, betaStart: 0.0001, betaEnd: 0.02);

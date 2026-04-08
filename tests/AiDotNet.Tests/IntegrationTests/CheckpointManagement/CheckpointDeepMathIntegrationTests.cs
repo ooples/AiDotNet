@@ -2,6 +2,7 @@ using AiDotNet.CheckpointManagement;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CheckpointManagement;
 
@@ -43,8 +44,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // AutoCheckpointState Tests
     // ============================
 
-    [Fact]
-    public void AutoCheckpointState_Disabled_ToString()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCheckpointState_Disabled_ToString()
     {
         var state = new AutoCheckpointState(
             isEnabled: false, saveFrequency: 0, saveOnImprovement: false,
@@ -53,8 +54,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Contains("disabled", state.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void AutoCheckpointState_Enabled_ToString()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCheckpointState_Enabled_ToString()
     {
         var state = new AutoCheckpointState(
             isEnabled: true, saveFrequency: 100, saveOnImprovement: true,
@@ -68,8 +69,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Contains("0.25", str);
     }
 
-    [Fact]
-    public void AutoCheckpointState_Properties_AllStored()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCheckpointState_Properties_AllStored()
     {
         var state = new AutoCheckpointState(
             isEnabled: true, saveFrequency: 200, saveOnImprovement: false,
@@ -84,8 +85,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Equal(0.95, state.BestMetricValue);
     }
 
-    [Fact]
-    public void AutoCheckpointState_NullBestMetric()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCheckpointState_NullBestMetric()
     {
         var state = new AutoCheckpointState(
             isEnabled: true, saveFrequency: 10, saveOnImprovement: true,
@@ -99,15 +100,15 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ShouldAutoSaveCheckpoint: Frequency-Based
     // ============================
 
-    [Fact]
-    public void ShouldAutoSave_NoConfig_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_NoConfig_ReturnsFalse()
     {
         // Manager without auto-checkpoint config
         Assert.False(_manager.ShouldAutoSaveCheckpoint(100));
     }
 
-    [Fact]
-    public void ShouldAutoSave_FrequencyReached_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_FrequencyReached_ReturnsTrue()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: false);
 
@@ -115,8 +116,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.True(_manager.ShouldAutoSaveCheckpoint(10));
     }
 
-    [Fact]
-    public void ShouldAutoSave_FrequencyNotReached_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_FrequencyNotReached_ReturnsFalse()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: false);
 
@@ -124,8 +125,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.False(_manager.ShouldAutoSaveCheckpoint(5));
     }
 
-    [Fact]
-    public void ShouldAutoSave_AfterUpdate_FrequencyFromLastSave()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_AfterUpdate_FrequencyFromLastSave()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: false);
 
@@ -143,8 +144,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ShouldAutoSaveCheckpoint: Improvement-Based (Minimize)
     // ============================
 
-    [Fact]
-    public void ShouldAutoSave_FirstMetric_AlwaysTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_FirstMetric_AlwaysTrue()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 5, saveOnImprovement: true);
 
@@ -152,8 +153,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.True(_manager.ShouldAutoSaveCheckpoint(1, metricValue: 1.0, shouldMinimize: true));
     }
 
-    [Fact]
-    public void ShouldAutoSave_Minimize_LowerValue_True()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_Minimize_LowerValue_True()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 5, saveOnImprovement: true);
 
@@ -164,8 +165,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.True(_manager.ShouldAutoSaveCheckpoint(2, metricValue: 0.5, shouldMinimize: true));
     }
 
-    [Fact]
-    public void ShouldAutoSave_Minimize_HigherValue_False()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_Minimize_HigherValue_False()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 5, saveOnImprovement: true);
 
@@ -180,8 +181,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ShouldAutoSaveCheckpoint: Improvement-Based (Maximize)
     // ============================
 
-    [Fact]
-    public void ShouldAutoSave_Maximize_HigherValue_True()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_Maximize_HigherValue_True()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 5, saveOnImprovement: true);
 
@@ -192,8 +193,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.True(_manager.ShouldAutoSaveCheckpoint(2, metricValue: 0.8, shouldMinimize: false));
     }
 
-    [Fact]
-    public void ShouldAutoSave_Maximize_LowerValue_False()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_Maximize_LowerValue_False()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 5, saveOnImprovement: true);
 
@@ -208,8 +209,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // UpdateAutoSaveState: Best Metric Tracking
     // ============================
 
-    [Fact]
-    public void UpdateAutoSaveState_TracksLastStep()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAutoSaveState_TracksLastStep()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: true);
 
@@ -219,8 +220,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Equal(50, state.LastSaveStep);
     }
 
-    [Fact]
-    public void UpdateAutoSaveState_TracksBestMetric_Minimize()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAutoSaveState_TracksBestMetric_Minimize()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: true);
 
@@ -232,8 +233,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Equal(0.5, state.BestMetricValue); // Best minimum
     }
 
-    [Fact]
-    public void UpdateAutoSaveState_TracksBestMetric_Maximize()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateAutoSaveState_TracksBestMetric_Maximize()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: true);
 
@@ -249,8 +250,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ConfigureAutoCheckpointing: State Reset
     // ============================
 
-    [Fact]
-    public void ConfigureAutoCheckpointing_ResetsState()
+    [Fact(Timeout = 120000)]
+    public async Task ConfigureAutoCheckpointing_ResetsState()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 10, keepLast: 5, saveOnImprovement: true);
         _manager.UpdateAutoSaveState(100, metricValue: 0.5, shouldMinimize: true);
@@ -266,8 +267,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Null(state.BestMetricValue);
     }
 
-    [Fact]
-    public void GetAutoCheckpointState_NoConfig_Disabled()
+    [Fact(Timeout = 120000)]
+    public async Task GetAutoCheckpointState_NoConfig_Disabled()
     {
         var state = _manager.GetAutoCheckpointState();
 
@@ -280,8 +281,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ShouldAutoSave: Combined Frequency + Improvement
     // ============================
 
-    [Fact]
-    public void ShouldAutoSave_FrequencyOrImprovement_EitherTriggers()
+    [Fact(Timeout = 120000)]
+    public async Task ShouldAutoSave_FrequencyOrImprovement_EitherTriggers()
     {
         _manager.ConfigureAutoCheckpointing(saveFrequency: 100, keepLast: 5, saveOnImprovement: true);
 
@@ -296,8 +297,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // GetCheckpointDirectory
     // ============================
 
-    [Fact]
-    public void GetCheckpointDirectory_ReturnsConfiguredPath()
+    [Fact(Timeout = 120000)]
+    public async Task GetCheckpointDirectory_ReturnsConfiguredPath()
     {
         var dir = _manager.GetCheckpointDirectory();
         Assert.True(Directory.Exists(dir));
@@ -307,8 +308,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // Checkpoint<T> Model Tests
     // ============================
 
-    [Fact]
-    public void Checkpoint_DefaultConstructor_GeneratesUniqueId()
+    [Fact(Timeout = 120000)]
+    public async Task Checkpoint_DefaultConstructor_GeneratesUniqueId()
     {
         var cp1 = new Checkpoint<double, double[], double>();
         var cp2 = new Checkpoint<double, double[], double>();
@@ -316,8 +317,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.NotEqual(cp1.CheckpointId, cp2.CheckpointId);
     }
 
-    [Fact]
-    public void Checkpoint_DefaultConstructor_EmptyCollections()
+    [Fact(Timeout = 120000)]
+    public async Task Checkpoint_DefaultConstructor_EmptyCollections()
     {
         var cp = new Checkpoint<double, double[], double>();
 
@@ -327,8 +328,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Empty(cp.Metadata);
     }
 
-    [Fact]
-    public void Checkpoint_DefaultConstructor_SetsCreatedAt()
+    [Fact(Timeout = 120000)]
+    public async Task Checkpoint_DefaultConstructor_SetsCreatedAt()
     {
         var before = DateTime.UtcNow;
         var cp = new Checkpoint<double, double[], double>();
@@ -337,8 +338,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.True(cp.CreatedAt <= DateTime.UtcNow);
     }
 
-    [Fact]
-    public void Checkpoint_ParameterizedConstructor_StoresValues()
+    [Fact(Timeout = 120000)]
+    public async Task Checkpoint_ParameterizedConstructor_StoresValues()
     {
         var metrics = new Dictionary<string, double> { { "loss", 0.5 }, { "accuracy", 0.85 } };
         var metadata = new Dictionary<string, object> { { "description", "Test checkpoint" } };
@@ -365,8 +366,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // CheckpointMetadata<T> Tests
     // ============================
 
-    [Fact]
-    public void CheckpointMetadata_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CheckpointMetadata_DefaultValues()
     {
         var metadata = new CheckpointMetadata<double>();
 
@@ -379,8 +380,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Equal(0, metadata.FileSizeBytes);
     }
 
-    [Fact]
-    public void CheckpointMetadata_StoresMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task CheckpointMetadata_StoresMetrics()
     {
         var metadata = new CheckpointMetadata<double>
         {
@@ -408,8 +409,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // RegisteredModel Tests
     // ============================
 
-    [Fact]
-    public void RegisteredModel_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task RegisteredModel_DefaultValues()
     {
         var model = new RegisteredModel<double, double[], double>();
 
@@ -429,8 +430,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ModelVersionInfo Tests
     // ============================
 
-    [Fact]
-    public void ModelVersionInfo_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelVersionInfo_DefaultValues()
     {
         var info = new ModelVersionInfo<double>();
 
@@ -444,8 +445,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ModelSearchCriteria Tests
     // ============================
 
-    [Fact]
-    public void ModelSearchCriteria_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelSearchCriteria_DefaultValues()
     {
         var criteria = new ModelSearchCriteria<double>();
 
@@ -462,8 +463,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ModelComparison Tests
     // ============================
 
-    [Fact]
-    public void ModelComparison_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelComparison_DefaultValues()
     {
         var comparison = new ModelComparison<double>();
 
@@ -480,8 +481,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
     // ModelLineage Tests
     // ============================
 
-    [Fact]
-    public void ModelLineage_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelLineage_DefaultValues()
     {
         var lineage = new ModelLineage();
 
@@ -495,8 +496,8 @@ public class CheckpointDeepMathIntegrationTests : IDisposable
         Assert.Null(lineage.Creator);
     }
 
-    [Fact]
-    public void ModelLineage_WithParent_TracksVersion()
+    [Fact(Timeout = 120000)]
+    public async Task ModelLineage_WithParent_TracksVersion()
     {
         var lineage = new ModelLineage
         {

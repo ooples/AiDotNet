@@ -1,6 +1,7 @@
 using AiDotNet.TrainingMonitoring;
 using Xunit;
 using LogLevel = AiDotNet.Interfaces.LogLevel;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.TrainingMonitoring;
 
@@ -16,8 +17,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Session Management Tests
     // ============================
 
-    [Fact]
-    public void StartSession_ReturnsNonEmptyId()
+    [Fact(Timeout = 120000)]
+    public async Task StartSession_ReturnsNonEmptyId()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test Session");
@@ -25,8 +26,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(sessionId));
     }
 
-    [Fact]
-    public void StartSession_MultipleSessions_UniqueIds()
+    [Fact(Timeout = 120000)]
+    public async Task StartSession_MultipleSessions_UniqueIds()
     {
         var monitor = new TrainingMonitor<double>();
         var ids = new HashSet<string>();
@@ -39,15 +40,15 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(10, ids.Count);
     }
 
-    [Fact]
-    public void StartSession_EmptyName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StartSession_EmptyName_Throws()
     {
         var monitor = new TrainingMonitor<double>();
         Assert.Throws<ArgumentException>(() => monitor.StartSession(""));
     }
 
-    [Fact]
-    public void EndSession_SetsEndTime()
+    [Fact(Timeout = 120000)]
+    public async Task EndSession_SetsEndTime()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -60,8 +61,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Metric Logging Tests
     // ============================
 
-    [Fact]
-    public void LogMetric_SingleMetric_Retrievable()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_SingleMetric_Retrievable()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -72,8 +73,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.5, current["loss"]);
     }
 
-    [Fact]
-    public void LogMetric_MultipleSteps_HistoryPreserved()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_MultipleSteps_HistoryPreserved()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -89,8 +90,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.25, history[2].Value);
     }
 
-    [Fact]
-    public void LogMetric_EmptyName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_EmptyName_Throws()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -98,8 +99,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => monitor.LogMetric(sessionId, "", 1.0, 0));
     }
 
-    [Fact]
-    public void LogMetrics_MultiplePairs_AllRecorded()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetrics_MultiplePairs_AllRecorded()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -115,8 +116,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0.85, current["accuracy"]);
     }
 
-    [Fact]
-    public void GetMetricHistory_UnknownMetric_ReturnsEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetricHistory_UnknownMetric_ReturnsEmpty()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -125,8 +126,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Empty(history);
     }
 
-    [Fact]
-    public void LogMetric_OverwritesCurrentMetric()
+    [Fact(Timeout = 120000)]
+    public async Task LogMetric_OverwritesCurrentMetric()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -142,8 +143,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Resource Usage Tests
     // ============================
 
-    [Fact]
-    public void LogResourceUsage_RecordsSnapshot()
+    [Fact(Timeout = 120000)]
+    public async Task LogResourceUsage_RecordsSnapshot()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -155,8 +156,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(60.0, usage.MemoryUsageMB);
     }
 
-    [Fact]
-    public void LogResourceUsage_WithGpu_RecordsGpuMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task LogResourceUsage_WithGpu_RecordsGpuMetrics()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -169,8 +170,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(90.0, usage.GpuMemoryUsageMB);
     }
 
-    [Fact]
-    public void GetResourceUsage_NoData_ReturnsDefault()
+    [Fact(Timeout = 120000)]
+    public async Task GetResourceUsage_NoData_ReturnsDefault()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -183,8 +184,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Progress and Speed Stats Tests
     // ============================
 
-    [Fact]
-    public void UpdateProgress_SetsProgressInfo()
+    [Fact(Timeout = 120000)]
+    public async Task UpdateProgress_SetsProgressInfo()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -197,8 +198,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(100, stats.TotalIterations);
     }
 
-    [Fact]
-    public void GetSpeedStats_WithProgress_CalculatesPercentage()
+    [Fact(Timeout = 120000)]
+    public async Task GetSpeedStats_WithProgress_CalculatesPercentage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -212,8 +213,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(25.0, stats.ProgressPercentage, 1.0);
     }
 
-    [Fact]
-    public void GetSpeedStats_WithProgress_IterationsPerSecond_Positive()
+    [Fact(Timeout = 120000)]
+    public async Task GetSpeedStats_WithProgress_IterationsPerSecond_Positive()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -228,8 +229,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.SecondsPerIteration > 0);
     }
 
-    [Fact]
-    public void GetSpeedStats_WithProgress_EstimatedRemaining_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task GetSpeedStats_WithProgress_EstimatedRemaining_NonNegative()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -242,8 +243,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.EstimatedTimeRemaining >= TimeSpan.Zero);
     }
 
-    [Fact]
-    public void GetSpeedStats_NoProgress_ZeroValues()
+    [Fact(Timeout = 120000)]
+    public async Task GetSpeedStats_NoProgress_ZeroValues()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -253,8 +254,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Equal(0, stats.SecondsPerIteration);
     }
 
-    [Fact]
-    public void GetSpeedStats_FullCompletion_100Percent()
+    [Fact(Timeout = 120000)]
+    public async Task GetSpeedStats_FullCompletion_100Percent()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -271,8 +272,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Epoch Management Tests
     // ============================
 
-    [Fact]
-    public void OnEpochStart_LogsMessage()
+    [Fact(Timeout = 120000)]
+    public async Task OnEpochStart_LogsMessage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -281,8 +282,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         // Should not throw, and logs "Epoch 1 started"
     }
 
-    [Fact]
-    public void OnEpochEnd_LogsCompletionMessage()
+    [Fact(Timeout = 120000)]
+    public async Task OnEpochEnd_LogsCompletionMessage()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -298,8 +299,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Message Logging Tests
     // ============================
 
-    [Fact]
-    public void LogMessage_EmptyMessage_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LogMessage_EmptyMessage_Throws()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -308,8 +309,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
             monitor.LogMessage(sessionId, LogLevel.Info, ""));
     }
 
-    [Fact]
-    public void LogMessage_ValidMessage_NoThrow()
+    [Fact(Timeout = 120000)]
+    public async Task LogMessage_ValidMessage_NoThrow()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -323,8 +324,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Issue Detection Tests
     // ============================
 
-    [Fact]
-    public void CheckForIssues_NoIssues_EmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task CheckForIssues_NoIssues_EmptyList()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -333,8 +334,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Empty(issues);
     }
 
-    [Fact]
-    public void CheckForIssues_HighMemory_ReportsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task CheckForIssues_HighMemory_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -346,8 +347,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Contains("memory"));
     }
 
-    [Fact]
-    public void CheckForIssues_CriticalGpuMemory_ReportsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task CheckForIssues_CriticalGpuMemory_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -360,8 +361,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.Contains(issues, i => i.Contains("GPU memory"));
     }
 
-    [Fact]
-    public void CheckForIssues_RecentErrors_ReportsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task CheckForIssues_RecentErrors_ReportsIssue()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -377,8 +378,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
     // Speed Stats Math Verification
     // ============================
 
-    [Fact]
-    public void SpeedStats_IterationsPerSecond_InverseOfSecondsPerIteration()
+    [Fact(Timeout = 120000)]
+    public async Task SpeedStats_IterationsPerSecond_InverseOfSecondsPerIteration()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -397,8 +398,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SpeedStats_ElapsedTime_NonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SpeedStats_ElapsedTime_NonNegative()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
@@ -407,8 +408,8 @@ public class TrainingMonitoringDeepMathIntegrationTests
         Assert.True(stats.ElapsedTime >= TimeSpan.Zero);
     }
 
-    [Fact]
-    public void SpeedStats_ProgressPercentage_Between0And100()
+    [Fact(Timeout = 120000)]
+    public async Task SpeedStats_ProgressPercentage_Between0And100()
     {
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");

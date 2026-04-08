@@ -2,13 +2,14 @@ using System;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
     public class ConversionsHelperTests
     {
-        [Fact]
-        public void ConvertToMatrix_WithMatrix_ReturnsOriginalMatrix()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToMatrix_WithMatrix_ReturnsOriginalMatrix()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 3);
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Same(matrix, result);
         }
 
-        [Fact]
-        public void ConvertToMatrix_With2DTensor_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToMatrix_With2DTensor_ConvertsCorrectly()
         {
             // Arrange - use proper multi-dimensional indexing
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Columns);
         }
 
-        [Fact]
-        public void ConvertToMatrix_WithHigherDimensionalTensor_Reshapes()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToMatrix_WithHigherDimensionalTensor_Reshapes()
         {
             // Arrange - use proper 3D indexing
             var tensor = new Tensor<double>(new int[] { 2, 2, 2 });
@@ -63,8 +64,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(2, result.Columns);
         }
 
-        [Fact]
-        public void ConvertToVector_WithVector_ReturnsOriginalVector()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToVector_WithVector_ReturnsOriginalVector()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -76,8 +77,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Same(vector, result);
         }
 
-        [Fact]
-        public void ConvertToVector_WithTensor_FlattensCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToVector_WithTensor_FlattensCorrectly()
         {
             // Arrange - use proper 2D indexing
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(6, result.Length);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithScalar_ReturnsValue()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithScalar_ReturnsValue()
         {
             // Arrange
             double value = 42.0;
@@ -109,8 +110,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42.0, result);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithVector_ReturnsFirstElement()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithVector_ReturnsFirstElement()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 10.0, 20.0, 30.0 });
@@ -122,8 +123,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(10.0, result);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithMatrix_ReturnsFirstElement()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithMatrix_ReturnsFirstElement()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 2);
@@ -137,8 +138,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5.5, result);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithTensor_ReturnsFirstElement()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithTensor_ReturnsFirstElement()
         {
             // Arrange - use proper 2D indexing
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(7.7, result);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithEmptyVector_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithEmptyVector_ThrowsInvalidOperationException()
         {
             // Arrange
             var vector = new Vector<double>(0);
@@ -163,8 +164,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.ConvertToScalar<double, Vector<double>>(vector));
         }
 
-        [Fact]
-        public void ConvertToScalar_WithEmptyMatrix_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithEmptyMatrix_ThrowsInvalidOperationException()
         {
             // Arrange
             var matrix = new Matrix<double>(0, 0);
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.ConvertToScalar<double, Matrix<double>>(matrix));
         }
 
-        [Fact]
-        public void ConvertToScalar_WithEmptyTensor_ThrowsInvalidOperationException()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithEmptyTensor_ThrowsInvalidOperationException()
         {
             // Arrange
             var tensor = new Tensor<double>(new int[] { 0 });
@@ -185,8 +186,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.ConvertToScalar<double, Tensor<double>>(tensor));
         }
 
-        [Fact]
-        public void ConvertObjectToVector_WithNull_ReturnsNull()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertObjectToVector_WithNull_ReturnsNull()
         {
             // Act
             var result = ConversionsHelper.ConvertObjectToVector<double>(null);
@@ -195,8 +196,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Null(result);
         }
 
-        [Fact]
-        public void ConvertObjectToVector_WithVector_ReturnsVector()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertObjectToVector_WithVector_ReturnsVector()
         {
             // Arrange
             object vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -209,8 +210,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Length);
         }
 
-        [Fact]
-        public void ConvertObjectToVector_WithTensor_ConvertsToVector()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertObjectToVector_WithTensor_ConvertsToVector()
         {
             // Arrange
             object tensor = new Tensor<double>(new int[] { 3 });
@@ -226,8 +227,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Length);
         }
 
-        [Fact]
-        public void ConvertFitFunction_WithMatrixToMatrix_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertFitFunction_WithMatrixToMatrix_WorksCorrectly()
         {
             // Arrange
             Func<Matrix<double>, Vector<double>> originalFunc = m =>
@@ -254,8 +255,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3.0, result[2]);
         }
 
-        [Fact]
-        public void TensorToMatrix_WithMatchingDimensions_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task TensorToMatrix_WithMatchingDimensions_ConvertsCorrectly()
         {
             // Arrange - use proper 2D indexing
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -273,8 +274,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Columns);
         }
 
-        [Fact]
-        public void TensorToMatrix_WithMismatchedDimensions_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task TensorToMatrix_WithMismatchedDimensions_ThrowsArgumentException()
         {
             // Arrange
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -284,8 +285,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.TensorToMatrix(tensor, 3, 3));
         }
 
-        [Fact]
-        public void MatrixToTensor_WithValidShape_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task MatrixToTensor_WithValidShape_ConvertsCorrectly()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 3);
@@ -303,8 +304,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Shape[1]);
         }
 
-        [Fact]
-        public void MatrixToTensor_WithInvalidShape_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task MatrixToTensor_WithInvalidShape_ThrowsArgumentException()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 3);
@@ -314,8 +315,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.MatrixToTensor(matrix, new int[] { 3, 3 }));
         }
 
-        [Fact]
-        public void VectorToTensor_WithValidShape_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task VectorToTensor_WithValidShape_ConvertsCorrectly()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -330,8 +331,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Shape[1]);
         }
 
-        [Fact]
-        public void VectorToTensor_WithInvalidShape_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task VectorToTensor_WithInvalidShape_ThrowsArgumentException()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
@@ -341,8 +342,8 @@ namespace AiDotNetTests.UnitTests.Helpers
                 ConversionsHelper.VectorToTensor(vector, new int[] { 2, 3 }));
         }
 
-        [Fact]
-        public void ConvertToTensor_WithMatrix_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToTensor_WithMatrix_ConvertsCorrectly()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 2);
@@ -357,8 +358,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(2, result.Rank);
         }
 
-        [Fact]
-        public void ConvertToTensor_WithVector_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToTensor_WithVector_ConvertsCorrectly()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -371,8 +372,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(1, result.Rank);
         }
 
-        [Fact]
-        public void ConvertToTensor_WithTensor_ReturnsSameTensor()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToTensor_WithTensor_ReturnsSameTensor()
         {
             // Arrange
             var tensor = new Tensor<double>(new int[] { 2, 3 });
@@ -384,8 +385,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Same(tensor, result);
         }
 
-        [Fact]
-        public void ConvertToMatrix_WithFloat_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToMatrix_WithFloat_WorksCorrectly()
         {
             // Arrange
             var matrix = new Matrix<float>(2, 2);
@@ -399,8 +400,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Same(matrix, result);
         }
 
-        [Fact]
-        public void ConvertToVector_WithFloat_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToVector_WithFloat_WorksCorrectly()
         {
             // Arrange
             var vector = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f });
@@ -412,8 +413,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Same(vector, result);
         }
 
-        [Fact]
-        public void ConvertToScalar_WithFloat_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ConvertToScalar_WithFloat_WorksCorrectly()
         {
             // Arrange
             float value = 42.5f;
@@ -425,8 +426,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42.5f, result);
         }
 
-        [Fact]
-        public void VectorToTensor_With3DShape_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task VectorToTensor_With3DShape_ConvertsCorrectly()
         {
             // Arrange
             var vector = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -442,8 +443,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(2, result.Shape[2]);
         }
 
-        [Fact]
-        public void MatrixToTensor_With3DShape_ConvertsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task MatrixToTensor_With3DShape_ConvertsCorrectly()
         {
             // Arrange
             var matrix = new Matrix<double>(2, 4);

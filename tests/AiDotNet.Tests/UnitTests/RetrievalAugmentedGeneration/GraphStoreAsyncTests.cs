@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region MemoryGraphStore Async Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task MemoryStore_AddNodeAsync_AddsNode()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("node1", retrieved.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task MemoryStore_AddEdgeAsync_AddsEdge()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retrieved);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task MemoryStore_GetNodesByLabelAsync_ReturnsCorrectNodes()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, System.Linq.Enumerable.Count(persons));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task MemoryStore_RemoveNodeAsync_RemovesNodeAndEdges()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FileGraphStore Async Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_AddNodeAsync_PersistsNode()
         {
             // Arrange
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Node node1", retrieved.GetProperty<string>("name"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_AddEdgeAsync_PersistsEdge()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("node2", retrieved.TargetId);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_AsyncOperations_SurviveRestart()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_GetAllNodesAsync_ReturnsAllNodes()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(3, System.Linq.Enumerable.Count(allNodes));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_GetAllEdgesAsync_ReturnsAllEdges()
         {
             // Arrange
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, System.Linq.Enumerable.Count(allEdges));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_ClearAsync_RemovesAllData()
         {
             // Arrange
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, store.EdgeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task FileStore_ConcurrentReads_WorkCorrectly()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Performance Comparison Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         [Trait("Category", "Integration")]  // Skip on net471 - concurrent file I/O has locking issues on .NET Framework
         public async Task PerformanceComparison_BulkInsert_AsyncVsSync()
         {

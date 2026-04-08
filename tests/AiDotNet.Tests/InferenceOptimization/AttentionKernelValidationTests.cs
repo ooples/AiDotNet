@@ -2,13 +2,14 @@ using System;
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class AttentionKernelValidationTests
 {
-    [Fact]
-    public void Execute_MatchesNaiveAttention()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_MatchesNaiveAttention()
     {
         var kernel = new AttentionKernel();
 
@@ -27,8 +28,8 @@ public class AttentionKernelValidationTests
         }
     }
 
-    [Fact]
-    public void Execute_WithMask_RespectsMaskZeros()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_WithMask_RespectsMaskZeros()
     {
         var kernel = new AttentionKernel();
 

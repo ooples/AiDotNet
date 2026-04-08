@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -92,8 +93,8 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(size, takagi.UnitaryMatrix.Columns);
     }
 
-    [Fact]
-    public void TakagiDecomposition_SigmaMatrix_IsDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_SigmaMatrix_IsDiagonal()
     {
         // Arrange
         var A = CreateSymmetricMatrix(4);
@@ -115,8 +116,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_SigmaMatrix_HasNonNegativeDiagonals()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_SigmaMatrix_HasNonNegativeDiagonals()
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(4);
@@ -211,8 +212,8 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(3, takagi.UnitaryMatrix.Columns);
     }
 
-    [Fact]
-    public void TakagiDecomposition_JacobiAlgorithm_ConvergesToDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_JacobiAlgorithm_ConvergesToDiagonal()
     {
         // Arrange
         var A = CreateSymmetricMatrix(4);
@@ -234,8 +235,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_PowerIteration_ProducesValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_PowerIteration_ProducesValidResult()
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(3);
@@ -251,8 +252,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_LanczosIteration_ProducesValidResult()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_LanczosIteration_ProducesValidResult()
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(4);
@@ -304,8 +305,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(3);
@@ -330,8 +331,8 @@ public class TakagiDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void TakagiDecomposition_2x2Matrix_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_2x2Matrix_WorksCorrectly()
     {
         // Arrange
         var A = new Matrix<double>(2, 2);
@@ -346,8 +347,8 @@ public class TakagiDecompositionIntegrationTests
         Assert.Equal(2, takagi.UnitaryMatrix.Rows);
     }
 
-    [Fact]
-    public void TakagiDecomposition_DiagonalMatrix_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_DiagonalMatrix_WorksCorrectly()
     {
         // Arrange
         var A = new Matrix<double>(3, 3);
@@ -376,8 +377,8 @@ public class TakagiDecompositionIntegrationTests
             $"Expected 16.0, got {singularValues[2]}");
     }
 
-    [Fact]
-    public void TakagiDecomposition_IdentityMatrix_HasAllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(3);
@@ -397,8 +398,8 @@ public class TakagiDecompositionIntegrationTests
 
     #region Numerical Properties Tests
 
-    [Fact]
-    public void TakagiDecomposition_NoNaNOrInfinity_InMatrices()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_NoNaNOrInfinity_InMatrices()
     {
         // Arrange
         var A = CreateSymmetricMatrix(4);
@@ -431,8 +432,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_UnitaryMatrix_HasUnitNormColumns()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_UnitaryMatrix_HasUnitNormColumns()
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(3);
@@ -456,8 +457,8 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void TakagiDecomposition_UnitaryMatrix_ColumnsAreOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_UnitaryMatrix_ColumnsAreOrthogonal()
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(3);
@@ -491,8 +492,8 @@ public class TakagiDecompositionIntegrationTests
 
     #region Consistency Tests
 
-    [Fact]
-    public void TakagiDecomposition_DifferentAlgorithms_ProduceValidResults()
+    [Fact(Timeout = 120000)]
+    public async Task TakagiDecomposition_DifferentAlgorithms_ProduceValidResults()
     {
         // Note: Different Takagi algorithms may produce different singular values
         // because they solve the decomposition problem using different approaches.

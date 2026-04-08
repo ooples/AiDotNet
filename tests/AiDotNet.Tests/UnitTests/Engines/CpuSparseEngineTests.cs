@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Engines;
 
@@ -13,8 +14,8 @@ public class CpuSparseEngineTests
 
     #region SpMV Tests
 
-    [Fact]
-    public void SpMV_IdentityMatrix_ReturnsOriginalVector()
+    [Fact(Timeout = 60000)]
+    public async Task SpMV_IdentityMatrix_ReturnsOriginalVector()
     {
         // Arrange: 3x3 identity as sparse
         var rowIndices = new[] { 0, 1, 2 };
@@ -33,8 +34,8 @@ public class CpuSparseEngineTests
         Assert.Equal(4.0, result[2], precision: 10);
     }
 
-    [Fact]
-    public void SpMV_SingleRowSparse_ComputesDotProduct()
+    [Fact(Timeout = 60000)]
+    public async Task SpMV_SingleRowSparse_ComputesDotProduct()
     {
         // Arrange: 1x3 sparse matrix with values [1, 2, 3]
         var rowIndices = new[] { 0, 0, 0 };
@@ -51,8 +52,8 @@ public class CpuSparseEngineTests
         Assert.Equal(32.0, result[0], precision: 10);
     }
 
-    [Fact]
-    public void SpMV_EmptySparse_ReturnsZeroVector()
+    [Fact(Timeout = 60000)]
+    public async Task SpMV_EmptySparse_ReturnsZeroVector()
     {
         // Arrange: Empty 3x3 sparse matrix
         var sparse = new SparseTensor<double>(3, 3,
@@ -73,8 +74,8 @@ public class CpuSparseEngineTests
 
     #region SpMM Tests
 
-    [Fact]
-    public void SpMM_IdentitySparse_ReturnsDenseMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task SpMM_IdentitySparse_ReturnsDenseMatrix()
     {
         // Arrange: 2x2 identity as sparse
         var rowIndices = new[] { 0, 1 };
@@ -96,8 +97,8 @@ public class CpuSparseEngineTests
         Assert.Equal(4.0, result[1, 1], precision: 10);
     }
 
-    [Fact]
-    public void SpMM_ScalingSparse_ScalesMatrix()
+    [Fact(Timeout = 60000)]
+    public async Task SpMM_ScalingSparse_ScalesMatrix()
     {
         // Arrange: 2x2 diagonal with 2 on diagonal
         var rowIndices = new[] { 0, 1 };
@@ -121,8 +122,8 @@ public class CpuSparseEngineTests
 
     #region SparseToDense Tests
 
-    [Fact]
-    public void SparseToDense_SimpleMatrix_ConvertsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task SparseToDense_SimpleMatrix_ConvertsCorrectly()
     {
         // Arrange
         var rowIndices = new[] { 0, 0, 1, 2 };
@@ -151,8 +152,8 @@ public class CpuSparseEngineTests
 
     #region DenseToSparse Tests
 
-    [Fact]
-    public void DenseToSparse_SparseMatrix_ConvertsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task DenseToSparse_SparseMatrix_ConvertsCorrectly()
     {
         // Arrange
         var dense = new Matrix<double>(new double[,]
@@ -175,8 +176,8 @@ public class CpuSparseEngineTests
 
     #region Coalesce Tests
 
-    [Fact]
-    public void Coalesce_DuplicateEntries_SumsValues()
+    [Fact(Timeout = 60000)]
+    public async Task Coalesce_DuplicateEntries_SumsValues()
     {
         // Arrange: Two entries at position (0,0) with values 1.0 and 2.0
         var rowIndices = new[] { 0, 0, 1 };
@@ -198,8 +199,8 @@ public class CpuSparseEngineTests
 
     #region SparseTranspose Tests
 
-    [Fact]
-    public void SparseTranspose_RectangularMatrix_TransposesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task SparseTranspose_RectangularMatrix_TransposesCorrectly()
     {
         // Arrange: 2x3 matrix
         var rowIndices = new[] { 0, 0, 1 };
@@ -223,8 +224,8 @@ public class CpuSparseEngineTests
 
     #region AddSparseDense Tests
 
-    [Fact]
-    public void AddSparseDense_AddsCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddSparseDense_AddsCorrectly()
     {
         // Arrange
         var rowIndices = new[] { 0, 1 };

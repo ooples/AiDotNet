@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ActivationFunctions;
 
@@ -18,16 +19,16 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Sigmoid
     // ========================================================================
 
-    [Fact]
-    public void Sigmoid_AtZero_Equals0_5()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_AtZero_Equals0_5()
     {
         var sigmoid = new SigmoidActivation<double>();
         double result = sigmoid.Activate(0.0);
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
-    public void Sigmoid_HandCalculated_MatchesFormula()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_HandCalculated_MatchesFormula()
     {
         // sigmoid(1) = 1 / (1 + e^(-1))
         var sigmoid = new SigmoidActivation<double>();
@@ -36,8 +37,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
-    public void Sigmoid_Symmetry_SigmoidX_Plus_SigmoidNegX_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_Symmetry_SigmoidX_Plus_SigmoidNegX_Equals1()
     {
         // sigma(x) + sigma(-x) = 1
         var sigmoid = new SigmoidActivation<double>();
@@ -50,8 +51,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sigmoid_Derivative_EqualsSigmoidTimesOneMinusSigmoid()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_Derivative_EqualsSigmoidTimesOneMinusSigmoid()
     {
         var sigmoid = new SigmoidActivation<double>();
         double[] testValues = [-2, -1, 0, 1, 2];
@@ -64,16 +65,16 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Sigmoid_Derivative_MaxAtZero_Equals0_25()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_Derivative_MaxAtZero_Equals0_25()
     {
         var sigmoid = new SigmoidActivation<double>();
         double derAtZero = sigmoid.Derivative(0.0);
         Assert.Equal(0.25, derAtZero, Tol);
     }
 
-    [Fact]
-    public void Sigmoid_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_NumericalGradient_MatchesAnalytical()
     {
         var sigmoid = new SigmoidActivation<double>();
         double[] testValues = [-3, -1, 0, 1, 3];
@@ -91,16 +92,16 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Tanh
     // ========================================================================
 
-    [Fact]
-    public void Tanh_AtZero_Equals0()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_AtZero_Equals0()
     {
         var tanh = new TanhActivation<double>();
         double result = tanh.Activate(0.0);
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
-    public void Tanh_IsOddFunction()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_IsOddFunction()
     {
         // tanh(-x) = -tanh(x)
         var tanh = new TanhActivation<double>();
@@ -113,8 +114,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tanh_OutputBoundedBetweenMinus1And1()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_OutputBoundedBetweenMinus1And1()
     {
         var tanh = new TanhActivation<double>();
         double[] testValues = [-100, -10, -1, 0, 1, 10, 100];
@@ -125,8 +126,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tanh_Derivative_Equals1MinusTanhSquared()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_Derivative_Equals1MinusTanhSquared()
     {
         var tanh = new TanhActivation<double>();
         double[] testValues = [-2, -0.5, 0, 0.5, 2];
@@ -139,16 +140,16 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tanh_Derivative_AtZero_Equals1()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_Derivative_AtZero_Equals1()
     {
         var tanh = new TanhActivation<double>();
         double derAtZero = tanh.Derivative(0.0);
         Assert.Equal(1.0, derAtZero, Tol);
     }
 
-    [Fact]
-    public void Tanh_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_NumericalGradient_MatchesAnalytical()
     {
         var tanh = new TanhActivation<double>();
         double[] testValues = [-2, -0.5, 0, 0.5, 2];
@@ -162,8 +163,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Tanh_Equals_2Sigmoid2x_Minus1()
+    [Fact(Timeout = 120000)]
+    public async Task Tanh_Equals_2Sigmoid2x_Minus1()
     {
         // tanh(x) = 2*sigmoid(2x) - 1
         var tanh = new TanhActivation<double>();
@@ -181,40 +182,40 @@ public class ActivationFunctionDeepMathIntegrationTests
     // ReLU
     // ========================================================================
 
-    [Fact]
-    public void ReLU_PositiveInput_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_PositiveInput_ReturnsInput()
     {
         var relu = new ReLUActivation<double>();
         Assert.Equal(5.0, relu.Activate(5.0), Tol);
         Assert.Equal(0.001, relu.Activate(0.001), Tol);
     }
 
-    [Fact]
-    public void ReLU_NegativeInput_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_NegativeInput_ReturnsZero()
     {
         var relu = new ReLUActivation<double>();
         Assert.Equal(0.0, relu.Activate(-5.0), Tol);
         Assert.Equal(0.0, relu.Activate(-0.001), Tol);
     }
 
-    [Fact]
-    public void ReLU_Derivative_PositiveInput_Returns1()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_Derivative_PositiveInput_Returns1()
     {
         var relu = new ReLUActivation<double>();
         Assert.Equal(1.0, relu.Derivative(5.0), Tol);
         Assert.Equal(1.0, relu.Derivative(0.001), Tol);
     }
 
-    [Fact]
-    public void ReLU_Derivative_NegativeInput_Returns0()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_Derivative_NegativeInput_Returns0()
     {
         var relu = new ReLUActivation<double>();
         Assert.Equal(0.0, relu.Derivative(-5.0), Tol);
         Assert.Equal(0.0, relu.Derivative(-0.001), Tol);
     }
 
-    [Fact]
-    public void ReLU_IsHomogeneous_ForPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_IsHomogeneous_ForPositive()
     {
         // ReLU(ax) = a*ReLU(x) for a > 0
         var relu = new ReLUActivation<double>();
@@ -227,22 +228,22 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Leaky ReLU
     // ========================================================================
 
-    [Fact]
-    public void LeakyReLU_PositiveInput_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLU_PositiveInput_ReturnsInput()
     {
         var lrelu = new LeakyReLUActivation<double>(alpha: 0.1);
         Assert.Equal(5.0, lrelu.Activate(5.0), Tol);
     }
 
-    [Fact]
-    public void LeakyReLU_NegativeInput_ReturnsAlphaTimesInput()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLU_NegativeInput_ReturnsAlphaTimesInput()
     {
         var lrelu = new LeakyReLUActivation<double>(alpha: 0.1);
         Assert.Equal(-0.5, lrelu.Activate(-5.0), Tol);
     }
 
-    [Fact]
-    public void LeakyReLU_Alpha0_EqualsReLU()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLU_Alpha0_EqualsReLU()
     {
         var relu = new ReLUActivation<double>();
         var lrelu = new LeakyReLUActivation<double>(alpha: 0.0);
@@ -253,16 +254,16 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void LeakyReLU_Derivative_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLU_Derivative_HandCalculated()
     {
         var lrelu = new LeakyReLUActivation<double>(alpha: 0.2);
         Assert.Equal(1.0, lrelu.Derivative(3.0), Tol);  // positive
         Assert.Equal(0.2, lrelu.Derivative(-3.0), Tol); // negative
     }
 
-    [Fact]
-    public void LeakyReLU_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task LeakyReLU_NumericalGradient_MatchesAnalytical()
     {
         var lrelu = new LeakyReLUActivation<double>(alpha: 0.1);
         // Avoid testing at x=0 where the derivative is technically undefined
@@ -281,15 +282,15 @@ public class ActivationFunctionDeepMathIntegrationTests
     // ELU
     // ========================================================================
 
-    [Fact]
-    public void ELU_PositiveInput_ReturnsInput()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_PositiveInput_ReturnsInput()
     {
         var elu = new ELUActivation<double>(alpha: 1.0);
         Assert.Equal(5.0, elu.Activate(5.0), Tol);
     }
 
-    [Fact]
-    public void ELU_NegativeInput_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_NegativeInput_HandCalculated()
     {
         // ELU(-1, alpha=1) = 1 * (e^(-1) - 1) = 1/e - 1 = -0.63212...
         var elu = new ELUActivation<double>(alpha: 1.0);
@@ -297,8 +298,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, elu.Activate(-1.0), Tol);
     }
 
-    [Fact]
-    public void ELU_NegativeSaturation_ApproachesMinusAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_NegativeSaturation_ApproachesMinusAlpha()
     {
         double alpha = 2.0;
         var elu = new ELUActivation<double>(alpha: alpha);
@@ -307,15 +308,15 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(-alpha, result, 1e-6);
     }
 
-    [Fact]
-    public void ELU_Derivative_Positive_Returns1()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_Derivative_Positive_Returns1()
     {
         var elu = new ELUActivation<double>(alpha: 1.0);
         Assert.Equal(1.0, elu.Derivative(5.0), Tol);
     }
 
-    [Fact]
-    public void ELU_Derivative_Negative_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_Derivative_Negative_HandCalculated()
     {
         // ELU derivative for x < 0: ELU(x) + alpha = alpha*(e^x - 1) + alpha = alpha*e^x
         var elu = new ELUActivation<double>(alpha: 1.0);
@@ -325,8 +326,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, analytical, Tol);
     }
 
-    [Fact]
-    public void ELU_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_NumericalGradient_MatchesAnalytical()
     {
         var elu = new ELUActivation<double>(alpha: 1.5);
         double[] testValues = [-3, -1, -0.5, 0.5, 1, 3];
@@ -344,23 +345,23 @@ public class ActivationFunctionDeepMathIntegrationTests
     // SELU
     // ========================================================================
 
-    [Fact]
-    public void SELU_PositiveInput_ReturnsLambdaTimesInput()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_PositiveInput_ReturnsLambdaTimesInput()
     {
         var selu = new SELUActivation<double>();
         double lambda = 1.0507009873554804934193349852946;
         Assert.Equal(lambda * 3.0, selu.Activate(3.0), Tol);
     }
 
-    [Fact]
-    public void SELU_AtZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_AtZero_ReturnsZero()
     {
         var selu = new SELUActivation<double>();
         Assert.Equal(0.0, selu.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void SELU_NegativeInput_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_NegativeInput_HandCalculated()
     {
         // SELU(-1) = lambda * alpha * (e^(-1) - 1)
         var selu = new SELUActivation<double>();
@@ -370,16 +371,16 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, selu.Activate(-1.0), Tol);
     }
 
-    [Fact]
-    public void SELU_Derivative_Positive_ReturnsLambda()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_Derivative_Positive_ReturnsLambda()
     {
         var selu = new SELUActivation<double>();
         double lambda = 1.0507009873554804934193349852946;
         Assert.Equal(lambda, selu.Derivative(1.0), Tol);
     }
 
-    [Fact]
-    public void SELU_Derivative_Negative_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_Derivative_Negative_HandCalculated()
     {
         // SELU'(x < 0) = lambda * alpha * e^x
         var selu = new SELUActivation<double>();
@@ -390,8 +391,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, selu.Derivative(x), Tol);
     }
 
-    [Fact]
-    public void SELU_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task SELU_NumericalGradient_MatchesAnalytical()
     {
         var selu = new SELUActivation<double>();
         double[] testValues = [-3, -1, -0.5, 0.5, 1, 3];
@@ -409,8 +410,8 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Swish (SiLU)
     // ========================================================================
 
-    [Fact]
-    public void Swish_EqualsX_TimesSigmoidX()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_EqualsX_TimesSigmoidX()
     {
         var swish = new SwishActivation<double>();
         var sigmoid = new SigmoidActivation<double>();
@@ -423,15 +424,15 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Swish_AtZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_AtZero_ReturnsZero()
     {
         var swish = new SwishActivation<double>();
         Assert.Equal(0.0, swish.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void Swish_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_HandCalculated()
     {
         // Swish(1) = 1 * sigmoid(1) = 1 / (1 + e^(-1))
         var swish = new SwishActivation<double>();
@@ -439,8 +440,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, swish.Activate(1.0), Tol);
     }
 
-    [Fact]
-    public void Swish_Derivative_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_Derivative_HandCalculated()
     {
         // Swish'(x) = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
         var swish = new SwishActivation<double>();
@@ -450,8 +451,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, swish.Derivative(x), Tol);
     }
 
-    [Fact]
-    public void Swish_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_NumericalGradient_MatchesAnalytical()
     {
         var swish = new SwishActivation<double>();
         double[] testValues = [-3, -1, 0, 1, 3];
@@ -465,8 +466,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Swish_HasNegativeRegion()
+    [Fact(Timeout = 120000)]
+    public async Task Swish_HasNegativeRegion()
     {
         // Swish has a small negative region around x ≈ -1.28
         var swish = new SwishActivation<double>();
@@ -478,15 +479,15 @@ public class ActivationFunctionDeepMathIntegrationTests
     // GELU
     // ========================================================================
 
-    [Fact]
-    public void GELU_AtZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_AtZero_ReturnsZero()
     {
         var gelu = new GELUActivation<double>();
         Assert.Equal(0.0, gelu.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void GELU_LargePositive_ApproachesInput()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_LargePositive_ApproachesInput()
     {
         var gelu = new GELUActivation<double>();
         double x = 10.0;
@@ -495,16 +496,16 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(x, result, 1e-4);
     }
 
-    [Fact]
-    public void GELU_LargeNegative_ApproachesZero()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_LargeNegative_ApproachesZero()
     {
         var gelu = new GELUActivation<double>();
         double result = gelu.Activate(-10.0);
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact]
-    public void GELU_HandCalculated_AtOne()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_HandCalculated_AtOne()
     {
         // GELU(1) = 0.5 * 1 * (1 + tanh(sqrt(2/pi) * (1 + 0.044715)))
         var gelu = new GELUActivation<double>();
@@ -514,8 +515,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, gelu.Activate(1.0), Tol);
     }
 
-    [Fact]
-    public void GELU_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_NumericalGradient_MatchesAnalytical()
     {
         var gelu = new GELUActivation<double>();
         double[] testValues = [-2, -1, 0, 1, 2];
@@ -533,16 +534,16 @@ public class ActivationFunctionDeepMathIntegrationTests
     // SoftPlus
     // ========================================================================
 
-    [Fact]
-    public void SoftPlus_HandCalculated_AtZero()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_HandCalculated_AtZero()
     {
         // SoftPlus(0) = ln(1 + 1) = ln(2)
         var sp = new SoftPlusActivation<double>();
         Assert.Equal(Math.Log(2), sp.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void SoftPlus_AlwaysPositive()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_AlwaysPositive()
     {
         var sp = new SoftPlusActivation<double>();
         double[] testValues = [-100, -10, -1, 0, 1, 10, 100];
@@ -552,8 +553,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SoftPlus_Derivative_IsSigmoid()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_Derivative_IsSigmoid()
     {
         // d/dx SoftPlus(x) = sigmoid(x)
         var sp = new SoftPlusActivation<double>();
@@ -565,8 +566,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SoftPlus_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_NumericalGradient_MatchesAnalytical()
     {
         var sp = new SoftPlusActivation<double>();
         double[] testValues = [-3, -1, 0, 1, 3];
@@ -580,8 +581,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SoftPlus_LargePositive_ApproachesInput()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_LargePositive_ApproachesInput()
     {
         // For large x: softplus(x) ≈ x
         var sp = new SoftPlusActivation<double>();
@@ -589,8 +590,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(x, sp.Activate(x), 1e-6);
     }
 
-    [Fact]
-    public void SoftPlus_GreaterThanReLU()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_GreaterThanReLU()
     {
         // SoftPlus(x) >= ReLU(x) for all x, with equality at +-inf
         var sp = new SoftPlusActivation<double>();
@@ -607,15 +608,15 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Mish
     // ========================================================================
 
-    [Fact]
-    public void Mish_AtZero_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Mish_AtZero_ReturnsZero()
     {
         var mish = new MishActivation<double>();
         Assert.Equal(0.0, mish.Activate(0.0), Tol);
     }
 
-    [Fact]
-    public void Mish_HandCalculated_AtOne()
+    [Fact(Timeout = 120000)]
+    public async Task Mish_HandCalculated_AtOne()
     {
         // Mish(1) = 1 * tanh(softplus(1)) = 1 * tanh(ln(1+e))
         var mish = new MishActivation<double>();
@@ -624,8 +625,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(expected, mish.Activate(1.0), Tol);
     }
 
-    [Fact]
-    public void Mish_LargePositive_ApproachesInput()
+    [Fact(Timeout = 120000)]
+    public async Task Mish_LargePositive_ApproachesInput()
     {
         // For large x: softplus(x) ≈ x, tanh(x) ≈ 1, so Mish(x) ≈ x
         var mish = new MishActivation<double>();
@@ -633,8 +634,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(x, mish.Activate(x), 1e-3);
     }
 
-    [Fact]
-    public void Mish_HasNegativeRegion()
+    [Fact(Timeout = 120000)]
+    public async Task Mish_HasNegativeRegion()
     {
         // Like Swish, Mish allows some negative values
         var mish = new MishActivation<double>();
@@ -642,8 +643,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.True(val < 0, $"Mish(-1)={val} should be negative");
     }
 
-    [Fact]
-    public void Mish_NumericalGradient_MatchesAnalytical()
+    [Fact(Timeout = 120000)]
+    public async Task Mish_NumericalGradient_MatchesAnalytical()
     {
         var mish = new MishActivation<double>();
         double[] testValues = [-2, -1, 0, 1, 2];
@@ -661,8 +662,8 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Cross-activation relationships
     // ========================================================================
 
-    [Fact]
-    public void ELU_WithAlpha0_EqualsReLU_ForNonZero()
+    [Fact(Timeout = 120000)]
+    public async Task ELU_WithAlpha0_EqualsReLU_ForNonZero()
     {
         var elu = new ELUActivation<double>(alpha: 0.0);
         var relu = new ReLUActivation<double>();
@@ -673,8 +674,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void GELU_BetweenReLU_AndIdentity_ForPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GELU_BetweenReLU_AndIdentity_ForPositive()
     {
         // For x > 0: 0 < GELU(x) <= x (GELU dampens positive values slightly for small x)
         var gelu = new GELUActivation<double>();
@@ -691,8 +692,8 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Additional scalar cross-checks
     // ========================================================================
 
-    [Fact]
-    public void AllActivations_Derivative_IsNonNegative_ForCommon()
+    [Fact(Timeout = 120000)]
+    public async Task AllActivations_Derivative_IsNonNegative_ForCommon()
     {
         // For Sigmoid and SoftPlus, the derivative is always non-negative
         var sigmoid = new SigmoidActivation<double>();
@@ -710,24 +711,24 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Numerical stability tests
     // ========================================================================
 
-    [Fact]
-    public void Sigmoid_VeryLargePositive_Approaches1()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_VeryLargePositive_Approaches1()
     {
         var sigmoid = new SigmoidActivation<double>();
         double result = sigmoid.Activate(100.0);
         Assert.Equal(1.0, result, 1e-10);
     }
 
-    [Fact]
-    public void Sigmoid_VeryLargeNegative_Approaches0()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_VeryLargeNegative_Approaches0()
     {
         var sigmoid = new SigmoidActivation<double>();
         double result = sigmoid.Activate(-100.0);
         Assert.Equal(0.0, result, 1e-10);
     }
 
-    [Fact]
-    public void SoftPlus_VeryLargeNegative_ApproachesZero()
+    [Fact(Timeout = 120000)]
+    public async Task SoftPlus_VeryLargeNegative_ApproachesZero()
     {
         var sp = new SoftPlusActivation<double>();
         double result = sp.Activate(-50.0);
@@ -738,8 +739,8 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Float type tests
     // ========================================================================
 
-    [Fact]
-    public void Sigmoid_Float_MatchesDoubleWithReasonablePrecision()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_Float_MatchesDoubleWithReasonablePrecision()
     {
         var sigmoidF = new SigmoidActivation<float>();
         var sigmoidD = new SigmoidActivation<double>();
@@ -749,8 +750,8 @@ public class ActivationFunctionDeepMathIntegrationTests
         Assert.Equal(resultD, resultF, 1e-6);
     }
 
-    [Fact]
-    public void ReLU_Float_MatchesDouble()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU_Float_MatchesDouble()
     {
         var reluF = new ReLUActivation<float>();
         var reluD = new ReLUActivation<double>();
@@ -763,8 +764,8 @@ public class ActivationFunctionDeepMathIntegrationTests
     // Property: activation/derivative consistency via fundamental theorem
     // ========================================================================
 
-    [Fact]
-    public void Sigmoid_IntegrationConsistency()
+    [Fact(Timeout = 120000)]
+    public async Task Sigmoid_IntegrationConsistency()
     {
         // Integral of sigmoid derivative from a to b should equal sigmoid(b) - sigmoid(a)
         // Using trapezoidal numerical integration

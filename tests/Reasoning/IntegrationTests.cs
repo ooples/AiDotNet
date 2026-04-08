@@ -6,6 +6,7 @@ using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Verification;
 using AiDotNet.Reasoning.DomainSpecific;
 using AiDotNet.Reasoning.Training;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Reasoning;
 
@@ -21,7 +22,7 @@ public class IntegrationTests
         _mockChatModel = new Mock<IChatModel>();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_MathProblem_WithVerification_Succeeds()
     {
         // Arrange
@@ -54,7 +55,7 @@ Final Answer: 180";
         Assert.True(result.Chain.Steps.Count >= 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_CodeGeneration_WithExecution_Succeeds()
     {
         // Arrange
@@ -82,7 +83,7 @@ assert is_even(7) == False
         Assert.Contains("def is_even", result.FinalAnswer);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_SelfConsistency_MultipleChains_AggregatesResults()
     {
         // Arrange
@@ -111,7 +112,7 @@ assert is_even(7) == False
         Assert.True(callCount >= 3); // Should have sampled multiple times
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_HybridRewardModel_CombinesPRMandORM()
     {
         // Arrange
@@ -141,7 +142,7 @@ assert is_even(7) == False
         Assert.True(Convert.ToDouble(reward) <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_ScientificReasoner_SolvesPhysicsProblem()
     {
         // Arrange
@@ -173,7 +174,7 @@ Final Answer: 2 seconds";
         Assert.Contains("2", result.FinalAnswer);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_LogicalReasoner_SolvesDeductiveProblem()
     {
         // Arrange
@@ -204,7 +205,7 @@ Final Answer: All cats are animals";
         Assert.Contains("animals", result.FinalAnswer.ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_TrainingDataCollection_SavesAndLoads()
     {
         // Arrange
@@ -234,7 +235,7 @@ Final Answer: All cats are animals";
         File.Delete(tempFile);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_PolicyGradientTraining_UpdatesModel()
     {
         // Arrange
@@ -267,7 +268,7 @@ Final Answer: All cats are animals";
         Assert.True(Convert.ToDouble(metrics.AverageReward) > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_AdaptiveComputeScaling_AdjustsForDifficulty()
     {
         // Arrange
@@ -285,7 +286,7 @@ Final Answer: All cats are animals";
         Assert.True(easyConfig.ExplorationDepth < hardConfig.ExplorationDepth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_ChainWithVerificationAndRefinement_ImprovesQuality()
     {
         // Arrange
@@ -328,8 +329,8 @@ Final Answer: All cats are animals";
         Assert.True(refinementCount > 0);
     }
 
-    [Fact]
-    public void EndToEnd_ConfigurationPresets_WorkCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_ConfigurationPresets_WorkCorrectly()
     {
         // Arrange & Act
         var fastConfig = ReasoningConfig.Fast;

@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DecompositionMethods;
 
@@ -64,16 +65,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region AdditiveDecomposition Tests
 
-    [Fact]
-    public void Additive_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new AdditiveDecomposition<double>(ts);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void Additive_GetComponents_ReturnsMultipleComponents()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_GetComponents_ReturnsMultipleComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new AdditiveDecomposition<double>(ts);
@@ -82,8 +83,8 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count >= 2, $"Should have at least 2 components (trend+residual), got {components.Count}");
     }
 
-    [Fact]
-    public void Additive_TimeSeries_PreservedAfterDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task Additive_TimeSeries_PreservedAfterDecomposition()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new AdditiveDecomposition<double>(ts);
@@ -94,16 +95,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region MultiplicativeDecomposition Tests
 
-    [Fact]
-    public void Multiplicative_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_Construction_DoesNotThrow()
     {
         var ts = CreatePositiveTimeSeries();
         var decomp = new MultiplicativeDecomposition<double>(ts);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void Multiplicative_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_GetComponents_ReturnsComponents()
     {
         var ts = CreatePositiveTimeSeries();
         var decomp = new MultiplicativeDecomposition<double>(ts);
@@ -112,8 +113,8 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count > 0, "Should have at least one component");
     }
 
-    [Fact]
-    public void Multiplicative_WithSeasonalPeriod_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Multiplicative_WithSeasonalPeriod_DoesNotThrow()
     {
         var ts = CreatePositiveTimeSeries();
         var decomp = new MultiplicativeDecomposition<double>(ts, seasonalPeriod: 12);
@@ -124,8 +125,8 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region STLTimeSeriesDecomposition Tests
 
-    [Fact]
-    public void STL_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task STL_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var options = new STLDecompositionOptions<double>();
@@ -133,8 +134,8 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void STL_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task STL_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var options = new STLDecompositionOptions<double>();
@@ -148,16 +149,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region SSADecomposition Tests
 
-    [Fact]
-    public void SSA_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SSA_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new SSADecomposition<double>(ts, windowSize: 12, numberOfComponents: 3);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void SSA_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task SSA_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new SSADecomposition<double>(ts, windowSize: 12, numberOfComponents: 3);
@@ -170,16 +171,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region EMDDecomposition Tests
 
-    [Fact]
-    public void EMD_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task EMD_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new EMDDecomposition<double>(ts);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void EMD_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task EMD_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new EMDDecomposition<double>(ts, maxImf: 5);
@@ -192,16 +193,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region WaveletDecomposition Tests
 
-    [Fact]
-    public void Wavelet_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task Wavelet_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new WaveletDecomposition<double>(ts, levels: 3);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void Wavelet_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task Wavelet_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new WaveletDecomposition<double>(ts, levels: 3);
@@ -214,16 +215,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region HodrickPrescottDecomposition Tests
 
-    [Fact]
-    public void HodrickPrescott_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task HodrickPrescott_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new HodrickPrescottDecomposition<double>(ts, lambda: 1600);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void HodrickPrescott_GetComponents_ContainsTrend()
+    [Fact(Timeout = 120000)]
+    public async Task HodrickPrescott_GetComponents_ContainsTrend()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new HodrickPrescottDecomposition<double>(ts, lambda: 1600);
@@ -233,8 +234,8 @@ public class TimeSeriesDecompositionIntegrationTests
             "HP filter should produce a Trend component");
     }
 
-    [Fact]
-    public void HodrickPrescott_TrendComponent_HasCorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task HodrickPrescott_TrendComponent_HasCorrectLength()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new HodrickPrescottDecomposition<double>(ts, lambda: 1600);
@@ -250,16 +251,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region BeveridgeNelsonDecomposition Tests
 
-    [Fact]
-    public void BeveridgeNelson_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task BeveridgeNelson_Construction_DoesNotThrow()
     {
         var ts = CreateSimpleTimeSeries();
         var decomp = new BeveridgeNelsonDecomposition<double>(ts);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void BeveridgeNelson_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task BeveridgeNelson_GetComponents_ReturnsComponents()
     {
         var ts = CreateSimpleTimeSeries();
         var decomp = new BeveridgeNelsonDecomposition<double>(ts);
@@ -272,16 +273,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region SEATSDecomposition Tests
 
-    [Fact]
-    public void SEATS_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SEATS_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new SEATSDecomposition<double>(ts);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void SEATS_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task SEATS_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new SEATSDecomposition<double>(ts);
@@ -294,16 +295,16 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region X11Decomposition Tests
 
-    [Fact]
-    public void X11_Construction_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task X11_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new X11Decomposition<double>(ts, seasonalPeriod: 12);
         Assert.NotNull(decomp);
     }
 
-    [Fact]
-    public void X11_GetComponents_ReturnsComponents()
+    [Fact(Timeout = 120000)]
+    public async Task X11_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new X11Decomposition<double>(ts, seasonalPeriod: 12);
@@ -316,8 +317,8 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region Cross-Decomposition Tests
 
-    [Fact]
-    public void AllDecompositions_PreserveOriginalTimeSeries()
+    [Fact(Timeout = 120000)]
+    public async Task AllDecompositions_PreserveOriginalTimeSeries()
     {
         var ts = CreateSeasonalTimeSeries();
         var posTs = CreatePositiveTimeSeries();
@@ -340,8 +341,8 @@ public class TimeSeriesDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllDecompositions_ProduceNonEmptyComponents()
+    [Fact(Timeout = 120000)]
+    public async Task AllDecompositions_ProduceNonEmptyComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var posTs = CreatePositiveTimeSeries();

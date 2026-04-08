@@ -1,5 +1,6 @@
 using AiDotNet.Preprocessing.DimensionalityReduction;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -15,8 +16,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Mean centering
     // ========================================================================
 
-    [Fact]
-    public void PCA_Mean_ComputedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_Mean_ComputedCorrectly()
     {
         // Data: [1, 2], [3, 4], [5, 6]
         // Mean: [3, 4]
@@ -33,8 +34,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(4.0, pca.Mean![1], Tol);
     }
 
-    [Fact]
-    public void PCA_ExplainedVarianceRatio_SumsToOne()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_ExplainedVarianceRatio_SumsToOne()
     {
         // For any dataset, explained variance ratios should sum to 1.0
         // when all components are kept
@@ -53,8 +54,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-3);
     }
 
-    [Fact]
-    public void PCA_ExplainedVariance_Descending()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_ExplainedVariance_Descending()
     {
         // Eigenvalues (explained variance) should be in descending order
         var pca = new PCA<double>();
@@ -75,8 +76,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PCA_ReduceComponents_KeepsRequested()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_ReduceComponents_KeepsRequested()
     {
         // Request 1 component from 3-feature data
         var pca = new PCA<double>(nComponents: 1);
@@ -96,8 +97,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, pca.NComponentsOut);
     }
 
-    [Fact]
-    public void PCA_CorrelatedFeatures_FirstComponentCaptures()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_CorrelatedFeatures_FirstComponentCaptures()
     {
         // Two perfectly correlated features: y = 2*x + 1
         // First principal component should capture nearly 100% of variance
@@ -117,8 +118,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
             $"First component should explain >99.9% for perfectly correlated data, got {pca.ExplainedVarianceRatio[0]:P2}");
     }
 
-    [Fact]
-    public void PCA_TwoFeatures_BothVariancesPositive()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_TwoFeatures_BothVariancesPositive()
     {
         // Two features with distinct, independent variation
         // Both eigenvalues should be positive
@@ -141,8 +142,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, totalRatio, 1e-3);
     }
 
-    [Fact]
-    public void PCA_TransformInverse_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_TransformInverse_Roundtrip()
     {
         // Transform and inverse transform should recover original data
         // Need well-conditioned data with independent variation in both features
@@ -172,8 +173,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PCA_Components_AreOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_Components_AreOrthogonal()
     {
         // Principal components should be orthogonal to each other
         var pca = new PCA<double>();
@@ -202,8 +203,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PCA_Components_AreUnitLength()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_Components_AreUnitLength()
     {
         // Each principal component vector should have unit length
         var pca = new PCA<double>();
@@ -229,8 +230,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void PCA_VarianceRatio_SelectsMinComponents()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_VarianceRatio_SelectsMinComponents()
     {
         // When variance ratio is set, should keep minimum number of components
         // to explain that fraction
@@ -249,8 +250,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, pca.NComponentsOut);
     }
 
-    [Fact]
-    public void PCA_TransformedData_UncorrelatedColumns()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_TransformedData_UncorrelatedColumns()
     {
         // Transformed data columns should be uncorrelated
         var pca = new PCA<double>();
@@ -302,8 +303,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Whitening
     // ========================================================================
 
-    [Fact]
-    public void PCA_Whitening_UnitVariance()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_Whitening_UnitVariance()
     {
         // With whitening, each component should have unit variance
         var pca = new PCA<double>(whiten: true);
@@ -348,8 +349,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Edge cases
     // ========================================================================
 
-    [Fact]
-    public void PCA_SingleFeature_KeepsAllVariance()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_SingleFeature_KeepsAllVariance()
     {
         // With a single feature, PCA should keep 100% of variance
         var pca = new PCA<double>();
@@ -367,8 +368,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, pca.ExplainedVarianceRatio![0], 1e-3);
     }
 
-    [Fact]
-    public void PCA_NComponentsLargerThanFeatures_CapsAtFeatureCount()
+    [Fact(Timeout = 120000)]
+    public async Task PCA_NComponentsLargerThanFeatures_CapsAtFeatureCount()
     {
         // Requesting more components than features should cap at feature count
         var pca = new PCA<double>(nComponents: 10); // More than 2 features
@@ -389,8 +390,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // TruncatedSVD
     // ========================================================================
 
-    [Fact]
-    public void TruncatedSVD_ReducesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task TruncatedSVD_ReducesDimensions()
     {
         var svd = new TruncatedSVD<double>(nComponents: 1);
 
@@ -407,8 +408,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, transformed.Columns);
     }
 
-    [Fact]
-    public void TruncatedSVD_ExplainedVarianceDescending()
+    [Fact(Timeout = 120000)]
+    public async Task TruncatedSVD_ExplainedVarianceDescending()
     {
         var svd = new TruncatedSVD<double>();
 
@@ -436,8 +437,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // NMF (Non-negative Matrix Factorization)
     // ========================================================================
 
-    [Fact]
-    public void NMF_OutputIsNonnegative()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_OutputIsNonnegative()
     {
         // NMF should produce non-negative output
         var nmf = new NMF<double>(nComponents: 2, maxIterations: 50);
@@ -461,8 +462,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void NMF_ReducesDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task NMF_ReducesDimensions()
     {
         var nmf = new NMF<double>(nComponents: 2, maxIterations: 50);
 
@@ -483,8 +484,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // RandomProjection - Johnson-Lindenstrauss lemma
     // ========================================================================
 
-    [Fact]
-    public void RandomProjection_PreservesApproximateDistances()
+    [Fact(Timeout = 120000)]
+    public async Task RandomProjection_PreservesApproximateDistances()
     {
         // Johnson-Lindenstrauss: random projection approximately preserves pairwise distances
         var rp = new RandomProjection<double>(nComponents: 5);

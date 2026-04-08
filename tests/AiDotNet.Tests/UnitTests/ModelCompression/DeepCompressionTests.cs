@@ -2,6 +2,7 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
@@ -13,8 +14,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new DeepCompression<double>();
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new DeepCompression<double>(
@@ -40,56 +41,56 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithNegativePruningSparsity_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativePruningSparsity_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(pruningSparsity: -0.1));
         }
 
-        [Fact]
-        public void Constructor_WithPruningSparsityGreaterThanOne_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithPruningSparsityGreaterThanOne_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(pruningSparsity: 1.5));
         }
 
-        [Fact]
-        public void Constructor_WithNegativePruningThreshold_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativePruningThreshold_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(pruningThreshold: -0.1));
         }
 
-        [Fact]
-        public void Constructor_WithZeroNumClusters_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroNumClusters_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(numClusters: 0));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeNumClusters_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeNumClusters_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(numClusters: -1));
         }
 
-        [Fact]
-        public void Constructor_WithZeroMaxIterations_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroMaxIterations_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
                 new DeepCompression<double>(maxClusteringIterations: 0));
         }
 
-        [Fact]
-        public void Constructor_WithZeroHuffmanPrecision_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithZeroHuffmanPrecision_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Factory Method Tests
 
-        [Fact]
-        public void ForConvolutionalLayers_CreatesCorrectInstance()
+        [Fact(Timeout = 60000)]
+        public async Task ForConvolutionalLayers_CreatesCorrectInstance()
         {
             // Arrange & Act
             var compression = DeepCompression<double>.ForConvolutionalLayers(randomSeed: 42);
@@ -110,8 +111,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void ForFullyConnectedLayers_CreatesCorrectInstance()
+        [Fact(Timeout = 60000)]
+        public async Task ForFullyConnectedLayers_CreatesCorrectInstance()
         {
             // Arrange & Act
             var compression = DeepCompression<double>.ForFullyConnectedLayers(randomSeed: 42);
@@ -124,8 +125,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compress Tests
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -147,8 +148,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<DeepCompressionMetadata<double>>(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new DeepCompression<double>();
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new DeepCompression<double>();
@@ -168,8 +169,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
-        public void Compress_ProducesDeepCompressionMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ProducesDeepCompressionMetadata()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -194,8 +195,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, deepMetadata.OriginalLength);
         }
 
-        [Fact]
-        public void Compress_WithHighSparsity_PrunesMostWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithHighSparsity_PrunesMostWeights()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -224,8 +225,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Decompress Tests
 
-        [Fact]
-        public void Decompress_ReconstructsApproximateWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -246,8 +247,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new DeepCompression<double>();
@@ -270,8 +271,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GetCompressedSize Tests
 
-        [Fact]
-        public void GetCompressedSize_ReturnsPositiveSize()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsPositiveSize()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -298,8 +299,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compression Stats Tests
 
-        [Fact]
-        public void CompressionStats_ContainsValidStatistics()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionStats_ContainsValidStatistics()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -326,8 +327,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(stats.BitsPerWeight > 0);
         }
 
-        [Fact]
-        public void CompressionStats_PruningRatio_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionStats_PruningRatio_ReturnsPositiveValue()
         {
             // Arrange
             var stats = new DeepCompressionStats { Sparsity = 0.9 };
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(stats.PruningRatio > 1.0);
         }
 
-        [Fact]
-        public void CompressionStats_QuantizationRatio_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionStats_QuantizationRatio_ReturnsPositiveValue()
         {
             // Arrange
             var stats = new DeepCompressionStats { BitsPerWeight = 5.0 };
@@ -351,8 +352,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new DeepCompression<float>(
@@ -377,8 +378,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Metadata Tests
 
-        [Fact]
-        public void Metadata_Constructor_WithNullPruningMetadata_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_Constructor_WithNullPruningMetadata_ThrowsException()
         {
             // Arrange
             var clusteringMetadata = new WeightClusteringMetadata<double>(
@@ -393,8 +394,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     null!, clusteringMetadata, huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
-        [Fact]
-        public void Metadata_Constructor_WithNullClusteringMetadata_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_Constructor_WithNullClusteringMetadata_ThrowsException()
         {
             // Arrange
             var pruningMetadata = new SparsePruningMetadata<double>(
@@ -409,8 +410,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     pruningMetadata, null!, huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
-        [Fact]
-        public void Metadata_Constructor_WithNullHuffmanMetadata_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_Constructor_WithNullHuffmanMetadata_ThrowsException()
         {
             // Arrange
             var pruningMetadata = new SparsePruningMetadata<double>(
@@ -424,8 +425,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                     pruningMetadata, clusteringMetadata, null!, 10, new DeepCompressionStats()));
         }
 
-        [Fact]
-        public void Metadata_GetMetadataSize_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
             var pruningMetadata = new SparsePruningMetadata<double>(
@@ -445,8 +446,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(size > 0);
         }
 
-        [Fact]
-        public void Metadata_Type_ReturnsCorrectCompressionType()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_Type_ReturnsCorrectCompressionType()
         {
             // Arrange
             var pruningMetadata = new SparsePruningMetadata<double>(
@@ -468,8 +469,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Round-Trip Tests
 
-        [Fact]
-        public void CompressAndDecompress_RoundTrip_PreservesLargeWeights()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_RoundTrip_PreservesLargeWeights()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -494,8 +495,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Small weights may be pruned to zero
         }
 
-        [Fact]
-        public void CompressAndDecompress_WithLargeDataset_CompletesInReasonableTime()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_WithLargeDataset_CompletesInReasonableTime()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -523,8 +524,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void CompressAndDecompress_WithReproducibleSeed_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task CompressAndDecompress_WithReproducibleSeed_ProducesSameResults()
         {
             // Arrange
             var compression1 = new DeepCompression<double>(
@@ -557,8 +558,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Edge Case Tests
 
-        [Fact]
-        public void Compress_WithAllSameValues_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithAllSameValues_HandlesGracefully()
         {
             // Arrange
             var compression = new DeepCompression<double>(
@@ -581,8 +582,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Compress_WithVerySmallWeights_PrunesAll()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithVerySmallWeights_PrunesAll()
         {
             // Arrange
             var compression = new DeepCompression<double>(

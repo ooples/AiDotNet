@@ -1,6 +1,7 @@
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Models.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
 
@@ -16,8 +17,8 @@ public class ClassificationDeepMathIntegrationTests
     // GaussianNaiveBayes - Training parameter computation
     // ========================================================================
 
-    [Fact]
-    public void GaussianNB_Train_ComputesMeansCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_Train_ComputesMeansCorrectly()
     {
         // 4 samples, 2 features, 2 classes (0, 1)
         // Class 0: samples [1, 2] and [3, 4] -> mean = [2, 3]
@@ -52,8 +53,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(1.0, predictions[3], Tol);
     }
 
-    [Fact]
-    public void GaussianNB_LogLikelihood_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_LogLikelihood_HandComputed()
     {
         // Train with known data where we can hand-compute everything
         // Class 0: [1, 2], [3, 4] -> mean=[2,3], var(n)=[1, 1]
@@ -96,8 +97,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(1.0, prob0 + prob1, 1e-5);
     }
 
-    [Fact]
-    public void GaussianNB_UniformPriors_EqualClassSizes()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_UniformPriors_EqualClassSizes()
     {
         // With equal class sizes and FitPriors=true, priors should be log(0.5) each
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -135,8 +136,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(0.5, probs[0, 1], 1e-4);
     }
 
-    [Fact]
-    public void GaussianNB_UnequalPriors_ShiftsDecisionBoundary()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_UnequalPriors_ShiftsDecisionBoundary()
     {
         // With unequal class sizes, priors shift the decision boundary
         // Class 0: 3 samples, Class 1: 1 sample -> prior(0)=0.75, prior(1)=0.25
@@ -176,8 +177,8 @@ public class ClassificationDeepMathIntegrationTests
             $"Expected class 0 prob ({probs[0, 0]}) > class 1 prob ({probs[0, 1]}) at midpoint due to higher prior");
     }
 
-    [Fact]
-    public void GaussianNB_Variance_PopulationFormula()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_Variance_PopulationFormula()
     {
         // Verify variance uses population formula (n, not n-1) like sklearn
         // Class 0: [2, 4, 6] -> mean=4, var(n) = ((2-4)^2+(4-4)^2+(6-4)^2)/3 = (4+0+4)/3 = 8/3
@@ -213,8 +214,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(0.0, predictions[0], Tol);
     }
 
-    [Fact]
-    public void GaussianNB_MinVarianceProtection()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_MinVarianceProtection()
     {
         // When all samples in a class have the same feature value,
         // variance = 0, but MinVariance should prevent division by zero
@@ -249,8 +250,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(1.0, predictions[0], Tol);
     }
 
-    [Fact]
-    public void GaussianNB_ProbabilitiesSumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_ProbabilitiesSumToOne()
     {
         // For any input, predicted probabilities must sum to 1.0
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -296,8 +297,8 @@ public class ClassificationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void GaussianNB_CustomPriors()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_CustomPriors()
     {
         // Custom priors should override learned priors
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -333,8 +334,8 @@ public class ClassificationDeepMathIntegrationTests
     // MultinomialNaiveBayes - Word count model
     // ========================================================================
 
-    [Fact]
-    public void MultinomialNB_Train_CorrectSmoothing()
+    [Fact(Timeout = 120000)]
+    public async Task MultinomialNB_Train_CorrectSmoothing()
     {
         // Multinomial NB with Laplace smoothing (alpha=1)
         // Class 0: [3, 0, 1] -> counts=[3,0,1]+1=[4,1,2], total=7, P=[4/7, 1/7, 2/7]
@@ -373,8 +374,8 @@ public class ClassificationDeepMathIntegrationTests
     // BernoulliNaiveBayes - Binary features
     // ========================================================================
 
-    [Fact]
-    public void BernoulliNB_Train_BinaryFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task BernoulliNB_Train_BinaryFeatures()
     {
         // Bernoulli NB with binary features
         // Class 0: [1,0,1], [1,1,1] -> P(f=1|c=0) = [1, 0.5, 1]
@@ -413,8 +414,8 @@ public class ClassificationDeepMathIntegrationTests
     // GaussianNaiveBayes - Serialization roundtrip
     // ========================================================================
 
-    [Fact]
-    public void GaussianNB_SerializeDeserialize_Roundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_SerializeDeserialize_Roundtrip()
     {
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
         {
@@ -460,8 +461,8 @@ public class ClassificationDeepMathIntegrationTests
     // GaussianNaiveBayes - Multi-class
     // ========================================================================
 
-    [Fact]
-    public void GaussianNB_MultiClass_CorrectClassification()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_MultiClass_CorrectClassification()
     {
         // 3 well-separated classes
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -503,8 +504,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(2.0, predictions[2], Tol);
     }
 
-    [Fact]
-    public void GaussianNB_HighDimensional_CorrectClassification()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_HighDimensional_CorrectClassification()
     {
         // Test with 5 features - well-separated classes
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -539,8 +540,8 @@ public class ClassificationDeepMathIntegrationTests
     // GaussianNaiveBayes - Edge cases
     // ========================================================================
 
-    [Fact]
-    public void GaussianNB_SingleSamplePerClass()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_SingleSamplePerClass()
     {
         // When each class has only one sample, variance is 0 -> MinVariance kicks in
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -571,8 +572,8 @@ public class ClassificationDeepMathIntegrationTests
         Assert.Equal(1.0, predictions[0], Tol);
     }
 
-    [Fact]
-    public void GaussianNB_LogProbabilities_AllFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_LogProbabilities_AllFinite()
     {
         // Verify log probabilities are always finite (no NaN or Inf)
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
@@ -617,8 +618,8 @@ public class ClassificationDeepMathIntegrationTests
     // ComplementNaiveBayes - Complement of each class
     // ========================================================================
 
-    [Fact]
-    public void ComplementNB_Train_PredictCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ComplementNB_Train_PredictCorrectly()
     {
         // ComplementNB uses the complement of each class (all other classes) for estimation
         // Should handle imbalanced data better than MultinomialNB
@@ -656,8 +657,8 @@ public class ClassificationDeepMathIntegrationTests
     // GaussianNaiveBayes - Clone produces identical predictions
     // ========================================================================
 
-    [Fact]
-    public void GaussianNB_Clone_IdenticalPredictions()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNB_Clone_IdenticalPredictions()
     {
         var gnb = new GaussianNaiveBayes<double>(new NaiveBayesOptions<double>
         {

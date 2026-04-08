@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.DistanceBased;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -60,15 +61,15 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LocalOutlierFactor Tests
 
-    [Fact]
-    public void LOF_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task LOF_Construction_NotFittedByDefault()
     {
         var detector = new LocalOutlierFactor<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void LOF_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LOF_OutlierGetsHighestScore()
     {
         var detector = new LocalOutlierFactor<double>();
         var data = CreateTestData();
@@ -79,8 +80,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void LOF_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task LOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LocalOutlierFactor<double>();
         var data = CreateTestData();
@@ -93,8 +94,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region KNNDetector Tests
 
-    [Fact]
-    public void KNN_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task KNN_OutlierGetsHighestScore()
     {
         var detector = new KNNDetector<double>();
         var data = CreateTestData();
@@ -104,8 +105,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void KNN_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task KNN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KNNDetector<double>();
         var data = CreateTestData();
@@ -118,8 +119,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region COFDetector Tests
 
-    [Fact]
-    public void COF_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task COF_OutlierGetsHighestScore()
     {
         var detector = new COFDetector<double>();
         var data = CreateTestData();
@@ -129,8 +130,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void COF_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task COF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new COFDetector<double>();
         var data = CreateTestData();
@@ -143,8 +144,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region INFLODetector Tests
 
-    [Fact]
-    public void INFLO_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task INFLO_OutlierGetsHighestScore()
     {
         var detector = new INFLODetector<double>();
         var data = CreateTestData();
@@ -154,8 +155,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void INFLO_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task INFLO_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new INFLODetector<double>();
         var data = CreateTestData();
@@ -168,8 +169,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LoOPDetector Tests
 
-    [Fact]
-    public void LoOP_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LoOP_OutlierGetsHighestScore()
     {
         var detector = new LoOPDetector<double>();
         var data = CreateTestData();
@@ -179,8 +180,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void LoOP_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task LoOP_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LoOPDetector<double>();
         var data = CreateTestData();
@@ -193,8 +194,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LOCIDetector Tests
 
-    [Fact]
-    public void LOCI_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LOCI_OutlierGetsHighestScore()
     {
         var detector = new LOCIDetector<double>();
         var data = CreateTestData();
@@ -204,8 +205,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void LOCI_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task LOCI_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LOCIDetector<double>();
         var data = CreateTestData();
@@ -218,8 +219,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LDCOFDetector Tests
 
-    [Fact]
-    public void LDCOF_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task LDCOF_OutlierGetsHighestScore()
     {
         var detector = new LDCOFDetector<double>();
         var data = CreateTestData();
@@ -229,8 +230,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void LDCOF_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task LDCOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LDCOFDetector<double>();
         var data = CreateTestData();
@@ -243,8 +244,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region OCSVMDetector Tests
 
-    [Fact]
-    public void OCSVM_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task OCSVM_OutlierGetsHighestScore()
     {
         var detector = new OCSVMDetector<double>();
         var data = CreateTestData();
@@ -254,8 +255,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void OCSVM_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task OCSVM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new OCSVMDetector<double>();
         var data = CreateTestData();
@@ -268,8 +269,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region SOSDetector Tests
 
-    [Fact]
-    public void SOS_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task SOS_OutlierGetsHighestScore()
     {
         var detector = new SOSDetector<double>();
         var data = CreateTestData();
@@ -279,8 +280,8 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void SOS_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task SOS_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SOSDetector<double>();
         var data = CreateTestData();
@@ -293,8 +294,8 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllDistanceDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllDistanceDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -49,8 +50,8 @@ public class FoundationModelMetaTests
         return false;
     }
 
-    [Fact]
-    public void MetaLoRA_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLoRA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaLoRAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -69,8 +70,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void LoRARecycle_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task LoRARecycle_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new LoRARecycleOptions<double, Matrix<double>, Vector<double>>(model)
@@ -89,8 +90,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void ICMFusion_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task ICMFusion_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new ICMFusionOptions<double, Matrix<double>, Vector<double>>(model)
@@ -109,8 +110,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaLoRABank_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLoRABank_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaLoRABankOptions<double, Matrix<double>, Vector<double>>(model)
@@ -129,8 +130,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void AutoLoRA_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task AutoLoRA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new AutoLoRAOptions<double, Matrix<double>, Vector<double>>(model)
@@ -149,8 +150,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaDiff_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaDiff_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaDiffOptions<double, Matrix<double>, Vector<double>>(model)
@@ -169,8 +170,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaDM_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaDM_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaDMOptions<double, Matrix<double>, Vector<double>>(model)
@@ -189,8 +190,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaDDPM_FiniteLossAndParamChange()
+    [Fact(Timeout = 120000)]
+    public async Task MetaDDPM_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaDDPMOptions<double, Matrix<double>, Vector<double>>(model)
@@ -209,8 +210,8 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
-    public void MetaLoRA_MultiStep_StableLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MetaLoRA_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaLoRAOptions<double, Matrix<double>, Vector<double>>(model)

@@ -1,6 +1,7 @@
 using AiDotNet.Caching;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Caching;
 
@@ -15,8 +16,8 @@ public class CachingDeepMathIntegrationTests
     // Determinism Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_SameInputs_SameKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_SameInputs_SameKey()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
@@ -26,8 +27,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentCalls_SameResult()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentCalls_SameResult()
     {
         // Create two separate but identical vectors
         var v1 = new Vector<double>(new double[] { 1.5, 2.5, 3.5 });
@@ -39,8 +40,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_MultipleCallsSameInstance_Consistent()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_MultipleCallsSameInstance_Consistent()
     {
         var v = new Vector<double>(new double[] { 0.0, 1.0 });
         var keys = new HashSet<string>();
@@ -56,8 +57,8 @@ public class CachingDeepMathIntegrationTests
     // SHA-256 Format Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_Returns64CharHexString()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_Returns64CharHexString()
     {
         // SHA-256 produces 256 bits = 32 bytes = 64 hex chars
         var v = new Vector<double>(new double[] { 1.0 });
@@ -67,8 +68,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
-    public void GenerateKey_LowercaseHex()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_LowercaseHex()
     {
         var v = new Vector<double>(new double[] { 1.0 });
 
@@ -82,8 +83,8 @@ public class CachingDeepMathIntegrationTests
     // Input Sensitivity Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_DifferentVectors_DifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentVectors_DifferentKeys()
     {
         var v1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var v2 = new Vector<double>(new double[] { 1.0, 2.0, 4.0 }); // Changed last element
@@ -94,8 +95,8 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentDescriptors_DifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentDescriptors_DifferentKeys()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0 });
 
@@ -105,8 +106,8 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentVectorLengths_DifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentVectorLengths_DifferentKeys()
     {
         var v1 = new Vector<double>(new double[] { 1.0, 2.0 });
         var v2 = new Vector<double>(new double[] { 1.0, 2.0, 0.0 }); // Extra zero
@@ -117,8 +118,8 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void GenerateKey_SmallValueDifference_DifferentKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_SmallValueDifference_DifferentKeys()
     {
         // Even tiny value differences should produce different keys
         var v1 = new Vector<double>(new double[] { 1.0 });
@@ -134,8 +135,8 @@ public class CachingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void GenerateKey_ZeroVector_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_ZeroVector_ValidKey()
     {
         var v = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
 
@@ -145,8 +146,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Matches("^[0-9a-f]{64}$", key);
     }
 
-    [Fact]
-    public void GenerateKey_NegativeValues_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NegativeValues_ValidKey()
     {
         var v = new Vector<double>(new double[] { -1.0, -2.5, -100.0 });
 
@@ -155,8 +156,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
-    public void GenerateKey_LargeValues_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_LargeValues_ValidKey()
     {
         var v = new Vector<double>(new double[] { 1e15, -1e15, 1e-15 });
 
@@ -169,8 +170,8 @@ public class CachingDeepMathIntegrationTests
     // Collision Resistance Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_ManyDistinctInputs_AllDistinctKeys()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_ManyDistinctInputs_AllDistinctKeys()
     {
         var keys = new HashSet<string>();
 
@@ -185,8 +186,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(100, keys.Count);
     }
 
-    [Fact]
-    public void GenerateKey_DifferentLengthVectors_AllDifferent()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_DifferentLengthVectors_AllDifferent()
     {
         var keys = new HashSet<string>();
 
@@ -209,8 +210,8 @@ public class CachingDeepMathIntegrationTests
     // Descriptor Sensitivity Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_EmptyDescriptor_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_EmptyDescriptor_ValidKey()
     {
         var v = new Vector<double>(new double[] { 1.0 });
 
@@ -219,8 +220,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
-    public void GenerateKey_WhitespaceDescriptor_TrimmedSame()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_WhitespaceDescriptor_TrimmedSame()
     {
         var v = new Vector<double>(new double[] { 1.0 });
 
@@ -235,15 +236,15 @@ public class CachingDeepMathIntegrationTests
     // Null Input Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_NullVector_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NullVector_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             DeterministicCacheKeyGenerator.GenerateKey<double>(null!, "test"));
     }
 
-    [Fact]
-    public void GenerateKey_NullDescriptor_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_NullDescriptor_Throws()
     {
         var v = new Vector<double>(new double[] { 1.0 });
         Assert.Throws<ArgumentNullException>(() =>
@@ -254,8 +255,8 @@ public class CachingDeepMathIntegrationTests
     // CreateInputDataDescriptor Tests
     // ============================
 
-    [Fact]
-    public void CreateDescriptor_MatrixInput_ContainsShape()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDescriptor_MatrixInput_ContainsShape()
     {
         var xTrain = new Matrix<double>(10, 5);
         var yTrain = new Vector<double>(10);
@@ -267,8 +268,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("Vector(10)", descriptor);
     }
 
-    [Fact]
-    public void CreateDescriptor_WithValidation_IncludesValSection()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDescriptor_WithValidation_IncludesValSection()
     {
         var xTrain = new Matrix<double>(10, 5);
         var yTrain = new Vector<double>(10);
@@ -282,8 +283,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("val:", descriptor);
     }
 
-    [Fact]
-    public void CreateDescriptor_WithTest_IncludesTestSection()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDescriptor_WithTest_IncludesTestSection()
     {
         var xTrain = new Matrix<double>(10, 5);
         var yTrain = new Vector<double>(10);
@@ -296,8 +297,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("test:", descriptor);
     }
 
-    [Fact]
-    public void CreateDescriptor_SameInputs_SameDescriptor()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDescriptor_SameInputs_SameDescriptor()
     {
         var xTrain1 = new Matrix<double>(10, 5);
         var yTrain1 = new Vector<double>(10);
@@ -312,8 +313,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(desc1, desc2);
     }
 
-    [Fact]
-    public void CreateDescriptor_DifferentShapes_DifferentDescriptors()
+    [Fact(Timeout = 120000)]
+    public async Task CreateDescriptor_DifferentShapes_DifferentDescriptors()
     {
         var xTrain1 = new Matrix<double>(10, 5);
         var yTrain1 = new Vector<double>(10);
@@ -332,8 +333,8 @@ public class CachingDeepMathIntegrationTests
     // End-to-End Cache Key Tests
     // ============================
 
-    [Fact]
-    public void FullCacheKeyPipeline_Deterministic()
+    [Fact(Timeout = 120000)]
+    public async Task FullCacheKeyPipeline_Deterministic()
     {
         // Simulate full pipeline: descriptor + key generation
         var xTrain = new Matrix<double>(100, 10);
@@ -351,8 +352,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
-    public void FullCacheKeyPipeline_ChangedParams_DifferentKey()
+    [Fact(Timeout = 120000)]
+    public async Task FullCacheKeyPipeline_ChangedParams_DifferentKey()
     {
         var xTrain = new Matrix<double>(100, 10);
         var yTrain = new Vector<double>(100);
@@ -369,8 +370,8 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
-    public void FullCacheKeyPipeline_ChangedData_DifferentKey()
+    [Fact(Timeout = 120000)]
+    public async Task FullCacheKeyPipeline_ChangedData_DifferentKey()
     {
         var modelParams = new Vector<double>(new double[] { 0.1, 0.2 });
 
@@ -394,8 +395,8 @@ public class CachingDeepMathIntegrationTests
     // Large Vector Tests
     // ============================
 
-    [Fact]
-    public void GenerateKey_LargeVector_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_LargeVector_ValidKey()
     {
         var data = new double[1000];
         for (int i = 0; i < 1000; i++)
@@ -408,8 +409,8 @@ public class CachingDeepMathIntegrationTests
         Assert.Matches("^[0-9a-f]{64}$", key);
     }
 
-    [Fact]
-    public void GenerateKey_SingleElement_ValidKey()
+    [Fact(Timeout = 120000)]
+    public async Task GenerateKey_SingleElement_ValidKey()
     {
         var v = new Vector<double>(new double[] { 42.0 });
         var key = DeterministicCacheKeyGenerator.GenerateKey(v, "single");

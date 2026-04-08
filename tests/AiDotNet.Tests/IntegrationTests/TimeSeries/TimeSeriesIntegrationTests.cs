@@ -14,8 +14,8 @@ public class TimeSeriesIntegrationTests
 {
     #region ARModel Tests
 
-    [Fact]
-    public void ARModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new ARModelOptions<double>();
         var model = new ARModel<double>(options);
@@ -23,8 +23,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARModel_Construction_WithCustomAROrder_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Construction_WithCustomAROrder_Succeeds()
     {
         var options = new ARModelOptions<double> { AROrder = 5 };
         var model = new ARModel<double>(options);
@@ -32,8 +32,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARModel_Construction_WithCustomLearningRate_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Construction_WithCustomLearningRate_Succeeds()
     {
         var options = new ARModelOptions<double> { LearningRate = 0.001 };
         var model = new ARModel<double>(options);
@@ -41,8 +41,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Float_Construction_Succeeds()
     {
         var options = new ARModelOptions<float>();
         var model = new ARModel<float>(options);
@@ -50,8 +50,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARModel_Construction_WithDifferentAROrders_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Construction_WithDifferentAROrders_Succeeds()
     {
         var model1 = new ARModel<double>(new ARModelOptions<double> { AROrder = 1 });
         var model2 = new ARModel<double>(new ARModelOptions<double> { AROrder = 3 });
@@ -66,8 +66,8 @@ public class TimeSeriesIntegrationTests
 
     #region MAModel Tests
 
-    [Fact]
-    public void MAModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new MAModelOptions<double>();
         var model = new MAModel<double>(options);
@@ -75,8 +75,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void MAModel_Construction_WithCustomMAOrder_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_Construction_WithCustomMAOrder_Succeeds()
     {
         var options = new MAModelOptions<double> { MAOrder = 3 };
         var model = new MAModel<double>(options);
@@ -84,8 +84,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void MAModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MAModel_Float_Construction_Succeeds()
     {
         var options = new MAModelOptions<float>();
         var model = new MAModel<float>(options);
@@ -97,8 +97,8 @@ public class TimeSeriesIntegrationTests
 
     #region ARMAModel Tests
 
-    [Fact]
-    public void ARMAModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARMAModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new ARMAOptions<double>();
         var model = new ARMAModel<double>(options);
@@ -106,8 +106,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARMAModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARMAModel_Float_Construction_Succeeds()
     {
         var options = new ARMAOptions<float>();
         var model = new ARMAModel<float>(options);
@@ -119,8 +119,8 @@ public class TimeSeriesIntegrationTests
 
     #region ARIMAModel Tests
 
-    [Fact]
-    public void ARIMAModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new ARIMAOptions<double>();
         var model = new ARIMAModel<double>(options);
@@ -128,8 +128,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ARIMAModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_Float_Construction_Succeeds()
     {
         var options = new ARIMAOptions<float>();
         var model = new ARIMAModel<float>(options);
@@ -141,8 +141,8 @@ public class TimeSeriesIntegrationTests
 
     #region SARIMAModel Tests
 
-    [Fact]
-    public void SARIMAModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new SARIMAOptions<double>();
         var model = new SARIMAModel<double>(options);
@@ -150,8 +150,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void SARIMAModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_Float_Construction_Succeeds()
     {
         var options = new SARIMAOptions<float>();
         var model = new SARIMAModel<float>(options);
@@ -163,8 +163,8 @@ public class TimeSeriesIntegrationTests
 
     #region ExponentialSmoothingModel Tests
 
-    [Fact]
-    public void ExponentialSmoothingModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothingModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new ExponentialSmoothingOptions<double>();
         var model = new ExponentialSmoothingModel<double>(options);
@@ -172,8 +172,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void ExponentialSmoothingModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothingModel_Float_Construction_Succeeds()
     {
         var options = new ExponentialSmoothingOptions<float>();
         var model = new ExponentialSmoothingModel<float>(options);
@@ -185,8 +185,8 @@ public class TimeSeriesIntegrationTests
 
     #region GARCHModel Tests
 
-    [Fact]
-    public void GARCHModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GARCHModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new GARCHModelOptions<double>();
         var model = new GARCHModel<double>(options);
@@ -194,8 +194,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void GARCHModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GARCHModel_Float_Construction_Succeeds()
     {
         var options = new GARCHModelOptions<float>();
         var model = new GARCHModel<float>(options);
@@ -207,8 +207,8 @@ public class TimeSeriesIntegrationTests
 
     #region StateSpaceModel Tests
 
-    [Fact]
-    public void StateSpaceModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task StateSpaceModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new StateSpaceModelOptions<double>();
         var model = new StateSpaceModel<double>(options);
@@ -216,8 +216,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void StateSpaceModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task StateSpaceModel_Float_Construction_Succeeds()
     {
         var options = new StateSpaceModelOptions<float>();
         var model = new StateSpaceModel<float>(options);
@@ -229,8 +229,8 @@ public class TimeSeriesIntegrationTests
 
     #region VectorAutoRegressionModel Tests
 
-    [Fact]
-    public void VectorAutoRegressionModel_Construction_WithDefaultOptions_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorAutoRegressionModel_Construction_WithDefaultOptions_Succeeds()
     {
         var options = new VARModelOptions<double>();
         var model = new VectorAutoRegressionModel<double>(options);
@@ -238,8 +238,8 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void VectorAutoRegressionModel_Float_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VectorAutoRegressionModel_Float_Construction_Succeeds()
     {
         var options = new VARModelOptions<float>();
         var model = new VectorAutoRegressionModel<float>(options);
@@ -251,8 +251,8 @@ public class TimeSeriesIntegrationTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllTimeSeriesModels_ImplementITimeSeriesModel()
+    [Fact(Timeout = 120000)]
+    public async Task AllTimeSeriesModels_ImplementITimeSeriesModel()
     {
         var arModel = new ARModel<double>(new ARModelOptions<double>());
         var maModel = new MAModel<double>(new MAModelOptions<double>());
@@ -295,8 +295,8 @@ public class TimeSeriesIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothingModel_SetParameters_WithTrainedModel_UpdatesParameterValues()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothingModel_SetParameters_WithTrainedModel_UpdatesParameterValues()
     {
         // Arrange: Create a model and set initial parameters
         var options = new ExponentialSmoothingOptions<double>();
@@ -317,8 +317,8 @@ public class TimeSeriesIntegrationTests
         Assert.Equal(0.1, retrieved[1], precision: 10);
     }
 
-    [Fact]
-    public void ExponentialSmoothingModel_SetParameters_WithMismatchedLength_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothingModel_SetParameters_WithMismatchedLength_ThrowsException()
     {
         // Arrange: Create a model and set initial parameters
         var options = new ExponentialSmoothingOptions<double>();
@@ -332,8 +332,8 @@ public class TimeSeriesIntegrationTests
         Assert.Throws<ArgumentException>(() => model.SetParameters(wrongLengthParams));
     }
 
-    [Fact]
-    public void ARModel_SetParameters_WithUntrainedModel_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_SetParameters_WithUntrainedModel_Succeeds()
     {
         // Arrange
         var options = new ARModelOptions<double> { AROrder = 3 };
@@ -390,8 +390,8 @@ public class TimeSeriesIntegrationTests
         return (x, y);
     }
 
-    [Fact]
-    public void ARIMAModel_TrainAndForecast_WithDifferencing_ProducesFinitePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task ARIMAModel_TrainAndForecast_WithDifferencing_ProducesFinitePredictions()
     {
         // Arrange: linear trend with d=1
         var (x, y) = CreateLinearTrendData(100);
@@ -414,8 +414,8 @@ public class TimeSeriesIntegrationTests
         }
     }
 
-    [Fact]
-    public void SARIMAModel_TrainAndForecast_WithSeasonality_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task SARIMAModel_TrainAndForecast_WithSeasonality_DoesNotCrash()
     {
         // Arrange: seasonal data with P=1, m=12
         var (x, y) = CreateSeasonalData(120, period: 12);
@@ -444,8 +444,8 @@ public class TimeSeriesIntegrationTests
         }
     }
 
-    [Fact]
-    public void ExponentialSmoothing_TrainAndForecast_DoesNotResetState()
+    [Fact(Timeout = 120000)]
+    public async Task ExponentialSmoothing_TrainAndForecast_DoesNotResetState()
     {
         // Arrange: strong linear trend data with fixed smoothing params
         // to guarantee a non-zero trend component in forecasts
@@ -483,8 +483,8 @@ public class TimeSeriesIntegrationTests
         }
     }
 
-    [Fact]
-    public void NBEATSModel_Train_WithSingleColumnInput_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task NBEATSModel_Train_WithSingleColumnInput_DoesNotCrash()
     {
         // Arrange: single-column feature matrix (univariate time series)
         var (x, y) = CreateLinearTrendData(50);
@@ -506,8 +506,8 @@ public class TimeSeriesIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void AutoformerModel_Train_WithSmallData_DoesNotCrash()
+    [Fact(Timeout = 120000)]
+    public async Task AutoformerModel_Train_WithSmallData_DoesNotCrash()
     {
         // Arrange: small dataset with reduced options
         var (x, y) = CreateLinearTrendData(60);
@@ -529,7 +529,7 @@ public class TimeSeriesIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task InformerModel_Train_CompletesInReasonableTime()
     {
         // Arrange: small dataset with reduced defaults

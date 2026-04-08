@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.WindowFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion;
 
@@ -14,8 +15,8 @@ public class AudioProcessingTests
 {
     #region Window Function Tests
 
-    [Fact]
-    public void WindowFunctions_Hann_CreatesCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_Hann_CreatesCorrectShape()
     {
         // Arrange
         int length = 2048;
@@ -28,8 +29,8 @@ public class AudioProcessingTests
         Assert.Equal(length, window.Length);
     }
 
-    [Fact]
-    public void WindowFunctions_Hann_FirstAndLastValuesNearZero()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_Hann_FirstAndLastValuesNearZero()
     {
         // Arrange
         int length = 1024;
@@ -43,8 +44,8 @@ public class AudioProcessingTests
         Assert.True(window[length / 2] > 0.99f); // Peak should be near 1
     }
 
-    [Fact]
-    public void WindowFunctions_Hamming_DoesNotGoToZero()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_Hamming_DoesNotGoToZero()
     {
         // Arrange
         int length = 1024;
@@ -57,8 +58,8 @@ public class AudioProcessingTests
         Assert.True(window[0] > 0.05f);
     }
 
-    [Fact]
-    public void WindowFunctions_Kaiser_VariesWithBeta()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFunctions_Kaiser_VariesWithBeta()
     {
         // Arrange
         int length = 512;
@@ -105,8 +106,8 @@ public class AudioProcessingTests
 
     #region STFT Tests
 
-    [Fact]
-    public void STFT_Forward_ProducesCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task STFT_Forward_ProducesCorrectShape()
     {
         // Arrange
         int nFft = 512;
@@ -131,8 +132,8 @@ public class AudioProcessingTests
         Assert.Equal(expectedFreqs, spectrogram.Shape[1]);
     }
 
-    [Fact]
-    public void STFT_Magnitude_ProducesNonNegativeValues()
+    [Fact(Timeout = 120000)]
+    public async Task STFT_Magnitude_ProducesNonNegativeValues()
     {
         // Arrange
         int nFft = 256;
@@ -156,8 +157,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void STFT_Power_IsSquareOfMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task STFT_Power_IsSquareOfMagnitude()
     {
         // Arrange
         int nFft = 256;
@@ -182,8 +183,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void STFT_Inverse_ReconstructsSignal()
+    [Fact(Timeout = 120000)]
+    public async Task STFT_Inverse_ReconstructsSignal()
     {
         // Arrange
         int nFft = 512;
@@ -212,8 +213,8 @@ public class AudioProcessingTests
         Assert.True(rmse < 0.1, $"RMSE {rmse} should be small for perfect reconstruction");
     }
 
-    [Fact]
-    public void STFT_CalculateNumFrames_ConsistentWithForward()
+    [Fact(Timeout = 120000)]
+    public async Task STFT_CalculateNumFrames_ConsistentWithForward()
     {
         // Arrange
         int nFft = 1024;
@@ -238,8 +239,8 @@ public class AudioProcessingTests
 
     #region Mel Spectrogram Tests
 
-    [Fact]
-    public void MelSpectrogram_Forward_ProducesCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_Forward_ProducesCorrectShape()
     {
         // Arrange
         int sampleRate = 22050;
@@ -265,8 +266,8 @@ public class AudioProcessingTests
         Assert.Equal(nMels, mel.Shape[1]);
     }
 
-    [Fact]
-    public void MelSpectrogram_HzToMel_Invertible()
+    [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_HzToMel_Invertible()
     {
         // Arrange
         double[] frequencies = { 100, 440, 1000, 4000, 10000 };
@@ -283,8 +284,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void MelSpectrogram_GetFilterbank_HasCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_GetFilterbank_HasCorrectShape()
     {
         // Arrange
         int nMels = 80;
@@ -302,8 +303,8 @@ public class AudioProcessingTests
         Assert.Equal(nFft / 2 + 1, filterbank.Shape[1]);
     }
 
-    [Fact]
-    public void MelSpectrogram_Filterbank_RowsAreNormalized()
+    [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_Filterbank_RowsAreNormalized()
     {
         // Arrange
         var melSpec = new MelSpectrogram<float>(
@@ -328,8 +329,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void MelSpectrogram_GetMelCenterFrequencies_IncreasesMonotonically()
+    [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_GetMelCenterFrequencies_IncreasesMonotonically()
     {
         // Arrange
         var melSpec = new MelSpectrogram<float>(
@@ -353,8 +354,8 @@ public class AudioProcessingTests
 
     #region Griffin-Lim Tests
 
-    [Fact]
-    public void GriffinLim_Reconstruct_ProducesCorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task GriffinLim_Reconstruct_ProducesCorrectLength()
     {
         // Arrange
         int nFft = 512;
@@ -382,8 +383,8 @@ public class AudioProcessingTests
         Assert.True(audio.Length > 0, "Output should have data");
     }
 
-    [Fact]
-    public void GriffinLim_ComputeSpectralConvergence_DecreasesWithIterations()
+    [Fact(Timeout = 120000)]
+    public async Task GriffinLim_ComputeSpectralConvergence_DecreasesWithIterations()
     {
         // Arrange
         int nFft = 256;
@@ -413,8 +414,8 @@ public class AudioProcessingTests
             $"50 iterations error ({error50}) should be <= 10 iterations error ({error10}) with 5% tolerance");
     }
 
-    [Fact]
-    public void GriffinLim_WithProgress_CallsCallback()
+    [Fact(Timeout = 120000)]
+    public async Task GriffinLim_WithProgress_CallsCallback()
     {
         // Arrange
         int nFft = 256;
@@ -443,8 +444,8 @@ public class AudioProcessingTests
 
     #region AudioProcessor Tests
 
-    [Fact]
-    public void AudioProcessor_AudioToSpectrogram_ProducesNormalizedOutput()
+    [Fact(Timeout = 120000)]
+    public async Task AudioProcessor_AudioToSpectrogram_ProducesNormalizedOutput()
     {
         // Arrange
         var processor = new AudioProcessor<float>(
@@ -469,8 +470,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void AudioProcessor_DurationConversions_AreConsistent()
+    [Fact(Timeout = 120000)]
+    public async Task AudioProcessor_DurationConversions_AreConsistent()
     {
         // Arrange
         int sampleRate = 44100;
@@ -489,8 +490,8 @@ public class AudioProcessingTests
             $"Duration should round-trip: {duration} -> {recoveredDuration}");
     }
 
-    [Fact]
-    public void AudioProcessor_NormalizeAudio_ScalesToTargetPeak()
+    [Fact(Timeout = 120000)]
+    public async Task AudioProcessor_NormalizeAudio_ScalesToTargetPeak()
     {
         // Arrange
         var processor = new AudioProcessor<float>();
@@ -517,8 +518,8 @@ public class AudioProcessingTests
             $"Peak should be {targetPeak}, got {maxAbs}");
     }
 
-    [Fact]
-    public void AudioProcessor_PadOrTruncate_PadsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AudioProcessor_PadOrTruncate_PadsCorrectly()
     {
         // Arrange
         var processor = new AudioProcessor<float>();
@@ -546,8 +547,8 @@ public class AudioProcessingTests
         }
     }
 
-    [Fact]
-    public void AudioProcessor_PadOrTruncate_TruncatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task AudioProcessor_PadOrTruncate_TruncatesCorrectly()
     {
         // Arrange
         var processor = new AudioProcessor<float>();

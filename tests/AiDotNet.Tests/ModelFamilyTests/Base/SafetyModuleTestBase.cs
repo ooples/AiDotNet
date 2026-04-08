@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -72,16 +73,16 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 1: Module name is not empty
-    [Fact]
-    public void ModuleName_IsNotNullOrEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task ModuleName_IsNotNullOrEmpty()
     {
         var module = CreateModule();
         Assert.False(string.IsNullOrWhiteSpace(module.ModuleName));
     }
 
     // INVARIANT 2: Evaluate returns non-null list
-    [Fact]
-    public void Evaluate_ReturnsNonNullList()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_ReturnsNonNullList()
     {
         var module = CreateAndAssertReady();
 
@@ -95,8 +96,8 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 3: All confidence scores are in [0, 1]
     // Confidence is a probability — must be bounded.
-    [Fact]
-    public void Evaluate_ConfidencesAreInUnitInterval()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_ConfidencesAreInUnitInterval()
     {
         var module = CreateAndAssertReady();
 
@@ -120,8 +121,8 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 4: All finding descriptions are non-null
-    [Fact]
-    public void Evaluate_FindingDescriptionsAreNonNull()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_FindingDescriptionsAreNonNull()
     {
         var module = CreateAndAssertReady();
 
@@ -132,8 +133,8 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 5: All findings reference their source module
-    [Fact]
-    public void Evaluate_FindingsReferenceSourceModule()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_FindingsReferenceSourceModule()
     {
         var module = CreateAndAssertReady();
 
@@ -150,8 +151,8 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 6: Higher confidence findings should have equal or higher severity
     // If the module is highly confident something is unsafe, severity should reflect that.
-    [Fact]
-    public void Evaluate_HighConfidenceFindings_HaveAppropiateSeverity()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_HighConfidenceFindings_HaveAppropiateSeverity()
     {
         var module = CreateAndAssertReady();
 
@@ -180,8 +181,8 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 7: Deterministic evaluation — same input → same findings count
-    [Fact]
-    public void Evaluate_IsDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_IsDeterministic()
     {
         var module = CreateAndAssertReady();
 
@@ -203,8 +204,8 @@ public abstract class SafetyModuleTestBase
 
     // INVARIANT 8: Content sensitivity — different content may produce different results
     // The module should not return a constant result regardless of input.
-    [Fact]
-    public void Evaluate_IsSensitiveToContent()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_IsSensitiveToContent()
     {
         var module = CreateAndAssertReady();
         if (!ProducesFindings) return;
@@ -247,16 +248,16 @@ public abstract class SafetyModuleTestBase
     // =========================================================================
 
     // INVARIANT 9: Null input throws
-    [Fact]
-    public void Evaluate_NullInput_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_NullInput_Throws()
     {
         var module = CreateModule();
         Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(null!));
     }
 
     // INVARIANT 10: Empty content does not crash
-    [Fact]
-    public void Evaluate_EmptyContent_DoesNotCrash()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_EmptyContent_DoesNotCrash()
     {
         var module = CreateAndAssertReady();
 
@@ -272,8 +273,8 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 11: Very large content does not crash or produce invalid results
-    [Fact]
-    public void Evaluate_LargeContent_ProducesValidResults()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_LargeContent_ProducesValidResults()
     {
         var module = CreateAndAssertReady();
 
@@ -293,8 +294,8 @@ public abstract class SafetyModuleTestBase
     }
 
     // INVARIANT 12: Constant content should not cause numerical issues
-    [Fact]
-    public void Evaluate_ConstantContent_DoesNotProduceNaN()
+    [Fact(Timeout = 60000)]
+    public async Task Evaluate_ConstantContent_DoesNotProduceNaN()
     {
         var module = CreateAndAssertReady();
 

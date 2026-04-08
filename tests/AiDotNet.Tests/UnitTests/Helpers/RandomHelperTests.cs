@@ -2,13 +2,14 @@ using System;
 using System.Linq;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Helpers
 {
     public class RandomHelperTests
     {
-        [Fact]
-        public void CreateSeededRandom_CoversLockedRandomOverrides()
+        [Fact(Timeout = 60000)]
+        public async Task CreateSeededRandom_CoversLockedRandomOverrides()
         {
             var rng = RandomHelper.CreateSeededRandom(123);
 
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.Helpers
 #endif
         }
 
-        [Fact]
-        public void CreateSeededRandom_WithSameSeed_IsDeterministic()
+        [Fact(Timeout = 60000)]
+        public async Task CreateSeededRandom_WithSameSeed_IsDeterministic()
         {
             var a = RandomHelper.CreateSeededRandom(42);
             var b = RandomHelper.CreateSeededRandom(42);
@@ -46,8 +47,8 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(expected, actual);
         }
 
-        [Fact]
-        public void CreateSecureRandom_ReturnsUsableGenerator()
+        [Fact(Timeout = 60000)]
+        public async Task CreateSecureRandom_ReturnsUsableGenerator()
         {
             var rng = RandomHelper.CreateSecureRandom();
 

@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -14,8 +15,8 @@ public class MobileNetTests
 {
     #region MobileNetV2 Configuration Tests
 
-    [Fact]
-    public void MobileNetV2Configuration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2Configuration_DefaultValues_AreCorrect()
     {
         // Arrange & Act - Use the standard factory method
         var config = MobileNetV2Configuration.CreateStandard(numClasses: 1000);
@@ -49,8 +50,8 @@ public class MobileNetTests
 
     #region MobileNetV2 Construction Tests
 
-    [Fact]
-    public void MobileNetV2_100_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_100_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
@@ -62,8 +63,8 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
-    public void MobileNetV2_035_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_035_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = MobileNetV2Network<double>.MobileNetV2_035(numClasses: 10);
@@ -74,8 +75,8 @@ public class MobileNetTests
         Assert.Equal(10, network.NumClasses);
     }
 
-    [Fact]
-    public void MobileNetV2_CustomConfig_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_CustomConfig_CreatesValidNetwork()
     {
         // Arrange - Use factory method for testing custom channels
         var network = MobileNetV2Network<double>.MobileNetV2_075(numClasses: 10, inputChannels: 1);
@@ -113,7 +114,7 @@ public class MobileNetTests
 
     #region MobileNetV2 Forward Pass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ProducesCorrectOutputShape()
     {
@@ -133,7 +134,7 @@ public class MobileNetTests
         Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ReturnsNonZeroOutput()
     {
@@ -157,8 +158,8 @@ public class MobileNetTests
 
     #region MobileNetV3 Configuration Tests
 
-    [Fact]
-    public void MobileNetV3Configuration_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Configuration_DefaultValues_AreCorrect()
     {
         // Arrange & Act - Use the Large factory method
         var config = MobileNetV3Configuration.CreateLarge(numClasses: 1000);
@@ -189,8 +190,8 @@ public class MobileNetTests
 
     #region MobileNetV3 Construction Tests
 
-    [Fact]
-    public void MobileNetV3Large_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Large_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
@@ -202,8 +203,8 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
-    public void MobileNetV3Small_Construction_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Small_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
@@ -215,8 +216,8 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
-    public void MobileNetV3_CustomConfig_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_CustomConfig_CreatesValidNetwork()
     {
         // Arrange - Use factory method for testing custom channels
         var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10, inputChannels: 1);
@@ -248,7 +249,7 @@ public class MobileNetTests
 
     #region MobileNetV3 Forward Pass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV3Large_Forward_ProducesCorrectOutputShape()
     {
@@ -268,7 +269,7 @@ public class MobileNetTests
         Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV3Small_Forward_ProducesCorrectOutputShape()
     {
@@ -292,8 +293,8 @@ public class MobileNetTests
 
     #region InvertedResidualBlock Tests
 
-    [Fact]
-    public void InvertedResidualBlock_Construction_CreatesValidBlock()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Construction_CreatesValidBlock()
     {
         // Arrange & Act
         var block = new InvertedResidualBlock<double>(
@@ -314,8 +315,8 @@ public class MobileNetTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void InvertedResidualBlock_WithSE_CreatesValidBlock()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_WithSE_CreatesValidBlock()
     {
         // Arrange & Act
         var block = new InvertedResidualBlock<double>(
@@ -333,8 +334,8 @@ public class MobileNetTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
-    public void InvertedResidualBlock_Forward_ProducesOutput()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Forward_ProducesOutput()
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
@@ -362,8 +363,8 @@ public class MobileNetTests
         Assert.Equal(8, output.Shape[3]); // Width
     }
 
-    [Fact]
-    public void InvertedResidualBlock_WithStride2_ReducesSpatialDimensions()
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_WithStride2_ReducesSpatialDimensions()
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
@@ -394,8 +395,8 @@ public class MobileNetTests
 
     #region ReLU6 Activation Tests
 
-    [Fact]
-    public void ReLU6Activation_Activate_ClampsToSix()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_Activate_ClampsToSix()
     {
         // Arrange
         var activation = new ReLU6Activation<double>();
@@ -408,8 +409,8 @@ public class MobileNetTests
         Assert.Equal(6.0, activation.Activate(10.0), 6);
     }
 
-    [Fact]
-    public void ReLU6Activation_Derivative_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_Derivative_ReturnsCorrectValues()
     {
         // Arrange
         var activation = new ReLU6Activation<double>();
@@ -422,8 +423,8 @@ public class MobileNetTests
         Assert.Equal(0.0, activation.Derivative(10.0), 6); // Out of range
     }
 
-    [Fact]
-    public void ReLU6Activation_SupportsJitCompilation()
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_SupportsJitCompilation()
     {
         // Arrange
         var activation = new ReLU6Activation<double>();
@@ -436,8 +437,8 @@ public class MobileNetTests
 
     #region HardSwish Activation Tests
 
-    [Fact]
-    public void HardSwishActivation_Activate_ComputesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_Activate_ComputesCorrectly()
     {
         // Arrange
         var activation = new HardSwishActivation<double>();
@@ -459,8 +460,8 @@ public class MobileNetTests
         Assert.Equal(0.6666, activation.Activate(1.0), 3);
     }
 
-    [Fact]
-    public void HardSwishActivation_Derivative_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_Derivative_ReturnsCorrectValues()
     {
         // Arrange
         var activation = new HardSwishActivation<double>();
@@ -480,8 +481,8 @@ public class MobileNetTests
         Assert.Equal(0.8333, activation.Derivative(1.0), 3);
     }
 
-    [Fact]
-    public void HardSwishActivation_SupportsJitCompilation()
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_SupportsJitCompilation()
     {
         // Arrange
         var activation = new HardSwishActivation<double>();
@@ -494,8 +495,8 @@ public class MobileNetTests
 
     #region Metadata Tests
 
-    [Fact]
-    public void MobileNetV2_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
@@ -511,8 +512,8 @@ public class MobileNetTests
         Assert.True((int)metadata.AdditionalInfo["LayerCount"] > 0);
     }
 
-    [Fact]
-    public void MobileNetV3_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
@@ -532,8 +533,8 @@ public class MobileNetTests
 
     #region Clone Tests
 
-    [Fact]
-    public void MobileNetV2_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
@@ -551,8 +552,8 @@ public class MobileNetTests
         Assert.Equal(original.NumClasses, clonedNetwork.NumClasses);
     }
 
-    [Fact]
-    public void MobileNetV3_Clone_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_Clone_CreatesIndependentCopy()
     {
         // Arrange
         var original = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
@@ -574,8 +575,8 @@ public class MobileNetTests
 
     #region Enum Tests
 
-    [Fact]
-    public void MobileNetV2WidthMultiplier_EnumValues_AreDistinct()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2WidthMultiplier_EnumValues_AreDistinct()
     {
         // Arrange
         var values = Enum.GetValues(typeof(MobileNetV2WidthMultiplier)).Cast<MobileNetV2WidthMultiplier>().ToArray();
@@ -591,8 +592,8 @@ public class MobileNetTests
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha140, values);
     }
 
-    [Fact]
-    public void MobileNetV3Variant_EnumValues_AreDistinct()
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Variant_EnumValues_AreDistinct()
     {
         // Arrange
         var values = Enum.GetValues(typeof(MobileNetV3Variant)).Cast<MobileNetV3Variant>().ToArray();

@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -219,8 +220,8 @@ public class SvdDecompositionIntegrationTests
 
     #region Singular Value Property Tests
 
-    [Fact]
-    public void SvdDecomposition_SingularValues_AreNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_SingularValues_AreNonNegative()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);
@@ -236,8 +237,8 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SvdDecomposition_SingularValues_AreSortedDescending()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_SingularValues_AreSortedDescending()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);
@@ -253,8 +254,8 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SvdDecomposition_IdentityMatrix_HasAllOnes()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_IdentityMatrix_HasAllOnes()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -270,8 +271,8 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SvdDecomposition_DiagonalMatrix_HasCorrectSingularValues()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_DiagonalMatrix_HasCorrectSingularValues()
     {
         // Arrange - Diagonal matrix with values 4, 3, 2, 1
         var D = new Matrix<double>(4, 4);
@@ -299,8 +300,8 @@ public class SvdDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact]
-    public void SvdDecomposition_TallMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
         var A = CreateTestMatrix(6, 3);
@@ -320,8 +321,8 @@ public class SvdDecompositionIntegrationTests
             $"Tall matrix reconstruction failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void SvdDecomposition_WideMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
         var A = CreateTestMatrix(3, 6);
@@ -345,8 +346,8 @@ public class SvdDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void SvdDecomposition_ZeroMatrix_HasZeroSingularValues()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_ZeroMatrix_HasZeroSingularValues()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -362,8 +363,8 @@ public class SvdDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SvdDecomposition_RankOneMatrix_HasOneSingularValue()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_RankOneMatrix_HasOneSingularValue()
     {
         // Arrange - Rank 1 matrix: u * v^T
         var u = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -382,8 +383,8 @@ public class SvdDecompositionIntegrationTests
         Assert.True(Math.Abs(svd.S[2]) < LooseTolerance, $"Third singular value should be ~0, got {svd.S[2]}");
     }
 
-    [Fact]
-    public void SvdDecomposition_SymmetricMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_SymmetricMatrix_ValidDecomposition()
     {
         // Arrange - Create symmetric matrix A^T * A
         var B = CreateTestMatrix(4, 4, seed: 123);
@@ -403,8 +404,8 @@ public class SvdDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void SvdDecomposition_LargeMatrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task SvdDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(20, 20, seed: 999);

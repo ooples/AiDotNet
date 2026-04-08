@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -131,8 +132,8 @@ public class GLMRegressionIntegrationTests
 
     #region PoissonRegression Tests
 
-    [Fact]
-    public void PoissonRegression_Train_CountData_MakesPositivePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_Train_CountData_MakesPositivePredictions()
     {
         // Arrange
         var options = new PoissonRegressionOptions<double>
@@ -155,8 +156,8 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PoissonRegression_Train_IncreasingTrend_CapturesTrend()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_Train_IncreasingTrend_CapturesTrend()
     {
         // Arrange
         var options = new PoissonRegressionOptions<double>
@@ -185,8 +186,8 @@ public class GLMRegressionIntegrationTests
         Assert.True(avgSecondHalf > avgFirstHalf, "Predictions should increase with increasing X");
     }
 
-    [Fact]
-    public void PoissonRegression_Coefficients_AreAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_Coefficients_AreAccessible()
     {
         // Arrange
         var poisson = new PoissonRegression<double>(new PoissonRegressionOptions<double>());
@@ -200,8 +201,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(1, poisson.Coefficients.Length); // One feature
     }
 
-    [Fact]
-    public void PoissonRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new PoissonRegressionOptions<double>
@@ -228,8 +229,8 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PoissonRegression_GetModelType_ReturnsPoissonRegression()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonRegression_GetModelType_ReturnsPoissonRegression()
     {
         // Arrange
         var poisson = new PoissonRegression<double>(new PoissonRegressionOptions<double>());
@@ -247,8 +248,8 @@ public class GLMRegressionIntegrationTests
 
     #region NegativeBinomialRegression Tests
 
-    [Fact]
-    public void NegativeBinomialRegression_Train_OverdispersedData_MakesPositivePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_Train_OverdispersedData_MakesPositivePredictions()
     {
         // Arrange
         var options = new NegativeBinomialRegressionOptions<double>
@@ -271,8 +272,8 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void NegativeBinomialRegression_Train_CapturesOverdispersion()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_Train_CapturesOverdispersion()
     {
         // Arrange
         var options = new NegativeBinomialRegressionOptions<double>
@@ -291,8 +292,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void NegativeBinomialRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new NegativeBinomialRegressionOptions<double>
@@ -319,8 +320,8 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void NegativeBinomialRegression_GetModelType_ReturnsNegativeBinomialRegression()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_GetModelType_ReturnsNegativeBinomialRegression()
     {
         // Arrange
         var nbr = new NegativeBinomialRegression<double>(new NegativeBinomialRegressionOptions<double>());
@@ -334,8 +335,8 @@ public class GLMRegressionIntegrationTests
 
     }
 
-    [Fact]
-    public void NegativeBinomialRegression_Coefficients_AreAccessible()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomialRegression_Coefficients_AreAccessible()
     {
         // Arrange
         var nbr = new NegativeBinomialRegression<double>(new NegativeBinomialRegressionOptions<double>());
@@ -353,8 +354,8 @@ public class GLMRegressionIntegrationTests
 
     #region GeneralizedAdditiveModel Tests
 
-    [Fact]
-    public void GeneralizedAdditiveModel_Train_NonLinearData_CapturesPattern()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_Train_NonLinearData_CapturesPattern()
     {
         // Arrange
         var options = new GeneralizedAdditiveModelOptions<double>
@@ -373,8 +374,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void GeneralizedAdditiveModel_Train_MultipleFeatures_HandlesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_Train_MultipleFeatures_HandlesCorrectly()
     {
         // Arrange
         var options = new GeneralizedAdditiveModelOptions<double>
@@ -393,8 +394,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void GeneralizedAdditiveModel_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new GeneralizedAdditiveModelOptions<double>
@@ -418,8 +419,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(2, (int)metadata.AdditionalInfo["Degree"]);
     }
 
-    [Fact]
-    public void GeneralizedAdditiveModel_FeatureImportances_AreCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_FeatureImportances_AreCalculated()
     {
         // Arrange
         var options = new GeneralizedAdditiveModelOptions<double>
@@ -441,8 +442,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(2, importances.Length); // Two features
     }
 
-    [Fact]
-    public void GeneralizedAdditiveModel_DifferentSplineConfigurations_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_DifferentSplineConfigurations_ProduceDifferentResults()
     {
         // Arrange
         var (X, y) = GenerateNonLinearData(25);
@@ -465,8 +466,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsMany.Length);
     }
 
-    [Fact]
-    public void GeneralizedAdditiveModel_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task GeneralizedAdditiveModel_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new GeneralizedAdditiveModelOptions<double>
@@ -497,8 +498,8 @@ public class GLMRegressionIntegrationTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllGLMModels_TrainAndPredict_CompletesWithoutException()
+    [Fact(Timeout = 120000)]
+    public async Task AllGLMModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange
         var (X, y) = GenerateCountData(20);
@@ -533,8 +534,8 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void PoissonVsNegativeBinomial_SameData_BothProduceResults()
+    [Fact(Timeout = 120000)]
+    public async Task PoissonVsNegativeBinomial_SameData_BothProduceResults()
     {
         // Arrange
         var (X, y) = GenerateCountData(25);
@@ -554,8 +555,8 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, nbrPredictions.Length);
     }
 
-    [Fact]
-    public void GLMModels_WithSmallData_HandlesEdgeCases()
+    [Fact(Timeout = 120000)]
+    public async Task GLMModels_WithSmallData_HandlesEdgeCases()
     {
         // Arrange - minimal training data
         var X = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });

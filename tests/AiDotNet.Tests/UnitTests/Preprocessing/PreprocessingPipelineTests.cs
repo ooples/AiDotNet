@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Scalers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.Preprocessing
 {
     public class PreprocessingPipelineTests
     {
-        [Fact]
-        public void Pipeline_Add_AddsTransformerToSteps()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_Add_AddsTransformerToSteps()
         {
             // Arrange
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -21,8 +22,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Single(pipeline.Steps);
         }
 
-        [Fact]
-        public void Pipeline_AddWithName_AddsNamedStep()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_AddWithName_AddsNamedStep()
         {
             // Arrange
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -35,8 +36,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal("scaler", pipeline.Steps[0].Name);
         }
 
-        [Fact]
-        public void Pipeline_FitTransform_AppliesAllStepsInOrder()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_FitTransform_AppliesAllStepsInOrder()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -58,8 +59,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001);
         }
 
-        [Fact]
-        public void Pipeline_MultipleSteps_AppliesSequentially()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_MultipleSteps_AppliesSequentially()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -82,8 +83,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Single(pipeline.Steps);
         }
 
-        [Fact]
-        public void Pipeline_InverseTransform_ReversesAllStepsInReverseOrder()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_InverseTransform_ReversesAllStepsInReverseOrder()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -106,8 +107,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 0] - 50.0) < 0.0001);
         }
 
-        [Fact]
-        public void Pipeline_FitThenTransform_WorksOnNewData()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_FitThenTransform_WorksOnNewData()
         {
             // Arrange
             var trainData = new Matrix<double>(new double[,]
@@ -135,8 +136,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[1, 0] - 0.75) < 0.0001); // 75 is 75% between 0 and 100
         }
 
-        [Fact]
-        public void Pipeline_TransformBeforeFit_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_TransformBeforeFit_ThrowsException()
         {
             // Arrange
             var data = new Matrix<double>(new double[,] { { 1.0 } });
@@ -147,8 +148,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Throws<InvalidOperationException>(() => pipeline.Transform(data));
         }
 
-        [Fact]
-        public void Pipeline_IsFitted_ReflectsFitStatus()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_IsFitted_ReflectsFitStatus()
         {
             // Arrange
             var data = new Matrix<double>(new double[,] { { 1.0 }, { 2.0 } });
@@ -165,8 +166,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(pipeline.IsFitted);
         }
 
-        [Fact]
-        public void Pipeline_SupportsInverseTransform_TrueWhenAllStepsSupport()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_SupportsInverseTransform_TrueWhenAllStepsSupport()
         {
             // Arrange
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -177,8 +178,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(pipeline.SupportsInverseTransform);
         }
 
-        [Fact]
-        public void Pipeline_GetFeatureNamesOut_PassesThroughTransformers()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_GetFeatureNamesOut_PassesThroughTransformers()
         {
             // Arrange
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
@@ -192,8 +193,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(inputNames, outputNames);
         }
 
-        [Fact]
-        public void Pipeline_FluentInterface_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_FluentInterface_WorksCorrectly()
         {
             // Arrange & Act
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>()
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(2, pipeline.Steps.Count);
         }
 
-        [Fact]
-        public void Pipeline_EmptyPipeline_FitTransformReturnsOriginalData()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_EmptyPipeline_FitTransformReturnsOriginalData()
         {
             // Arrange
             var data = new Matrix<double>(new double[,]
@@ -223,8 +224,8 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(data[1, 1], result[1, 1]);
         }
 
-        [Fact]
-        public void Pipeline_AddNullTransformer_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Pipeline_AddNullTransformer_ThrowsException()
         {
             // Arrange
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();

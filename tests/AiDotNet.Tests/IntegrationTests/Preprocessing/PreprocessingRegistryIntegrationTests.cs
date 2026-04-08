@@ -3,6 +3,7 @@ using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -22,7 +23,7 @@ public class PreprocessingRegistryIntegrationTests
     /// PreprocessingRegistry, so concurrent builds would overwrite each other's pipeline.
     /// After the fix, the registry is never set by AiModelBuilder.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ConcurrentBuilds_WithDifferentPreprocessing_DoNotCrossContaminate()
     {
         // Arrange: clear any leftover state from other tests
@@ -97,7 +98,7 @@ public class PreprocessingRegistryIntegrationTests
     /// The preprocessing pipeline flows through the builder's instance field to AiModelResult.PreprocessingInfo,
     /// not through the global static PreprocessingRegistry.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithPreprocessing_Succeeds_WithoutRegistry()
     {
         // Arrange: clear any leftover state
@@ -143,8 +144,8 @@ public class PreprocessingRegistryIntegrationTests
     /// The [Obsolete] attribute is tested at compile time (CS0618 warning), and here we
     /// verify the runtime behavior still works for backward compatibility.
     /// </summary>
-    [Fact]
-    public void DeprecatedRegistry_StillFunctionsForBackwardCompatibility()
+    [Fact(Timeout = 120000)]
+    public async Task DeprecatedRegistry_StillFunctionsForBackwardCompatibility()
     {
 #pragma warning disable CS0618 // Intentionally testing deprecated API
         try
@@ -174,7 +175,7 @@ public class PreprocessingRegistryIntegrationTests
     /// <summary>
     /// Verifies that multiple sequential builds do not leave stale state in the registry.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SequentialBuilds_DoNotLeaveStaleRegistryState()
     {
 #pragma warning disable CS0618

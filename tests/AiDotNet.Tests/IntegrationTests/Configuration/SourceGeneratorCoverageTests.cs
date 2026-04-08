@@ -2,6 +2,7 @@ using System.Reflection;
 using Xunit;
 using AiDotNet.Configuration;
 using AiDotNet.Interfaces;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 
@@ -19,8 +20,8 @@ public class SourceGeneratorCoverageTests
     /// Verifies that every public Configure*() method on AiModelBuilder has a corresponding
     /// property on YamlModelConfig (either hand-written or auto-generated).
     /// </summary>
-    [Fact]
-    public void YamlModelConfig_HasPropertyForEveryConfigureMethod()
+    [Fact(Timeout = 120000)]
+    public async Task YamlModelConfig_HasPropertyForEveryConfigureMethod()
     {
         var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
 
@@ -67,8 +68,8 @@ public class SourceGeneratorCoverageTests
     /// Auto-generated: 48 from source generator
     /// Total: 66 properties
     /// </summary>
-    [Fact]
-    public void YamlModelConfig_HasExpectedPropertyCount()
+    [Fact(Timeout = 120000)]
+    public async Task YamlModelConfig_HasExpectedPropertyCount()
     {
         var configType = typeof(YamlModelConfig);
         var properties = configType
@@ -87,8 +88,8 @@ public class SourceGeneratorCoverageTests
 
     #region Generated Section Deserialization
 
-    [Fact]
-    public void LoadFromString_WithRegularizationSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithRegularizationSection_DeserializesCorrectly()
     {
         var yaml = @"
 regularization:
@@ -101,8 +102,8 @@ regularization:
         Assert.Equal("NoRegularization", config.Regularization.Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithFitDetectorSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFitDetectorSection_DeserializesCorrectly()
     {
         var yaml = @"
 fitDetector:
@@ -115,8 +116,8 @@ fitDetector:
         Assert.Equal("DefaultFitDetector", config.FitDetector.Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithFairnessEvaluatorSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFairnessEvaluatorSection_DeserializesCorrectly()
     {
         var yaml = @"
 fairnessEvaluator:
@@ -129,8 +130,8 @@ fairnessEvaluator:
         Assert.Equal("BasicFairnessEvaluator", config.FairnessEvaluator.Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithPreprocessingPipeline_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithPreprocessingPipeline_DeserializesCorrectly()
     {
         var yaml = @"
 preprocessing:
@@ -150,8 +151,8 @@ preprocessing:
         Assert.True(config.Preprocessing.Steps[1].Params.ContainsKey("strategy"));
     }
 
-    [Fact]
-    public void LoadFromString_WithPostprocessingPipeline_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithPostprocessingPipeline_DeserializesCorrectly()
     {
         var yaml = @"
 postprocessing:
@@ -166,8 +167,8 @@ postprocessing:
         Assert.Equal("SoftmaxTransformer", config.Postprocessing.Steps[0].Type);
     }
 
-    [Fact]
-    public void LoadFromString_WithFederatedLearningSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFederatedLearningSection_DeserializesCorrectly()
     {
         var yaml = @"
 federatedLearning:
@@ -186,8 +187,8 @@ federatedLearning:
         Assert.Equal(100, config.FederatedLearning.MaxRounds);
     }
 
-    [Fact]
-    public void LoadFromString_WithAugmentationSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithAugmentationSection_DeserializesCorrectly()
     {
         var yaml = @"
 augmentation:
@@ -204,8 +205,8 @@ augmentation:
         Assert.Equal(42, config.Augmentation.Seed);
     }
 
-    [Fact]
-    public void LoadFromString_WithUncertaintyQuantificationSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithUncertaintyQuantificationSection_DeserializesCorrectly()
     {
         var yaml = @"
 uncertaintyQuantification:
@@ -222,8 +223,8 @@ uncertaintyQuantification:
         Assert.Equal(0.1, config.UncertaintyQuantification.MonteCarloDropoutRate);
     }
 
-    [Fact]
-    public void LoadFromString_WithProgramSynthesisSection_DeserializesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithProgramSynthesisSection_DeserializesCorrectly()
     {
         var yaml = @"
 programSynthesis:
@@ -245,8 +246,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the type registry has entries for the sections that have parameterless-ctor implementations.
     /// </summary>
-    [Fact]
-    public void TypeRegistry_HasRegisteredImplementations_ForKeyInterfaceSections()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_HasRegisteredImplementations_ForKeyInterfaceSections()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
 
@@ -301,8 +302,8 @@ programSynthesis:
     /// The library has hundreds of IFullModel implementations and all with public constructors
     /// should be registered.
     /// </summary>
-    [Fact]
-    public void TypeRegistry_ModelSection_HasMultipleImplementations()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_ModelSection_HasMultipleImplementations()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
 
@@ -317,8 +318,8 @@ programSynthesis:
     /// Samples up to 3 types per section to avoid test host crashes from types
     /// that allocate large resources during construction.
     /// </summary>
-    [Fact]
-    public void TypeRegistry_SampledTypes_CanBeInstantiated()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_SampledTypes_CanBeInstantiated()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
 
@@ -372,8 +373,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the YamlRegisteredTypeNames (non-generic) matches the generic YamlTypeRegistry.
     /// </summary>
-    [Fact]
-    public void RegisteredTypeNames_MatchesTypeRegistry()
+    [Fact(Timeout = 120000)]
+    public async Task RegisteredTypeNames_MatchesTypeRegistry()
     {
         var genericRegistries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
         var stringNames = YamlRegisteredTypeNames.SectionTypes;
@@ -398,8 +399,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the schema metadata covers all generated sections.
     /// </summary>
-    [Fact]
-    public void SchemaMetadata_CoversAllGeneratedSections()
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_CoversAllGeneratedSections()
     {
         var sections = YamlSchemaMetadata.Sections;
         var sectionNames = sections.Select(s => s.SectionName).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -419,8 +420,8 @@ programSynthesis:
     /// <summary>
     /// Verifies POCO sections in the schema metadata have property definitions.
     /// </summary>
-    [Fact]
-    public void SchemaMetadata_PocoSections_HaveProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_PocoSections_HaveProperties()
     {
         var sections = YamlSchemaMetadata.Sections;
         var pocoSections = sections.Where(s => s.Category == "Poco").ToList();
@@ -437,8 +438,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the hand-written sections are correctly marked in schema metadata.
     /// </summary>
-    [Fact]
-    public void SchemaMetadata_HandWrittenSections_AreMarked()
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_HandWrittenSections_AreMarked()
     {
         var sections = YamlSchemaMetadata.Sections;
 
@@ -467,8 +468,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the JSON Schema generator produces valid output.
     /// </summary>
-    [Fact]
-    public void JsonSchemaGenerate_ProducesValidJson()
+    [Fact(Timeout = 120000)]
+    public async Task JsonSchemaGenerate_ProducesValidJson()
     {
         var schema = YamlJsonSchema.Generate();
 
@@ -484,8 +485,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the JSON Schema covers both hand-written and generated sections.
     /// </summary>
-    [Fact]
-    public void JsonSchemaGenerate_CoversAllSections()
+    [Fact(Timeout = 120000)]
+    public async Task JsonSchemaGenerate_CoversAllSections()
     {
         var schema = YamlJsonSchema.Generate();
 
@@ -513,8 +514,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the docs generator produces markdown output with key sections.
     /// </summary>
-    [Fact]
-    public void DocsGenerate_ProducesMarkdown()
+    [Fact(Timeout = 120000)]
+    public async Task DocsGenerate_ProducesMarkdown()
     {
         var docs = YamlDocsGenerator.Generate();
 
@@ -529,8 +530,8 @@ programSynthesis:
     /// <summary>
     /// Verifies the docs generator covers POCO, interface, and pipeline sections.
     /// </summary>
-    [Fact]
-    public void DocsGenerate_CoversAllSectionTypes()
+    [Fact(Timeout = 120000)]
+    public async Task DocsGenerate_CoversAllSectionTypes()
     {
         var docs = YamlDocsGenerator.Generate();
 
@@ -552,8 +553,8 @@ programSynthesis:
 
     #region Type Registry CreateInstance End-to-End
 
-    [Fact]
-    public void TypeRegistry_CreateInstance_NoRegularization_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_NoRegularization_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
             .CreateInstance<IRegularization<double, Matrix<double>, Vector<double>>>(
@@ -562,8 +563,8 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact]
-    public void TypeRegistry_CreateInstance_DefaultFitDetector_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_DefaultFitDetector_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
             .CreateInstance<IFitDetector<double, Matrix<double>, Vector<double>>>(
@@ -572,8 +573,8 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact]
-    public void TypeRegistry_CreateInstance_BasicFairnessEvaluator_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_BasicFairnessEvaluator_Works()
     {
         var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
             .CreateInstance<IFairnessEvaluator<double>>(
@@ -582,8 +583,8 @@ programSynthesis:
         Assert.NotNull(instance);
     }
 
-    [Fact]
-    public void TypeRegistry_CreateInstance_InvalidSection_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_InvalidSection_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
             YamlTypeRegistry<double, Matrix<double>, Vector<double>>
@@ -592,8 +593,8 @@ programSynthesis:
         Assert.Contains("NonExistentSection", ex.Message);
     }
 
-    [Fact]
-    public void TypeRegistry_CreateInstance_InvalidType_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_InvalidType_ThrowsArgumentException()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
             YamlTypeRegistry<double, Matrix<double>, Vector<double>>
@@ -612,8 +613,8 @@ programSynthesis:
     /// These were previously excluded because the ImplementationFinder required parameterless
     /// constructors. With smart constructor resolution, they are now all registered.
     /// </summary>
-    [Fact]
-    public void TypeRegistry_PreviouslyGappedSections_NowHaveImplementations()
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_PreviouslyGappedSections_NowHaveImplementations()
     {
         var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
 
@@ -654,8 +655,8 @@ programSynthesis:
     /// Counts the total number of Configure methods, generated properties, and registered types
     /// to provide a clear coverage summary.
     /// </summary>
-    [Fact]
-    public void CoverageSummary_ReportsCounts()
+    [Fact(Timeout = 120000)]
+    public async Task CoverageSummary_ReportsCounts()
     {
         var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
         var configType = typeof(YamlModelConfig);
@@ -698,8 +699,8 @@ programSynthesis:
 
     #region YAML Applier End-to-End for Generated Sections
 
-    [Fact]
-    public void Apply_WithRegularizationSection_ConfiguresBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithRegularizationSection_ConfiguresBuilder()
     {
         var yaml = @"
 regularization:
@@ -715,8 +716,8 @@ regularization:
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Apply_WithFitDetectorSection_ConfiguresBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithFitDetectorSection_ConfiguresBuilder()
     {
         var yaml = @"
 fitDetector:
@@ -731,8 +732,8 @@ fitDetector:
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Apply_WithFairnessEvaluatorSection_ConfiguresBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithFairnessEvaluatorSection_ConfiguresBuilder()
     {
         var yaml = @"
 fairnessEvaluator:
@@ -747,8 +748,8 @@ fairnessEvaluator:
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Apply_WithPromptTemplateSection_ConfiguresBuilder()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithPromptTemplateSection_ConfiguresBuilder()
     {
         var yaml = @"
 promptTemplate:
@@ -763,8 +764,8 @@ promptTemplate:
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Apply_WithComprehensiveConfig_AllSectionsApplyWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithComprehensiveConfig_AllSectionsApplyWithoutError()
     {
         var yaml = @"
 optimizer:

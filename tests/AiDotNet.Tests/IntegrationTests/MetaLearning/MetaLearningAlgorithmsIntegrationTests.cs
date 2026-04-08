@@ -8,6 +8,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -109,8 +110,8 @@ public class MetaLearningAlgorithmsIntegrationTests
         };
     }
 
-    [Fact]
-    public void MAML_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
@@ -144,8 +145,8 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MAML, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void Reptile_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task Reptile_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new ReptileOptions<double, Matrix<double>, Vector<double>>(model)
@@ -181,8 +182,8 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.Reptile, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void MetaSGD_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MetaSGD_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
         var options = new MetaSGDOptions<double, Matrix<double>, Vector<double>>(model)
@@ -210,8 +211,8 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MetaSGD, algorithm.AlgorithmType);
     }
 
-    [Fact]
-    public void ProtoNets_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task ProtoNets_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(3, 2);
         var options = new ProtoNetsOptions<double, Matrix<double>, Tensor<double>>(model)
@@ -235,8 +236,8 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(task.NumWays, predictions.Shape[1]);
     }
 
-    [Fact]
-    public void MatchingNetworks_MetaTrainAndAdapt_Run()
+    [Fact(Timeout = 120000)]
+    public async Task MatchingNetworks_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(3, 2);
         var options = new MatchingNetworksOptions<double, Matrix<double>, Tensor<double>>(model)

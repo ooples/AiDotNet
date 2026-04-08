@@ -4,6 +4,7 @@ using AiDotNet.SelfSupervisedLearning;
 using AiDotNet.SelfSupervisedLearning.Losses;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SelfSupervisedLearning;
 
@@ -20,8 +21,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region BarlowTwinsLoss Tests
 
-    [Fact]
-    public void BarlowTwinsLoss_IdentityCrossCorrelation_LossIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_IdentityCrossCorrelation_LossIsZero()
     {
         // When cross-correlation = Identity, invariance = 0, redundancy = 0, loss = 0
         // z1 = z2 = [[sqrt(2), 0], [0, sqrt(2)]] (normalize=false)
@@ -37,8 +38,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Loss should be 0 when cross-corr = I, got {lossVal}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_HandCalculated_KnownOffDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_HandCalculated_KnownOffDiagonal()
     {
         // z1 = z2 = [[1,1],[1,1]], normalize=false
         // C[i,j] = (1/2)(1*1+1*1) = 1 for all i,j
@@ -57,8 +58,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected {expected}, got {lossVal}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_HandCalculated_OrthogonalViews()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_HandCalculated_OrthogonalViews()
     {
         // z1 = [[1,0],[0,1]], z2 = [[1,0],[0,1]], normalize=false
         // C[0,0] = (1/2)(1*1+0*0) = 0.5
@@ -77,8 +78,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 0.5, got {lossVal}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_LambdaZero_OnlyInvariance()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_LambdaZero_OnlyInvariance()
     {
         // lambda=0 should ignore off-diagonal terms entirely
         var loss = new BarlowTwinsLoss<double>(lambda: 0.0, normalize: false);
@@ -93,8 +94,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"With lambda=0 and C_ii=1, loss should be 0, got {lossVal}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_CrossCorrelationMatrix_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_CrossCorrelationMatrix_HandCalculated()
     {
         // Directly test ComputeCrossCorrelation
         var loss = new BarlowTwinsLoss<double>(normalize: false);
@@ -115,8 +116,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(cc[1, 1] - 22.0) < Tolerance, $"C[1,1] expected 22, got {cc[1, 1]}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_OffDiagonalSum_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_OffDiagonalSum_HandCalculated()
     {
         var loss = new BarlowTwinsLoss<double>();
         // Matrix = [[1, 2], [3, 4]]
@@ -128,8 +129,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(offDiag - 13.0) < Tolerance, $"Expected 13, got {offDiag}");
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_GradientVerification_FiniteDifference()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_GradientVerification_FiniteDifference()
     {
         // Verify analytical gradient matches finite-difference approximation
         var loss = new BarlowTwinsLoss<double>(lambda: 0.5, normalize: false);
@@ -159,8 +160,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void BarlowTwinsLoss_NegativeLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task BarlowTwinsLoss_NegativeLambda_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BarlowTwinsLoss<double>(lambda: -0.1));
@@ -170,8 +171,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region DINOLoss Tests
 
-    [Fact]
-    public void DINOLoss_HandCalculated_KnownCrossEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_HandCalculated_KnownCrossEntropy()
     {
         // Verify loss against independently computed cross-entropy
         // Using simple inputs where softmax is tractable
@@ -203,8 +204,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected {expected:F6}, got {lossVal:F6}");
     }
 
-    [Fact]
-    public void DINOLoss_IdenticalStudentTeacher_LossIsEntropy()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_IdenticalStudentTeacher_LossIsEntropy()
     {
         // When student == teacher, cross-entropy = entropy of teacher distribution
         int dim = 3;
@@ -229,8 +230,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected entropy {entropy:F6}, got {lossVal:F6}");
     }
 
-    [Fact]
-    public void DINOLoss_CenterUpdate_EMAFormula()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_CenterUpdate_EMAFormula()
     {
         int dim = 2;
         double momentum = 0.8;
@@ -256,8 +257,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Center[1] expected 1.2, got {centerAfter[1]}");
     }
 
-    [Fact]
-    public void DINOLoss_TeacherSharpening_LowerTempMorePeaked()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_TeacherSharpening_LowerTempMorePeaked()
     {
         // Lower teacher temperature should produce more peaked distributions,
         // resulting in higher loss when student disagrees
@@ -277,8 +278,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Sharp loss ({sharpLossVal:F4}) should > soft loss ({softLossVal:F4})");
     }
 
-    [Fact]
-    public void DINOLoss_GradientDirection_StudentMovesTowardTeacher()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_GradientDirection_StudentMovesTowardTeacher()
     {
         int dim = 3;
         var loss = new DINOLoss<double>(dim, studentTemperature: 0.1, teacherTemperature: 0.04);
@@ -301,8 +302,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Gradient at class 2 should be positive (push away from wrong), got {gradStudent[0, 2]}");
     }
 
-    [Fact]
-    public void DINOLoss_MultiCropLoss_SkipsSameReference()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_MultiCropLoss_SkipsSameReference()
     {
         int dim = 3;
         var loss = new DINOLoss<double>(dim, studentTemperature: 0.1, teacherTemperature: 0.04);
@@ -320,8 +321,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(multiCropLoss > 0, "Multi-crop loss should be positive");
     }
 
-    [Fact]
-    public void DINOLoss_ResetCenter_ClearsToZero()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_ResetCenter_ClearsToZero()
     {
         int dim = 2;
         var loss = new DINOLoss<double>(dim);
@@ -340,8 +341,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             "Center should be zero after reset");
     }
 
-    [Fact]
-    public void DINOLoss_InvalidTemperature_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_InvalidTemperature_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new DINOLoss<double>(4, studentTemperature: 0));
@@ -353,8 +354,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region MAEReconstructionLoss Tests
 
-    [Fact]
-    public void MAEReconstructionLoss_NoMaskedPatches_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_NoMaskedPatches_ZeroLoss()
     {
         var loss = new MAEReconstructionLoss<double>(normalize: false, perPatchNormalization: false);
         var recon = new Tensor<double>(new double[] { 99, 99, 99, 99 }, [1, 2, 2]);
@@ -367,8 +368,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Loss should be 0 when no patches masked, got {lossVal}");
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_AllMasked_HandCalculatedMSE()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_AllMasked_HandCalculatedMSE()
     {
         // batch=1, patches=2, dim=2, normalize=false, perPatchNorm=false
         // recon = [[[1, 2], [3, 4]]]
@@ -388,8 +389,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 10.0, got {lossVal}");
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_WithNormalize_DividesbyPatchDim()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_WithNormalize_DividesbyPatchDim()
     {
         // Same as above but normalize=true: patch MSE is divided by patchDim
         // Patch 0: 0 / 2 = 0
@@ -406,8 +407,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 5.0 with normalize, got {lossVal}");
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_PartialMask_OnlyCountsMasked()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_PartialMask_OnlyCountsMasked()
     {
         // Only patch 1 is masked
         var loss = new MAEReconstructionLoss<double>(normalize: false, perPatchNormalization: false);
@@ -422,8 +423,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 20.0 for single masked patch, got {lossVal}");
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_PerSampleLoss_MatchesOverallLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_PerSampleLoss_MatchesOverallLoss()
     {
         var loss = new MAEReconstructionLoss<double>(normalize: true, perPatchNormalization: false);
         var recon = CreateRandom3DTensor(2, 4, 3, seed: 42);
@@ -439,8 +440,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(perSample[1] >= 0, "Per-sample loss should be non-negative");
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_GradientVerification()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_GradientVerification()
     {
         var loss = new MAEReconstructionLoss<double>(normalize: true, perPatchNormalization: false);
         var recon = CreateRandom3DTensor(1, 3, 2, seed: 42);
@@ -470,8 +471,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void MAEReconstructionLoss_CreateRandomMask_CorrectRatio()
+    [Fact(Timeout = 120000)]
+    public async Task MAEReconstructionLoss_CreateRandomMask_CorrectRatio()
     {
         int batchSize = 10;
         int numPatches = 16;
@@ -499,8 +500,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region TemperatureScheduler Tests
 
-    [Fact]
-    public void TemperatureScheduler_Constant_AlwaysReturnsInitial()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_Constant_AlwaysReturnsInitial()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.Constant,
@@ -514,8 +515,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(2000), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_LinearDecay_BoundariesAndMidpoint()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_LinearDecay_BoundariesAndMidpoint()
     {
         double initial = 1.0;
         double final_ = 0.1;
@@ -535,8 +536,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(midExpected, scheduler.GetTemperature(500), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_CosineDecay_BoundariesAndMidpoint()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_CosineDecay_BoundariesAndMidpoint()
     {
         double initial = 1.0;
         double final_ = 0.1;
@@ -556,8 +557,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(midExpected, scheduler.GetTemperature(500), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_ExponentialDecay_Boundaries()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_ExponentialDecay_Boundaries()
     {
         double initial = 1.0;
         double final_ = 0.01;
@@ -577,8 +578,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(midExpected, scheduler.GetTemperature(500), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_ExponentialDecay_SameInitialFinal_Constant()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_ExponentialDecay_SameInitialFinal_Constant()
     {
         var scheduler = new TemperatureScheduler(
             TemperatureScheduleType.ExponentialDecay,
@@ -591,8 +592,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(0.5, scheduler.GetTemperature(1000), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_LinearWarmup_DuringAndAfterWarmup()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_LinearWarmup_DuringAndAfterWarmup()
     {
         double initial = 0.04;
         double final_ = 0.07;
@@ -652,8 +653,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(final_, scheduler.GetTemperature(1000), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_CosineWarmup_Boundaries()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_CosineWarmup_Boundaries()
     {
         double initial = 0.01;
         double final_ = 0.1;
@@ -678,8 +679,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(mid, scheduler.GetTemperature(100), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_FactoryConstant()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_FactoryConstant()
     {
         var scheduler = TemperatureScheduler.Constant(0.07);
 
@@ -689,8 +690,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(12345), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_FactoryCosineAnneal()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_FactoryCosineAnneal()
     {
         var scheduler = TemperatureScheduler.CosineAnneal(highTemperature: 0.5, lowTemperature: 0.07, totalSteps: 1000);
 
@@ -699,8 +700,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.Equal(0.07, scheduler.GetTemperature(1000), Tolerance);
     }
 
-    [Fact]
-    public void TemperatureScheduler_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TemperatureScheduler_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TemperatureScheduler(initialTemperature: 0));
@@ -716,8 +717,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region CenteringMechanism Tests
 
-    [Fact]
-    public void CenteringMechanism_InitialCenter_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_InitialCenter_IsZero()
     {
         var center = new CenteringMechanism<double>(dimension: 4);
 
@@ -729,8 +730,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void CenteringMechanism_ApplyCenter_SubtractsCenter()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_ApplyCenter_SubtractsCenter()
     {
         var center = new CenteringMechanism<double>(dimension: 2, momentum: 0.9);
         center.SetCenter(new double[] { 1.0, 2.0 });
@@ -748,8 +749,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(centered[1, 1] - 2.0) < Tolerance);
     }
 
-    [Fact]
-    public void CenteringMechanism_Update_EMAFormula()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_Update_EMAFormula()
     {
         double momentum = 0.7;
         var center = new CenteringMechanism<double>(dimension: 2, momentum: momentum);
@@ -773,8 +774,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(c2[1] - 4.26) < Tolerance, $"After 2nd update: center[1]={c2[1]}, expected 4.26");
     }
 
-    [Fact]
-    public void CenteringMechanism_CenterAndUpdate_CombinesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_CenterAndUpdate_CombinesCorrectly()
     {
         var center = new CenteringMechanism<double>(dimension: 2, momentum: 0.5);
 
@@ -793,8 +794,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(c[1] - 3.0) < Tolerance);
     }
 
-    [Fact]
-    public void CenteringMechanism_CenterNorm_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_CenterNorm_HandCalculated()
     {
         var center = new CenteringMechanism<double>(dimension: 2);
         center.SetCenter(new double[] { 3.0, 4.0 });
@@ -805,8 +806,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(norm - 5.0) < Tolerance, $"Expected norm=5, got {norm}");
     }
 
-    [Fact]
-    public void CenteringMechanism_CenterStatistics_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_CenterStatistics_Correct()
     {
         var center = new CenteringMechanism<double>(dimension: 4);
         center.SetCenter(new double[] { 1, 3, 5, 7 });
@@ -822,8 +823,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(max - 7.0) < Tolerance, $"Max expected 7, got {max}");
     }
 
-    [Fact]
-    public void CenteringMechanism_Reset_ClearsCenter()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_Reset_ClearsCenter()
     {
         var center = new CenteringMechanism<double>(dimension: 3);
         center.SetCenter(new double[] { 1, 2, 3 });
@@ -837,8 +838,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void CenteringMechanism_InvalidParams_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task CenteringMechanism_InvalidParams_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new CenteringMechanism<double>(dimension: 0));
@@ -852,8 +853,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region StopGradient Tests
 
-    [Fact]
-    public void StopGradient_Detach_CreatesIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task StopGradient_Detach_CreatesIndependentCopy()
     {
         var original = new Tensor<double>(new double[] { 1, 2, 3, 4 }, [2, 2]);
         var detached = StopGradient<double>.Detach(original);
@@ -867,8 +868,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(detached[0, 1] - 2.0) < Tolerance);
     }
 
-    [Fact]
-    public void StopGradient_ZeroGrad_CreatesZeroTensor()
+    [Fact(Timeout = 120000)]
+    public async Task StopGradient_ZeroGrad_CreatesZeroTensor()
     {
         var tensor = new Tensor<double>(new double[] { 5, 10, 15 }, [1, 3]);
         var zeros = StopGradient<double>.ZeroGrad(tensor);
@@ -882,8 +883,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void StopGradient_SymmetricLoss_AveragesBothDirections()
+    [Fact(Timeout = 120000)]
+    public async Task StopGradient_SymmetricLoss_AveragesBothDirections()
     {
         var pred1 = new Tensor<double>(new double[] { 1, 2 }, [1, 2]);
         var target1 = new Tensor<double>(new double[] { 3, 4 }, [1, 2]);
@@ -913,8 +914,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 20.0, got {symmetricLoss}");
     }
 
-    [Fact]
-    public void StopGradient_DetachBatch_AllIndependent()
+    [Fact(Timeout = 120000)]
+    public async Task StopGradient_DetachBatch_AllIndependent()
     {
         var t1 = new Tensor<double>(new double[] { 1, 2 }, [1, 2]);
         var t2 = new Tensor<double>(new double[] { 3, 4 }, [1, 2]);
@@ -932,8 +933,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(detached[1][0, 0] - 3.0) < Tolerance);
     }
 
-    [Fact]
-    public void DetachedTensor_WrapperPreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task DetachedTensor_WrapperPreservesValues()
     {
         var original = new Tensor<double>(new double[] { 1, 2, 3 }, [1, 3]);
         var detached = new DetachedTensor<double>(original);
@@ -953,8 +954,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region Hand-Calculated Contrastive Loss Verification
 
-    [Fact]
-    public void NTXentLoss_HandCalculated_BatchSize2()
+    [Fact(Timeout = 120000)]
+    public async Task NTXentLoss_HandCalculated_BatchSize2()
     {
         // batch=2, dim=2, temperature=1.0, normalize=false
         // z1 = [[1,0],[0,1]], z2 = [[1,0],[0,1]]
@@ -982,8 +983,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected {expected:F6}, got {lossVal:F6}");
     }
 
-    [Fact]
-    public void InfoNCELoss_HandCalculated_SingleQueryOneNegative()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCELoss_HandCalculated_SingleQueryOneNegative()
     {
         // batch=1, dim=2, temp=1.0, normalize=false
         // query = [[1, 0]], posKey = [[1, 0]], negKey = [[0, 1]]
@@ -1006,8 +1007,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected {expected:F6}, got {lossVal:F6}");
     }
 
-    [Fact]
-    public void BYOLLoss_HandCalculated_KnownVectors()
+    [Fact(Timeout = 120000)]
+    public async Task BYOLLoss_HandCalculated_KnownVectors()
     {
         // prediction = [[3, 4]], target = [[4, 3]], normalize=true
         // ||pred|| = 5, normalized pred = [0.6, 0.8]
@@ -1025,8 +1026,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
             $"Expected 0.08, got {lossVal:F6}");
     }
 
-    [Fact]
-    public void BYOLLoss_MSEEquivalence_ForNormalizedVectors()
+    [Fact(Timeout = 120000)]
+    public async Task BYOLLoss_MSEEquivalence_ForNormalizedVectors()
     {
         // For L2-normalized vectors: MSE(p, z) = 2 - 2*cos(p, z) = BYOL loss
         // Verify this equivalence holds
@@ -1052,8 +1053,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region Gradient Verification (Finite Difference)
 
-    [Fact]
-    public void BYOLLoss_GradientVerification_FiniteDifference()
+    [Fact(Timeout = 120000)]
+    public async Task BYOLLoss_GradientVerification_FiniteDifference()
     {
         var loss = new BYOLLoss<double>(normalize: true);
         var pred = CreateRandomTensor(2, 4, seed: 42);
@@ -1081,8 +1082,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void InfoNCELoss_InBatchGradientVerification()
+    [Fact(Timeout = 120000)]
+    public async Task InfoNCELoss_InBatchGradientVerification()
     {
         var loss = new InfoNCELoss<double>(temperature: 0.5, normalize: false);
         var queries = CreateRandomTensor(3, 4, seed: 42);
@@ -1111,8 +1112,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void DINOLoss_GradientVerification()
+    [Fact(Timeout = 120000)]
+    public async Task DINOLoss_GradientVerification()
     {
         int dim = 3;
         var loss = new DINOLoss<double>(dim, studentTemperature: 0.5, teacherTemperature: 0.1, centerMomentum: 0.9);
@@ -1152,8 +1153,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region MemoryBank FIFO Ordering Tests
 
-    [Fact]
-    public void MemoryBank_FIFOOrdering_AfterWrapAround()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryBank_FIFOOrdering_AfterWrapAround()
     {
         // Capacity 3, embedding dim 2
         var bank = new MemoryBank<double>(capacity: 3, embeddingDim: 2);
@@ -1174,8 +1175,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         Assert.True(Math.Abs(all[2, 0] - 5.0) < Tolerance, $"Expected newest [5,5], got [{all[2, 0]},{all[2, 1]}]");
     }
 
-    [Fact]
-    public void MemoryBank_SetAt_BeyondCurrentSize_ExtendsSize()
+    [Fact(Timeout = 120000)]
+    public async Task MemoryBank_SetAt_BeyondCurrentSize_ExtendsSize()
     {
         var bank = new MemoryBank<double>(capacity: 10, embeddingDim: 2);
 

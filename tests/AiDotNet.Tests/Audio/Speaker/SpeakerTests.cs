@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Audio.Speaker;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Speaker
 {
@@ -33,8 +34,8 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerEmbeddingExtractor Tests
-        [Fact]
-        public void SpeakerEmbeddingExtractor_Extract_ReturnsEmbedding()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbeddingExtractor_Extract_ReturnsEmbedding()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -49,8 +50,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(embedding.Vector.Length > 0, "Embedding should not be empty");
         }
 
-        [Fact]
-        public void SpeakerEmbeddingExtractor_SameAudio_SimilarEmbeddings()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbeddingExtractor_SameAudio_SimilarEmbeddings()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact]
-        public void SpeakerEmbeddingExtractor_DifferentSpeakers_DifferentEmbeddings()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbeddingExtractor_DifferentSpeakers_DifferentEmbeddings()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -91,8 +92,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(sumDiff > 0.1, "Embeddings for different speakers should differ");
         }
 
-        [Fact]
-        public void SpeakerEmbeddingExtractor_EmbeddingValues_AreFinite()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbeddingExtractor_EmbeddingValues_AreFinite()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -109,8 +110,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact]
-        public void SpeakerEmbeddingExtractor_EmbeddingDimension_MatchesOption()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbeddingExtractor_EmbeddingDimension_MatchesOption()
         {
             // Arrange
             var options = new SpeakerEmbeddingOptions { EmbeddingDimension = 128 };
@@ -120,8 +121,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(128, extractor.EmbeddingDimension);
         }
 
-        [Fact]
-        public void SpeakerEmbedding_CosineSimilarity_SameEmbedding_IsOne()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbedding_CosineSimilarity_SameEmbedding_IsOne()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -135,8 +136,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1.0, similarity, 3);
         }
 
-        [Fact]
-        public void SpeakerEmbedding_CosineSimilarity_InRange()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerEmbedding_CosineSimilarity_InRange()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -154,8 +155,8 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerVerifier Tests
-        [Fact]
-        public void SpeakerVerifier_EnrollAndVerify_Works()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerVerifier_EnrollAndVerify_Works()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -172,8 +173,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1.0, result.Score, 2);
         }
 
-        [Fact]
-        public void SpeakerVerifier_EnrolledCount_IncreasesAfterEnroll()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerVerifier_EnrolledCount_IncreasesAfterEnroll()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -191,8 +192,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(1, verifier.EnrolledCount);
         }
 
-        [Fact]
-        public void SpeakerVerifier_Unenroll_RemovesSpeaker()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerVerifier_Unenroll_RemovesSpeaker()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -208,8 +209,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.Equal(0, verifier.EnrolledCount);
         }
 
-        [Fact]
-        public void SpeakerVerifier_IsEnrolled_ReturnsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerVerifier_IsEnrolled_ReturnsCorrectly()
         {
             // Arrange
             var extractor = new SpeakerEmbeddingExtractor<float>();
@@ -223,8 +224,8 @@ namespace AiDotNet.Tests.Audio.Speaker
         }
 
         // SpeakerDiarizer Tests
-        [Fact]
-        public void SpeakerDiarizer_Diarize_ReturnsTurns()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerDiarizer_Diarize_ReturnsTurns()
         {
             // Arrange
             var diarizer = new SpeakerDiarizer<float>();
@@ -239,8 +240,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(result.Turns.Count >= 1, "Should have at least one speaker turn");
         }
 
-        [Fact]
-        public void SpeakerDiarizer_Turns_HaveValidTimestamps()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerDiarizer_Turns_HaveValidTimestamps()
         {
             // Arrange
             var diarizer = new SpeakerDiarizer<float>();
@@ -259,8 +260,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             }
         }
 
-        [Fact]
-        public void SpeakerDiarizer_NumSpeakers_IsPositive()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerDiarizer_NumSpeakers_IsPositive()
         {
             // Arrange
             var diarizer = new SpeakerDiarizer<float>();
@@ -273,8 +274,8 @@ namespace AiDotNet.Tests.Audio.Speaker
             Assert.True(result.NumSpeakers >= 1, "Should detect at least one speaker");
         }
 
-        [Fact]
-        public void SpeakerDiarizer_Duration_MatchesAudio()
+        [Fact(Timeout = 60000)]
+        public async Task SpeakerDiarizer_Duration_MatchesAudio()
         {
             // Arrange
             var diarizer = new SpeakerDiarizer<float>();

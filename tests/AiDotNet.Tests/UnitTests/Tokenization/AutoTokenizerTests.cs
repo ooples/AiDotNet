@@ -5,6 +5,7 @@ using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Models;
 using Newtonsoft.Json;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -36,8 +37,8 @@ public class AutoTokenizerTests : IDisposable
         }
     }
 
-    [Fact]
-    public void FromPretrained_WithLocalPath_LoadsTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithLocalPath_LoadsTokenizer()
     {
         // Arrange
         CreateLocalTokenizerFiles();
@@ -50,16 +51,16 @@ public class AutoTokenizerTests : IDisposable
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void FromPretrained_WithEmptyPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithEmptyPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => AutoTokenizer.FromPretrained(""));
         Assert.Throws<ArgumentException>(() => AutoTokenizer.FromPretrained("   "));
     }
 
-    [Fact]
-    public void GetDefaultCacheDir_ReturnsValidPath()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefaultCacheDir_ReturnsValidPath()
     {
         // Act
         var cacheDir = AutoTokenizer.GetDefaultCacheDir();
@@ -70,8 +71,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.Contains("tokenizers", cacheDir);
     }
 
-    [Fact]
-    public void IsCached_WithNonexistentModel_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsCached_WithNonexistentModel_ReturnsFalse()
     {
         // Act
         var isCached = AutoTokenizer.IsCached("nonexistent-model-xyz", _tempDir);
@@ -80,8 +81,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.False(isCached);
     }
 
-    [Fact]
-    public void IsCached_WithCachedModel_ReturnsTrue()
+    [Fact(Timeout = 60000)]
+    public async Task IsCached_WithCachedModel_ReturnsTrue()
     {
         // Arrange
         var modelName = "test-model";
@@ -96,8 +97,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.True(isCached);
     }
 
-    [Fact]
-    public void IsCached_WithEmptyName_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsCached_WithEmptyName_ReturnsFalse()
     {
         // Act
         var isCached = AutoTokenizer.IsCached("");
@@ -106,8 +107,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.False(isCached);
     }
 
-    [Fact]
-    public void ListCachedModels_ReturnsCorrectModels()
+    [Fact(Timeout = 60000)]
+    public async Task ListCachedModels_ReturnsCorrectModels()
     {
         // Arrange
         var model1Dir = Path.Combine(_tempDir, "model1");
@@ -124,8 +125,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.Contains("model2", models);
     }
 
-    [Fact]
-    public void ListCachedModels_EmptyCache_ReturnsEmptyArray()
+    [Fact(Timeout = 60000)]
+    public async Task ListCachedModels_EmptyCache_ReturnsEmptyArray()
     {
         // Arrange
         var emptyDir = Path.Combine(_tempDir, "empty_cache");
@@ -138,8 +139,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.Empty(models);
     }
 
-    [Fact]
-    public void ListCachedModels_NonexistentDir_ReturnsEmptyArray()
+    [Fact(Timeout = 60000)]
+    public async Task ListCachedModels_NonexistentDir_ReturnsEmptyArray()
     {
         // Arrange
         var nonexistentDir = Path.Combine(_tempDir, "nonexistent");
@@ -151,8 +152,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.Empty(models);
     }
 
-    [Fact]
-    public void ClearCache_SpecificModel_RemovesOnlyThatModel()
+    [Fact(Timeout = 60000)]
+    public async Task ClearCache_SpecificModel_RemovesOnlyThatModel()
     {
         // Arrange
         var model1Dir = Path.Combine(_tempDir, "model1");
@@ -168,8 +169,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.True(Directory.Exists(model2Dir));
     }
 
-    [Fact]
-    public void ClearCache_AllModels_ClearsEntireCache()
+    [Fact(Timeout = 60000)]
+    public async Task ClearCache_AllModels_ClearsEntireCache()
     {
         // Arrange
         var cacheDir = Path.Combine(_tempDir, "cache_to_clear");
@@ -186,8 +187,8 @@ public class AutoTokenizerTests : IDisposable
         Assert.Empty(Directory.GetDirectories(cacheDir)); // But is empty
     }
 
-    [Fact]
-    public void ListCachedModels_HandlesSlashInModelName()
+    [Fact(Timeout = 60000)]
+    public async Task ListCachedModels_HandlesSlashInModelName()
     {
         // Arrange - Simulate org/model format stored as org--model
         var modelDir = Path.Combine(_tempDir, "org--model");
@@ -200,7 +201,7 @@ public class AutoTokenizerTests : IDisposable
         Assert.Contains("org/model", models);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async System.Threading.Tasks.Task FromPretrainedAsync_WithLocalPath_LoadsTokenizer()
     {
         // Arrange
@@ -214,7 +215,7 @@ public class AutoTokenizerTests : IDisposable
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async System.Threading.Tasks.Task FromPretrainedAsync_WithEmptyPath_ThrowsArgumentException()
     {
         // Act & Assert

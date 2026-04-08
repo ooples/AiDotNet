@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class SparseCategoricalCrossEntropyLossTests
     {
-        [Fact]
-        public void CalculateLoss_WithPerfectPrediction_SingleSample_ReturnsNearZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithPerfectPrediction_SingleSample_ReturnsNearZero()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -26,8 +27,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result >= 0.0);
         }
 
-        [Fact]
-        public void CalculateLoss_WithSingleSample_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithSingleSample_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -43,8 +44,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5108256237659907, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithMultipleSamples_ReturnsAverageLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithMultipleSamples_ReturnsAverageLoss()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -64,8 +65,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.9830564281864163, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithPoorPrediction_ReturnsHighLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithPoorPrediction_ReturnsHighLoss()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -81,8 +82,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.995732273553991, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithInvalidClassIndex_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithInvalidClassIndex_ThrowsArgumentException()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -94,8 +95,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
-        public void CalculateLoss_WithNegativeClassIndex_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithNegativeClassIndex_ThrowsArgumentException()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -107,8 +108,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
-        public void CalculateLoss_WithEmptyPredicted_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithEmptyPredicted_ThrowsArgumentException()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -119,8 +120,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithSingleSample_ReturnsCorrectGradient()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithSingleSample_ReturnsCorrectGradient()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -140,8 +141,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result[3], 10);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithMultipleSamples_ReturnsAveragedGradient()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithMultipleSamples_ReturnsAveragedGradient()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -160,8 +161,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result[2], 10);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithDifferentClassIndices_ReturnsCorrectGradient()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithDifferentClassIndices_ReturnsCorrectGradient()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -181,8 +182,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-1.6666666666666667, result[2], 10);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithInvalidClassIndex_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithInvalidClassIndex_ThrowsArgumentException()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -194,8 +195,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
-        public void CalculateLoss_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<float>();
@@ -210,8 +211,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5108256237659907f, result, 5);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<float>();
@@ -228,8 +229,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0f, result[3], 5);
         }
 
-        [Fact]
-        public void CalculateLoss_WithManyClasses_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithManyClasses_HandlesCorrectly()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
@@ -248,8 +249,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.2039728043259361, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithVeryLowProbability_HandlesClamping()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithVeryLowProbability_HandlesClamping()
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();

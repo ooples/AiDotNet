@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -29,7 +30,7 @@ public class AiModelBuilderFederatedLearningLeafIntegrationTests
   }
 }";
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithLeafFederatedDataLoader_UsesEffectiveClientCountForDpSampling()
     {
         string trainPath = Path.Combine(Path.GetTempPath(), $"leaf_train_{Guid.NewGuid():N}.json");

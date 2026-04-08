@@ -3,19 +3,20 @@ using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
 public class HeaderTierResolverTests
 {
-    [Fact]
-    public void Constructor_Throws_WhenOptionsNull()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_Throws_WhenOptionsNull()
     {
         Assert.Throws<ArgumentNullException>(() => new HeaderTierResolver(options: null!));
     }
 
-    [Fact]
-    public void ResolveTier_ReturnsEnterprise_WhenEnforcementDisabled()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveTier_ReturnsEnterprise_WhenEnforcementDisabled()
     {
         var resolver = new HeaderTierResolver(Options.Create(new TierEnforcementOptions { Enabled = false }));
 
@@ -24,8 +25,8 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Enterprise, tier);
     }
 
-    [Fact]
-    public void ResolveTier_ReturnsDefault_WhenContextNull()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveTier_ReturnsDefault_WhenContextNull()
     {
         var resolver = new HeaderTierResolver(Options.Create(new TierEnforcementOptions
         {
@@ -38,8 +39,8 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Free, tier);
     }
 
-    [Fact]
-    public void ResolveTier_ReturnsDefault_WhenHeaderMissing()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveTier_ReturnsDefault_WhenHeaderMissing()
     {
         var options = new TierEnforcementOptions
         {
@@ -55,8 +56,8 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Free, tier);
     }
 
-    [Fact]
-    public void ResolveTier_ReturnsParsedTier_WhenHeaderValid()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveTier_ReturnsParsedTier_WhenHeaderValid()
     {
         var options = new TierEnforcementOptions
         {
@@ -73,8 +74,8 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Pro, tier);
     }
 
-    [Fact]
-    public void ResolveTier_ReturnsDefault_WhenHeaderInvalid()
+    [Fact(Timeout = 60000)]
+    public async Task ResolveTier_ReturnsDefault_WhenHeaderInvalid()
     {
         var options = new TierEnforcementOptions
         {

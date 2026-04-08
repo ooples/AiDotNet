@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -157,16 +158,16 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
-        public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiVectorRetriever<double>(null!, vectorsPerDocument: 3, aggregationMethod: "max"));
         }
 
-        [Fact]
-        public void Constructor_ZeroVectorsPerDocument_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_ZeroVectorsPerDocument_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -176,8 +177,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiVectorRetriever<double>(store, vectorsPerDocument: 0, aggregationMethod: "max"));
         }
 
-        [Fact]
-        public void Constructor_NegativeVectorsPerDocument_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NegativeVectorsPerDocument_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiVectorRetriever<double>(store, vectorsPerDocument: -1, aggregationMethod: "max"));
         }
 
-        [Fact]
-        public void Constructor_NullAggregationMethod_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_NullAggregationMethod_ThrowsArgumentNullException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new MultiVectorRetriever<double>(store, vectorsPerDocument: 3, aggregationMethod: null!));
         }
 
-        [Fact]
-        public void Constructor_DifferentAggregationMethods_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_DifferentAggregationMethods_CreatesInstance()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -215,8 +216,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
-        public void Retrieve_EmptyStore_ReturnsEmptyResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_SingleDocumentMultipleVectors_ReturnsSingleAggregatedResult()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleDocumentMultipleVectors_ReturnsSingleAggregatedResult()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -246,8 +247,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.StartsWith("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_MultipleDocuments_ReturnsMultipleAggregatedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MultipleDocuments_ReturnsMultipleAggregatedResults()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -262,8 +263,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_WithTopK_ReturnsLimitedResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -281,8 +282,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
-        public void Retrieve_NullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -293,8 +294,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
-        public void Retrieve_EmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -305,8 +306,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
-        public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -321,8 +322,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Aggregation Method Tests - Max
 
-        [Fact]
-        public void Retrieve_MaxAggregation_UsesHighestScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MaxAggregation_UsesHighestScore()
         {
             // Arrange - Document with vectors scoring 0.9, 0.5, 0.3
             var store = CreateMultiVectorStore(3,
@@ -337,8 +338,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.9, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_MaxAggregation_RanksDocumentsByMaxScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MaxAggregation_RanksDocumentsByMaxScore()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -358,8 +359,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Aggregation Method Tests - Mean
 
-        [Fact]
-        public void Retrieve_MeanAggregation_UsesAverageScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MeanAggregation_UsesAverageScore()
         {
             // Arrange - Document with vectors scoring 0.9, 0.6, 0.3 -> mean = 0.6
             var store = CreateMultiVectorStore(3,
@@ -374,8 +375,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.6, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_AverageAggregation_SameAsMean()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_AverageAggregation_SameAsMean()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -390,8 +391,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.6, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_MeanAggregation_RanksDocumentsByMeanScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_MeanAggregation_RanksDocumentsByMeanScore()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -412,8 +413,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Aggregation Method Tests - Weighted
 
-        [Fact]
-        public void Retrieve_WeightedAggregation_AppliesDecreasingWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WeightedAggregation_AppliesDecreasingWeights()
         {
             // Arrange - Weights: 1/1, 1/2, 1/3 = 1, 0.5, 0.333...
             // Score = (0.9*1 + 0.6*0.5 + 0.3*0.333) / (1 + 0.5 + 0.333)
@@ -431,8 +432,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 $"Weighted score {results[0].RelevanceScore} should be between mean and max");
         }
 
-        [Fact]
-        public void Retrieve_WeightedAggregation_FirstVectorMoreImportant()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WeightedAggregation_FirstVectorMoreImportant()
         {
             // Arrange - Same total scores but different distribution
             var store = CreateMultiVectorStore(3,
@@ -453,8 +454,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Aggregation Method Tests - Unknown/Default
 
-        [Fact]
-        public void Retrieve_UnknownAggregation_DefaultsToMax()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_UnknownAggregation_DefaultsToMax()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -473,8 +474,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
-        public void Retrieve_WithMetadataFilter_FiltersResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilter_FiltersResults()
         {
             // Arrange
             var store = CreateMultiVectorStoreWithMetadata(3,
@@ -493,8 +494,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.StartsWith("doc1", results[0].Id);
         }
 
-        [Fact]
-        public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
             var store = CreateMultiVectorStoreWithMetadata(3,
@@ -510,8 +511,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -531,8 +532,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Document ID Extraction Tests
 
-        [Fact]
-        public void Retrieve_VectorIdFormat_ExtractsBaseDocumentId()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_VectorIdFormat_ExtractsBaseDocumentId()
         {
             // Arrange - Vectors with IDs like "doc1_vector_0", "doc1_vector_1", etc.
             var store = new MockDocumentStore();
@@ -549,8 +550,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results); // All vectors should be grouped into one document
         }
 
-        [Fact]
-        public void Retrieve_RegularDocumentId_PreservesId()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_RegularDocumentId_PreservesId()
         {
             // Arrange - Document without "_vector_" format
             var store = new MockDocumentStore();
@@ -570,8 +571,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
-        public void Retrieve_SingleVectorPerDocument_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_SingleVectorPerDocument_HandlesCorrectly()
         {
             // Arrange
             var store = CreateMultiVectorStore(1,
@@ -588,8 +589,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.8, results[1].RelevanceScore, 3);
         }
 
-        [Fact]
-        public void Retrieve_ManyVectorsPerDocument_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ManyVectorsPerDocument_HandlesCorrectly()
         {
             // Arrange
             var store = CreateMultiVectorStore(10,
@@ -604,8 +605,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.9, results[0].RelevanceScore, 3); // Max of all 10 vectors
         }
 
-        [Fact]
-        public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -616,8 +617,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
-        public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var store = new MockDocumentStore();
@@ -628,8 +629,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact]
-        public void Retrieve_TopKGreaterThanDocuments_ReturnsAllAvailable()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_TopKGreaterThanDocuments_ReturnsAllAvailable()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -644,8 +645,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
-        public void Retrieve_CaseInsensitiveAggregationMethod()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_CaseInsensitiveAggregationMethod()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -661,8 +662,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(retrieverMixed.Retrieve("test").ToList());
         }
 
-        [Fact]
-        public void Retrieve_DocumentsHaveRelevanceScores()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -676,8 +677,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
-        public void Retrieve_ResultsOrderedByAggregatedScore()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_ResultsOrderedByAggregatedScore()
         {
             // Arrange
             var store = CreateMultiVectorStore(3,
@@ -702,8 +703,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Oversampling Tests
 
-        [Fact]
-        public void Retrieve_OversamplesToEnsureCoverage()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_OversamplesToEnsureCoverage()
         {
             // Arrange - The retriever should request topK * vectorsPerDocument * 2 candidates
             var store = CreateMultiVectorStore(3,

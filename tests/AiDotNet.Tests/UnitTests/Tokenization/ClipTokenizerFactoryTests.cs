@@ -4,6 +4,7 @@ using System.IO;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.Tokenization;
 /// </summary>
 public class ClipTokenizerFactoryTests
 {
-    [Fact]
-    public void CreateSimple_ReturnsValidTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_ReturnsValidTokenizer()
     {
         // Act
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -23,8 +24,8 @@ public class ClipTokenizerFactoryTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void CreateSimple_WithCustomCorpus_TrainsOnCorpus()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_WithCustomCorpus_TrainsOnCorpus()
     {
         // Arrange
         var corpus = new[]
@@ -43,8 +44,8 @@ public class ClipTokenizerFactoryTests
         Assert.True(tokenizer.VocabularySize <= 210); // vocab size + special tokens
     }
 
-    [Fact]
-    public void CreateSimple_HasClipSpecialTokens()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_HasClipSpecialTokens()
     {
         // Act
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -55,8 +56,8 @@ public class ClipTokenizerFactoryTests
         Assert.Equal("<|startoftext|>", tokenizer.SpecialTokens.ClsToken);
     }
 
-    [Fact]
-    public void CreateSimple_CanTokenizeText()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_CanTokenizeText()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -71,8 +72,8 @@ public class ClipTokenizerFactoryTests
         Assert.NotEmpty(result.TokenIds);
     }
 
-    [Fact]
-    public void CreateSimple_WithSpecialTokens_AddsStartToken()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_WithSpecialTokens_AddsStartToken()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -88,8 +89,8 @@ public class ClipTokenizerFactoryTests
         Assert.Contains("<|startoftext|>", result.Tokens);
     }
 
-    [Fact]
-    public void GetDefaultEncodingOptions_ReturnsCorrectDefaults()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefaultEncodingOptions_ReturnsCorrectDefaults()
     {
         // Act
         var options = ClipTokenizerFactory.GetDefaultEncodingOptions();
@@ -104,8 +105,8 @@ public class ClipTokenizerFactoryTests
         Assert.True(options.ReturnAttentionMask);
     }
 
-    [Fact]
-    public void GetDefaultEncodingOptions_WithCustomMaxLength_UsesCustomValue()
+    [Fact(Timeout = 60000)]
+    public async Task GetDefaultEncodingOptions_WithCustomMaxLength_UsesCustomValue()
     {
         // Act
         var options = ClipTokenizerFactory.GetDefaultEncodingOptions(maxLength: 128);
@@ -114,8 +115,8 @@ public class ClipTokenizerFactoryTests
         Assert.Equal(128, options.MaxLength);
     }
 
-    [Fact]
-    public void IsClipCompatible_WithSimpleTokenizer_ChecksCompatibility()
+    [Fact(Timeout = 60000)]
+    public async Task IsClipCompatible_WithSimpleTokenizer_ChecksCompatibility()
     {
         // Arrange - Simple tokenizer - note: small training corpus won't reach 1000 tokens
         var tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: 1000);
@@ -144,8 +145,8 @@ public class ClipTokenizerFactoryTests
         }
     }
 
-    [Fact]
-    public void IsClipCompatible_WithNullTokenizer_ReturnsFalse()
+    [Fact(Timeout = 60000)]
+    public async Task IsClipCompatible_WithNullTokenizer_ReturnsFalse()
     {
         // Act
         var isCompatible = ClipTokenizerFactory.IsClipCompatible(null!);
@@ -154,29 +155,29 @@ public class ClipTokenizerFactoryTests
         Assert.False(isCompatible);
     }
 
-    [Fact]
-    public void DefaultVocabSize_Is49408()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultVocabSize_Is49408()
     {
         // Assert
         Assert.Equal(49408, ClipTokenizerFactory.DefaultVocabSize);
     }
 
-    [Fact]
-    public void DefaultMaxLength_Is77()
+    [Fact(Timeout = 60000)]
+    public async Task DefaultMaxLength_Is77()
     {
         // Assert
         Assert.Equal(77, ClipTokenizerFactory.DefaultMaxLength);
     }
 
-    [Fact]
-    public void ClipPattern_IsNotNullOrEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task ClipPattern_IsNotNullOrEmpty()
     {
         // Assert
         Assert.False(string.IsNullOrEmpty(ClipTokenizerFactory.ClipPattern));
     }
 
-    [Fact]
-    public void CreateSimple_TokenizerCanEncodeDecode()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_TokenizerCanEncodeDecode()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -192,8 +193,8 @@ public class ClipTokenizerFactoryTests
         Assert.Contains("machine", decoded.ToLowerInvariant());
     }
 
-    [Fact]
-    public void CreateSimple_WithPaddingOptions_PadsToMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_WithPaddingOptions_PadsToMaxLength()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -208,8 +209,8 @@ public class ClipTokenizerFactoryTests
         Assert.Equal(77, result.AttentionMask.Count);
     }
 
-    [Fact]
-    public void CreateSimple_WithTruncationOptions_TruncatesToMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_WithTruncationOptions_TruncatesToMaxLength()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
@@ -223,32 +224,32 @@ public class ClipTokenizerFactoryTests
         Assert.Equal(77, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void FromPretrained_WithNullVocabPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithNullVocabPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             ClipTokenizerFactory.FromPretrained(null!, "merges.txt"));
     }
 
-    [Fact]
-    public void FromPretrained_WithNullMergesPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithNullMergesPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             ClipTokenizerFactory.FromPretrained("vocab.json", null!));
     }
 
-    [Fact]
-    public void FromPretrained_WithEmptyVocabPath_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithEmptyVocabPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
             ClipTokenizerFactory.FromPretrained("", "merges.txt"));
     }
 
-    [Fact]
-    public void FromPretrained_WithNonExistentVocabFile_ThrowsFileNotFoundException()
+    [Fact(Timeout = 60000)]
+    public async Task FromPretrained_WithNonExistentVocabFile_ThrowsFileNotFoundException()
     {
         // Arrange
         var nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "vocab.json");
@@ -258,8 +259,8 @@ public class ClipTokenizerFactoryTests
             ClipTokenizerFactory.FromPretrained(nonExistentPath, "merges.txt"));
     }
 
-    [Fact]
-    public void CreateSimple_BatchEncode_ProcessesMultipleTexts()
+    [Fact(Timeout = 60000)]
+    public async Task CreateSimple_BatchEncode_ProcessesMultipleTexts()
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();

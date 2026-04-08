@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -74,8 +75,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return new MockRetriever(docs);
         }
 
-        [Fact]
-        public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
             var mockRetriever = CreateMockRetriever();
@@ -85,8 +86,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(null!, mockRetriever));
         }
 
-        [Fact]
-        public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -96,8 +97,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, null!));
         }
 
-        [Fact]
-        public void Constructor_WithValidArguments_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -114,8 +115,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(totRetriever);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidMaxDepth_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidMaxDepth_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -129,8 +130,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, mockRetriever, maxDepth: 15));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidBranchingFactor_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidBranchingFactor_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -144,8 +145,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new TreeOfThoughtsRetriever<double>(generator, mockRetriever, branchingFactor: 15));
         }
 
-        [Fact]
-        public void Retrieve_WithNullQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -157,8 +158,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve(null!, 10));
         }
 
-        [Fact]
-        public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -170,8 +171,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve("   ", 10));
         }
 
-        [Fact]
-        public void Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -183,8 +184,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 totRetriever.Retrieve("test query", -1));
         }
 
-        [Fact]
-        public void Retrieve_WithBreadthFirstStrategy_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithBreadthFirstStrategy_ReturnsDocuments()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -207,8 +208,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact]
-        public void Retrieve_WithDepthFirstStrategy_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDepthFirstStrategy_ReturnsDocuments()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -231,8 +232,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact]
-        public void Retrieve_WithBestFirstStrategy_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithBestFirstStrategy_ReturnsDocuments()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -255,8 +256,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(resultList.Count <= 5);
         }
 
-        [Fact]
-        public void Retrieve_WithMetadataFilters_ReturnsDocuments()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithMetadataFilters_ReturnsDocuments()
         {
             // Arrange
             var generator = new StubGenerator<double>();
@@ -275,8 +276,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
-        public void Retrieve_WithDifferentDepths_ReturnsAppropriateResults()
+        [Fact(Timeout = 60000)]
+        public async Task Retrieve_WithDifferentDepths_ReturnsAppropriateResults()
         {
             // Arrange
             var generator = new StubGenerator<double>();

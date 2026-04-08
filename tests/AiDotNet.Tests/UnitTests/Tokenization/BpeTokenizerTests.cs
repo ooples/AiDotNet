@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -31,8 +32,8 @@ public class BpeTokenizerTests
         _tokenizer = BpeTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact]
-    public void Train_CreatesVocabulary_WithCorrectSize()
+    [Fact(Timeout = 60000)]
+    public async Task Train_CreatesVocabulary_WithCorrectSize()
     {
         // Arrange & Act
         var tokenizer = BpeTokenizer.Train(_trainingCorpus, 100);
@@ -42,8 +43,8 @@ public class BpeTokenizerTests
         Assert.True(tokenizer.VocabularySize <= 100 + 10); // vocab size + special tokens
     }
 
-    [Fact]
-    public void Tokenize_SimpleText_ReturnsTokens()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_SimpleText_ReturnsTokens()
     {
         // Arrange
         var text = "Hello world";
@@ -56,8 +57,8 @@ public class BpeTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_EmptyText_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_EmptyText_ReturnsEmptyList()
     {
         // Arrange
         var text = "";
@@ -70,8 +71,8 @@ public class BpeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_NullText_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_NullText_ReturnsEmptyList()
     {
         // Arrange
         string? text = null;
@@ -84,8 +85,8 @@ public class BpeTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Encode_ReturnsTokenizationResult_WithTokenIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsTokenizationResult_WithTokenIds()
     {
         // Arrange
         var text = "Hello world";
@@ -100,8 +101,8 @@ public class BpeTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void Encode_WithSpecialTokens_AddsClsAndSep()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithSpecialTokens_AddsClsAndSep()
     {
         // Arrange
         var text = "Hello world";
@@ -123,8 +124,8 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact]
-    public void Encode_WithAttentionMask_ReturnsValidMask()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithAttentionMask_ReturnsValidMask()
     {
         // Arrange
         var text = "Hello world";
@@ -139,8 +140,8 @@ public class BpeTokenizerTests
         Assert.All(result.AttentionMask, mask => Assert.Equal(1, mask));
     }
 
-    [Fact]
-    public void Encode_WithTokenTypeIds_ReturnsValidTypeIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithTokenTypeIds_ReturnsValidTypeIds()
     {
         // Arrange
         var text = "Hello world";
@@ -154,8 +155,8 @@ public class BpeTokenizerTests
         Assert.Equal(result.TokenIds.Count, result.TokenTypeIds.Count);
     }
 
-    [Fact]
-    public void Encode_WithPositionIds_ReturnsSequentialIds()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithPositionIds_ReturnsSequentialIds()
     {
         // Arrange
         var text = "Hello world";
@@ -173,8 +174,8 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact]
-    public void Encode_WithPadding_PadsToMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithPadding_PadsToMaxLength()
     {
         // Arrange
         var text = "Hi";
@@ -192,8 +193,8 @@ public class BpeTokenizerTests
         Assert.Equal(10, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void Encode_WithTruncation_TruncatesToMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithTruncation_TruncatesToMaxLength()
     {
         // Arrange
         var text = "This is a very long sentence that should be truncated to fit the maximum length";
@@ -211,8 +212,8 @@ public class BpeTokenizerTests
         Assert.True(result.TokenIds.Count <= 5);
     }
 
-    [Fact]
-    public void Decode_ReturnsOriginalText_Approximately()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_ReturnsOriginalText_Approximately()
     {
         // Arrange
         var text = "Hello world";
@@ -228,8 +229,8 @@ public class BpeTokenizerTests
         Assert.Contains("Hello", decoded, System.StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Decode_SkipsSpecialTokens_ByDefault()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_SkipsSpecialTokens_ByDefault()
     {
         // Arrange
         var text = "Hello world";
@@ -250,8 +251,8 @@ public class BpeTokenizerTests
         }
     }
 
-    [Fact]
-    public void EncodeBatch_ProcessesMultipleTexts()
+    [Fact(Timeout = 60000)]
+    public async Task EncodeBatch_ProcessesMultipleTexts()
     {
         // Arrange
         var texts = new List<string> { "Hello world", "Test text", "Another sentence" };
@@ -264,8 +265,8 @@ public class BpeTokenizerTests
         Assert.All(results, r => Assert.NotEmpty(r.TokenIds));
     }
 
-    [Fact]
-    public void DecodeBatch_ProcessesMultipleTokenIdLists()
+    [Fact(Timeout = 60000)]
+    public async Task DecodeBatch_ProcessesMultipleTokenIdLists()
     {
         // Arrange
         var texts = new List<string> { "Hello world", "Test text" };
@@ -280,8 +281,8 @@ public class BpeTokenizerTests
         Assert.All(decoded, d => Assert.NotEmpty(d));
     }
 
-    [Fact]
-    public void ConvertTokensToIds_ReturnsValidIds()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertTokensToIds_ReturnsValidIds()
     {
         // Arrange
         var tokens = _tokenizer.Tokenize("Hello world");
@@ -294,8 +295,8 @@ public class BpeTokenizerTests
         Assert.All(ids, id => Assert.True(id >= 0));
     }
 
-    [Fact]
-    public void ConvertIdsToTokens_ReturnsValidTokens()
+    [Fact(Timeout = 60000)]
+    public async Task ConvertIdsToTokens_ReturnsValidTokens()
     {
         // Arrange
         var text = "Hello world";
@@ -309,8 +310,8 @@ public class BpeTokenizerTests
         Assert.All(tokens, t => Assert.NotNull(t));
     }
 
-    [Fact]
-    public void Roundtrip_TokenizeAndDetokenize_PreservesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Roundtrip_TokenizeAndDetokenize_PreservesContent()
     {
         // Arrange
         var originalText = "machine learning";
@@ -330,16 +331,16 @@ public class BpeTokenizerTests
         Assert.Contains("learning", normalizedDecoded);
     }
 
-    [Fact]
-    public void SpecialTokens_AreInVocabulary()
+    [Fact(Timeout = 60000)]
+    public async Task SpecialTokens_AreInVocabulary()
     {
         // Assert
         Assert.True(_tokenizer.Vocabulary.ContainsToken(_tokenizer.SpecialTokens.UnkToken));
         Assert.True(_tokenizer.Vocabulary.ContainsToken(_tokenizer.SpecialTokens.PadToken));
     }
 
-    [Fact]
-    public void Train_WithEmptyCorpus_CreatesMinimalTokenizer()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithEmptyCorpus_CreatesMinimalTokenizer()
     {
         // Arrange
         var emptyCorpus = new List<string>();
@@ -352,8 +353,8 @@ public class BpeTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0); // At least special tokens exist
     }
 
-    [Fact]
-    public void VocabularySize_ReturnsCorrectCount()
+    [Fact(Timeout = 60000)]
+    public async Task VocabularySize_ReturnsCorrectCount()
     {
         // Assert
         Assert.True(_tokenizer.VocabularySize > 0);
@@ -362,15 +363,15 @@ public class BpeTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void Train_NullCorpus_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
             BpeTokenizer.Train(null!, 100));
     }
 
-    [Fact]
-    public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
+    [Fact(Timeout = 60000)]
+    public async Task Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
     {
         var corpus = new List<string> { "Hello world" };
 

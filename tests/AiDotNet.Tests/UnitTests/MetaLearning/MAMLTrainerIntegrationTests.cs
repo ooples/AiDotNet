@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
@@ -91,8 +92,8 @@ public class MAMLTrainerIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -129,8 +130,8 @@ public class MAMLTrainerIntegrationTests
         Assert.All(lossHistory, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    [Fact]
-    public void MetaTrain_TrainsModelOnMultipleTasks()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_TrainsModelOnMultipleTasks()
     {
         // This test verifies the framework correctly processes multiple meta-learning tasks
         // and that MAML uses query set evaluation (key difference from Reptile)
@@ -177,8 +178,8 @@ public class MAMLTrainerIntegrationTests
         Assert.True(paramsDifferent, "Meta-training should change parameters differently than baseline");
     }
 
-    [Fact]
-    public void Adapt_ProducesTaskSpecificModel()
+    [Fact(Timeout = 120000)]
+    public async Task Adapt_ProducesTaskSpecificModel()
     {
         // This test verifies that MAML adaptation creates a task-specialized model
 
@@ -219,8 +220,8 @@ public class MAMLTrainerIntegrationTests
         Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    [Fact]
-    public void Evaluate_ProducesValidMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluate_ProducesValidMetrics()
     {
         // This test verifies evaluation produces valid loss values
 
@@ -245,8 +246,8 @@ public class MAMLTrainerIntegrationTests
         Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
-    [Fact]
-    public void MAML_FirstOrderApproximation_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MAML_FirstOrderApproximation_WorksCorrectly()
     {
         // This test verifies FOMAML (first-order approximation) works
 
@@ -278,8 +279,8 @@ public class MAMLTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
-    public void MetaTrain_LongTraining_TracksLossCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_LongTraining_TracksLossCorrectly()
     {
         // Arrange
         var options = CreateDefaultOptions();
@@ -307,8 +308,8 @@ public class MAMLTrainerIntegrationTests
         Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
-    [Fact]
-    public void MetaTrain_WithLargeBatch_ProcessesAllTasks()
+    [Fact(Timeout = 120000)]
+    public async Task MetaTrain_WithLargeBatch_ProcessesAllTasks()
     {
         // Arrange
         var options = CreateDefaultOptions();

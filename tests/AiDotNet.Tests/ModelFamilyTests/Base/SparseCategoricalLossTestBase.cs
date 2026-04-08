@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,8 +18,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 1: Loss is finite for valid inputs
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
         // 4-class problem, single sample with class index 2
@@ -35,8 +36,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 2: Loss is non-negative
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_ShouldBeNonNegative()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
@@ -51,8 +52,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 3: Higher probability at correct class → lower loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_HigherConfidence_ShouldReduceLoss()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_HigherConfidence_ShouldReduceLoss()
     {
         var loss = CreateLoss();
         var actual = new Vector<double>(new[] { 1.0 }); // class 1
@@ -71,8 +72,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 4: Perfect prediction → near-zero loss
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_PerfectPrediction_ShouldBeNearZero()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_PerfectPrediction_ShouldBeNearZero()
     {
         var loss = CreateLoss();
         // Near-perfect prediction (can't use exactly 1.0 due to log)
@@ -88,8 +89,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 5: Derivative is finite
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
@@ -109,8 +110,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 6: Gradient at correct class should be negative (push probability up)
     // =========================================================================
 
-    [Fact]
-    public void CalculateDerivative_CorrectClass_ShouldBeNegative()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateDerivative_CorrectClass_ShouldBeNegative()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.3, 0.4, 0.3 });
@@ -127,8 +128,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 7: Invalid class index should throw
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_InvalidClassIndex_ShouldThrow()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_InvalidClassIndex_ShouldThrow()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.5, 0.5 });
@@ -141,8 +142,8 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 8: Multiple samples in batch
     // =========================================================================
 
-    [Fact]
-    public void CalculateLoss_BatchInput_ShouldBeFinite()
+    [Fact(Timeout = 30000)]
+    public async Task CalculateLoss_BatchInput_ShouldBeFinite()
     {
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.2, 0.3, 0.5 });

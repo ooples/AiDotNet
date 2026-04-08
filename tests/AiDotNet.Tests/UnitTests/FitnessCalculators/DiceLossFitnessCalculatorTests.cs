@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
 {
@@ -14,8 +15,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
     /// </summary>
     public class DiceLossFitnessCalculatorTests
     {
-        [Fact]
-        public void Constructor_WithDefaultDataSetType_UsesValidation()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultDataSetType_UsesValidation()
         {
             // Arrange & Act
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter); // Dice loss: lower is better
         }
 
-        [Fact]
-        public void Constructor_WithTrainingDataSetType_UsesTraining()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithTrainingDataSetType_UsesTraining()
         {
             // Arrange & Act
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Training);
@@ -34,8 +35,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -53,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNoOverlap_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNoOverlap_ReturnsOne()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPartialOverlap_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPartialOverlap_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -94,8 +95,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.2, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithProbabilisticPredictions_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithProbabilisticPredictions_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.24324324324324326, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithAllZeros_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithAllZeros_ReturnsOne()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -136,8 +137,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result >= 0.999);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithSingleElement_ReturnsCorrectValue()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -158,8 +159,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.33333333333333331, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<float, Vector<float>, Vector<float>>();
@@ -178,8 +179,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.2f, result, 5);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithImbalancedData_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithImbalancedData_HandlesCorrectly()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -201,8 +202,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.08108108108108109, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -212,8 +213,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                 calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             // Note: ModelEvaluationData requires 2D tensors for proper matrix conversion
@@ -234,8 +235,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.0, result, 10); // Perfect predictions
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
             // Arrange - Use Tensor types which are supported by ModelEvaluationData
             // Note: ModelEvaluationData requires 2D tensors for proper matrix conversion
@@ -256,8 +257,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(1.0, result, 10); // No overlap
         }
 
-        [Fact]
-        public void IsHigherScoreBetter_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsHigherScoreBetter_ReturnsFalse()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -266,8 +267,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(calculator.IsHigherScoreBetter);
         }
 
-        [Fact]
-        public void IsBetterFitness_WithLowerScore_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -281,8 +282,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(result); // Lower score is better for loss functions
         }
 
-        [Fact]
-        public void IsBetterFitness_WithHigherScore_ReturnsFalse()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -296,8 +297,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.False(result); // Higher score is worse for loss functions
         }
 
-        [Fact]
-        public void CalculateFitnessScore_MedicalImagingScenario_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_MedicalImagingScenario_ReturnsCorrectValue()
         {
             // Arrange - Simulating tumor segmentation scenario
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -320,8 +321,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Equal(0.09947643979057592, result, 10);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithVerySmallValues_HandlesCorrectly()
         {
             // Arrange
             var calculator = new DiceLossFitnessCalculator<double, Vector<double>, Vector<double>>();

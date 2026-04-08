@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
 
@@ -106,8 +107,8 @@ public class KernelRegressionIntegrationTests
 
     #region KernelRidgeRegression Tests
 
-    [Fact]
-    public void KernelRidgeRegression_Train_QuadraticData_MakesReasonablePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task KernelRidgeRegression_Train_QuadraticData_MakesReasonablePredictions()
     {
         // Arrange
         var options = new KernelRidgeRegressionOptions
@@ -131,8 +132,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void KernelRidgeRegression_Train_SinusoidalData_CapturesNonLinearPattern()
+    [Fact(Timeout = 120000)]
+    public async Task KernelRidgeRegression_Train_SinusoidalData_CapturesNonLinearPattern()
     {
         // Arrange
         var options = new KernelRidgeRegressionOptions
@@ -160,8 +161,8 @@ public class KernelRegressionIntegrationTests
         Assert.True(mse < 1.0, $"MSE {mse} is too high, model failed to capture pattern");
     }
 
-    [Fact]
-    public void KernelRidgeRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task KernelRidgeRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new KernelRidgeRegressionOptions
@@ -182,8 +183,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(0.5, (double)metadata.AdditionalInfo["LambdaKRR"]);
     }
 
-    [Fact]
-    public void KernelRidgeRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task KernelRidgeRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new KernelRidgeRegressionOptions
@@ -214,8 +215,8 @@ public class KernelRegressionIntegrationTests
 
     #region SupportVectorRegression Tests
 
-    [Fact]
-    public void SupportVectorRegression_Train_LinearData_MakesReasonablePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SupportVectorRegression_Train_LinearData_MakesReasonablePredictions()
     {
         // Arrange
         var options = new SupportVectorRegressionOptions
@@ -246,8 +247,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void SupportVectorRegression_Train_RBFKernel_CapturesNonLinearity()
+    [Fact(Timeout = 120000)]
+    public async Task SupportVectorRegression_Train_RBFKernel_CapturesNonLinearity()
     {
         // Arrange
         var options = new SupportVectorRegressionOptions
@@ -269,8 +270,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void SupportVectorRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task SupportVectorRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new SupportVectorRegressionOptions
@@ -293,8 +294,8 @@ public class KernelRegressionIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("C"));
     }
 
-    [Fact]
-    public void SupportVectorRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task SupportVectorRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new SupportVectorRegressionOptions
@@ -322,8 +323,8 @@ public class KernelRegressionIntegrationTests
 
     #region GaussianProcessRegression Tests
 
-    [Fact]
-    public void GaussianProcessRegression_Train_SimpleData_MakesReasonablePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessRegression_Train_SimpleData_MakesReasonablePredictions()
     {
         // Arrange
         var options = new GaussianProcessRegressionOptions
@@ -348,8 +349,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void GaussianProcessRegression_Train_WithHyperparameterOptimization_Converges()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessRegression_Train_WithHyperparameterOptimization_Converges()
     {
         // Arrange
         var options = new GaussianProcessRegressionOptions
@@ -371,8 +372,8 @@ public class KernelRegressionIntegrationTests
         // Just verify it completes without exception
     }
 
-    [Fact]
-    public void GaussianProcessRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new GaussianProcessRegressionOptions
@@ -397,8 +398,8 @@ public class KernelRegressionIntegrationTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("SignalVariance"));
     }
 
-    [Fact]
-    public void GaussianProcessRegression_InterpolatesThroughTrainingPoints()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianProcessRegression_InterpolatesThroughTrainingPoints()
     {
         // Arrange - GPR should exactly interpolate through training points (with low noise)
         var options = new GaussianProcessRegressionOptions
@@ -426,8 +427,8 @@ public class KernelRegressionIntegrationTests
 
     #region LocallyWeightedRegression Tests
 
-    [Fact]
-    public void LocallyWeightedRegression_Train_NonLinearData_AdaptsLocally()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyWeightedRegression_Train_NonLinearData_AdaptsLocally()
     {
         // Arrange
         var options = new LocallyWeightedRegressionOptions
@@ -446,8 +447,8 @@ public class KernelRegressionIntegrationTests
         // LWR should adapt to local patterns
     }
 
-    [Fact]
-    public void LocallyWeightedRegression_Train_DifferentBandwidths_AffectsSmoothness()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyWeightedRegression_Train_DifferentBandwidths_AffectsSmoothness()
     {
         // Arrange
         var (X, y) = GenerateSinusoidalData(30, noiseLevel: 0.2);
@@ -470,8 +471,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsLarge.Length);
     }
 
-    [Fact]
-    public void LocallyWeightedRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyWeightedRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new LocallyWeightedRegressionOptions { Bandwidth = 1.0 };
@@ -495,8 +496,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void LocallyWeightedRegression_SoftMode_EnablesJitCompilation()
+    [Fact(Timeout = 120000)]
+    public async Task LocallyWeightedRegression_SoftMode_EnablesJitCompilation()
     {
         // Arrange
         var options = new LocallyWeightedRegressionOptions
@@ -517,8 +518,8 @@ public class KernelRegressionIntegrationTests
 
     #region KNearestNeighborsRegression Tests
 
-    [Fact]
-    public void KNearestNeighborsRegression_Train_SimpleData_MakesReasonablePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_Train_SimpleData_MakesReasonablePredictions()
     {
         // Arrange
         var options = new KNearestNeighborsOptions { K = 3 };
@@ -539,8 +540,8 @@ public class KernelRegressionIntegrationTests
         // For K=3, predictions should be averages of 3 nearest neighbors
     }
 
-    [Fact]
-    public void KNearestNeighborsRegression_Train_K1_ReturnsNearestNeighbor()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_Train_K1_ReturnsNearestNeighbor()
     {
         // Arrange - with K=1, prediction should be the exact value of nearest neighbor
         var options = new KNearestNeighborsOptions { K = 1 };
@@ -559,8 +560,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void KNearestNeighborsRegression_DifferentKValues_ProduceDifferentResults()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_DifferentKValues_ProduceDifferentResults()
     {
         // Arrange
         var (X, y) = GenerateSinusoidalData(20, noiseLevel: 0.3);
@@ -580,8 +581,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions5.Length);
     }
 
-    [Fact]
-    public void KNearestNeighborsRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new KNearestNeighborsOptions { K = 3 };
@@ -605,8 +606,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void KNearestNeighborsRegression_SoftKNN_EnablesJitCompilation()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_SoftKNN_EnablesJitCompilation()
     {
         // Arrange
         var options = new KNearestNeighborsOptions { K = 3 };
@@ -622,8 +623,8 @@ public class KernelRegressionIntegrationTests
         Assert.True(knn.SupportsJitCompilation);
     }
 
-    [Fact]
-    public void KNearestNeighborsRegression_MultiDimensionalData_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task KNearestNeighborsRegression_MultiDimensionalData_WorksCorrectly()
     {
         // Arrange
         var options = new KNearestNeighborsOptions { K = 3 };
@@ -642,8 +643,8 @@ public class KernelRegressionIntegrationTests
 
     #region RadialBasisFunctionRegression Tests
 
-    [Fact]
-    public void RadialBasisFunctionRegression_Train_QuadraticData_CapturesPattern()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionRegression_Train_QuadraticData_CapturesPattern()
     {
         // Arrange
         var options = new RadialBasisFunctionOptions
@@ -663,8 +664,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
-    public void RadialBasisFunctionRegression_DifferentCenters_AffectsComplexity()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionRegression_DifferentCenters_AffectsComplexity()
     {
         // Arrange
         var (X, y) = GenerateSinusoidalData(30);
@@ -687,8 +688,8 @@ public class KernelRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsMany.Length);
     }
 
-    [Fact]
-    public void RadialBasisFunctionRegression_SerializeDeserialize_PreservesModel()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
         var options = new RadialBasisFunctionOptions
@@ -717,8 +718,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void RadialBasisFunctionRegression_GetModelMetadata_ReturnsCorrectInfo()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
         var options = new RadialBasisFunctionOptions
@@ -739,8 +740,8 @@ public class KernelRegressionIntegrationTests
 
     }
 
-    [Fact]
-    public void RadialBasisFunctionRegression_MultiDimensionalInput_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task RadialBasisFunctionRegression_MultiDimensionalInput_WorksCorrectly()
     {
         // Arrange
         var options = new RadialBasisFunctionOptions
@@ -764,8 +765,8 @@ public class KernelRegressionIntegrationTests
 
     #region Cross-Model Comparison Tests
 
-    [Fact]
-    public void AllKernelModels_TrainAndPredict_CompletesWithoutException()
+    [Fact(Timeout = 120000)]
+    public async Task AllKernelModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange
         var (X, y) = GenerateSinusoidalData(20);
@@ -818,8 +819,8 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllKernelModels_WithNoisyData_HandleNoiseGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task AllKernelModels_WithNoisyData_HandleNoiseGracefully()
     {
         // Arrange
         var (X, y) = GenerateSinusoidalData(30, noiseLevel: 0.5);

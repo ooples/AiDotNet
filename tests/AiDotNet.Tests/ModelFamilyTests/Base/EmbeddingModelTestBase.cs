@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,8 +18,8 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // This tests the local Lipschitz continuity of the embedding function.
     // =====================================================
 
-    [Fact]
-    public void SimilarInputs_ProduceSimilarEmbeddings()
+    [Fact(Timeout = 60000)]
+    public async Task SimilarInputs_ProduceSimilarEmbeddings()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -57,8 +58,8 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // extreme values are numerically unstable and unusable downstream.
     // =====================================================
 
-    [Fact]
-    public void Embeddings_ShouldBeFiniteAndBounded()
+    [Fact(Timeout = 60000)]
+    public async Task Embeddings_ShouldBeFiniteAndBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -83,8 +84,8 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // (product of OutputShape dimensions).
     // =====================================================
 
-    [Fact]
-    public void OutputDimensionality_MatchesEmbeddingDim()
+    [Fact(Timeout = 60000)]
+    public async Task OutputDimensionality_MatchesEmbeddingDim()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();

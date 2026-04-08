@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.CrossValidators;
 
@@ -56,8 +57,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
         var validator = new StandardCrossValidator<double, Matrix<double>, Vector<double>>();
@@ -66,8 +67,8 @@ public class StandardCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidator()
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -117,8 +118,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Fold Size Tests
 
-    [Fact]
-    public void Validate_FoldSizesAreApproximatelyEqual()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_FoldSizesAreApproximatelyEqual()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -147,8 +148,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
-    public void Validate_NoOverlapBetweenTrainAndTest()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_NoOverlapBetweenTrainAndTest()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -178,8 +179,8 @@ public class StandardCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_TrainAndTestCoverAllIndices()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_TrainAndTestCoverAllIndices()
     {
         // Arrange
         int numSamples = 50;
@@ -214,8 +215,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Shuffle Tests
 
-    [Fact]
-    public void Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithShuffle_ProducesReproducibleResultsWithSeed()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -250,8 +251,8 @@ public class StandardCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
-    public void Validate_WithoutShuffle_PreservesOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithoutShuffle_PreservesOrder()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -278,8 +279,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
-    public void Validate_ReturnsValidFoldResults()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_ReturnsValidFoldResults()
     {
         // Arrange
         var options = new CrossValidationOptions { NumberOfFolds = 3 };
@@ -311,8 +312,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Sample Usage Tests
 
-    [Fact]
-    public void Validate_EachSampleUsedExactlyOnceAsTest()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_EachSampleUsedExactlyOnceAsTest()
     {
         // Arrange
         var options = new CrossValidationOptions
@@ -355,8 +356,8 @@ public class StandardCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void Validate_WithMinimumFolds_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Validate_WithMinimumFolds_Works()
     {
         // Arrange - 2 folds is minimum
         var options = new CrossValidationOptions

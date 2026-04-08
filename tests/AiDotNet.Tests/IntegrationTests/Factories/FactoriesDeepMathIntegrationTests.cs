@@ -3,6 +3,7 @@ using AiDotNet.Factories;
 using AiDotNet.PromptEngineering.Templates;
 using AiDotNet.Training.Factories;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Factories;
 
@@ -74,14 +75,14 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_CreateByString_EmptyName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_CreateByString_EmptyName_Throws()
     {
         Assert.Throws<ArgumentException>(() => LossFunctionFactory<double>.Create(""));
     }
 
-    [Fact]
-    public void LossFactory_CreateByString_UnknownName_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_CreateByString_UnknownName_Throws()
     {
         Assert.Throws<ArgumentException>(() => LossFunctionFactory<double>.Create("UnknownLoss"));
     }
@@ -90,16 +91,16 @@ public class FactoriesDeepMathIntegrationTests
     // LossFunctionFactory: Parameters
     // ============================
 
-    [Fact]
-    public void LossFactory_Huber_CustomDelta()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_Huber_CustomDelta()
     {
         var parameters = new Dictionary<string, object> { { "delta", 2.0 } };
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, parameters);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_Focal_CustomGammaAndAlpha()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_Focal_CustomGammaAndAlpha()
     {
         var parameters = new Dictionary<string, object>
         {
@@ -110,24 +111,24 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_Quantile_CustomQuantile()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_Quantile_CustomQuantile()
     {
         var parameters = new Dictionary<string, object> { { "quantile", 0.9 } };
         var loss = LossFunctionFactory<double>.Create(LossType.Quantile, parameters);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_Contrastive_CustomMargin()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_Contrastive_CustomMargin()
     {
         var parameters = new Dictionary<string, object> { { "margin", 2.0 } };
         var loss = LossFunctionFactory<double>.Create(LossType.Contrastive, parameters);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_ElasticNet_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_ElasticNet_CustomParams()
     {
         var parameters = new Dictionary<string, object>
         {
@@ -138,8 +139,8 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_CTC_CustomClasses()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_CTC_CustomClasses()
     {
         var parameters = new Dictionary<string, object>
         {
@@ -150,8 +151,8 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_Margin_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_Margin_CustomParams()
     {
         var parameters = new Dictionary<string, object>
         {
@@ -163,31 +164,31 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_NullParameters_UsesDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_NullParameters_UsesDefaults()
     {
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, null);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_StringParam_ParsedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_StringParam_ParsedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", "1.5" } };
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, parameters);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_IntParam_ConvertedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_IntParam_ConvertedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", 2 } };
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, parameters);
         Assert.NotNull(loss);
     }
 
-    [Fact]
-    public void LossFactory_FloatParam_ConvertedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task LossFactory_FloatParam_ConvertedCorrectly()
     {
         var parameters = new Dictionary<string, object> { { "delta", 1.5f } };
         var loss = LossFunctionFactory<double>.Create(LossType.Huber, parameters);
@@ -225,15 +226,15 @@ public class FactoriesDeepMathIntegrationTests
         Assert.NotNull(window);
     }
 
-    [Fact]
-    public void WindowFactory_InvalidType_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFactory_InvalidType_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             WindowFunctionFactory.CreateWindowFunction<double>((WindowFunctionType)999));
     }
 
-    [Fact]
-    public void WindowFactory_FloatType_Works()
+    [Fact(Timeout = 120000)]
+    public async Task WindowFactory_FloatType_Works()
     {
         var window = WindowFunctionFactory.CreateWindowFunction<float>(WindowFunctionType.Hanning);
         Assert.NotNull(window);
@@ -243,80 +244,80 @@ public class FactoriesDeepMathIntegrationTests
     // PromptTemplateFactory: All Template Types
     // ============================
 
-    [Fact]
-    public void PromptFactory_Simple_ReturnsTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Simple_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Simple, "Hello {name}");
         Assert.NotNull(template);
         Assert.IsType<SimplePromptTemplate>(template);
     }
 
-    [Fact]
-    public void PromptFactory_Chat_ReturnsTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Chat_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Chat);
         Assert.NotNull(template);
         Assert.IsType<ChatPromptTemplate>(template);
     }
 
-    [Fact]
-    public void PromptFactory_ChainOfThought_AppendsStepByStep()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_ChainOfThought_AppendsStepByStep()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ChainOfThought, "Solve {problem}");
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_ChainOfThought_NullTemplate_UsesDefault()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_ChainOfThought_NullTemplate_UsesDefault()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ChainOfThought);
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_ReAct_ReturnsTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_ReAct_ReturnsTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct, "Custom base");
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_ReAct_NullTemplate_UsesDefault()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_ReAct_NullTemplate_UsesDefault()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.ReAct);
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_Tool_ReturnsSimpleTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Tool_ReturnsSimpleTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Tool, "Use tool {tool}");
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_Optimized_ReturnsSimpleTemplate()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Optimized_ReturnsSimpleTemplate()
     {
         var template = PromptTemplateFactory.Create(PromptTemplateType.Optimized, "Optimize {input}");
         Assert.NotNull(template);
     }
 
-    [Fact]
-    public void PromptFactory_Simple_NullTemplate_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Simple_NullTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, null));
     }
 
-    [Fact]
-    public void PromptFactory_Simple_EmptyTemplate_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_Simple_EmptyTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.Simple, "  "));
     }
 
-    [Fact]
-    public void PromptFactory_FewShot_WithoutSelector_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task PromptFactory_FewShot_WithoutSelector_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             PromptTemplateFactory.Create(PromptTemplateType.FewShot, "template"));
@@ -326,8 +327,8 @@ public class FactoriesDeepMathIntegrationTests
     // TrainingResult: Defaults
     // ============================
 
-    [Fact]
-    public void TrainingResult_Defaults()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingResult_Defaults()
     {
         var result = new AiDotNet.Training.TrainingResult<double>();
 
@@ -338,8 +339,8 @@ public class FactoriesDeepMathIntegrationTests
         Assert.False(result.Completed);
     }
 
-    [Fact]
-    public void TrainingResult_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task TrainingResult_SetProperties()
     {
         var result = new AiDotNet.Training.TrainingResult<double>
         {

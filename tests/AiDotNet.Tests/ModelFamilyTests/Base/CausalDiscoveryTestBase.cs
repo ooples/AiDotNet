@@ -1,6 +1,7 @@
 using AiDotNet.CausalDiscovery;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -84,8 +85,8 @@ public abstract class CausalDiscoveryTestBase
     // =========================================================================
 
     // INVARIANT 1: Output adjacency matrix is square [d x d]
-    [Fact]
-    public void DiscoverStructure_OutputIsSquare()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_OutputIsSquare()
     {
         var algo = CreateAlgorithm();
         var data = CreateKnownStructureData();
@@ -96,8 +97,8 @@ public abstract class CausalDiscoveryTestBase
     }
 
     // INVARIANT 2: Diagonal is zero (no self-causation)
-    [Fact]
-    public void DiscoverStructure_DiagonalIsZero()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_DiagonalIsZero()
     {
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
@@ -118,8 +119,8 @@ public abstract class CausalDiscoveryTestBase
     // For score-based methods: full DAG, topological sort on all edges.
     // For constraint-based methods (CPDAG): only directed edges (asymmetric) must be acyclic.
     // Undirected edges (symmetric A[i,j]≈A[j,i]) represent Markov equivalence class uncertainty.
-    [Fact]
-    public void DiscoverStructure_OutputIsAcyclic()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_OutputIsAcyclic()
     {
         if (!GuaranteesDAG) return;
 
@@ -177,8 +178,8 @@ public abstract class CausalDiscoveryTestBase
     }
 
     // INVARIANT 4: All entries are finite
-    [Fact]
-    public void DiscoverStructure_OutputIsFinite()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_OutputIsFinite()
     {
         var algo = CreateAlgorithm();
         var adj = algo.DiscoverStructure(CreateKnownStructureData()).AdjacencyMatrix;
@@ -201,8 +202,8 @@ public abstract class CausalDiscoveryTestBase
     // Edge DIRECTION may be reversed (X1→X0 instead of X0→X1) — that's a known
     // limitation of observational causal discovery (Markov equivalence).
     // But a false adjacency (X2↔X0) indicates a real algorithm bug.
-    [Fact]
-    public void DiscoverStructure_RootNodeHasNoFalseAdjacencies()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_RootNodeHasNoFalseAdjacencies()
     {
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
@@ -231,8 +232,8 @@ public abstract class CausalDiscoveryTestBase
 
     // INVARIANT 6: Known true edges are detected (recall)
     // The true structure has edges X0→X1, X1→X2, X0→X3. At least some should be found.
-    [Fact]
-    public void DiscoverStructure_RecoversTrueEdges()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_RecoversTrueEdges()
     {
         if (!CanRecoverLinearStructure) return;
 
@@ -260,8 +261,8 @@ public abstract class CausalDiscoveryTestBase
 
     // INVARIANT 7: Independent variables have weak/no edges between them
     // X1 and X3 are conditionally independent given X0 — should have weak or no edge.
-    [Fact]
-    public void DiscoverStructure_IndependentVariablesHaveWeakEdges()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_IndependentVariablesHaveWeakEdges()
     {
         if (!CanRecoverLinearStructure || NumVariables < 4) return;
 
@@ -291,8 +292,8 @@ public abstract class CausalDiscoveryTestBase
 
     // INVARIANT 8: Fully independent data produces sparse graph
     // When all variables are independent, a correct algorithm should find few/no edges.
-    [Fact]
-    public void DiscoverStructure_IndependentDataProducesSparseGraph()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_IndependentDataProducesSparseGraph()
     {
         var algo = CreateAlgorithm();
         CausalGraph<double>? graph;
@@ -330,8 +331,8 @@ public abstract class CausalDiscoveryTestBase
 
     // INVARIANT 9: More data → same or more accurate structure
     // Running with 2x samples should not degrade structure quality (measured by false edge count)
-    [Fact]
-    public void DiscoverStructure_MoreDataDoesNotDegradeQuality()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_MoreDataDoesNotDegradeQuality()
     {
         if (!CanRecoverLinearStructure) return;
 
@@ -375,8 +376,8 @@ public abstract class CausalDiscoveryTestBase
     // INVARIANT 10: Data scaling invariance
     // Multiplying all data by a constant should not change the STRUCTURE (edges present/absent).
     // Only edge weights may change.
-    [Fact]
-    public void DiscoverStructure_IsInvariantToDataScaling()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_IsInvariantToDataScaling()
     {
         var algo1 = CreateAlgorithm();
         var algo2 = CreateAlgorithm();
@@ -421,8 +422,8 @@ public abstract class CausalDiscoveryTestBase
     // INVARIANT 11: Topological ordering consistency (directed edges only)
     // For directed edges i→j, parent i must appear before child j in topological order.
     // Undirected edges (CPDAG) are skipped since they have no defined direction.
-    [Fact]
-    public void DiscoverStructure_TopologicalOrderIsConsistent()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_TopologicalOrderIsConsistent()
     {
         if (!GuaranteesDAG) return;
 
@@ -459,8 +460,8 @@ public abstract class CausalDiscoveryTestBase
     // For CPDAGs: undirected edges (symmetric weights) are valid — they represent
     // edges whose orientation cannot be determined from observational data alone.
     // The invariant checks: no ASYMMETRIC strong edges in BOTH directions (would mean a cycle).
-    [Fact]
-    public void DiscoverStructure_NoAsymmetricBidirectionalEdges()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_NoAsymmetricBidirectionalEdges()
     {
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
@@ -491,8 +492,8 @@ public abstract class CausalDiscoveryTestBase
     }
 
     // INVARIANT 13: Does not mutate input data
-    [Fact]
-    public void DiscoverStructure_DoesNotMutateInput()
+    [Fact(Timeout = 60000)]
+    public async Task DiscoverStructure_DoesNotMutateInput()
     {
         var algo = CreateAlgorithm();
         var data = CreateKnownStructureData();
@@ -511,8 +512,8 @@ public abstract class CausalDiscoveryTestBase
     }
 
     // INVARIANT 14: Algorithm properties are consistent
-    [Fact]
-    public void Properties_AreConsistent()
+    [Fact(Timeout = 60000)]
+    public async Task Properties_AreConsistent()
     {
         var algo = CreateAlgorithm();
 

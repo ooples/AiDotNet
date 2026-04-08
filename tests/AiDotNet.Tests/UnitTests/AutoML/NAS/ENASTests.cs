@@ -2,6 +2,7 @@ using System;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -10,8 +11,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class ENASTests
     {
-        [Fact]
-        public void ENAS_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -21,8 +22,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(enas);
         }
 
-        [Fact]
-        public void ENAS_SampleArchitecture_ReturnsValidArchitecture()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_SampleArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -36,8 +37,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
-        public void ENAS_SampleArchitecture_ReturnsLogProbability()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_SampleArchitecture_ReturnsLogProbability()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -50,8 +51,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(logProb <= 0.0); // Log probability should be non-positive
         }
 
-        [Fact]
-        public void ENAS_SampleArchitecture_ReturnsEntropy()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_SampleArchitecture_ReturnsEntropy()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -64,8 +65,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(entropy >= 0.0); // Entropy should be non-negative
         }
 
-        [Fact]
-        public void ENAS_GetControllerParameters_ReturnsNonEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetControllerParameters_ReturnsNonEmptyList()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -79,8 +80,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(parameters.Count > 0);
         }
 
-        [Fact]
-        public void ENAS_GetControllerGradients_ReturnsMatchingList()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetControllerGradients_ReturnsMatchingList()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -94,8 +95,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(parameters.Count, gradients.Count);
         }
 
-        [Fact]
-        public void ENAS_GetSharedWeights_ReturnsEmptyDictionaryInitially()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetSharedWeights_ReturnsEmptyDictionaryInitially()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -109,8 +110,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(sharedWeights);
         }
 
-        [Fact]
-        public void ENAS_GetSharedWeights_WithKey_InitializesAndReturns()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetSharedWeights_WithKey_InitializesAndReturns()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -124,8 +125,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(weights.Length > 0);
         }
 
-        [Fact]
-        public void ENAS_GetSharedWeights_SameKey_ReturnsSameReference()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetSharedWeights_SameKey_ReturnsSameReference()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -139,8 +140,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Same(weights1, weights2);
         }
 
-        [Fact]
-        public void ENAS_UpdateController_UpdatesBaseline()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_UpdateController_UpdatesBaseline()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -156,8 +157,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotEqual(baselineBefore, baselineAfter);
         }
 
-        [Fact]
-        public void ENAS_GetBaseline_ReturnsZeroInitially()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_GetBaseline_ReturnsZeroInitially()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -170,8 +171,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.0, baseline);
         }
 
-        [Fact]
-        public void ENAS_MultipleSamples_ReturnDifferentArchitectures()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_MultipleSamples_ReturnDifferentArchitectures()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -193,8 +194,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(desc3);
         }
 
-        [Fact]
-        public void ENAS_CustomControllerHiddenSize_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_CustomControllerHiddenSize_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -205,8 +206,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(enas.GetControllerParameters()[0].Length > 0);
         }
 
-        [Fact]
-        public void ENAS_CustomBaselineDecay_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_CustomBaselineDecay_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -221,8 +222,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotEqual(0.0, baseline);
         }
 
-        [Fact]
-        public void ENAS_CustomEntropyWeight_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ENAS_CustomEntropyWeight_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();

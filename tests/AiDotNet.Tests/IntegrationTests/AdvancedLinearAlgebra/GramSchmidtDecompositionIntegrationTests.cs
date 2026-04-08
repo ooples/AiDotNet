@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -234,8 +235,8 @@ public class GramSchmidtDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void GramSchmidt_2x2Matrix_CorrectDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_2x2Matrix_CorrectDecomposition()
     {
         // Arrange
         var A = new Matrix<double>(2, 2);
@@ -253,8 +254,8 @@ public class GramSchmidtDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void GramSchmidt_TallMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
         var A = CreateTestMatrix(6, 3);
@@ -270,8 +271,8 @@ public class GramSchmidtDecompositionIntegrationTests
             $"Tall matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void GramSchmidt_IdentityMatrix_DecomposesToIdentities()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_IdentityMatrix_DecomposesToIdentities()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -293,8 +294,8 @@ public class GramSchmidtDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void GramSchmidt_Modified_HandlesIllConditionedMatrix()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_Modified_HandlesIllConditionedMatrix()
     {
         // Arrange - Create a Hilbert-like matrix that can cause numerical issues
         int n = 5;
@@ -318,8 +319,8 @@ public class GramSchmidtDecompositionIntegrationTests
             $"Modified Gram-Schmidt on ill-conditioned matrix. Max difference: {maxDiff}");
     }
 
-    [Fact]
-    public void GramSchmidt_Q_Columns_AreUnitVectors()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_Q_Columns_AreUnitVectors()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);
@@ -342,8 +343,8 @@ public class GramSchmidtDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void GramSchmidt_Q_Columns_AreMutuallyOrthogonal()
+    [Fact(Timeout = 120000)]
+    public async Task GramSchmidt_Q_Columns_AreMutuallyOrthogonal()
     {
         // Arrange
         var A = CreateTestMatrix(5, 5);

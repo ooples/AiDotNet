@@ -5,12 +5,13 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Regression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithCentralDpAndBasicAccounting_TracksPrivacySpend()
     {
         var (x, y) = CreateToyData();
@@ -56,7 +57,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
         Assert.All(flMetadata.RoundMetrics, r => Assert.True(r.PrivacyBudgetConsumed > 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithSecureAggregation_SetsSecureAggregationEnabled()
     {
         var (x, y) = CreateToyData();
@@ -91,7 +92,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
         Assert.Equal(2, flMetadata.RoundsCompleted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithLocalAndCentralDpAndRdpAccounting_ReportsEpsilonAtDelta()
     {
         var (x, y) = CreateToyData();

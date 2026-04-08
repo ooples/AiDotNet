@@ -2,6 +2,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Groups;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Engines;
 
@@ -14,8 +15,8 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Octonion Tests
 
-    [Fact]
-    public void OctonionAddBatch_ComputesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task OctonionAddBatch_ComputesCorrectly()
     {
         // Arrange
         var left = new[]
@@ -38,8 +39,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(3.0, result[1].E1, precision: 10);       // 1 + 2
     }
 
-    [Fact]
-    public void OctonionMultiplyBatch_RealNumbers_BehavesLikeScalarMultiply()
+    [Fact(Timeout = 60000)]
+    public async Task OctonionMultiplyBatch_RealNumbers_BehavesLikeScalarMultiply()
     {
         // Arrange: Real octonions (scalar only)
         var left = new[]
@@ -64,8 +65,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.True(result[1].IsScalar);
     }
 
-    [Fact]
-    public void OctonionConjugateBatch_FlipsImaginaryParts()
+    [Fact(Timeout = 60000)]
+    public async Task OctonionConjugateBatch_FlipsImaginaryParts()
     {
         // Arrange
         var octonions = new[]
@@ -88,8 +89,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(-8.0, result[0].E7, precision: 10);
     }
 
-    [Fact]
-    public void OctonionNormBatch_ComputesMagnitudes()
+    [Fact(Timeout = 60000)]
+    public async Task OctonionNormBatch_ComputesMagnitudes()
     {
         // Arrange: (3, 4, 0, 0, 0, 0, 0, 0) has magnitude 5
         var octonions = new[]
@@ -107,8 +108,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(1.0, result[1], precision: 10);
     }
 
-    [Fact]
-    public void OctonionMultiply_NonAssociativity()
+    [Fact(Timeout = 60000)]
+    public async Task OctonionMultiply_NonAssociativity()
     {
         // Arrange: Octonion multiplication is NOT associative: (a*b)*c != a*(b*c)
         // This is a defining property we should verify
@@ -138,8 +139,8 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Multivector/Clifford Tests
 
-    [Fact]
-    public void MultivectorAddBatch_ComputesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task MultivectorAddBatch_ComputesCorrectly()
     {
         // Arrange: G(2,0) - 2D Euclidean geometric algebra
         var algebra = new CliffordAlgebra(2, 0, 0);
@@ -163,8 +164,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(6.0, result[1].Scalar, precision: 10);  // 2 + 4
     }
 
-    [Fact]
-    public void GeometricProductBatch_Scalars_MultipliesScalars()
+    [Fact(Timeout = 60000)]
+    public async Task GeometricProductBatch_Scalars_MultipliesScalars()
     {
         // Arrange
         var algebra = new CliffordAlgebra(2, 0, 0);
@@ -188,8 +189,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(15.0, result[1].Scalar, precision: 10);  // 3 * 5
     }
 
-    [Fact]
-    public void MultivectorReverseBatch_AppliesReverseToAll()
+    [Fact(Timeout = 60000)]
+    public async Task MultivectorReverseBatch_AppliesReverseToAll()
     {
         // Arrange
         var algebra = new CliffordAlgebra(2, 0, 0);
@@ -206,8 +207,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(5.0, result[0].Scalar, precision: 10);
     }
 
-    [Fact]
-    public void GradeProjectBatch_ExtractsGradeZero()
+    [Fact(Timeout = 60000)]
+    public async Task GradeProjectBatch_ExtractsGradeZero()
     {
         // Arrange: Create multivector with multiple grades
         var algebra = new CliffordAlgebra(2, 0, 0);  // 4 basis elements: 1, e1, e2, e12
@@ -235,8 +236,8 @@ public class CpuAdvancedAlgebraEngineTests
 
     #region Lie Group Tests
 
-    [Fact]
-    public void So3ExpBatch_ZeroVectors_ReturnsIdentities()
+    [Fact(Timeout = 60000)]
+    public async Task So3ExpBatch_ZeroVectors_ReturnsIdentities()
     {
         // Arrange
         var group = new So3Group<double>();
@@ -261,8 +262,8 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact]
-    public void So3ExpLogBatch_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task So3ExpLogBatch_RoundTrip()
     {
         // Arrange
         var group = new So3Group<double>();
@@ -286,8 +287,8 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact]
-    public void So3ComposeBatch_IdentityComposition()
+    [Fact(Timeout = 60000)]
+    public async Task So3ComposeBatch_IdentityComposition()
     {
         // Arrange
         var group = new So3Group<double>();
@@ -313,8 +314,8 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact]
-    public void Se3ExpBatch_ZeroVector_ReturnsIdentity()
+    [Fact(Timeout = 60000)]
+    public async Task Se3ExpBatch_ZeroVector_ReturnsIdentity()
     {
         // Arrange
         var group = new Se3Group<double>();
@@ -334,8 +335,8 @@ public class CpuAdvancedAlgebraEngineTests
         Assert.Equal(0.0, result[0].Translation[2], precision: 10);
     }
 
-    [Fact]
-    public void Se3ExpLogBatch_RoundTrip()
+    [Fact(Timeout = 60000)]
+    public async Task Se3ExpLogBatch_RoundTrip()
     {
         // Arrange
         var group = new Se3Group<double>();
@@ -356,8 +357,8 @@ public class CpuAdvancedAlgebraEngineTests
         }
     }
 
-    [Fact]
-    public void So3AdjointBatch_ReturnsRotationMatrices()
+    [Fact(Timeout = 60000)]
+    public async Task So3AdjointBatch_ReturnsRotationMatrices()
     {
         // Arrange: For SO(3), the adjoint is just the rotation matrix itself
         var group = new So3Group<double>();

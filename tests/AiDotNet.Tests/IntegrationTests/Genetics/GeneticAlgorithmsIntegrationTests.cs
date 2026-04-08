@@ -3,6 +3,7 @@ using AiDotNet.Genetics;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Genetics;
 
@@ -16,8 +17,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region GeneticParameters Tests
 
-    [Fact]
-    public void GeneticParameters_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_DefaultValues_AreCorrect()
     {
         // Arrange & Act
         var parameters = new GeneticParameters();
@@ -163,8 +164,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(method, parameters.InitializationMethod);
     }
 
-    [Fact]
-    public void GeneticParameters_MaxTime_CanBeConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_MaxTime_CanBeConfigured()
     {
         // Arrange
         var parameters = new GeneticParameters();
@@ -177,8 +178,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(customTime, parameters.MaxTime);
     }
 
-    [Fact]
-    public void GeneticParameters_CrossoverOperator_CanBeConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_CrossoverOperator_CanBeConfigured()
     {
         // Arrange
         var parameters = new GeneticParameters();
@@ -190,8 +191,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal("Uniform", parameters.CrossoverOperator);
     }
 
-    [Fact]
-    public void GeneticParameters_MutationOperator_CanBeConfigured()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_MutationOperator_CanBeConfigured()
     {
         // Arrange
         var parameters = new GeneticParameters();
@@ -203,8 +204,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal("Gaussian", parameters.MutationOperator);
     }
 
-    [Fact]
-    public void GeneticParameters_FullConfiguration_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_FullConfiguration_WorksCorrectly()
     {
         // Arrange & Act - Create a fully configured parameters object
         var parameters = new GeneticParameters
@@ -246,8 +247,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region ModelParameterGene Tests
 
-    [Fact]
-    public void ModelParameterGene_Constructor_SetsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Constructor_SetsCorrectValues()
     {
         // Arrange & Act
         var gene = new ModelParameterGene<double>(5, 0.75);
@@ -272,8 +273,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact]
-    public void ModelParameterGene_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Clone_CreatesDeepCopy()
     {
         // Arrange
         var original = new ModelParameterGene<double>(10, 0.5);
@@ -287,8 +288,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact]
-    public void ModelParameterGene_Clone_IsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Clone_IsIndependentCopy()
     {
         // Arrange
         var original = new ModelParameterGene<double>(10, 0.5);
@@ -303,8 +304,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact]
-    public void ModelParameterGene_Equals_ReturnsTrueForEqualGenes()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Equals_ReturnsTrueForEqualGenes()
     {
         // Arrange
         var gene1 = new ModelParameterGene<double>(5, 0.75);
@@ -315,8 +316,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(gene1.GetHashCode(), gene2.GetHashCode());
     }
 
-    [Fact]
-    public void ModelParameterGene_Equals_ReturnsFalseForDifferentGenes()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_Equals_ReturnsFalseForDifferentGenes()
     {
         // Arrange
         var gene1 = new ModelParameterGene<double>(5, 0.75);
@@ -328,8 +329,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.False(gene1.Equals(gene3)); // Different index
     }
 
-    [Fact]
-    public void ModelParameterGene_MultipleGenes_CanRepresentModelParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ModelParameterGene_MultipleGenes_CanRepresentModelParameters()
     {
         // Arrange & Act - Simulate a simple model's parameters
         var genes = new List<ModelParameterGene<double>>
@@ -351,8 +352,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region MultiObjectiveRealIndividual Advanced Tests
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Dominates_CorrectlyIdentifiesDominance()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Dominates_CorrectlyIdentifiesDominance()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -371,8 +372,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(dominates);
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Dominates_ReturnsFalseWhenNotDominating()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Dominates_ReturnsFalseWhenNotDominating()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -392,8 +393,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.False(dominates2Over1);
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_RankAndCrowdingDistance_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_RankAndCrowdingDistance_CanBeSet()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -444,8 +445,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(distance, individual.GetCrowdingDistance(), Tolerance);
     }
 
-    [Fact]
-    public void MultiObjectiveRealIndividual_Clone_PreservesAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task MultiObjectiveRealIndividual_Clone_PreservesAllProperties()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -479,8 +480,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region PermutationIndividual Advanced Tests
 
-    [Fact]
-    public void PermutationIndividual_OrderCrossover_ProducesValidPermutations()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_OrderCrossover_ProducesValidPermutations()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -511,8 +512,8 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void PermutationIndividual_SwapMutation_MaintainsValidPermutation()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_SwapMutation_MaintainsValidPermutation()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -532,8 +533,8 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void PermutationIndividual_InversionMutation_MaintainsValidPermutation()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_InversionMutation_MaintainsValidPermutation()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -552,8 +553,8 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void PermutationIndividual_MultipleSwapMutations_MaintainValidity()
+    [Fact(Timeout = 120000)]
+    public async Task PermutationIndividual_MultipleSwapMutations_MaintainValidity()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -580,8 +581,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region TreeIndividual Advanced Tests
 
-    [Fact]
-    public void TreeIndividual_RandomGeneration_ProducesVariedExpressions()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_RandomGeneration_ProducesVariedExpressions()
     {
         // Arrange
         var terminals = new List<string> { "x", "1.0", "2.0" };
@@ -599,8 +600,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(expressions.Count > 1, "Should produce varied expressions");
     }
 
-    [Fact]
-    public void TreeIndividual_FullMethod_ProducesDeepTrees()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_FullMethod_ProducesDeepTrees()
     {
         // Arrange
         var terminals = new List<string> { "x", "1.0" };
@@ -613,8 +614,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(tree.GetDepth() >= 1, "Full method should produce trees with depth >= 1");
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_HandlesProtectedDivision()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_HandlesProtectedDivision()
     {
         // Arrange - Create a division by zero scenario
         var divNode = new NodeGene(GeneticNodeType.Function, "/");
@@ -629,8 +630,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_HandlesProtectedLog()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_HandlesProtectedLog()
     {
         // Arrange - Create a log of negative number scenario
         var root = new NodeGene(GeneticNodeType.Function, "log");
@@ -644,8 +645,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
-    public void TreeIndividual_SubtreeMutation_ChangesExpression()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_SubtreeMutation_ChangesExpression()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -669,8 +670,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.True(changed, "Subtree mutation should change the expression");
     }
 
-    [Fact]
-    public void TreeIndividual_Evaluate_WithMultipleVariables()
+    [Fact(Timeout = 120000)]
+    public async Task TreeIndividual_Evaluate_WithMultipleVariables()
     {
         // Arrange - Build: (x + y) * 2
         var mulNode = new NodeGene(GeneticNodeType.Function, "*");
@@ -692,8 +693,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region RealValuedIndividual Advanced Tests
 
-    [Fact]
-    public void RealValuedIndividual_UpdateStepSizes_IncreasesWithHighSuccess()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_UpdateStepSizes_IncreasesWithHighSuccess()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -713,8 +714,8 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void RealValuedIndividual_UpdateStepSizes_DecreasesWithLowSuccess()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_UpdateStepSizes_DecreasesWithLowSuccess()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -734,8 +735,8 @@ public class GeneticAlgorithmsIntegrationTests
         }
     }
 
-    [Fact]
-    public void RealValuedIndividual_GetValuesAsArray_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task RealValuedIndividual_GetValuesAsArray_ReturnsCorrectValues()
     {
         // Arrange
         var genes = new List<RealGene>
@@ -760,8 +761,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region BinaryIndividual Advanced Tests
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsInt_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsInt_ReturnsCorrectValue()
     {
         // Arrange - Binary 1010 (LSB first, so bits 0 and 2 are set)
         var genes = new List<BinaryGene>
@@ -799,8 +800,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(expected, decoded);
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueInRange()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueInRange()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -814,8 +815,8 @@ public class GeneticAlgorithmsIntegrationTests
             $"Normalized value {normalized} should be between 0 and 1");
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsNormalizedDouble_AllZeros_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsNormalizedDouble_AllZeros_ReturnsZero()
     {
         // Arrange
         var genes = Enumerable.Repeat(new BinaryGene(0), 8).ToList();
@@ -828,8 +829,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(0.0, normalized, Tolerance);
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueAsNormalizedDouble_AllOnes_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueAsNormalizedDouble_AllOnes_ReturnsOne()
     {
         // Arrange
         var genes = Enumerable.Repeat(new BinaryGene(1), 8).ToList();
@@ -842,8 +843,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(1.0, normalized, Tolerance);
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueMapped_ReturnsValueInRange()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueMapped_ReturnsValueInRange()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -859,8 +860,8 @@ public class GeneticAlgorithmsIntegrationTests
             $"Mapped value {mapped} should be between {min} and {max}");
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueMapped_AllZeros_ReturnsMin()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueMapped_AllZeros_ReturnsMin()
     {
         // Arrange
         var genes = Enumerable.Repeat(new BinaryGene(0), 8).ToList();
@@ -873,8 +874,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(-10.0, mapped, Tolerance);
     }
 
-    [Fact]
-    public void BinaryIndividual_GetValueMapped_AllOnes_ReturnsMax()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_GetValueMapped_AllOnes_ReturnsMax()
     {
         // Arrange
         var genes = Enumerable.Repeat(new BinaryGene(1), 8).ToList();
@@ -887,8 +888,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(10.0, mapped, Tolerance);
     }
 
-    [Fact]
-    public void BinaryIndividual_Clone_CreatesDeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_Clone_CreatesDeepCopy()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -906,8 +907,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.Equal(original.GetValueAsInt(), clone.GetValueAsInt());
     }
 
-    [Fact]
-    public void BinaryIndividual_SetGenes_UpdatesIndividual()
+    [Fact(Timeout = 120000)]
+    public async Task BinaryIndividual_SetGenes_UpdatesIndividual()
     {
         // Arrange
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -932,8 +933,8 @@ public class GeneticAlgorithmsIntegrationTests
 
     #region Integration Tests - GA Component Interactions
 
-    [Fact]
-    public void GeneticParameters_WithPermutationIndividual_ConfigurationScenario()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_WithPermutationIndividual_ConfigurationScenario()
     {
         // Arrange - Simulate TSP configuration
         var parameters = new GeneticParameters
@@ -965,8 +966,8 @@ public class GeneticAlgorithmsIntegrationTests
         });
     }
 
-    [Fact]
-    public void GeneticParameters_WithRealValuedIndividual_NumericalOptimization()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_WithRealValuedIndividual_NumericalOptimization()
     {
         // Arrange - Simulate numerical optimization configuration
         var parameters = new GeneticParameters
@@ -998,8 +999,8 @@ public class GeneticAlgorithmsIntegrationTests
         });
     }
 
-    [Fact]
-    public void GeneticParameters_WithBinaryIndividual_FeatureSelection()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_WithBinaryIndividual_FeatureSelection()
     {
         // Arrange - Simulate feature selection configuration
         var parameters = new GeneticParameters
@@ -1026,8 +1027,8 @@ public class GeneticAlgorithmsIntegrationTests
         Assert.All(population, p => Assert.Equal(20, p.GetGenes().Count));
     }
 
-    [Fact]
-    public void GeneticParameters_WithTreeIndividual_SymbolicRegression()
+    [Fact(Timeout = 120000)]
+    public async Task GeneticParameters_WithTreeIndividual_SymbolicRegression()
     {
         // Arrange - Simulate symbolic regression configuration
         var parameters = new GeneticParameters

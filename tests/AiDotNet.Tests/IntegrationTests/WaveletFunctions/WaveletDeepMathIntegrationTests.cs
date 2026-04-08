@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.WaveletFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.WaveletFunctions;
 
@@ -19,39 +20,39 @@ public class WaveletDeepMathIntegrationTests
     // HAAR WAVELET - Calculate
     // ================================================================
 
-    [Fact]
-    public void Haar_Calculate_BoundaryAt0_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Calculate_BoundaryAt0_ReturnsOne()
     {
         // x=0 is in [0, 0.5), should return 1
         var haar = new HaarWavelet<double>();
         Assert.Equal(1.0, haar.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Haar_Calculate_BoundaryAt0Point5_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Calculate_BoundaryAt0Point5_ReturnsNegativeOne()
     {
         // x=0.5 is in [0.5, 1.0), should return -1
         var haar = new HaarWavelet<double>();
         Assert.Equal(-1.0, haar.Calculate(0.5), Tolerance);
     }
 
-    [Fact]
-    public void Haar_Calculate_BoundaryAt1_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Calculate_BoundaryAt1_ReturnsZero()
     {
         // x=1.0 is outside [0, 1.0), should return 0
         var haar = new HaarWavelet<double>();
         Assert.Equal(0.0, haar.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void Haar_Calculate_NegativeX_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Calculate_NegativeX_ReturnsZero()
     {
         var haar = new HaarWavelet<double>();
         Assert.Equal(0.0, haar.Calculate(-0.001), Tolerance);
     }
 
-    [Fact]
-    public void Haar_ZeroIntegral_WaveletAdmissibility()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_ZeroIntegral_WaveletAdmissibility()
     {
         // Haar wavelet integral over [0,1) should be zero (admissibility condition)
         // Integral = integral[0,0.5) of 1 dx + integral[0.5,1) of -1 dx = 0.5 - 0.5 = 0
@@ -71,8 +72,8 @@ public class WaveletDeepMathIntegrationTests
     // HAAR WAVELET - Decompose/Reconstruct
     // ================================================================
 
-    [Fact]
-    public void Haar_Decompose_HandCalculation_ConstantSignal()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Decompose_HandCalculation_ConstantSignal()
     {
         // Input: [3, 3, 3, 3]
         // approx[i] = (a + b) / sqrt(2), detail[i] = (a - b) / sqrt(2)
@@ -88,8 +89,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, detail[1], Tolerance);
     }
 
-    [Fact]
-    public void Haar_Decompose_HandCalculation_AlternatingSignal()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Decompose_HandCalculation_AlternatingSignal()
     {
         // Input: [1, -1, 1, -1]
         // For pair (1,-1): approx = 0, detail = 2/sqrt(2) = sqrt(2)
@@ -103,8 +104,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2), detail[1], Tolerance);
     }
 
-    [Fact]
-    public void Haar_Decompose_HandCalculation_SpecificValues()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Decompose_HandCalculation_SpecificValues()
     {
         // Input: [4, 6, 8, 2]
         // Pair (4,6): approx = 10/sqrt(2), detail = -2/sqrt(2)
@@ -119,8 +120,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(6.0 / Math.Sqrt(2), detail[1], Tolerance);
     }
 
-    [Fact]
-    public void Haar_DecomposeReconstruct_PerfectRoundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_DecomposeReconstruct_PerfectRoundtrip()
     {
         var haar = new HaarWavelet<double>();
         var input = new Vector<double>(new[] { 1.0, 3.0, 5.0, 2.0, 7.0, 4.0 });
@@ -133,8 +134,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Haar_EnergyPreservation_ParsevalsTheorem()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_EnergyPreservation_ParsevalsTheorem()
     {
         // Parseval's theorem: sum(x[i]^2) = sum(approx[i]^2) + sum(detail[i]^2)
         var haar = new HaarWavelet<double>();
@@ -151,8 +152,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(inputEnergy, coeffEnergy, Tolerance);
     }
 
-    [Fact]
-    public void Haar_ScalingCoefficients_SumEqualsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_ScalingCoefficients_SumEqualsOne()
     {
         // For orthogonal wavelets, sum of scaling coefficients = sqrt(2)
         // (since each coefficient is 1/sqrt(2))
@@ -163,8 +164,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2), sum, Tolerance);
     }
 
-    [Fact]
-    public void Haar_WaveletCoefficients_SumEqualsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_WaveletCoefficients_SumEqualsZero()
     {
         // For orthogonal wavelets, sum of wavelet coefficients = 0
         var haar = new HaarWavelet<double>();
@@ -174,8 +175,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void Haar_Coefficients_Orthogonality()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Coefficients_Orthogonality()
     {
         // Scaling and wavelet coefficient inner product should be 0
         var haar = new HaarWavelet<double>();
@@ -186,8 +187,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, dot, Tolerance);
     }
 
-    [Fact]
-    public void Haar_Coefficients_ScalingNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Coefficients_ScalingNormalization()
     {
         // For orthogonal wavelets: sum(h[i]^2) = 1
         var haar = new HaarWavelet<double>();
@@ -197,8 +198,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(1.0, normSq, Tolerance);
     }
 
-    [Fact]
-    public void Haar_Coefficients_WaveletNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Coefficients_WaveletNormalization()
     {
         // For orthogonal wavelets: sum(g[i]^2) = 1
         var haar = new HaarWavelet<double>();
@@ -212,16 +213,16 @@ public class WaveletDeepMathIntegrationTests
     // MEXICAN HAT WAVELET - Calculate
     // ================================================================
 
-    [Fact]
-    public void MexicanHat_AtOrigin_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_AtOrigin_HandValue()
     {
         // f(0) = (2 - 0) * exp(0) = 2.0 for sigma=1
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         Assert.Equal(2.0, mh.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_AtSqrt2Sigma_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_AtSqrt2Sigma_IsZero()
     {
         // f(x) = 0 when 2 - x^2/sigma^2 = 0, i.e., x = sqrt(2) * sigma
         // For sigma=1: x = sqrt(2)
@@ -230,8 +231,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, mh.Calculate(x), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_Symmetry_EvenFunction()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_Symmetry_EvenFunction()
     {
         // f(x) = f(-x) (even function)
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
@@ -242,16 +243,16 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void MexicanHat_HandValue_AtX1_Sigma1()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_HandValue_AtX1_Sigma1()
     {
         // f(1) = (2 - 1) * exp(-0.5) = exp(-0.5) = 0.60653...
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         Assert.Equal(Math.Exp(-0.5), mh.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_HandValue_AtX2_Sigma1()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_HandValue_AtX2_Sigma1()
     {
         // f(2) = (2 - 4) * exp(-2) = -2 * exp(-2) = -0.27067...
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
@@ -259,8 +260,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, mh.Calculate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_SigmaScaling_WidthEffect()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_SigmaScaling_WidthEffect()
     {
         // Larger sigma should stretch the wavelet: f_s2(2x) ~ f_s1(x) after normalization
         // More precisely: with sigma=2, zero crossing at x = sqrt(2)*2 = 2*sqrt(2)
@@ -269,8 +270,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, mh2.Calculate(zeroCrossing), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_HandValue_Sigma2_AtX1()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_HandValue_Sigma2_AtX1()
     {
         // f(1, sigma=2) = (2 - 1/4) * exp(-1/8) = 1.75 * exp(-0.125)
         var mh = new MexicanHatWavelet<double>(sigma: 2.0);
@@ -278,16 +279,16 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, mh.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void MexicanHat_NegativeInTrough()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_NegativeInTrough()
     {
         // For sigma=1, at x=2, the value should be negative (in the trough)
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         Assert.True(mh.Calculate(2.0) < 0, "MexicanHat should be negative in trough region");
     }
 
-    [Fact]
-    public void MexicanHat_Derivative_AtOrigin_ShouldBeZero()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_Derivative_AtOrigin_ShouldBeZero()
     {
         // The derivative at x=0 should be 0 (it's the peak of an even function)
         // Test via numerical differentiation of Calculate
@@ -298,8 +299,8 @@ public class WaveletDeepMathIntegrationTests
             $"MexicanHat derivative at origin should be 0, got {numericalDeriv}");
     }
 
-    [Fact]
-    public void MexicanHat_Derivative_HandFormula_Sigma1()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_Derivative_HandFormula_Sigma1()
     {
         // True derivative: f'(x) = (-4x/sigma^2 + x^3/sigma^4) * exp(-x^2/(2*sigma^2))
         // For sigma=1, f'(x) = x * (x^2 - 4) * exp(-x^2/2)
@@ -318,32 +319,32 @@ public class WaveletDeepMathIntegrationTests
     // GAUSSIAN WAVELET - Calculate
     // ================================================================
 
-    [Fact]
-    public void Gaussian_AtOrigin_PeakValue()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_AtOrigin_PeakValue()
     {
         // g(0) = exp(0) = 1.0 for any sigma
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         Assert.Equal(1.0, gw.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_AtSigma_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_AtSigma_HandValue()
     {
         // g(sigma) = exp(-1/2) = 0.60653...
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         Assert.Equal(Math.Exp(-0.5), gw.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_At2Sigma_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_At2Sigma_HandValue()
     {
         // g(2*sigma) = exp(-2) = 0.13534...
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         Assert.Equal(Math.Exp(-2.0), gw.Calculate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_Symmetry_EvenFunction()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_Symmetry_EvenFunction()
     {
         var gw = new GaussianWavelet<double>(sigma: 1.5);
         double[] testPoints = { 0.5, 1.0, 2.0, 3.0 };
@@ -353,8 +354,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Gaussian_SigmaScaling_HalfHeight()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_SigmaScaling_HalfHeight()
     {
         // g(sigma) / g(0) = exp(-0.5) for any sigma
         var gw = new GaussianWavelet<double>(sigma: 3.0);
@@ -362,8 +363,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-0.5), ratio, Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_MonotonicallyDecreasing_FromOrigin()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_MonotonicallyDecreasing_FromOrigin()
     {
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         double prev = gw.Calculate(0.0);
@@ -375,8 +376,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Gaussian_DerivativeFormula_HandCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_DerivativeFormula_HandCalculation()
     {
         // g'(x) = -x/sigma^2 * g(x)
         // At x=1, sigma=1: g'(1) = -1 * exp(-0.5) = -0.60653...
@@ -389,8 +390,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, numericalDeriv, 1e-4);
     }
 
-    [Fact]
-    public void Gaussian_AlwaysPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_AlwaysPositive()
     {
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         for (double x = -10; x <= 10; x += 0.1)
@@ -403,16 +404,16 @@ public class WaveletDeepMathIntegrationTests
     // MORLET WAVELET - Calculate
     // ================================================================
 
-    [Fact]
-    public void Morlet_AtOrigin_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_AtOrigin_HandValue()
     {
         // f(0) = cos(omega*0) * exp(0) = 1.0
         var morlet = new MorletWavelet<double>(omega: 5.0);
         Assert.Equal(1.0, morlet.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Morlet_HandValue_AtX1_Omega5()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_HandValue_AtX1_Omega5()
     {
         // f(1) = cos(5) * exp(-0.5) = 0.28366... * 0.60653... = 0.17203...
         var morlet = new MorletWavelet<double>(omega: 5.0);
@@ -420,8 +421,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, morlet.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void Morlet_GaussianEnvelope_Bounds()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_GaussianEnvelope_Bounds()
     {
         // |f(x)| <= exp(-x^2/2) for all x (cosine bounded by 1)
         var morlet = new MorletWavelet<double>(omega: 5.0);
@@ -433,8 +434,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Morlet_ZeroCrossings_AtPiOverOmega()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_ZeroCrossings_AtPiOverOmega()
     {
         // cos(omega*x) = 0 when omega*x = pi/2 + k*pi
         // At x = pi/(2*omega): f = cos(pi/2)*exp(...) = 0
@@ -445,8 +446,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.True(Math.Abs(val) < 1e-10, $"Morlet should be ~0 at x=pi/(2*omega), got {val}");
     }
 
-    [Fact]
-    public void Morlet_DecaysAwayFromCenter()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_DecaysAwayFromCenter()
     {
         var morlet = new MorletWavelet<double>(omega: 5.0);
         double nearCenter = Math.Abs(morlet.Calculate(0.0));
@@ -454,8 +455,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.True(farAway < nearCenter, "Morlet should decay away from center");
     }
 
-    [Fact]
-    public void Morlet_HigherOmega_MoreOscillations()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_HigherOmega_MoreOscillations()
     {
         // Count zero crossings in [0, 3] - higher omega means more
         int CountZeroCrossings(double omega)
@@ -481,8 +482,8 @@ public class WaveletDeepMathIntegrationTests
     // DOG WAVELET - Calculate
     // ================================================================
 
-    [Fact]
-    public void DOG_Order1_AtOrigin_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order1_AtOrigin_IsZero()
     {
         // DOG order 1: psi(x) = -x * exp(-x^2/2) * norm
         // At x=0: psi(0) = 0
@@ -490,8 +491,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, dog.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void DOG_Order1_OddFunction()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order1_OddFunction()
     {
         // Order 1: -x * exp(-x^2/2) is an odd function
         var dog = new DOGWavelet<double>(order: 1);
@@ -504,8 +505,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DOG_Order2_AtOrigin_HandValue()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order2_AtOrigin_HandValue()
     {
         // DOG order 2: psi(x) = (x^2 - 1) * exp(-x^2/2) * norm
         // At x=0: (0 - 1) * 1 * norm = -norm
@@ -517,8 +518,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, dog.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void DOG_Order2_EvenFunction()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order2_EvenFunction()
     {
         // Order 2: (x^2 - 1) * exp(-x^2/2) is an even function
         var dog = new DOGWavelet<double>(order: 2);
@@ -529,8 +530,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DOG_Order2_ZeroCrossingAtX1()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order2_ZeroCrossingAtX1()
     {
         // psi(x) = (x^2 - 1) * exp(-x^2/2) * norm = 0 when x^2 = 1, i.e., x = +/-1
         var dog = new DOGWavelet<double>(order: 2);
@@ -538,8 +539,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, dog.Calculate(-1.0), Tolerance);
     }
 
-    [Fact]
-    public void DOG_Order2_HandValue_AtX2()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order2_HandValue_AtX2()
     {
         // psi(2) = (4 - 1) * exp(-2) * norm = 3 * exp(-2) * norm
         // norm = 1 / (sqrt(2) * 2^(3/2))
@@ -549,8 +550,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(expected, dog.Calculate(2.0), Tolerance);
     }
 
-    [Fact]
-    public void DOG_DecaysToZero()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_DecaysToZero()
     {
         var dog = new DOGWavelet<double>(order: 2);
         double farAway = Math.Abs(dog.Calculate(10.0));
@@ -561,8 +562,8 @@ public class WaveletDeepMathIntegrationTests
     // DAUBECHIES WAVELET - Coefficients
     // ================================================================
 
-    [Fact]
-    public void Daubechies_D4_ScalingCoefficients_HandValues()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_ScalingCoefficients_HandValues()
     {
         // D4 coefficients:
         // h0 = (1+sqrt(3))/(4*sqrt(2)), h1 = (3+sqrt(3))/(4*sqrt(2))
@@ -578,8 +579,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal((1 - s3) / (4 * s2), h[3], Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_ScalingCoefficients_SumEqualsSqrt2()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_ScalingCoefficients_SumEqualsSqrt2()
     {
         // Orthogonal wavelet property: sum(h[i]) = sqrt(2)
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -589,8 +590,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2), sum, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_WaveletCoefficients_SumEqualsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_WaveletCoefficients_SumEqualsZero()
     {
         // sum(g[i]) = 0
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -600,8 +601,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_Orthogonality_ScalingWavelet()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_Orthogonality_ScalingWavelet()
     {
         // Inner product <h, g> = 0
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -612,8 +613,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, dot, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_ScalingNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_ScalingNormalization()
     {
         // sum(h[i]^2) = 1
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -623,8 +624,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(1.0, normSq, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_WaveletNormalization()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_WaveletNormalization()
     {
         // sum(g[i]^2) = 1
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -634,8 +635,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(1.0, normSq, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_QMFRelationship()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_QMFRelationship()
     {
         // Quadrature mirror filter: g[n] = (-1)^n * h[L-1-n]
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -650,8 +651,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Daubechies_D4_VanishingMoment_ZerothOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_VanishingMoment_ZerothOrder()
     {
         // D4 has 2 vanishing moments: sum(g[n]) = 0 (zeroth moment)
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -661,8 +662,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_VanishingMoment_FirstOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_VanishingMoment_FirstOrder()
     {
         // D4 has 2 vanishing moments: sum(n * g[n]) = 0 (first moment)
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -672,8 +673,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, sum, Tolerance);
     }
 
-    [Fact]
-    public void Daubechies_D4_Decompose_EnergyPreservation()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_Decompose_EnergyPreservation()
     {
         var db = new DaubechiesWavelet<double>(order: 4);
         var input = new Vector<double>(new[] { 1.0, 3.0, 5.0, 2.0, 7.0, 4.0, 8.0, 1.0 });
@@ -689,8 +690,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(inputEnergy, coeffEnergy, LooseTolerance);
     }
 
-    [Fact]
-    public void Daubechies_Calculate_OutsideSupport_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_Calculate_OutsideSupport_IsZero()
     {
         // Daubechies D4: support is [0, order-1] = [0, 3]
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -702,8 +703,8 @@ public class WaveletDeepMathIntegrationTests
     // GAUSSIAN WAVELET - Decompose/Reconstruct
     // ================================================================
 
-    [Fact]
-    public void Gaussian_Decompose_OutputLength_EqualsInput()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_Decompose_OutputLength_EqualsInput()
     {
         // Gaussian decompose uses element-wise multiplication, so output length = input length
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -713,8 +714,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(input.Length, detail.Length);
     }
 
-    [Fact]
-    public void Gaussian_Decompose_CenterPoint_MaxApprox()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_Decompose_CenterPoint_MaxApprox()
     {
         // At center (i = size/2), wavelet value is maximum (=1), so approx[center] = input[center]
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -727,8 +728,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(5.0, approx[center], Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_Decompose_CenterPoint_ZeroDetail()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_Decompose_CenterPoint_ZeroDetail()
     {
         // At center, derivative = -x/sigma^2 * g(x) = 0 (since x=0), so detail[center] = 0
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -740,8 +741,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, detail[center], Tolerance);
     }
 
-    [Fact]
-    public void Gaussian_Reconstruct_PerfectAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_Reconstruct_PerfectAtCenter()
     {
         // The reconstruction should be perfect at the center where both wavelet and derivative are well-defined
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -758,8 +759,8 @@ public class WaveletDeepMathIntegrationTests
     // MEXICAN HAT - Decompose
     // ================================================================
 
-    [Fact]
-    public void MexicanHat_Decompose_OutputLength_EqualsInput()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_Decompose_OutputLength_EqualsInput()
     {
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -768,8 +769,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(input.Length, detail.Length);
     }
 
-    [Fact]
-    public void MexicanHat_Decompose_CenterPoint_HandVerification()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_Decompose_CenterPoint_HandVerification()
     {
         // At center (i = size/2), x=0, waveletValue = 2.0, derivativeValue should be 0
         // approx[center] = 2.0 * input[center], detail[center] should be ~0
@@ -787,8 +788,8 @@ public class WaveletDeepMathIntegrationTests
     // MORLET WAVELET - Decompose (FFT-based)
     // ================================================================
 
-    [Fact]
-    public void Morlet_Decompose_OutputLength_EqualsInput()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_Decompose_OutputLength_EqualsInput()
     {
         var morlet = new MorletWavelet<double>(omega: 5.0);
         int size = 8; // power of 2 for FFT
@@ -798,8 +799,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(size, detail.Length);
     }
 
-    [Fact]
-    public void Morlet_Reconstruct_ApproxPlusDetail_EqualsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Morlet_Reconstruct_ApproxPlusDetail_EqualsOriginal()
     {
         // Morlet reconstruct combines approximation and detail via FFT
         var morlet = new MorletWavelet<double>(omega: 5.0);
@@ -818,8 +819,8 @@ public class WaveletDeepMathIntegrationTests
     // CROSS-WAVELET COMPARISONS
     // ================================================================
 
-    [Fact]
-    public void MexicanHat_DOGOrder2_SameShapeUpToScaling()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_DOGOrder2_SameShapeUpToScaling()
     {
         // MexicanHat psi(x) = (2 - x^2/sigma^2) * exp(-x^2/(2*sigma^2)) with sigma=1
         // DOG order 2 psi(x) = (x^2 - 1) * exp(-x^2/2) * norm
@@ -843,8 +844,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(0.0, dog.Calculate(1.0), Tolerance);
     }
 
-    [Fact]
-    public void AllWavelets_FiniteValues_NoNaNOrInf()
+    [Fact(Timeout = 120000)]
+    public async Task AllWavelets_FiniteValues_NoNaNOrInf()
     {
         var wavelets = new IWaveletFunction<double>[]
         {
@@ -869,8 +870,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllWavelets_ScalingCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task AllWavelets_ScalingCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]
         {
@@ -889,8 +890,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllWavelets_WaveletCoefficients_NonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task AllWavelets_WaveletCoefficients_NonEmpty()
     {
         var wavelets = new IWaveletFunction<double>[]
         {
@@ -913,16 +914,16 @@ public class WaveletDeepMathIntegrationTests
     // HAAR - Decompose edge cases
     // ================================================================
 
-    [Fact]
-    public void Haar_Decompose_OddLength_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Decompose_OddLength_ThrowsArgumentException()
     {
         var haar = new HaarWavelet<double>();
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         Assert.Throws<ArgumentException>(() => haar.Decompose(input));
     }
 
-    [Fact]
-    public void Haar_Decompose_TwoElements_SingleCoefficients()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_Decompose_TwoElements_SingleCoefficients()
     {
         // Input: [a, b]
         // approx = [(a+b)/sqrt(2)]
@@ -941,8 +942,8 @@ public class WaveletDeepMathIntegrationTests
     // DOG WAVELET - Order 3
     // ================================================================
 
-    [Fact]
-    public void DOG_Order3_OddFunction()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order3_OddFunction()
     {
         // Order 3: -(x^3 - 3x) * exp(-x^2/2) = (3x - x^3) * exp(-x^2/2) is odd
         var dog = new DOGWavelet<double>(order: 3);
@@ -955,16 +956,16 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DOG_Order3_AtOrigin_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order3_AtOrigin_IsZero()
     {
         // Odd function => f(0) = 0
         var dog = new DOGWavelet<double>(order: 3);
         Assert.Equal(0.0, dog.Calculate(0.0), Tolerance);
     }
 
-    [Fact]
-    public void DOG_Order4_EvenFunction()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order4_EvenFunction()
     {
         // Order 4: (x^4 - 6x^2 + 3) * exp(-x^2/2) is even
         var dog = new DOGWavelet<double>(order: 4);
@@ -975,8 +976,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void DOG_Order4_HandValue_AtOrigin()
+    [Fact(Timeout = 120000)]
+    public async Task DOG_Order4_HandValue_AtOrigin()
     {
         // psi(0) = (0 - 0 + 3) * 1 * norm = 3 * norm
         // norm = 1 / (sqrt(4!) * 2^(5/2)) = 1 / (sqrt(24) * 4*sqrt(2))
@@ -990,8 +991,8 @@ public class WaveletDeepMathIntegrationTests
     // GAUSSIAN WAVELET - Scaling coefficients shape
     // ================================================================
 
-    [Fact]
-    public void Gaussian_ScalingCoefficients_PeakAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_ScalingCoefficients_PeakAtCenter()
     {
         var gw = new GaussianWavelet<double>(sigma: 1.0);
         var coeffs = gw.GetScalingCoefficients();
@@ -1007,8 +1008,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(center, maxIdx);
     }
 
-    [Fact]
-    public void Gaussian_WaveletCoefficients_AntisymmetricAroundCenter()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_WaveletCoefficients_AntisymmetricAroundCenter()
     {
         // Derivative of Gaussian: -x/sigma^2 * g(x) is antisymmetric around center
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -1022,8 +1023,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Gaussian_WaveletCoefficients_ZeroAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task Gaussian_WaveletCoefficients_ZeroAtCenter()
     {
         // Derivative of Gaussian at x=0 is 0
         var gw = new GaussianWavelet<double>(sigma: 1.0);
@@ -1036,8 +1037,8 @@ public class WaveletDeepMathIntegrationTests
     // MEXICAN HAT - Scaling coefficients shape
     // ================================================================
 
-    [Fact]
-    public void MexicanHat_ScalingCoefficients_PeakAtCenter()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_ScalingCoefficients_PeakAtCenter()
     {
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         var coeffs = mh.GetScalingCoefficients();
@@ -1052,8 +1053,8 @@ public class WaveletDeepMathIntegrationTests
         Assert.Equal(center, maxIdx);
     }
 
-    [Fact]
-    public void MexicanHat_ScalingCoefficients_SymmetricAroundCenter()
+    [Fact(Timeout = 120000)]
+    public async Task MexicanHat_ScalingCoefficients_SymmetricAroundCenter()
     {
         var mh = new MexicanHatWavelet<double>(sigma: 1.0);
         var coeffs = mh.GetScalingCoefficients();
@@ -1069,8 +1070,8 @@ public class WaveletDeepMathIntegrationTests
     // DAUBECHIES - Decompose constant signal
     // ================================================================
 
-    [Fact]
-    public void Daubechies_D4_Decompose_ConstantSignal_ZeroDetail()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_Decompose_ConstantSignal_ZeroDetail()
     {
         // With 2 vanishing moments, a constant signal should produce zero detail coefficients
         var db = new DaubechiesWavelet<double>(order: 4);
@@ -1083,8 +1084,8 @@ public class WaveletDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void Daubechies_D4_Decompose_LinearSignal_ZeroDetail()
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_D4_Decompose_LinearSignal_ZeroDetail()
     {
         // With 2 vanishing moments, a linear signal should also produce (near-)zero detail
         // Note: This is approximate due to circular convolution boundary effects
@@ -1109,8 +1110,8 @@ public class WaveletDeepMathIntegrationTests
     // HAAR WAVELET - Large signal roundtrip
     // ================================================================
 
-    [Fact]
-    public void Haar_LargeSignal_DecomposeReconstruct_PerfectRoundtrip()
+    [Fact(Timeout = 120000)]
+    public async Task Haar_LargeSignal_DecomposeReconstruct_PerfectRoundtrip()
     {
         var haar = new HaarWavelet<double>();
         int size = 256;

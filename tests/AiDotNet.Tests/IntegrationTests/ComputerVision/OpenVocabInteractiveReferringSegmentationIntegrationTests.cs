@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -31,16 +32,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region OpenVocabSAM
 
-    [Fact]
-    public void OpenVocabSAM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task OpenVocabSAM_Construction_Succeeds()
     {
         var model = new OpenVocabSAM<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void OpenVocabSAM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OpenVocabSAM_Predict_ReturnsOutput()
     {
         var model = new OpenVocabSAM<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -48,8 +49,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void OpenVocabSAM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task OpenVocabSAM_Dispose_DoesNotThrow()
     {
         var model = new OpenVocabSAM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -59,16 +60,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region GroundedSAM2
 
-    [Fact]
-    public void GroundedSAM2_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GroundedSAM2_Construction_Succeeds()
     {
         var model = new GroundedSAM2<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void GroundedSAM2_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GroundedSAM2_Predict_ReturnsOutput()
     {
         var model = new GroundedSAM2<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -76,8 +77,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GroundedSAM2_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task GroundedSAM2_Dispose_DoesNotThrow()
     {
         var model = new GroundedSAM2<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -87,16 +88,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region CATSeg
 
-    [Fact]
-    public void CATSeg_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task CATSeg_Construction_Succeeds()
     {
         var model = new CATSeg<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void CATSeg_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task CATSeg_Predict_ReturnsOutput()
     {
         var model = new CATSeg<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -104,8 +105,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void CATSeg_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task CATSeg_Dispose_DoesNotThrow()
     {
         var model = new CATSeg<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -115,16 +116,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region MaskAdapter
 
-    [Fact]
-    public void MaskAdapter_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task MaskAdapter_Construction_Succeeds()
     {
         var model = new MaskAdapter<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void MaskAdapter_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task MaskAdapter_Predict_ReturnsOutput()
     {
         var model = new MaskAdapter<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -132,8 +133,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void MaskAdapter_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task MaskAdapter_Dispose_DoesNotThrow()
     {
         var model = new MaskAdapter<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -143,16 +144,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SAN
 
-    [Fact]
-    public void SAN_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SAN_Construction_Succeeds()
     {
         var model = new SAN<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SAN_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SAN_Predict_ReturnsOutput()
     {
         var model = new SAN<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -160,8 +161,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SAN_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SAN_Dispose_DoesNotThrow()
     {
         var model = new SAN<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -171,16 +172,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SED
 
-    [Fact]
-    public void SED_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SED_Construction_Succeeds()
     {
         var model = new SED<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SED_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SED_Predict_ReturnsOutput()
     {
         var model = new SED<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -188,8 +189,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SED_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SED_Dispose_DoesNotThrow()
     {
         var model = new SED<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -199,16 +200,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SegGPT
 
-    [Fact]
-    public void SegGPT_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SegGPT_Construction_Succeeds()
     {
         var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SegGPT_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SegGPT_Predict_ReturnsOutput()
     {
         var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -216,8 +217,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SegGPT_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SegGPT_Dispose_DoesNotThrow()
     {
         var model = new SegGPT<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -227,16 +228,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SEEM
 
-    [Fact]
-    public void SEEM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task SEEM_Construction_Succeeds()
     {
         var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void SEEM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SEEM_Predict_ReturnsOutput()
     {
         var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -244,8 +245,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void SEEM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task SEEM_Dispose_DoesNotThrow()
     {
         var model = new SEEM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -255,16 +256,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region LISA
 
-    [Fact]
-    public void LISA_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LISA_Construction_Succeeds()
     {
         var model = new LISA<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void LISA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LISA_Predict_ReturnsOutput()
     {
         var model = new LISA<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -272,8 +273,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void LISA_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task LISA_Dispose_DoesNotThrow()
     {
         var model = new LISA<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -283,16 +284,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region VideoLISA
 
-    [Fact]
-    public void VideoLISA_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task VideoLISA_Construction_Succeeds()
     {
         var model = new VideoLISA<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void VideoLISA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task VideoLISA_Predict_ReturnsOutput()
     {
         var model = new VideoLISA<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -300,8 +301,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void VideoLISA_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task VideoLISA_Dispose_DoesNotThrow()
     {
         var model = new VideoLISA<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -311,16 +312,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region GLaMM
 
-    [Fact]
-    public void GLaMM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task GLaMM_Construction_Succeeds()
     {
         var model = new GLaMM<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void GLaMM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GLaMM_Predict_ReturnsOutput()
     {
         var model = new GLaMM<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -328,8 +329,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void GLaMM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task GLaMM_Dispose_DoesNotThrow()
     {
         var model = new GLaMM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -339,16 +340,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region OMGLLaVA
 
-    [Fact]
-    public void OMGLLaVA_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task OMGLLaVA_Construction_Succeeds()
     {
         var model = new OMGLLaVA<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void OMGLLaVA_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task OMGLLaVA_Predict_ReturnsOutput()
     {
         var model = new OMGLLaVA<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -356,8 +357,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void OMGLLaVA_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task OMGLLaVA_Dispose_DoesNotThrow()
     {
         var model = new OMGLLaVA<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
@@ -367,16 +368,16 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region PixelLM
 
-    [Fact]
-    public void PixelLM_Construction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task PixelLM_Construction_Succeeds()
     {
         var model = new PixelLM<double>(Arch());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
-    public void PixelLM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PixelLM_Predict_ReturnsOutput()
     {
         var model = new PixelLM<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
@@ -384,8 +385,8 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
-    public void PixelLM_Dispose_DoesNotThrow()
+    [Fact(Timeout = 120000)]
+    public async Task PixelLM_Dispose_DoesNotThrow()
     {
         var model = new PixelLM<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));

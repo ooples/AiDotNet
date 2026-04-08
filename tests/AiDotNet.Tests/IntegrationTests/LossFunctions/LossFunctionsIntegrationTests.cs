@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LossFunctions;
 
@@ -15,8 +16,8 @@ public class LossFunctionsIntegrationTests
 
     #region Mean Squared Error Loss Tests
 
-    [Fact]
-    public void MSELoss_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MSELoss_IdenticalVectors_ReturnsZero()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -30,8 +31,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void MSELoss_DifferentVectors_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MSELoss_DifferentVectors_ReturnsPositiveLoss()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -45,8 +46,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void MSELoss_Derivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task MSELoss_Derivative_ReturnsCorrectGradient()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -64,8 +65,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(derivative[2] > 0);
     }
 
-    [Fact]
-    public void MSELoss_LargerErrors_ProducesLargerLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MSELoss_LargerErrors_ProducesLargerLoss()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -85,8 +86,8 @@ public class LossFunctionsIntegrationTests
 
     #region Mean Absolute Error Loss Tests
 
-    [Fact]
-    public void MAELoss_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAELoss_IdenticalVectors_ReturnsZero()
     {
         // Arrange
         var mae = new MeanAbsoluteErrorLoss<double>();
@@ -100,8 +101,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void MAELoss_DifferentVectors_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task MAELoss_DifferentVectors_ReturnsPositiveLoss()
     {
         // Arrange
         var mae = new MeanAbsoluteErrorLoss<double>();
@@ -115,8 +116,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void MAELoss_Derivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task MAELoss_Derivative_ReturnsCorrectGradient()
     {
         // Arrange
         var mae = new MeanAbsoluteErrorLoss<double>();
@@ -134,8 +135,8 @@ public class LossFunctionsIntegrationTests
 
     #region Binary Cross Entropy Loss Tests
 
-    [Fact]
-    public void BCELoss_PerfectPredictions_ReturnsLowLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BCELoss_PerfectPredictions_ReturnsLowLoss()
     {
         // Arrange
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -149,8 +150,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss < 0.1);
     }
 
-    [Fact]
-    public void BCELoss_WrongPredictions_ReturnsHighLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BCELoss_WrongPredictions_ReturnsHighLoss()
     {
         // Arrange
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -164,8 +165,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss > 2.0);
     }
 
-    [Fact]
-    public void BCELoss_UncertainPredictions_ReturnsModerateLoss()
+    [Fact(Timeout = 120000)]
+    public async Task BCELoss_UncertainPredictions_ReturnsModerateLoss()
     {
         // Arrange
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -180,8 +181,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss < 1.0);
     }
 
-    [Fact]
-    public void BCELoss_Derivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task BCELoss_Derivative_ReturnsCorrectGradient()
     {
         // Arrange
         var bce = new BinaryCrossEntropyLoss<double>();
@@ -199,8 +200,8 @@ public class LossFunctionsIntegrationTests
 
     #region Huber Loss Tests
 
-    [Fact]
-    public void HuberLoss_SmallErrors_BehavesLikeMSE()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_SmallErrors_BehavesLikeMSE()
     {
         // Arrange
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -216,8 +217,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(Math.Abs(huberLoss - 0.5 * mseLoss) < 0.01);
     }
 
-    [Fact]
-    public void HuberLoss_LargeErrors_MoreRobustThanMSE()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_LargeErrors_MoreRobustThanMSE()
     {
         // Arrange
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -233,8 +234,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(huberLoss < mseLoss);
     }
 
-    [Fact]
-    public void HuberLoss_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_IdenticalVectors_ReturnsZero()
     {
         // Arrange
         var huber = new HuberLoss<double>();
@@ -248,8 +249,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void HuberLoss_Derivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task HuberLoss_Derivative_ReturnsCorrectGradient()
     {
         // Arrange
         var huber = new HuberLoss<double>(delta: 1.0);
@@ -267,8 +268,8 @@ public class LossFunctionsIntegrationTests
 
     #region Hinge Loss Tests
 
-    [Fact]
-    public void HingeLoss_CorrectPredictions_ReturnsZeroOrLow()
+    [Fact(Timeout = 120000)]
+    public async Task HingeLoss_CorrectPredictions_ReturnsZeroOrLow()
     {
         // Arrange - Hinge loss uses -1/1 labels
         var hinge = new HingeLoss<double>();
@@ -282,8 +283,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void HingeLoss_WrongPredictions_ReturnsPositiveLoss()
+    [Fact(Timeout = 120000)]
+    public async Task HingeLoss_WrongPredictions_ReturnsPositiveLoss()
     {
         // Arrange
         var hinge = new HingeLoss<double>();
@@ -297,8 +298,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss > 0.0);
     }
 
-    [Fact]
-    public void HingeLoss_MarginAtOne_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task HingeLoss_MarginAtOne_ReturnsZero()
     {
         // Arrange
         var hinge = new HingeLoss<double>();
@@ -312,8 +313,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void HingeLoss_Derivative_ReturnsCorrectGradient()
+    [Fact(Timeout = 120000)]
+    public async Task HingeLoss_Derivative_ReturnsCorrectGradient()
     {
         // Arrange
         var hinge = new HingeLoss<double>();
@@ -331,8 +332,8 @@ public class LossFunctionsIntegrationTests
 
     #region Root Mean Squared Error Loss Tests
 
-    [Fact]
-    public void RMSELoss_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task RMSELoss_IdenticalVectors_ReturnsZero()
     {
         // Arrange
         var rmse = new RootMeanSquaredErrorLoss<double>();
@@ -346,8 +347,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void RMSELoss_DifferentVectors_ReturnsSqrtOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSELoss_DifferentVectors_ReturnsSqrtOfMSE()
     {
         // Arrange
         var rmse = new RootMeanSquaredErrorLoss<double>();
@@ -365,8 +366,8 @@ public class LossFunctionsIntegrationTests
 
     #region Cross Entropy Loss Tests
 
-    [Fact]
-    public void CrossEntropyLoss_PerfectPredictions_ReturnsLowLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CrossEntropyLoss_PerfectPredictions_ReturnsLowLoss()
     {
         // Arrange
         var ce = new CrossEntropyLoss<double>();
@@ -380,8 +381,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss < 0.2);
     }
 
-    [Fact]
-    public void CrossEntropyLoss_WrongPredictions_ReturnsHigherLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CrossEntropyLoss_WrongPredictions_ReturnsHigherLoss()
     {
         // Arrange
         var ce = new CrossEntropyLoss<double>();
@@ -401,8 +402,8 @@ public class LossFunctionsIntegrationTests
 
     #region Log Cosh Loss Tests
 
-    [Fact]
-    public void LogCoshLoss_IdenticalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task LogCoshLoss_IdenticalVectors_ReturnsZero()
     {
         // Arrange
         var logCosh = new LogCoshLoss<double>();
@@ -416,8 +417,8 @@ public class LossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
-    public void LogCoshLoss_SmallErrors_BehavesLikeMSE()
+    [Fact(Timeout = 120000)]
+    public async Task LogCoshLoss_SmallErrors_BehavesLikeMSE()
     {
         // Arrange
         var logCosh = new LogCoshLoss<double>();
@@ -436,8 +437,8 @@ public class LossFunctionsIntegrationTests
 
     #region Quantile Loss Tests
 
-    [Fact]
-    public void QuantileLoss_MedianQuantile_BehavesLikeMAE()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileLoss_MedianQuantile_BehavesLikeMAE()
     {
         // Arrange - quantile 0.5 should behave like MAE
         var quantile = new QuantileLoss<double>(0.5);
@@ -453,8 +454,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(quantileLoss > 0.0);
     }
 
-    [Fact]
-    public void QuantileLoss_DifferentQuantiles_ProduceDifferentLoss()
+    [Fact(Timeout = 120000)]
+    public async Task QuantileLoss_DifferentQuantiles_ProduceDifferentLoss()
     {
         // Arrange
         var quantile25 = new QuantileLoss<double>(0.25);
@@ -474,8 +475,8 @@ public class LossFunctionsIntegrationTests
 
     #region Focal Loss Tests
 
-    [Fact]
-    public void FocalLoss_EasyExamples_DownWeighted()
+    [Fact(Timeout = 120000)]
+    public async Task FocalLoss_EasyExamples_DownWeighted()
     {
         // Arrange
         var focal = new FocalLoss<double>(gamma: 2.0);
@@ -491,8 +492,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(focalLoss < bceLoss);
     }
 
-    [Fact]
-    public void FocalLoss_HardExamples_LessDownWeighted()
+    [Fact(Timeout = 120000)]
+    public async Task FocalLoss_HardExamples_LessDownWeighted()
     {
         // Arrange
         var focal = new FocalLoss<double>(gamma: 2.0);
@@ -512,8 +513,8 @@ public class LossFunctionsIntegrationTests
 
     #region Cosine Similarity Loss Tests
 
-    [Fact]
-    public void CosineSimilarityLoss_IdenticalVectors_ReturnsZeroOrNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarityLoss_IdenticalVectors_ReturnsZeroOrNegative()
     {
         // Arrange
         var cosine = new CosineSimilarityLoss<double>();
@@ -527,8 +528,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(loss <= 1.0);
     }
 
-    [Fact]
-    public void CosineSimilarityLoss_OrthogonalVectors_ReturnsHigherLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarityLoss_OrthogonalVectors_ReturnsHigherLoss()
     {
         // Arrange
         var cosine = new CosineSimilarityLoss<double>();
@@ -546,8 +547,8 @@ public class LossFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
-    public void AllLossFunctions_HandleLengthMismatch_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task AllLossFunctions_HandleLengthMismatch_ThrowsException()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -558,8 +559,8 @@ public class LossFunctionsIntegrationTests
         Assert.Throws<ArgumentException>(() => mse.CalculateLoss(predicted, actual));
     }
 
-    [Fact]
-    public void AllLossFunctions_EmptyVectors_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task AllLossFunctions_EmptyVectors_HandledGracefully()
     {
         // Arrange
         var mse = new MeanSquaredErrorLoss<double>();
@@ -572,8 +573,8 @@ public class LossFunctionsIntegrationTests
         Assert.True(double.IsNaN(loss) || loss >= 0.0 || loss == 0.0);
     }
 
-    [Fact]
-    public void MultipleLossFunctions_ConsistentDerivativeLength()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleLossFunctions_ConsistentDerivativeLength()
     {
         // Arrange
         var losses = new ILossFunction<double>[]
@@ -594,8 +595,8 @@ public class LossFunctionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllLossFunctions_LargeValues_NoNaNOrInfinity()
+    [Fact(Timeout = 120000)]
+    public async Task AllLossFunctions_LargeValues_NoNaNOrInfinity()
     {
         // Arrange
         var losses = new ILossFunction<double>[]

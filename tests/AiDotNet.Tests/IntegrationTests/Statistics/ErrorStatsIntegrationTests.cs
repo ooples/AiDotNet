@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Statistics;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -22,8 +23,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: sklearn.metrics.mean_absolute_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]) = 0.5
     /// </summary>
-    [Fact]
-    public void MAE_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -46,8 +47,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(np.abs([1, 2, 3] - [1, 2, 3])) = 0.0
     /// </summary>
-    [Fact]
-    public void MAE_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -70,8 +71,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(np.abs([0, 0, 0, 0] - [1, 1, 1, 1])) = 1.0
     /// </summary>
-    [Fact]
-    public void MAE_ConstantError_ReturnsConstant()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_ConstantError_ReturnsConstant()
     {
         // Arrange - Each prediction is off by 1
         var actual = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
@@ -98,8 +99,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: sklearn.metrics.mean_squared_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]) = 0.375
     /// </summary>
-    [Fact]
-    public void MSE_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -123,8 +124,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(([1, 2, 3, 4, 5] - [1, 2, 3, 4, 5])**2) = 0.0
     /// </summary>
-    [Fact]
-    public void MSE_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -147,8 +148,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with NumPy: np.mean(([0, 0, 0, 0] - [2, 2, 2, 2])**2) = 4.0
     /// </summary>
-    [Fact]
-    public void MSE_ConstantError_ReturnsSquaredError()
+    [Fact(Timeout = 120000)]
+    public async Task MSE_ConstantError_ReturnsSquaredError()
     {
         // Arrange - Each prediction is off by 2
         var actual = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
@@ -175,8 +176,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// Verified with sklearn: np.sqrt(sklearn.metrics.mean_squared_error([3, -0.5, 2, 7], [2.5, 0.0, 2, 8])) = 0.6123724356957945
     /// </summary>
-    [Fact]
-    public void RMSE_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -199,8 +200,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// RMSE = sqrt(MSE), so RMSE of 2.0 error should be 2.0
     /// </summary>
-    [Fact]
-    public void RMSE_ConstantError_ReturnsSqrtOfMSE()
+    [Fact(Timeout = 120000)]
+    public async Task RMSE_ConstantError_ReturnsSqrtOfMSE()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
@@ -231,8 +232,8 @@ public class ErrorStatsIntegrationTests
     /// = mean([0.1, 0.05, 0.0333...]) * 100
     /// = 0.0611... * 100 = 6.11...
     /// </summary>
-    [Fact]
-    public void MAPE_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MAPE_StandardDataset_ReturnsExactValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
@@ -261,8 +262,8 @@ public class ErrorStatsIntegrationTests
     /// MeanBiasError = mean(predicted - actual)
     /// Positive bias means model over-predicts on average.
     /// </summary>
-    [Fact]
-    public void MeanBiasError_OverPrediction_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_OverPrediction_ReturnsPositive()
     {
         // Arrange - Predictions are consistently higher
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -286,8 +287,8 @@ public class ErrorStatsIntegrationTests
     /// MeanBiasError = mean(predicted - actual)
     /// Negative bias means model under-predicts on average.
     /// </summary>
-    [Fact]
-    public void MeanBiasError_UnderPrediction_ReturnsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_UnderPrediction_ReturnsNegative()
     {
         // Arrange - Predictions are consistently lower
         var actual = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
@@ -310,8 +311,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MeanBiasError = 0 when errors cancel out.
     /// </summary>
-    [Fact]
-    public void MeanBiasError_BalancedErrors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MeanBiasError_BalancedErrors_ReturnsZero()
     {
         // Arrange - Errors cancel out: +1, -1, +1, -1
         var actual = new Vector<double>(new[] { 5.0, 5.0, 5.0, 5.0 });
@@ -338,8 +339,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MaxError = max(|actual - predicted|)
     /// </summary>
-    [Fact]
-    public void MaxError_ReturnsLargestAbsoluteError()
+    [Fact(Timeout = 120000)]
+    public async Task MaxError_ReturnsLargestAbsoluteError()
     {
         // Arrange - Errors: 0.5, 0.5, 0, 1 -> Max = 1
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -362,8 +363,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// MaxError should find maximum regardless of sign.
     /// </summary>
-    [Fact]
-    public void MaxError_NegativeError_ReturnsAbsoluteMax()
+    [Fact(Timeout = 120000)]
+    public async Task MaxError_NegativeError_ReturnsAbsoluteMax()
     {
         // Arrange - Errors: 1, -5, 2 -> Max = 5
         var actual = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -391,8 +392,8 @@ public class ErrorStatsIntegrationTests
     /// MedianAbsoluteError = median of |actual - predicted|
     /// More robust to outliers than MAE.
     /// </summary>
-    [Fact]
-    public void MedianAbsoluteError_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MedianAbsoluteError_StandardDataset_ReturnsExactValue()
     {
         // Arrange - Errors: |0.5|, |0.5|, |0|, |1| = [0, 0.5, 0.5, 1]
         // Sorted: [0, 0.5, 0.5, 1] -> Median = (0.5 + 0.5) / 2 = 0.5
@@ -421,8 +422,8 @@ public class ErrorStatsIntegrationTests
     /// SMAPE = mean(2 * |actual - predicted| / (|actual| + |predicted|)) * 100
     /// Bounded between 0% and 200%.
     /// </summary>
-    [Fact]
-    public void SMAPE_StandardDataset_ReturnsBoundedValue()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_StandardDataset_ReturnsBoundedValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
@@ -446,8 +447,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// SMAPE = 0 for perfect predictions.
     /// </summary>
-    [Fact]
-    public void SMAPE_PerfectPrediction_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SMAPE_PerfectPrediction_ReturnsZero()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -474,8 +475,8 @@ public class ErrorStatsIntegrationTests
     /// <summary>
     /// RSS = sum((actual - predicted)^2)
     /// </summary>
-    [Fact]
-    public void RSS_StandardDataset_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task RSS_StandardDataset_ReturnsExactValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -499,8 +500,8 @@ public class ErrorStatsIntegrationTests
 
     #region GetMetric Tests
 
-    [Fact]
-    public void GetMetric_MAE_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetric_MAE_ReturnsCorrectValue()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 3.0, -0.5, 2.0, 7.0 });
@@ -521,8 +522,8 @@ public class ErrorStatsIntegrationTests
         Assert.Equal(stats.MAE, mae, Tolerance);
     }
 
-    [Fact]
-    public void GetMetric_AllAliases_MatchProperties()
+    [Fact(Timeout = 120000)]
+    public async Task GetMetric_AllAliases_MatchProperties()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -547,8 +548,8 @@ public class ErrorStatsIntegrationTests
 
     #region ErrorList Tests
 
-    [Fact]
-    public void ErrorList_ContainsResiduals()
+    [Fact(Timeout = 120000)]
+    public async Task ErrorList_ContainsResiduals()
     {
         // Arrange
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -575,8 +576,8 @@ public class ErrorStatsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void MAE_FloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task MAE_FloatType_ReturnsCorrectValue()
     {
         // Arrange
         var actual = new Vector<float>(new[] { 3.0f, -0.5f, 2.0f, 7.0f });

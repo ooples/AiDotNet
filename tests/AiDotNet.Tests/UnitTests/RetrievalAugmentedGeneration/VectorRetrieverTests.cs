@@ -286,8 +286,8 @@ public class VectorRetrieverTests
 
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
     {
         // Arrange
         var embeddingModel = new MockEmbeddingModel();
@@ -298,8 +298,8 @@ public class VectorRetrieverTests
         Assert.Equal("documentStore", exception.ParamName);
     }
 
-    [Fact]
-    public void Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -310,8 +310,8 @@ public class VectorRetrieverTests
         Assert.Equal("embeddingModel", exception.ParamName);
     }
 
-    [Fact]
-    public void Constructor_WithValidParameters_CreatesInstance()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidParameters_CreatesInstance()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -324,8 +324,8 @@ public class VectorRetrieverTests
         Assert.NotNull(retriever);
     }
 
-    [Fact]
-    public void Constructor_WithDefaultTopK_UsesDefaultValue()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultTopK_UsesDefaultValue()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -376,8 +376,8 @@ public class VectorRetrieverTests
 
     #region Retrieve Method Tests
 
-    [Fact]
-    public void Retrieve_EmbedsQueryUsingEmbeddingModel()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_EmbedsQueryUsingEmbeddingModel()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -394,8 +394,8 @@ public class VectorRetrieverTests
         Assert.Equal(query, embeddingModel.LastEmbeddedText);
     }
 
-    [Fact]
-    public void Retrieve_PassesQueryVectorToDocumentStore()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_PassesQueryVectorToDocumentStore()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -420,8 +420,8 @@ public class VectorRetrieverTests
         }
     }
 
-    [Fact]
-    public void Retrieve_ReturnsDocumentsFromStore()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_ReturnsDocumentsFromStore()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -444,8 +444,8 @@ public class VectorRetrieverTests
         Assert.Contains(results, r => r.Id == "doc2");
     }
 
-    [Fact]
-    public void Retrieve_WithTopK_ReturnsRequestedNumberOfDocuments()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithTopK_ReturnsRequestedNumberOfDocuments()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -466,8 +466,8 @@ public class VectorRetrieverTests
         Assert.Equal(3, documentStore.LastTopK);
     }
 
-    [Fact]
-    public void Retrieve_ReturnsDocumentsOrderedBySimilarity()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_ReturnsDocumentsOrderedBySimilarity()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -497,8 +497,8 @@ public class VectorRetrieverTests
         Assert.Equal("doc3", results[2].Id);  // Least similar last
     }
 
-    [Fact]
-    public void Retrieve_WithEmptyStore_ReturnsEmptyList()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithEmptyStore_ReturnsEmptyList()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -512,8 +512,8 @@ public class VectorRetrieverTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void Retrieve_IncludesRelevanceScores()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_IncludesRelevanceScores()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -535,8 +535,8 @@ public class VectorRetrieverTests
 
     #region Metadata Filtering Tests
 
-    [Fact]
-    public void Retrieve_WithMetadataFilters_PassesFiltersToStore()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithMetadataFilters_PassesFiltersToStore()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -557,8 +557,8 @@ public class VectorRetrieverTests
         Assert.Contains(documentStore.LastFilters, kvp => kvp.Key == "category" && (string)kvp.Value == "A");
     }
 
-    [Fact]
-    public void Retrieve_WithMetadataFilters_FiltersDocuments()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithMetadataFilters_FiltersDocuments()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -582,8 +582,8 @@ public class VectorRetrieverTests
         Assert.All(results, r => Assert.Equal("science", r.Metadata["category"]));
     }
 
-    [Fact]
-    public void Retrieve_WithMultipleFilters_AppliesAllFilters()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithMultipleFilters_AppliesAllFilters()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -607,8 +607,8 @@ public class VectorRetrieverTests
         Assert.Equal("doc1", results[0].Id);
     }
 
-    [Fact]
-    public void Retrieve_WithNoMatchingFilters_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithNoMatchingFilters_ReturnsEmpty()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -627,8 +627,8 @@ public class VectorRetrieverTests
         Assert.Empty(results);
     }
 
-    [Fact]
-    public void Retrieve_WithEmptyFilters_ReturnsAllMatchingDocuments()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithEmptyFilters_ReturnsAllMatchingDocuments()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -647,8 +647,8 @@ public class VectorRetrieverTests
         Assert.Equal(2, results.Count);
     }
 
-    [Fact]
-    public void Retrieve_WithNullMetadataFilters_ThrowsArgumentNullException()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithNullMetadataFilters_ThrowsArgumentNullException()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -664,8 +664,8 @@ public class VectorRetrieverTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
-    public void Retrieve_WithNullQuery_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -677,8 +677,8 @@ public class VectorRetrieverTests
             retriever.Retrieve(null!).ToList());
     }
 
-    [Fact]
-    public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -690,8 +690,8 @@ public class VectorRetrieverTests
             retriever.Retrieve("").ToList());
     }
 
-    [Fact]
-    public void Retrieve_WithWhitespaceQuery_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithWhitespaceQuery_ThrowsArgumentException()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -719,8 +719,8 @@ public class VectorRetrieverTests
             retriever.Retrieve("query", topK).ToList());
     }
 
-    [Fact]
-    public void Retrieve_WithTopKGreaterThanDocumentCount_ReturnsAllDocuments()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithTopKGreaterThanDocumentCount_ReturnsAllDocuments()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -739,8 +739,8 @@ public class VectorRetrieverTests
         Assert.Equal(3, results.Count);
     }
 
-    [Fact]
-    public void Retrieve_MultipleTimes_EmbedsQueryEachTime()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_MultipleTimes_EmbedsQueryEachTime()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -757,8 +757,8 @@ public class VectorRetrieverTests
         Assert.Equal(3, embeddingModel.EmbedCallCount);
     }
 
-    [Fact]
-    public void Retrieve_PreservesDocumentMetadata()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_PreservesDocumentMetadata()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -785,8 +785,8 @@ public class VectorRetrieverTests
         Assert.Equal("2024-01-01", results[0].Metadata["date"]);
     }
 
-    [Fact]
-    public void Retrieve_PreservesDocumentContent()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_PreservesDocumentContent()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -809,8 +809,8 @@ public class VectorRetrieverTests
 
     #region Semantic Similarity Tests
 
-    [Fact]
-    public void Retrieve_FindsSemanticallyRelatedDocuments()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_FindsSemanticallyRelatedDocuments()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -837,8 +837,8 @@ public class VectorRetrieverTests
         Assert.Equal("doc1", results[0].Id);  // Related document should be returned
     }
 
-    [Fact]
-    public void Retrieve_ReturnsNormalizedRelevanceScores()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_ReturnsNormalizedRelevanceScores()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -863,8 +863,8 @@ public class VectorRetrieverTests
 
     #region Integration-Style Tests
 
-    [Fact]
-    public void Retrieve_WithLargeDocumentSet_HandlesEfficiently()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithLargeDocumentSet_HandlesEfficiently()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -886,8 +886,8 @@ public class VectorRetrieverTests
         Assert.Equal(10, results.Count);
     }
 
-    [Fact]
-    public void Retrieve_WithVaryingTopK_ReturnsCorrectCount()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithVaryingTopK_ReturnsCorrectCount()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -907,8 +907,8 @@ public class VectorRetrieverTests
         Assert.Equal(15, retriever.Retrieve("q", 15).Count());
     }
 
-    [Fact]
-    public void Retrieve_SameQueryDifferentFilters_ReturnsDifferentResults()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_SameQueryDifferentFilters_ReturnsDifferentResults()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -933,8 +933,8 @@ public class VectorRetrieverTests
         Assert.Equal("doc2", resultsB[0].Id);
     }
 
-    [Fact]
-    public void Retrieve_DocumentsWithSameEmbedding_ReturnsAllEqually()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_DocumentsWithSameEmbedding_ReturnsAllEqually()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -957,8 +957,8 @@ public class VectorRetrieverTests
         // All should have equal relevance scores (same embedding = same similarity)
     }
 
-    [Fact]
-    public void Retrieve_WithDifferentEmbeddingDimensions_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_WithDifferentEmbeddingDimensions_WorksCorrectly()
     {
         // Arrange
         var dimension = 256;
@@ -980,8 +980,8 @@ public class VectorRetrieverTests
 
     #region Document Store Interaction Tests
 
-    [Fact]
-    public void Retrieve_CallsGetSimilarWithFiltersNotGetSimilar()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_CallsGetSimilarWithFiltersNotGetSimilar()
     {
         // Arrange
         var documentStore = new MockDocumentStore();
@@ -997,8 +997,8 @@ public class VectorRetrieverTests
         Assert.Equal(0, documentStore.GetSimilarCallCount);
     }
 
-    [Fact]
-    public void Retrieve_PassesCorrectTopKToStore()
+    [Fact(Timeout = 60000)]
+    public async Task Retrieve_PassesCorrectTopKToStore()
     {
         // Arrange
         var documentStore = new MockDocumentStore();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
@@ -10,7 +11,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     /// Unit tests for GraphQueryMatcher.
     /// </summary>
     /// <remarks>
-    /// Note: xUnit creates a fresh instance of this test class for each [Fact] test method,
+    /// Note: xUnit creates a fresh instance of this test class for each [Fact(Timeout = 60000)] test method,
     /// so the constructor runs for each test, ensuring a fresh _graph and _matcher for every test.
     /// This provides test isolation without needing IClassFixture or explicit per-test setup.
     /// </remarks>
@@ -89,8 +90,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindNodes Tests
 
-        [Fact]
-        public void FindNodes_ByLabel_ReturnsAllMatchingNodes()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_ByLabel_ReturnsAllMatchingNodes()
         {
             // Act
             var people = _matcher.FindNodes("Person");
@@ -100,8 +101,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(people, p => Assert.Equal("Person", p.Label));
         }
 
-        [Fact]
-        public void FindNodes_ByLabelAndProperty_ReturnsFilteredNodes()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_ByLabelAndProperty_ReturnsFilteredNodes()
         {
             // Arrange
             var props = new Dictionary<string, object> { { "name", "Alice" } };
@@ -114,8 +115,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
-        public void FindNodes_MultipleProperties_FiltersCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_MultipleProperties_FiltersCorrectly()
         {
             // Arrange
             var props = new Dictionary<string, object>
@@ -132,8 +133,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
-        public void FindNodes_NoMatches_ReturnsEmptyList()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_NoMatches_ReturnsEmptyList()
         {
             // Arrange
             var props = new Dictionary<string, object> { { "name", "NonExistent" } };
@@ -145,8 +146,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
-        public void FindNodes_InvalidLabel_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_InvalidLabel_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => _matcher.FindNodes(null!));
@@ -158,8 +159,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindPaths Tests
 
-        [Fact]
-        public void FindPaths_SimplePattern_ReturnsMatchingPaths()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_SimplePattern_ReturnsMatchingPaths()
         {
             // Act
             var paths = _matcher.FindPaths("Person", "KNOWS", "Person");
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
-        public void FindPaths_WithSourceFilter_ReturnsFilteredPaths()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_WithSourceFilter_ReturnsFilteredPaths()
         {
             // Arrange
             var sourceProps = new Dictionary<string, object> { { "name", "Alice" } };
@@ -189,8 +190,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0].TargetNode.Id);
         }
 
-        [Fact]
-        public void FindPaths_WithTargetFilter_ReturnsFilteredPaths()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_WithTargetFilter_ReturnsFilteredPaths()
         {
             // Arrange
             var targetProps = new Dictionary<string, object> { { "name", "Charlie" } };
@@ -204,8 +205,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("charlie", paths[0].TargetNode.Id);
         }
 
-        [Fact]
-        public void FindPaths_DifferentLabels_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_DifferentLabels_WorksCorrectly()
         {
             // Act
             var paths = _matcher.FindPaths("Person", "WORKS_AT", "Company");
@@ -220,8 +221,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
-        public void FindPaths_WithBothFilters_ReturnsSpecificPath()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_WithBothFilters_ReturnsSpecificPath()
         {
             // Arrange
             var sourceProps = new Dictionary<string, object> { { "name", "Alice" } };
@@ -236,8 +237,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("google", paths[0].TargetNode.Id);
         }
 
-        [Fact]
-        public void FindPaths_InvalidArguments_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_InvalidArguments_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -254,8 +255,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindPathsOfLength Tests
 
-        [Fact]
-        public void FindPathsOfLength_Length1_ReturnsDirectNeighbors()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_Length1_ReturnsDirectNeighbors()
         {
             // Act
             var paths = _matcher.FindPathsOfLength("alice", 1);
@@ -269,8 +270,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
-        public void FindPathsOfLength_Length2_ReturnsDistantNodes()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_Length2_ReturnsDistantNodes()
         {
             // Act
             var paths = _matcher.FindPathsOfLength("alice", 2);
@@ -280,8 +281,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(paths, p => Assert.Equal(3, p.Count)); // Source + Intermediate + Target
         }
 
-        [Fact]
-        public void FindPathsOfLength_WithRelationshipFilter_FiltersCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_WithRelationshipFilter_FiltersCorrectly()
         {
             // Act
             var paths = _matcher.FindPathsOfLength("alice", 1, "KNOWS");
@@ -291,8 +292,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0][1].Id);
         }
 
-        [Fact]
-        public void FindPathsOfLength_AvoidsCycles()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_AvoidsCycles()
         {
             // Act - This would create a cycle if not handled
             var paths = _matcher.FindPathsOfLength("alice", 5);
@@ -305,8 +306,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
-        public void FindPathsOfLength_InvalidArguments_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_InvalidArguments_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -323,8 +324,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindShortestPaths Tests
 
-        [Fact]
-        public void FindShortestPaths_DirectConnection_ReturnsShortestPath()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_DirectConnection_ReturnsShortestPath()
         {
             // Act
             var paths = _matcher.FindShortestPaths("alice", "bob");
@@ -336,8 +337,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0][1].Id);
         }
 
-        [Fact]
-        public void FindShortestPaths_IndirectConnection_FindsPath()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_IndirectConnection_FindsPath()
         {
             // Act
             var paths = _matcher.FindShortestPaths("alice", "charlie");
@@ -349,8 +350,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("charlie", shortestPath[^1].Id);
         }
 
-        [Fact]
-        public void FindShortestPaths_SameNode_ReturnsSingleNodePath()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_SameNode_ReturnsSingleNodePath()
         {
             // Act
             var paths = _matcher.FindShortestPaths("alice", "alice");
@@ -361,8 +362,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", paths[0][0].Id);
         }
 
-        [Fact]
-        public void FindShortestPaths_NoConnection_ReturnsEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_NoConnection_ReturnsEmpty()
         {
             // Arrange - Add isolated node
             _graph.AddNode(CreateNode("isolated", "Person", new Dictionary<string, object> { { "name", "Isolated" } }));
@@ -374,8 +375,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(paths);
         }
 
-        [Fact]
-        public void FindShortestPaths_InvalidArguments_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_InvalidArguments_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -385,8 +386,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _matcher.FindShortestPaths("alice", null!));
         }
 
-        [Fact]
-        public void FindShortestPaths_RespectsMaxDepth()
+        [Fact(Timeout = 60000)]
+        public async Task FindShortestPaths_RespectsMaxDepth()
         {
             // Act - Set maxDepth to 1, so can't reach Charlie from Alice
             var paths = _matcher.FindShortestPaths("alice", "charlie", maxDepth: 1);
@@ -399,8 +400,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ExecutePattern Tests
 
-        [Fact]
-        public void ExecutePattern_SimplePattern_ReturnsMatches()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_SimplePattern_ReturnsMatches()
         {
             // Act
             var paths = _matcher.ExecutePattern("(Person)-[KNOWS]->(Person)");
@@ -409,8 +410,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, paths.Count);
         }
 
-        [Fact]
-        public void ExecutePattern_WithSourceProperty_FiltersCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_WithSourceProperty_FiltersCorrectly()
         {
             // Act
             var paths = _matcher.ExecutePattern("(Person {name: \"Alice\"})-[KNOWS]->(Person)");
@@ -420,8 +421,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", paths[0].SourceNode.Id);
         }
 
-        [Fact]
-        public void ExecutePattern_WithTargetProperty_FiltersCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_WithTargetProperty_FiltersCorrectly()
         {
             // Act
             var paths = _matcher.ExecutePattern("(Person)-[WORKS_AT]->(Company {name: \"Google\"})");
@@ -431,8 +432,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(paths, p => Assert.Equal("google", p.TargetNode.Id));
         }
 
-        [Fact]
-        public void ExecutePattern_WithBothProperties_FindsSpecificPath()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_WithBothProperties_FindsSpecificPath()
         {
             // Act
             var paths = _matcher.ExecutePattern("(Person {name: \"Alice\"})-[WORKS_AT]->(Company {name: \"Google\"})");
@@ -443,8 +444,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("google", paths[0].TargetNode.Id);
         }
 
-        [Fact]
-        public void ExecutePattern_InvalidFormat_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_InvalidFormat_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -461,8 +462,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GraphPath ToString Tests
 
-        [Fact]
-        public void GraphPath_ToString_FormatsCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task GraphPath_ToString_FormatsCorrectly()
         {
             // Arrange
             var paths = _matcher.FindPaths("Person", "KNOWS", "Person");
@@ -479,8 +480,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Complex Scenario Tests
 
-        [Fact]
-        public void FindPaths_ComplexQuery_HandlesMultipleCriteria()
+        [Fact(Timeout = 60000)]
+        public async Task FindPaths_ComplexQuery_HandlesMultipleCriteria()
         {
             // Arrange - Find people older than 30 who work at tech companies
             var sourceProps = new Dictionary<string, object> { { "age", 35 } };
@@ -494,8 +495,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0].SourceNode.Id);
         }
 
-        [Fact]
-        public void FindPathsOfLength_ComplexGraph_FindsAllPaths()
+        [Fact(Timeout = 60000)]
+        public async Task FindPathsOfLength_ComplexGraph_FindsAllPaths()
         {
             // Arrange - Add more connections to create multiple paths
             _graph.AddEdge(CreateEdge("alice", "KNOWS", "charlie"));
@@ -511,8 +512,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Numeric Property Tests
 
-        [Fact]
-        public void FindNodes_NumericProperty_ComparesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FindNodes_NumericProperty_ComparesCorrectly()
         {
             // Arrange
             var props = new Dictionary<string, object> { { "age", 30 } };
@@ -525,8 +526,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
-        public void ExecutePattern_NumericProperty_ParsesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task ExecutePattern_NumericProperty_ParsesCorrectly()
         {
             // Act - Pattern with numeric property
             var paths = _matcher.ExecutePattern("(Person {age: 30})-[KNOWS]->(Person)");

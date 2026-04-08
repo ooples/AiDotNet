@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
 {
@@ -74,8 +75,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Constructor Tests
 
-        [Fact]
-        public void Constructor_WithValidBaseFitnessCalculator_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidBaseFitnessCalculator_CreatesInstance()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -88,16 +89,16 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.NotNull(calculator);
         }
 
-        [Fact]
-        public void Constructor_WithNullBaseFitnessCalculator_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNullBaseFitnessCalculator_ThrowsException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new CompressionAwareFitnessCalculator<double, Matrix<double>, Vector<double>>(null!));
         }
 
-        [Fact]
-        public void Constructor_WithNegativeWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithNegativeWeights_ThrowsException()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -111,8 +112,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                     speedWeight: 0.5));
         }
 
-        [Fact]
-        public void Constructor_WithAllZeroWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithAllZeroWeights_ThrowsException()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -126,8 +127,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
                     speedWeight: 0));
         }
 
-        [Fact]
-        public void Constructor_WithCustomWeights_NormalizesToSumOfOne()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomWeights_NormalizesToSumOfOne()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.8);
@@ -171,8 +172,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region IsHigherScoreBetter Tests
 
-        [Fact]
-        public void IsHigherScoreBetter_ReturnsTrue()
+        [Fact(Timeout = 60000)]
+        public async Task IsHigherScoreBetter_ReturnsTrue()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -187,8 +188,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CompressionMetrics Property Tests
 
-        [Fact]
-        public void CompressionMetrics_DefaultsToNull()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionMetrics_DefaultsToNull()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -199,8 +200,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.Null(calculator.CompressionMetrics);
         }
 
-        [Fact]
-        public void CompressionMetrics_CanBeSetAndRetrieved()
+        [Fact(Timeout = 60000)]
+        public async Task CompressionMetrics_CanBeSetAndRetrieved()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -226,8 +227,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CalculateFitnessScore Tests (ModelEvaluationData)
 
-        [Fact]
-        public void CalculateFitnessScore_WithoutCompressionMetrics_ReturnsBaseAccuracy()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithoutCompressionMetrics_ReturnsBaseAccuracy()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.8);
@@ -243,8 +244,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness >= 0 && fitness <= 1);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithCompressionMetrics_CombinesScores()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithCompressionMetrics_CombinesScores()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.9);
@@ -270,8 +271,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness > 0);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithLowerIsBetterBase_NormalizesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithLowerIsBetterBase_NormalizesCorrectly()
         {
             // Arrange - Error-based fitness calculator where lower is better
             var baseFitness = new MockFitnessCalculator(returnValue: 0.1, isHigherBetter: false);
@@ -287,8 +288,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness > 0 && fitness <= 1);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithZeroError_ReturnsHighScore()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithZeroError_ReturnsHighScore()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.0, isHigherBetter: false);
@@ -308,8 +309,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region CalculateFitnessScore Tests (DataSetStats)
 
-        [Fact]
-        public void CalculateFitnessScore_DataSetStats_WithoutCompressionMetrics_ReturnsBaseAccuracy()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_DataSetStats_WithoutCompressionMetrics_ReturnsBaseAccuracy()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.85);
@@ -325,8 +326,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness >= 0 && fitness <= 1);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_DataSetStats_WithCompressionMetrics_CombinesScores()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_DataSetStats_WithCompressionMetrics_CombinesScores()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 0.9);
@@ -359,8 +360,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region IsBetterFitness Tests
 
-        [Fact]
-        public void IsBetterFitness_HigherIsBetter_ReturnsCorrectComparison()
+        [Fact(Timeout = 60000)]
+        public async Task IsBetterFitness_HigherIsBetter_ReturnsCorrectComparison()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator();
@@ -377,8 +378,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Type-Specific Tests
 
-        [Fact]
-        public void Constructor_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var baseFitness = new MockFloatFitnessCalculator();
@@ -396,8 +397,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
         #region Edge Case Tests
 
-        [Fact]
-        public void CalculateFitnessScore_WithVeryHighError_ReturnsLowScore()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithVeryHighError_ReturnsLowScore()
         {
             // Arrange - High error value
             var baseFitness = new MockFitnessCalculator(returnValue: 10.0, isHigherBetter: false);
@@ -413,8 +414,8 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             Assert.True(fitness < 0.5);
         }
 
-        [Fact]
-        public void CalculateFitnessScore_WithPerfectAccuracyAndGoodCompression_ReturnsHighScore()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateFitnessScore_WithPerfectAccuracyAndGoodCompression_ReturnsHighScore()
         {
             // Arrange
             var baseFitness = new MockFitnessCalculator(returnValue: 1.0);

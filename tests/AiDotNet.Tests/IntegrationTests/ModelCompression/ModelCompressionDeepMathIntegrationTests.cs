@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelCompression;
 
@@ -17,8 +18,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region CompressionMetrics - CalculateDerivedMetrics
 
-    [Fact]
-    public void CompressionMetrics_CompressionRatio_ExactFormula()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompressionRatio_ExactFormula()
     {
         // CompressionRatio = OriginalSize / CompressedSize
         var metrics = new CompressionMetrics<double>
@@ -33,8 +34,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(4.0, metrics.CompressionRatio, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_SizeReductionPercentage_ExactFormula()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_SizeReductionPercentage_ExactFormula()
     {
         // SizeReductionPercentage = (1 - CompressedSize/OriginalSize) * 100
         var metrics = new CompressionMetrics<double>
@@ -49,8 +50,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(75.0, metrics.SizeReductionPercentage, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_SizeReduction_50Percent()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_SizeReduction_50Percent()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -64,8 +65,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(50.0, metrics.SizeReductionPercentage, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_InferenceSpeedup_ExactFormula()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_InferenceSpeedup_ExactFormula()
     {
         // InferenceSpeedup = OriginalInferenceTimeMs / CompressedInferenceTimeMs
         var metrics = new CompressionMetrics<double>
@@ -82,8 +83,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(2.5, metrics.InferenceSpeedup, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_AccuracyLoss_ExactFormula()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_AccuracyLoss_ExactFormula()
     {
         // AccuracyLoss = OriginalAccuracy - CompressedAccuracy
         var metrics = new CompressionMetrics<double>
@@ -100,8 +101,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.02, metrics.AccuracyLoss, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_MemoryBandwidthSavings_EqualsCompressionRatio()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_MemoryBandwidthSavings_EqualsCompressionRatio()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -116,8 +117,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(metrics.CompressionRatio, metrics.MemoryBandwidthSavings, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_ZeroCompressedInferenceTime_NoSpeedup()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_ZeroCompressedInferenceTime_NoSpeedup()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -137,8 +138,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region CompressionMetrics - MeetsQualityThreshold
 
-    [Fact]
-    public void CompressionMetrics_MeetsQualityThreshold_GoodCompression()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_MeetsQualityThreshold_GoodCompression()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -154,8 +155,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.True(metrics.MeetsQualityThreshold(2.0, 2.0));
     }
 
-    [Fact]
-    public void CompressionMetrics_MeetsQualityThreshold_TooMuchAccuracyLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_MeetsQualityThreshold_TooMuchAccuracyLoss()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -171,8 +172,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.False(metrics.MeetsQualityThreshold(2.0, 2.0));
     }
 
-    [Fact]
-    public void CompressionMetrics_MeetsQualityThreshold_InsufficientCompression()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_MeetsQualityThreshold_InsufficientCompression()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -188,8 +189,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.False(metrics.MeetsQualityThreshold(2.0, 2.0));
     }
 
-    [Fact]
-    public void CompressionMetrics_MeetsQualityThreshold_BoundaryValues()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_MeetsQualityThreshold_BoundaryValues()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -209,8 +210,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region CompressionMetrics - CalculateCompositeFitness
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_PerfectAccuracy_NoCompression()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_PerfectAccuracy_NoCompression()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -231,8 +232,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(expectedFitness, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_HighCompression()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_HighCompression()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -258,8 +259,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(expectedFitness, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_CustomWeights()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_CustomWeights()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -288,8 +289,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(expected, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_AccuracyLossClamped()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_AccuracyLossClamped()
     {
         // If accuracy loss > 1.0 (shouldn't happen but test clamping)
         var metrics = new CompressionMetrics<double>
@@ -310,8 +311,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(expected, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_IsBetterThan_HigherFitnessWins()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_IsBetterThan_HigherFitnessWins()
     {
         var good = new CompressionMetrics<double>
         {
@@ -335,8 +336,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.False(bad.IsBetterThan(good));
     }
 
-    [Fact]
-    public void CompressionMetrics_IsBetterThan_NullIsAlwaysWorse()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_IsBetterThan_NullIsAlwaysWorse()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -352,8 +353,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region CompressionMetrics - SparseCompressionResult Integration
 
-    [Fact]
-    public void SparseCompressionResult_Sparsity_HighDimensional()
+    [Fact(Timeout = 120000)]
+    public async Task SparseCompressionResult_Sparsity_HighDimensional()
     {
         // 4D tensor: [2, 3, 4, 5] = 120 total elements
         // 30 non-zero values => sparsity = 1 - 30/120 = 0.75
@@ -370,8 +371,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.75, result.Sparsity, Tolerance);
     }
 
-    [Fact]
-    public void SparseCompressionResult_CompressedSizeBytes_AllFormats()
+    [Fact(Timeout = 120000)]
+    public async Task SparseCompressionResult_CompressedSizeBytes_AllFormats()
     {
         // COO format: Values + RowIndices + ColumnIndices + metadata
         var cooResult = new SparseCompressionResult<double>
@@ -392,8 +393,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(184, cooResult.GetCompressedSizeBytes(8));
     }
 
-    [Fact]
-    public void SparseCompressionResult_CompressedSizeBytes_WithSparsityMask()
+    [Fact(Timeout = 120000)]
+    public async Task SparseCompressionResult_CompressedSizeBytes_WithSparsityMask()
     {
         var result = new SparseCompressionResult<double>
         {
@@ -416,8 +417,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region WeightClusteringCompression - Round-Trip
 
-    [Fact]
-    public void WeightClustering_CompressDecompress_WellSeparatedClusters()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_CompressDecompress_WellSeparatedClusters()
     {
         // Weights with 3 clear clusters: ~0.0, ~0.5, ~1.0
         var weights = new Vector<double>(new double[]
@@ -444,8 +445,8 @@ public class ModelCompressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeightClustering_ClusterCentersConvergeToMean()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_ClusterCentersConvergeToMean()
     {
         // 2 clusters with well-separated data:
         // Cluster A: [1.0, 1.0, 1.0] => center should converge to 1.0
@@ -474,8 +475,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.True(Math.Abs(decompressed[3] - 5.0) < 0.01);
     }
 
-    [Fact]
-    public void WeightClustering_SingleCluster_AllWeightsBecomeTheMean()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_SingleCluster_AllWeightsBecomeTheMean()
     {
         // With k=1, all weights should map to the single cluster center (the mean)
         var weights = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -496,8 +497,8 @@ public class ModelCompressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeightClustering_KEqualsN_PerfectReconstruction()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_KEqualsN_PerfectReconstruction()
     {
         // When number of clusters equals number of unique weights, reconstruction should be exact
         var weights = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
@@ -517,8 +518,8 @@ public class ModelCompressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeightClustering_Reproducible_WithSeed()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_Reproducible_WithSeed()
     {
         var weights = new Vector<double>(new double[] { 0.1, 0.5, 0.3, 0.9, 0.7 });
 
@@ -537,8 +538,8 @@ public class ModelCompressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void WeightClustering_CompressedSize_SmallerThanOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_CompressedSize_SmallerThanOriginal()
     {
         // With 4 clusters and many weights, compressed size should be smaller
         var data = new double[100];
@@ -560,8 +561,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region WeightClusteringMetadata
 
-    [Fact]
-    public void WeightClusteringMetadata_GetMetadataSize_ExactCalculation()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClusteringMetadata_GetMetadataSize_ExactCalculation()
     {
         // 4 cluster centers (double = 8 bytes each) + numClusters (4 bytes) + originalLength (4 bytes)
         var centers = new double[] { 0.0, 0.25, 0.5, 0.75 };
@@ -571,8 +572,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(expectedSize, metadata.GetMetadataSize());
     }
 
-    [Fact]
-    public void WeightClusteringMetadata_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClusteringMetadata_Properties()
     {
         var centers = new double[] { 1.0, 2.0, 3.0 };
         var metadata = new WeightClusteringMetadata<double>(centers, 3, 50);
@@ -583,8 +584,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(CompressionType.WeightClustering, metadata.Type);
     }
 
-    [Fact]
-    public void WeightClusteringMetadata_InvalidParameters_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClusteringMetadata_InvalidParameters_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new WeightClusteringMetadata<double>(null, 3, 50));
@@ -598,8 +599,8 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region CompressionMetrics - Edge Cases
 
-    [Fact]
-    public void CompressionMetrics_ZeroOriginalSize_NoException()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_ZeroOriginalSize_NoException()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -613,8 +614,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.0, metrics.CompressionRatio, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_EqualSizes_CompressionRatio1()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_EqualSizes_CompressionRatio1()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -628,8 +629,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.0, metrics.SizeReductionPercentage, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_NoAccuracyLoss_ZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_NoAccuracyLoss_ZeroLoss()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -644,8 +645,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.0, metrics.AccuracyLoss, Tolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_OnlyAccuracyWeighted()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_OnlyAccuracyWeighted()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -663,8 +664,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.95, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_CompositeFitness_OnlyCompressionWeighted()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_CompositeFitness_OnlyCompressionWeighted()
     {
         var metrics = new CompressionMetrics<double>
         {
@@ -679,8 +680,8 @@ public class ModelCompressionDeepMathIntegrationTests
         Assert.Equal(0.5, fitness, LooseTolerance);
     }
 
-    [Fact]
-    public void CompressionMetrics_FromDeepCompressionStats_CorrectMapping()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionMetrics_FromDeepCompressionStats_CorrectMapping()
     {
         var stats = new DeepCompressionStats
         {
@@ -708,30 +709,30 @@ public class ModelCompressionDeepMathIntegrationTests
 
     #region WeightClusteringCompression - Validation
 
-    [Fact]
-    public void WeightClustering_EmptyWeights_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_EmptyWeights_Throws()
     {
         var compressor = new WeightClusteringCompression<double>(numClusters: 3);
         Assert.Throws<ArgumentException>(() => compressor.Compress(new Vector<double>(Array.Empty<double>())));
     }
 
-    [Fact]
-    public void WeightClustering_NullWeights_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_NullWeights_Throws()
     {
         var compressor = new WeightClusteringCompression<double>(numClusters: 3);
         Assert.Throws<ArgumentNullException>(() => compressor.Compress(null));
     }
 
-    [Fact]
-    public void WeightClustering_InvalidParameters_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_InvalidParameters_Throws()
     {
         Assert.Throws<ArgumentException>(() => new WeightClusteringCompression<double>(numClusters: 0));
         Assert.Throws<ArgumentException>(() => new WeightClusteringCompression<double>(maxIterations: 0));
         Assert.Throws<ArgumentException>(() => new WeightClusteringCompression<double>(tolerance: 0));
     }
 
-    [Fact]
-    public void WeightClustering_MoreClustersThanWeights_AdjustsDown()
+    [Fact(Timeout = 120000)]
+    public async Task WeightClustering_MoreClustersThanWeights_AdjustsDown()
     {
         // 3 weights but k=10 => should adjust to k=3
         var weights = new Vector<double>(new double[] { 1.0, 5.0, 9.0 });

@@ -5,6 +5,7 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests.ProgramSynthesis;
 
@@ -30,8 +31,8 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Subject = "sub"
     };
 
-    [Fact]
-    public void TryValidate_Completion_EnforcesCursorOffsetAndCandidates()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_Completion_EnforcesCursorOffsetAndCandidates()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
         {
@@ -66,8 +67,8 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("MaxCandidates exceeds tier limit (2).", error);
     }
 
-    [Fact]
-    public void TryValidate_Generation_RequiresDescriptionOrExamples_AndAppliesExampleLimits()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_Generation_RequiresDescriptionOrExamples_AndAppliesExampleLimits()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
         {
@@ -107,8 +108,8 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("Examples exceeds tier limit (2).", error);
     }
 
-    [Fact]
-    public void TryValidate_Search_AndCorpus_Validation_EnforcesLimits()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_Search_AndCorpus_Validation_EnforcesLimits()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
         {
@@ -156,8 +157,8 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("Filters exceeds tier limit (2).", error);
     }
 
-    [Fact]
-    public void TryValidate_CloneDetection_ValidatesMinSimilarity()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_CloneDetection_ValidatesMinSimilarity()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
         {
@@ -192,8 +193,8 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.Equal("MinSimilarity must be between 0 and 1.", error);
     }
 
-    [Fact]
-    public void TryValidate_MaxWallClockMilliseconds_IsClampedByTier()
+    [Fact(Timeout = 60000)]
+    public async Task TryValidate_MaxWallClockMilliseconds_IsClampedByTier()
     {
         var validator = CreateValidator(new ServingProgramSynthesisLimitOptions
         {

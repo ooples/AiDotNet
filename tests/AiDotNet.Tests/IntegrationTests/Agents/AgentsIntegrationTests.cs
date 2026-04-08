@@ -2,6 +2,7 @@ using AiDotNet.Agents;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Agents;
 
@@ -249,8 +250,8 @@ public class AgentsIntegrationTests
 
     #region Agent (ReAct) Tests
 
-    [Fact]
-    public void Agent_Constructor_WithValidChatModel_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task Agent_Constructor_WithValidChatModel_CreatesInstance()
     {
         // Arrange
         var chatModel = new MockChatModel("test response");
@@ -264,15 +265,15 @@ public class AgentsIntegrationTests
         Assert.Empty(agent.Tools);
     }
 
-    [Fact]
-    public void Agent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task Agent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new Agent<double>(null!));
     }
 
-    [Fact]
-    public void Agent_Constructor_WithTools_StoresTools()
+    [Fact(Timeout = 120000)]
+    public async Task Agent_Constructor_WithTools_StoresTools()
     {
         // Arrange
         var chatModel = new MockChatModel("test response");
@@ -291,7 +292,7 @@ public class AgentsIntegrationTests
         Assert.Contains(agent.Tools, t => t.Name == "Search");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithFinalAnswerInFirstResponse_ReturnsAnswer()
     {
         // Arrange
@@ -312,7 +313,7 @@ public class AgentsIntegrationTests
         Assert.Contains("The answer is 42", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithToolAction_ExecutesTool()
     {
         // Arrange
@@ -342,7 +343,7 @@ public class AgentsIntegrationTests
         Assert.Contains("2 + 2", calculator.ReceivedInputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithNullQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -353,7 +354,7 @@ public class AgentsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -364,7 +365,7 @@ public class AgentsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithZeroMaxIterations_ThrowsArgumentException()
     {
         // Arrange
@@ -375,7 +376,7 @@ public class AgentsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync("query", maxIterations: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_ReachingMaxIterations_ReturnsFallbackMessage()
     {
         // Arrange - No final answer, always wants to use a tool
@@ -397,7 +398,7 @@ public class AgentsIntegrationTests
         Assert.Contains("2", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithNonExistentTool_ReturnsError()
     {
         // Arrange
@@ -424,7 +425,7 @@ public class AgentsIntegrationTests
         Assert.Contains("not found", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithHttpException_ReturnsErrorMessage()
     {
         // Arrange
@@ -439,7 +440,7 @@ public class AgentsIntegrationTests
         Assert.Contains("Network error", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_WithToolExecutionError_ReturnsErrorObservation()
     {
         // Arrange
@@ -466,7 +467,7 @@ public class AgentsIntegrationTests
         Assert.Contains("Error executing tool", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_ParsesRegexFallback()
     {
         // Arrange - Non-JSON response that uses the regex fallback parser
@@ -485,7 +486,7 @@ public class AgentsIntegrationTests
         Assert.Equal("The answer is 42", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_Scratchpad_ClearsOnNewRun()
     {
         // Arrange
@@ -510,8 +511,8 @@ public class AgentsIntegrationTests
 
     #region ChainOfThoughtAgent Tests
 
-    [Fact]
-    public void ChainOfThoughtAgent_Constructor_WithValidChatModel_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task ChainOfThoughtAgent_Constructor_WithValidChatModel_CreatesInstance()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -524,14 +525,14 @@ public class AgentsIntegrationTests
         Assert.Same(chatModel, agent.ChatModel);
     }
 
-    [Fact]
-    public void ChainOfThoughtAgent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task ChainOfThoughtAgent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new ChainOfThoughtAgent<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_WithFinalAnswer_ReturnsAnswer()
     {
         // Arrange
@@ -555,7 +556,7 @@ public class AgentsIntegrationTests
         Assert.Contains("Step 2", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_WithToolCalls_ExecutesTools()
     {
         // Arrange
@@ -586,7 +587,7 @@ public class AgentsIntegrationTests
         Assert.Equal(1, calculator.ExecuteCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_WithAllowToolsFalse_DoesNotExecuteTools()
     {
         // Arrange
@@ -614,7 +615,7 @@ public class AgentsIntegrationTests
         Assert.Equal(0, calculator.ExecuteCount); // Tool not executed
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_TruncatesStepsExceedingMaxIterations()
     {
         // Arrange - Response with more steps than maxIterations allows
@@ -639,7 +640,7 @@ public class AgentsIntegrationTests
         Assert.Contains("truncating to 3", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -650,7 +651,7 @@ public class AgentsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_WithHttpException_ReturnsErrorMessage()
     {
         // Arrange
@@ -664,7 +665,7 @@ public class AgentsIntegrationTests
         Assert.Contains("error", result.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChainOfThoughtAgent_RunAsync_ParsesRegexFallback()
     {
         // Arrange - Non-JSON response
@@ -686,8 +687,8 @@ public class AgentsIntegrationTests
 
     #region PlanAndExecuteAgent Tests
 
-    [Fact]
-    public void PlanAndExecuteAgent_Constructor_WithValidChatModel_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task PlanAndExecuteAgent_Constructor_WithValidChatModel_CreatesInstance()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -700,14 +701,14 @@ public class AgentsIntegrationTests
         Assert.Same(chatModel, agent.ChatModel);
     }
 
-    [Fact]
-    public void PlanAndExecuteAgent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task PlanAndExecuteAgent_Constructor_WithNullChatModel_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new PlanAndExecuteAgent<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_ExecutesPlan()
     {
         // Arrange
@@ -743,7 +744,7 @@ public class AgentsIntegrationTests
         Assert.Contains("EXECUTION PHASE", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_WithEmptyPlan_ReturnsErrorMessage()
     {
         // Arrange
@@ -758,7 +759,7 @@ public class AgentsIntegrationTests
         Assert.Contains("unable to create a plan", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_WithPlanRevision_RevisesPlan()
     {
         // Arrange - First plan has a step that will fail, then revision succeeds
@@ -796,7 +797,7 @@ public class AgentsIntegrationTests
         Assert.Contains("Plan revised", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_WithPlanRevisionDisabled_DoesNotRevise()
     {
         // Arrange
@@ -823,7 +824,7 @@ public class AgentsIntegrationTests
         Assert.DoesNotContain("Attempting to revise plan", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_WithMaxRevisionsReached_StopsRevising()
     {
         // Arrange - Plans that always fail
@@ -850,7 +851,7 @@ public class AgentsIntegrationTests
         Assert.Contains("maximum number of plan revisions", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PlanAndExecuteAgent_RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -865,8 +866,8 @@ public class AgentsIntegrationTests
 
     #region RAGAgent Tests
 
-    [Fact]
-    public void RAGAgent_Constructor_WithValidComponents_CreatesInstance()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_Constructor_WithValidComponents_CreatesInstance()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -880,8 +881,8 @@ public class AgentsIntegrationTests
         Assert.NotNull(agent);
     }
 
-    [Fact]
-    public void RAGAgent_Constructor_WithNullRetriever_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_Constructor_WithNullRetriever_ThrowsArgumentNullException()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -891,8 +892,8 @@ public class AgentsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => new RAGAgent<double>(chatModel, null!, generator));
     }
 
-    [Fact]
-    public void RAGAgent_Constructor_WithNullGenerator_ThrowsArgumentNullException()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_Constructor_WithNullGenerator_ThrowsArgumentNullException()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -902,8 +903,8 @@ public class AgentsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => new RAGAgent<double>(chatModel, retriever, null!));
     }
 
-    [Fact]
-    public void RAGAgent_Constructor_WithInvalidRetrievalTopK_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_Constructor_WithInvalidRetrievalTopK_ThrowsArgumentException()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -914,8 +915,8 @@ public class AgentsIntegrationTests
         Assert.Throws<ArgumentException>(() => new RAGAgent<double>(chatModel, retriever, generator, retrievalTopK: 0));
     }
 
-    [Fact]
-    public void RAGAgent_Constructor_WithInvalidRerankTopK_ThrowsArgumentException()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_Constructor_WithInvalidRerankTopK_ThrowsArgumentException()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -927,7 +928,7 @@ public class AgentsIntegrationTests
         Assert.Throws<ArgumentException>(() => new RAGAgent<double>(chatModel, retriever, generator, reranker, rerankTopK: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_RetrievesAndGenerates()
     {
         // Arrange
@@ -952,7 +953,7 @@ public class AgentsIntegrationTests
         Assert.Contains("GENERATION PHASE", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithReranker_ReranksDocuments()
     {
         // Arrange
@@ -976,7 +977,7 @@ public class AgentsIntegrationTests
         Assert.Contains("1 documents after reranking", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithNoDocuments_ReturnsNoDocumentsMessage()
     {
         // Arrange
@@ -992,7 +993,7 @@ public class AgentsIntegrationTests
         Assert.Contains("couldn't find any relevant information", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithCitations_IncludesCitations()
     {
         // Arrange
@@ -1014,7 +1015,7 @@ public class AgentsIntegrationTests
         Assert.Contains("[1]", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithoutCitations_DoesNotIncludeCitations()
     {
         // Arrange
@@ -1035,7 +1036,7 @@ public class AgentsIntegrationTests
         Assert.DoesNotContain("Sources:", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithQueryRefinement_RefinesQuery()
     {
         // Arrange
@@ -1056,7 +1057,7 @@ public class AgentsIntegrationTests
         Assert.Contains("QUERY ANALYSIS", agent.Scratchpad);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task RAGAgent_RunAsync_WithEmptyQuery_ThrowsArgumentException()
     {
         // Arrange
@@ -1069,8 +1070,8 @@ public class AgentsIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(""));
     }
 
-    [Fact]
-    public void RAGAgent_GetPipelineInfo_ReturnsConfiguration()
+    [Fact(Timeout = 120000)]
+    public async Task RAGAgent_GetPipelineInfo_ReturnsConfiguration()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -1094,8 +1095,8 @@ public class AgentsIntegrationTests
 
     #region AgentBase Tests (via concrete implementations)
 
-    [Fact]
-    public void AgentBase_Tools_ReturnsReadOnlyList()
+    [Fact(Timeout = 120000)]
+    public async Task AgentBase_Tools_ReturnsReadOnlyList()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -1110,8 +1111,8 @@ public class AgentsIntegrationTests
         Assert.Single(toolList);
     }
 
-    [Fact]
-    public void AgentBase_Tools_WithNullTools_ReturnsEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task AgentBase_Tools_WithNullTools_ReturnsEmptyList()
     {
         // Arrange
         var chatModel = new MockChatModel("response");
@@ -1124,7 +1125,7 @@ public class AgentsIntegrationTests
         Assert.Empty(toolList);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AgentBase_Scratchpad_TracksReasoningHistory()
     {
         // Arrange
@@ -1146,7 +1147,7 @@ public class AgentsIntegrationTests
 
     #region JSON Parsing Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_ParsesJsonInMarkdownCodeBlock()
     {
         // Arrange
@@ -1168,7 +1169,7 @@ public class AgentsIntegrationTests
         Assert.Equal("The answer is 42", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_ParsesJsonWithoutCodeBlock()
     {
         // Arrange
@@ -1189,7 +1190,7 @@ public class AgentsIntegrationTests
         Assert.Equal("The answer is 42", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_RunAsync_HandlesEmptyResponse()
     {
         // Arrange
@@ -1210,7 +1211,7 @@ public class AgentsIntegrationTests
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Agent_ConcurrentRuns_AreIsolated()
     {
         // Arrange

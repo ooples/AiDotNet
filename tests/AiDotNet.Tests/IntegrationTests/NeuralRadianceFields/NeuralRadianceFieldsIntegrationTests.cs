@@ -4,6 +4,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralRadianceFields.Models;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralRadianceFields;
 
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralRadianceFields;
 /// </summary>
 public class NeuralRadianceFieldsIntegrationTests
 {
-    [Fact]
-    public void InstantNGP_RenderRays_ProducesFiniteColors()
+    [Fact(Timeout = 120000)]
+    public async Task InstantNGP_RenderRays_ProducesFiniteColors()
     {
         var options = new InstantNGPOptions<double>
         {
@@ -58,8 +59,8 @@ public class NeuralRadianceFieldsIntegrationTests
         }
     }
 
-    [Fact]
-    public void InstantNGP_Train_ChangesSerializedState()
+    [Fact(Timeout = 120000)]
+    public async Task InstantNGP_Train_ChangesSerializedState()
     {
         var options = new InstantNGPOptions<double>
         {
@@ -103,8 +104,8 @@ public class NeuralRadianceFieldsIntegrationTests
         Assert.Equal(3, output.Shape[1]);
     }
 
-    [Fact]
-    public void NeRF_Train_ProducesFiniteOutput()
+    [Fact(Timeout = 120000)]
+    public async Task NeRF_Train_ProducesFiniteOutput()
     {
         // Create NeRF with individual parameters (golden standard pattern)
         var model = new NeRF<double>(
@@ -133,8 +134,8 @@ public class NeuralRadianceFieldsIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
-    public void GaussianSplatting_Train_ChangesRenderOutput()
+    [Fact(Timeout = 120000)]
+    public async Task GaussianSplatting_Train_ChangesRenderOutput()
     {
         var pointCloud = new Matrix<double>(2, 3);
         pointCloud[0, 0] = 0.0;

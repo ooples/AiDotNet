@@ -1,6 +1,7 @@
 using AiDotNet.Preprocessing;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Preprocessing;
 
@@ -13,8 +14,8 @@ public class TrainTestSplitTests
 
     #region Split Tests (Two-way)
 
-    [Fact]
-    public void Split_DefaultParameters_Returns80_20Split()
+    [Fact(Timeout = 60000)]
+    public async Task Split_DefaultParameters_Returns80_20Split()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -30,8 +31,8 @@ public class TrainTestSplitTests
         Assert.Equal(20, yTest.Length);
     }
 
-    [Fact]
-    public void Split_CustomTestSize_CorrectSplit()
+    [Fact(Timeout = 60000)]
+    public async Task Split_CustomTestSize_CorrectSplit()
     {
         // Arrange
         var X = CreateMatrix(100, 2);
@@ -47,8 +48,8 @@ public class TrainTestSplitTests
         Assert.Equal(30, yTest.Length);
     }
 
-    [Fact]
-    public void Split_PreservesFeatureCount()
+    [Fact(Timeout = 60000)]
+    public async Task Split_PreservesFeatureCount()
     {
         // Arrange
         var X = CreateMatrix(50, 5);
@@ -62,8 +63,8 @@ public class TrainTestSplitTests
         Assert.Equal(5, XTest.Columns);
     }
 
-    [Fact]
-    public void Split_NoDataLoss_AllSamplesInOutput()
+    [Fact(Timeout = 60000)]
+    public async Task Split_NoDataLoss_AllSamplesInOutput()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -77,8 +78,8 @@ public class TrainTestSplitTests
         Assert.Equal(10, yTrain.Length + yTest.Length);
     }
 
-    [Fact]
-    public void Split_SameSeed_ProducesSameResults()
+    [Fact(Timeout = 60000)]
+    public async Task Split_SameSeed_ProducesSameResults()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -98,8 +99,8 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
-    public void Split_DifferentSeeds_ProducesDifferentResults()
+    [Fact(Timeout = 60000)]
+    public async Task Split_DifferentSeeds_ProducesDifferentResults()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -124,8 +125,8 @@ public class TrainTestSplitTests
         Assert.True(anyDifferent);
     }
 
-    [Fact]
-    public void Split_NoShuffle_PreservesOrder()
+    [Fact(Timeout = 60000)]
+    public async Task Split_NoShuffle_PreservesOrder()
     {
         // Arrange - Create data with sequential values
         var X = new Matrix<double>(10, 1);
@@ -148,8 +149,8 @@ public class TrainTestSplitTests
         Assert.Equal(9.0, XTest[1, 0], Tolerance);
     }
 
-    [Fact]
-    public void Split_InvalidTestSize_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Split_InvalidTestSize_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -162,8 +163,8 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.Split(X, y, testSize: 1.5));
     }
 
-    [Fact]
-    public void Split_NullInputs_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Split_NullInputs_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -174,8 +175,8 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(X, null!));
     }
 
-    [Fact]
-    public void Split_MismatchedSizes_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task Split_MismatchedSizes_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -189,8 +190,8 @@ public class TrainTestSplitTests
 
     #region SplitThreeWay Tests
 
-    [Fact]
-    public void SplitThreeWay_DefaultParameters_CorrectSplit()
+    [Fact(Timeout = 60000)]
+    public async Task SplitThreeWay_DefaultParameters_CorrectSplit()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -209,8 +210,8 @@ public class TrainTestSplitTests
         Assert.Equal(15, yTest.Length);
     }
 
-    [Fact]
-    public void SplitThreeWay_CustomSizes_CorrectSplit()
+    [Fact(Timeout = 60000)]
+    public async Task SplitThreeWay_CustomSizes_CorrectSplit()
     {
         // Arrange
         var X = CreateMatrix(100, 2);
@@ -226,8 +227,8 @@ public class TrainTestSplitTests
         Assert.Equal(20, XTest.Rows);
     }
 
-    [Fact]
-    public void SplitThreeWay_NoDataLoss_AllSamplesInOutput()
+    [Fact(Timeout = 60000)]
+    public async Task SplitThreeWay_NoDataLoss_AllSamplesInOutput()
     {
         // Arrange
         var X = CreateMatrix(50, 2);
@@ -241,8 +242,8 @@ public class TrainTestSplitTests
         Assert.Equal(50, XTrain.Rows + XVal.Rows + XTest.Rows);
     }
 
-    [Fact]
-    public void SplitThreeWay_InvalidSizes_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task SplitThreeWay_InvalidSizes_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -259,8 +260,8 @@ public class TrainTestSplitTests
             TrainTestSplit<double>.SplitThreeWay(X, y, trainSize: 0.7, validationSize: 0.4)); // Sum >= 1
     }
 
-    [Fact]
-    public void SplitThreeWay_SameSeed_ProducesSameResults()
+    [Fact(Timeout = 60000)]
+    public async Task SplitThreeWay_SameSeed_ProducesSameResults()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -278,8 +279,8 @@ public class TrainTestSplitTests
 
     #region SplitX Tests
 
-    [Fact]
-    public void SplitX_BasicSplit_Works()
+    [Fact(Timeout = 60000)]
+    public async Task SplitX_BasicSplit_Works()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -294,15 +295,15 @@ public class TrainTestSplitTests
         Assert.Equal(3, XTest.Columns);
     }
 
-    [Fact]
-    public void SplitX_NullInput_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task SplitX_NullInput_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.SplitX(null!));
     }
 
-    [Fact]
-    public void SplitX_InvalidTestSize_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task SplitX_InvalidTestSize_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -316,8 +317,8 @@ public class TrainTestSplitTests
 
     #region KFoldSplit Tests
 
-    [Fact]
-    public void KFoldSplit_DefaultK_ReturnsFiveFolds()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_DefaultK_ReturnsFiveFolds()
     {
         // Arrange
         var X = CreateMatrix(100, 3);
@@ -330,8 +331,8 @@ public class TrainTestSplitTests
         Assert.Equal(5, folds.Count);
     }
 
-    [Fact]
-    public void KFoldSplit_CustomK_ReturnsCorrectFolds()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_CustomK_ReturnsCorrectFolds()
     {
         // Arrange
         var X = CreateMatrix(100, 2);
@@ -344,8 +345,8 @@ public class TrainTestSplitTests
         Assert.Equal(10, folds.Count);
     }
 
-    [Fact]
-    public void KFoldSplit_EachFoldHasCorrectTestSize()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_EachFoldHasCorrectTestSize()
     {
         // Arrange
         var X = CreateMatrix(100, 2);
@@ -362,8 +363,8 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
-    public void KFoldSplit_TrainingSetCorrectSize()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_TrainingSetCorrectSize()
     {
         // Arrange
         var X = CreateMatrix(100, 2);
@@ -380,8 +381,8 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
-    public void KFoldSplit_InvalidK_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_InvalidK_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -393,8 +394,8 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.KFoldSplit(X, y, k: -1));
     }
 
-    [Fact]
-    public void KFoldSplit_KGreaterThanSamples_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_KGreaterThanSamples_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(5, 2);
@@ -404,8 +405,8 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.KFoldSplit(X, y, k: 10));
     }
 
-    [Fact]
-    public void KFoldSplit_NullInputs_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_NullInputs_ThrowsException()
     {
         // Arrange
         var X = CreateMatrix(10, 2);
@@ -416,8 +417,8 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(X, null!));
     }
 
-    [Fact]
-    public void KFoldSplit_SameSeed_ProducesSameResults()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_SameSeed_ProducesSameResults()
     {
         // Arrange
         var X = CreateMatrix(50, 2);
@@ -434,8 +435,8 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
-    public void KFoldSplit_HandlesUnevenDivision()
+    [Fact(Timeout = 60000)]
+    public async Task KFoldSplit_HandlesUnevenDivision()
     {
         // Arrange - 23 samples with k=5 doesn't divide evenly
         var X = CreateMatrix(23, 2);

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Tokenization;
 
@@ -27,15 +28,15 @@ public class UnigramTokenizerTests
         _tokenizer = UnigramTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact]
-    public void Train_CreatesVocabulary()
+    [Fact(Timeout = 60000)]
+    public async Task Train_CreatesVocabulary()
     {
         // Assert
         Assert.True(_tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
-    public void Tokenize_UsesViterbiSegmentation()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_UsesViterbiSegmentation()
     {
         // Arrange
         var text = "machine learning";
@@ -48,8 +49,8 @@ public class UnigramTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
-    public void Tokenize_HandlesSpaces_WithSentencePieceMarker()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_HandlesSpaces_WithSentencePieceMarker()
     {
         // Arrange
         var text = "Hello world";
@@ -63,8 +64,8 @@ public class UnigramTokenizerTests
         Assert.Contains("\u2581", joinedTokens);
     }
 
-    [Fact]
-    public void Tokenize_EmptyText_ReturnsEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_EmptyText_ReturnsEmpty()
     {
         // Act
         var tokens = _tokenizer.Tokenize("");
@@ -73,8 +74,8 @@ public class UnigramTokenizerTests
         Assert.Empty(tokens);
     }
 
-    [Fact]
-    public void Encode_ReturnsValidResult()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_ReturnsValidResult()
     {
         // Arrange
         var text = "Hello world";
@@ -87,8 +88,8 @@ public class UnigramTokenizerTests
         Assert.Equal(result.Tokens.Count, result.TokenIds.Count);
     }
 
-    [Fact]
-    public void Decode_RemovesSentencePieceMarker()
+    [Fact(Timeout = 60000)]
+    public async Task Decode_RemovesSentencePieceMarker()
     {
         // Arrange
         var text = "Hello world";
@@ -101,8 +102,8 @@ public class UnigramTokenizerTests
         Assert.DoesNotContain("\u2581", decoded);
     }
 
-    [Fact]
-    public void Roundtrip_PreservesContent()
+    [Fact(Timeout = 60000)]
+    public async Task Roundtrip_PreservesContent()
     {
         // Arrange
         var text = "machine learning";
@@ -117,8 +118,8 @@ public class UnigramTokenizerTests
         Assert.Contains("learning", normalizedDecoded);
     }
 
-    [Fact]
-    public void Encode_WithPositionIds_ReturnsSequential()
+    [Fact(Timeout = 60000)]
+    public async Task Encode_WithPositionIds_ReturnsSequential()
     {
         // Arrange
         var text = "Test text";
@@ -134,8 +135,8 @@ public class UnigramTokenizerTests
         }
     }
 
-    [Fact]
-    public void Train_WithSmallVocab_Works()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithSmallVocab_Works()
     {
         // Arrange & Act
         var smallTokenizer = UnigramTokenizer.Train(_trainingCorpus, 50);
@@ -145,8 +146,8 @@ public class UnigramTokenizerTests
         Assert.True(smallTokenizer.VocabularySize <= 60); // vocab + special tokens
     }
 
-    [Fact]
-    public void Tokenize_LongWord_BreaksIntoSubwords()
+    [Fact(Timeout = 60000)]
+    public async Task Tokenize_LongWord_BreaksIntoSubwords()
     {
         // Arrange
         var text = "antidisestablishmentarianism";

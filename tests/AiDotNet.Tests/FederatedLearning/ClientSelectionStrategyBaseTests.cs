@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using AiDotNet.Tensors.Helpers;
@@ -5,8 +6,8 @@ using Xunit;
 
 public class ClientSelectionStrategyBaseTests
 {
-    [Fact]
-    public void GetDesiredClientCount_Throws_WhenCandidatesNull()
+    [Fact(Timeout = 60000)]
+    public async Task GetDesiredClientCount_Throws_WhenCandidatesNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates: null!, fraction: 0.5));
@@ -22,8 +23,8 @@ public class ClientSelectionStrategyBaseTests
             ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates: new[] { 1, 2, 3 }, fraction: fraction));
     }
 
-    [Fact]
-    public void GetDesiredClientCount_ReturnsCeilingWithMinimumOne()
+    [Fact(Timeout = 60000)]
+    public async Task GetDesiredClientCount_ReturnsCeilingWithMinimumOne()
     {
         var candidates = Enumerable.Range(0, 10).ToArray();
 
@@ -33,15 +34,15 @@ public class ClientSelectionStrategyBaseTests
         Assert.Equal(10, ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates, fraction: 1.0));
     }
 
-    [Fact]
-    public void ShuffleAndTake_Throws_WhenItemsNull()
+    [Fact(Timeout = 60000)]
+    public async Task ShuffleAndTake_Throws_WhenItemsNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: null!, count: 1, random: RandomHelper.CreateSeededRandom(1)));
     }
 
-    [Fact]
-    public void ShuffleAndTake_Throws_WhenRandomNull()
+    [Fact(Timeout = 60000)]
+    public async Task ShuffleAndTake_Throws_WhenRandomNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: new[] { 1 }, count: 1, random: null!));
@@ -56,8 +57,8 @@ public class ClientSelectionStrategyBaseTests
             ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: new[] { 1, 2 }, count: count, random: RandomHelper.CreateSeededRandom(1)));
     }
 
-    [Fact]
-    public void ShuffleAndTake_ReturnsSortedItems_WhenCountAtLeastItemCount()
+    [Fact(Timeout = 60000)]
+    public async Task ShuffleAndTake_ReturnsSortedItems_WhenCountAtLeastItemCount()
     {
         var items = new[] { 3, 1, 2 };
 
@@ -69,8 +70,8 @@ public class ClientSelectionStrategyBaseTests
         Assert.Equal(new[] { 1, 2, 3 }, selected);
     }
 
-    [Fact]
-    public void ShuffleAndTake_ReturnsSortedSubset_WhenCountLessThanItemCount()
+    [Fact(Timeout = 60000)]
+    public async Task ShuffleAndTake_ReturnsSortedSubset_WhenCountLessThanItemCount()
     {
         var items = new[] { 1, 2, 3, 4, 5 };
 

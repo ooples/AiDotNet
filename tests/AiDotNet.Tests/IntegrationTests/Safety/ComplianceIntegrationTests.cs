@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Compliance;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -15,8 +16,8 @@ public class ComplianceIntegrationTests
 {
     #region EUAIActComplianceChecker Tests
 
-    [Fact]
-    public void EUAIAct_MissingWatermarking_DetectsNonCompliance()
+    [Fact(Timeout = 120000)]
+    public async Task EUAIAct_MissingWatermarking_DetectsNonCompliance()
     {
         var config = new SafetyConfig
         {
@@ -30,8 +31,8 @@ public class ComplianceIntegrationTests
         Assert.Contains(findings, f => f.Description.Contains("Article 50"));
     }
 
-    [Fact]
-    public void EUAIAct_FullyCompliant_FewerFindings()
+    [Fact(Timeout = 120000)]
+    public async Task EUAIAct_FullyCompliant_FewerFindings()
     {
         var config = new SafetyConfig
         {
@@ -47,8 +48,8 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void EUAIAct_MissingFairness_DetectsNonCompliance()
+    [Fact(Timeout = 120000)]
+    public async Task EUAIAct_MissingFairness_DetectsNonCompliance()
     {
         var config = new SafetyConfig
         {
@@ -61,8 +62,8 @@ public class ComplianceIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
-    public void EUAIAct_EmptyText_StillChecksConfig()
+    [Fact(Timeout = 120000)]
+    public async Task EUAIAct_EmptyText_StillChecksConfig()
     {
         var config = new SafetyConfig
         {
@@ -79,8 +80,8 @@ public class ComplianceIntegrationTests
 
     #region GDPRComplianceChecker Tests
 
-    [Fact]
-    public void GDPR_MissingPIIDetection_DetectsNonCompliance()
+    [Fact(Timeout = 120000)]
+    public async Task GDPR_MissingPIIDetection_DetectsNonCompliance()
     {
         var config = new SafetyConfig
         {
@@ -93,8 +94,8 @@ public class ComplianceIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact]
-    public void GDPR_PIIEnabled_FewerFindings()
+    [Fact(Timeout = 120000)]
+    public async Task GDPR_PIIEnabled_FewerFindings()
     {
         var config = new SafetyConfig
         {
@@ -107,8 +108,8 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void GDPR_AllControlsDisabled_DetectsMultipleIssues()
+    [Fact(Timeout = 120000)]
+    public async Task GDPR_AllControlsDisabled_DetectsMultipleIssues()
     {
         var config = new SafetyConfig
         {
@@ -125,8 +126,8 @@ public class ComplianceIntegrationTests
 
     #region SOC2ComplianceChecker Tests
 
-    [Fact]
-    public void SOC2_MissingControls_DetectsMultipleIssues()
+    [Fact(Timeout = 120000)]
+    public async Task SOC2_MissingControls_DetectsMultipleIssues()
     {
         var config = new SafetyConfig
         {
@@ -140,8 +141,8 @@ public class ComplianceIntegrationTests
             $"Should detect multiple missing SOC2 controls, found {findings.Count}");
     }
 
-    [Fact]
-    public void SOC2_AllControlsEnabled_FewerFindings()
+    [Fact(Timeout = 120000)]
+    public async Task SOC2_AllControlsEnabled_FewerFindings()
     {
         var config = new SafetyConfig
         {
@@ -154,8 +155,8 @@ public class ComplianceIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void SOC2_MissingJailbreak_DetectsIssue()
+    [Fact(Timeout = 120000)]
+    public async Task SOC2_MissingJailbreak_DetectsIssue()
     {
         var config = new SafetyConfig
         {
@@ -171,8 +172,8 @@ public class ComplianceIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
-    public void AllCheckers_SameConfig_ProduceResults()
+    [Fact(Timeout = 120000)]
+    public async Task AllCheckers_SameConfig_ProduceResults()
     {
         var config = new SafetyConfig
         {
@@ -186,8 +187,8 @@ public class ComplianceIntegrationTests
         Assert.NotNull(new SOC2ComplianceChecker<double>(config).EvaluateText("Text"));
     }
 
-    [Fact]
-    public void AllCheckers_NonCompliantConfig_AllDetectIssues()
+    [Fact(Timeout = 120000)]
+    public async Task AllCheckers_NonCompliantConfig_AllDetectIssues()
     {
         var config = new SafetyConfig
         {

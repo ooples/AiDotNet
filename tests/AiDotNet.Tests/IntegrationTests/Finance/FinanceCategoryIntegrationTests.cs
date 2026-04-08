@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Finance;
 
@@ -84,8 +85,8 @@ public class FinanceCategoryIntegrationTests
     public static IEnumerable<object[]> AutoMlTypesDouble =>
         WrapTypes(FinanceModelTestFactory.GetFinanceModelTypesByNamespace<double>("AiDotNet.Finance.AutoML"));
 
-    [Fact]
-    public void FinanceCategories_HaveModels()
+    [Fact(Timeout = 120000)]
+    public async Task FinanceCategories_HaveModels()
     {
         Assert.NotEmpty(ForecastingTransformerTypesFloat);
         Assert.NotEmpty(ForecastingNeuralTypesFloat);

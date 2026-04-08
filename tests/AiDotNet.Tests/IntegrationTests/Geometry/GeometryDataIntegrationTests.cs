@@ -1,12 +1,13 @@
 using AiDotNet.Geometry.Data;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Geometry;
 
 public class GeometryDataIntegrationTests
 {
-    [Fact]
-    public void TriangleMeshData_ComputesNormalsAndBounds()
+    [Fact(Timeout = 120000)]
+    public async Task TriangleMeshData_ComputesNormalsAndBounds()
     {
         var vertices = new Tensor<double>(new[]
         {
@@ -43,8 +44,8 @@ public class GeometryDataIntegrationTests
         }
     }
 
-    [Fact]
-    public void TriangleMeshData_ToPointCloud_IncludesFeatures()
+    [Fact(Timeout = 120000)]
+    public async Task TriangleMeshData_ToPointCloud_IncludesFeatures()
     {
         var vertices = new Tensor<double>(new[]
         {
@@ -69,8 +70,8 @@ public class GeometryDataIntegrationTests
         Assert.Equal(9, cloud.Points.Shape[1]);
     }
 
-    [Fact]
-    public void VoxelGridData_ToPointCloud_ThresholdsAndCenters()
+    [Fact(Timeout = 120000)]
+    public async Task VoxelGridData_ToPointCloud_ThresholdsAndCenters()
     {
         var data = new[]
         {

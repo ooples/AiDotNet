@@ -5,13 +5,14 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedBNFullModelAggregationStrategyTests
 {
-    [Fact]
-    public void Aggregate_LeavesBatchNormParametersFromFirstClient()
+    [Fact(Timeout = 60000)]
+    public async Task Aggregate_LeavesBatchNormParametersFromFirstClient()
     {
         var model1 = CreateNetwork();
         var model2 = CreateNetwork();

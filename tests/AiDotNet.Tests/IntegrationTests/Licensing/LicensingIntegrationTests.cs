@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 #if !NET471
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -14,8 +15,8 @@ using Xunit;
 /// </summary>
 public class LicensingIntegrationTests
 {
-    [Fact]
-    public void BasicEncryptDecrypt_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task BasicEncryptDecrypt_RoundTrip()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
 
@@ -45,8 +46,8 @@ public class LicensingIntegrationTests
         }
     }
 
-    [Fact]
-    public void EncryptDecrypt_WrongKey_Fails()
+    [Fact(Timeout = 120000)]
+    public async Task EncryptDecrypt_WrongKey_Fails()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));
 
@@ -72,8 +73,8 @@ public class LicensingIntegrationTests
         }
     }
 
-    [Fact]
-    public void EncryptDecrypt_TamperedData_Fails()
+    [Fact(Timeout = 120000)]
+    public async Task EncryptDecrypt_TamperedData_Fails()
     {
         var plaintext = new byte[] { 10, 20, 30, 40, 50 };
         var licenseKey = "tamper-detection-key";
@@ -91,8 +92,8 @@ public class LicensingIntegrationTests
                 encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
-    public void ModelFileHeader_WrapAndExtract_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task ModelFileHeader_WrapAndExtract_RoundTrip()
     {
         var model = new StubModelSerializer
         {
@@ -116,8 +117,8 @@ public class LicensingIntegrationTests
         Assert.Equal(new[] { 10 }, info.OutputShape);
     }
 
-    [Fact]
-    public void ModelFileHeader_EncryptedScheme_PreservedInHeader()
+    [Fact(Timeout = 120000)]
+    public async Task ModelFileHeader_EncryptedScheme_PreservedInHeader()
     {
         var model = new StubModelSerializer
         {
@@ -145,8 +146,8 @@ public class LicensingIntegrationTests
         Assert.Equal(fakeTag, info.Tag);
     }
 
-    [Fact]
-    public void EncryptSigned_WithSyntheticBuildKey_ProducesDifferentOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EncryptSigned_WithSyntheticBuildKey_ProducesDifferentOutput()
     {
         var plaintext = new byte[] { 1, 2, 3, 4, 5 };
         var aad = ModelPayloadEncryption.BuildAad("SignTest", new[] { 5 }, new[] { 1 });
@@ -169,8 +170,8 @@ public class LicensingIntegrationTests
         Assert.Equal(plaintext, dec2);
     }
 
-    [Fact]
-    public void DecryptSigned_WithSyntheticToken_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task DecryptSigned_WithSyntheticToken_RoundTrip()
     {
         // Simulates the full 3-layer round trip:
         // Layer 1: User license key encrypts the payload

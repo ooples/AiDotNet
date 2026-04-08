@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.TEE;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -12,8 +13,8 @@ public class TeeIntegrationTests
 {
     // ========== SimulatedTeeProvider Lifecycle Tests ==========
 
-    [Fact]
-    public void SimulatedProvider_Initialize_SetsIsInitialized()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_Initialize_SetsIsInitialized()
     {
         var provider = new SimulatedTeeProvider<double>();
         var options = new TeeOptions { SimulationMode = true };
@@ -23,8 +24,8 @@ public class TeeIntegrationTests
         Assert.True(provider.IsInitialized);
     }
 
-    [Fact]
-    public void SimulatedProvider_NotInitialized_ThrowsOnSealData()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_NotInitialized_ThrowsOnSealData()
     {
         var provider = new SimulatedTeeProvider<double>();
         var data = new byte[] { 1, 2, 3, 4 };
@@ -32,8 +33,8 @@ public class TeeIntegrationTests
         Assert.Throws<InvalidOperationException>(() => provider.SealData(data));
     }
 
-    [Fact]
-    public void SimulatedProvider_NotInitialized_ThrowsOnUnsealData()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_NotInitialized_ThrowsOnUnsealData()
     {
         var provider = new SimulatedTeeProvider<double>();
         var data = new byte[32];
@@ -41,32 +42,32 @@ public class TeeIntegrationTests
         Assert.Throws<InvalidOperationException>(() => provider.UnsealData(data));
     }
 
-    [Fact]
-    public void SimulatedProvider_NotInitialized_ThrowsOnGetMeasurementHash()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_NotInitialized_ThrowsOnGetMeasurementHash()
     {
         var provider = new SimulatedTeeProvider<double>();
 
         Assert.Throws<InvalidOperationException>(() => provider.GetMeasurementHash());
     }
 
-    [Fact]
-    public void SimulatedProvider_NotInitialized_ThrowsOnGenerateAttestationQuote()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_NotInitialized_ThrowsOnGenerateAttestationQuote()
     {
         var provider = new SimulatedTeeProvider<double>();
 
         Assert.Throws<InvalidOperationException>(() => provider.GenerateAttestationQuote(new byte[] { 1 }));
     }
 
-    [Fact]
-    public void SimulatedProvider_Initialize_NullOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_Initialize_NullOptions_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
 
         Assert.Throws<ArgumentNullException>(() => provider.Initialize(null));
     }
 
-    [Fact]
-    public void SimulatedProvider_Destroy_ResetsState()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_Destroy_ResetsState()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -78,8 +79,8 @@ public class TeeIntegrationTests
         Assert.Throws<InvalidOperationException>(() => provider.SealData(new byte[] { 1 }));
     }
 
-    [Fact]
-    public void SimulatedProvider_ProviderType_IsSimulated()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_ProviderType_IsSimulated()
     {
         var provider = new SimulatedTeeProvider<double>();
 
@@ -88,8 +89,8 @@ public class TeeIntegrationTests
 
     // ========== Data Sealing/Unsealing Tests ==========
 
-    [Fact]
-    public void SimulatedProvider_SealUnseal_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_SealUnseal_RoundTrips()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -101,8 +102,8 @@ public class TeeIntegrationTests
         Assert.Equal(plaintext, unsealed);
     }
 
-    [Fact]
-    public void SimulatedProvider_SealData_ProducesDifferentOutput()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_SealData_ProducesDifferentOutput()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -116,8 +117,8 @@ public class TeeIntegrationTests
         Assert.True(sealed_.Length > plaintext.Length);
     }
 
-    [Fact]
-    public void SimulatedProvider_SealData_NullPlaintext_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_SealData_NullPlaintext_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -125,8 +126,8 @@ public class TeeIntegrationTests
         Assert.Throws<ArgumentException>(() => provider.SealData(null));
     }
 
-    [Fact]
-    public void SimulatedProvider_SealData_EmptyPlaintext_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_SealData_EmptyPlaintext_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -134,8 +135,8 @@ public class TeeIntegrationTests
         Assert.Throws<ArgumentException>(() => provider.SealData(Array.Empty<byte>()));
     }
 
-    [Fact]
-    public void SimulatedProvider_UnsealData_TooShort_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_UnsealData_TooShort_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -143,8 +144,8 @@ public class TeeIntegrationTests
         Assert.Throws<ArgumentException>(() => provider.UnsealData(new byte[] { 1, 2, 3 }));
     }
 
-    [Fact]
-    public void SimulatedProvider_SealUnseal_LargePayload()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_SealUnseal_LargePayload()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -162,8 +163,8 @@ public class TeeIntegrationTests
 
     // ========== Attestation Tests ==========
 
-    [Fact]
-    public void SimulatedProvider_GetMeasurementHash_ReturnsNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_GetMeasurementHash_ReturnsNonEmpty()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -173,8 +174,8 @@ public class TeeIntegrationTests
         Assert.False(string.IsNullOrEmpty(hash));
     }
 
-    [Fact]
-    public void SimulatedProvider_MeasurementHash_IsConsistent()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_MeasurementHash_IsConsistent()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -185,8 +186,8 @@ public class TeeIntegrationTests
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
-    public void SimulatedProvider_GenerateAttestationQuote_ReturnsNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_GenerateAttestationQuote_ReturnsNonEmpty()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -198,8 +199,8 @@ public class TeeIntegrationTests
         Assert.True(quote.Length > 0);
     }
 
-    [Fact]
-    public void SimulatedProvider_GenerateAttestationQuote_NullReportData_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_GenerateAttestationQuote_NullReportData_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -207,8 +208,8 @@ public class TeeIntegrationTests
         Assert.Throws<ArgumentNullException>(() => provider.GenerateAttestationQuote(null));
     }
 
-    [Fact]
-    public void SimulatedProvider_GetMaxEnclaveMemory_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedProvider_GetMaxEnclaveMemory_ReturnsPositive()
     {
         var provider = new SimulatedTeeProvider<double>();
 
@@ -219,8 +220,8 @@ public class TeeIntegrationTests
 
     // ========== TeeAesHelper Tests ==========
 
-    [Fact]
-    public void TeeAesHelper_EncryptDecrypt_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task TeeAesHelper_EncryptDecrypt_RoundTrips()
     {
         var key = new byte[32]; // AES-256 key
         for (int i = 0; i < 32; i++) key[i] = (byte)i;
@@ -232,8 +233,8 @@ public class TeeIntegrationTests
         Assert.Equal(plaintext, decrypted);
     }
 
-    [Fact]
-    public void TeeAesHelper_Encrypt_DifferentFromPlaintext()
+    [Fact(Timeout = 120000)]
+    public async Task TeeAesHelper_Encrypt_DifferentFromPlaintext()
     {
         var key = new byte[32];
         for (int i = 0; i < 32; i++) key[i] = (byte)(i + 1);
@@ -244,8 +245,8 @@ public class TeeIntegrationTests
         Assert.NotEqual(plaintext, encrypted);
     }
 
-    [Fact]
-    public void TeeAesHelper_DecryptWithWrongKey_Fails()
+    [Fact(Timeout = 120000)]
+    public async Task TeeAesHelper_DecryptWithWrongKey_Fails()
     {
         var key1 = new byte[32];
         var key2 = new byte[32];
@@ -264,15 +265,15 @@ public class TeeIntegrationTests
 
     // ========== TeeSecureAggregation Tests ==========
 
-    [Fact]
-    public void TeeSecureAggregation_Constructor_NullProvider_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_Constructor_NullProvider_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TeeSecureAggregation<double>(null, new TeeOptions()));
     }
 
-    [Fact]
-    public void TeeSecureAggregation_Constructor_NullOptions_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_Constructor_NullOptions_Throws()
     {
         var provider = new SimulatedTeeProvider<double>();
 
@@ -280,8 +281,8 @@ public class TeeIntegrationTests
             new TeeSecureAggregation<double>(provider, null));
     }
 
-    [Fact]
-    public void TeeSecureAggregation_BeginRound_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_BeginRound_Succeeds()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -291,8 +292,8 @@ public class TeeIntegrationTests
         teeAgg.BeginRound(roundNumber: 1, expectedClients: 3);
     }
 
-    [Fact]
-    public void TeeSecureAggregation_GenerateSessionKey_ReturnsNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_GenerateSessionKey_ReturnsNonEmpty()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -304,8 +305,8 @@ public class TeeIntegrationTests
         Assert.True(key.Length > 0);
     }
 
-    [Fact]
-    public void TeeSecureAggregation_EncryptForSubmission_ReturnsNonNull()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_EncryptForSubmission_ReturnsNonNull()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -318,8 +319,8 @@ public class TeeIntegrationTests
         Assert.True(encrypted.Length > 0);
     }
 
-    [Fact]
-    public void TeeSecureAggregation_SubmitAndAggregate_ProducesResult()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_SubmitAndAggregate_ProducesResult()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -341,8 +342,8 @@ public class TeeIntegrationTests
         Assert.NotNull(aggregated);
     }
 
-    [Fact]
-    public void TeeSecureAggregation_GetAttestationQuote_ReturnsNonEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task TeeSecureAggregation_GetAttestationQuote_ReturnsNonEmpty()
     {
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
@@ -356,29 +357,29 @@ public class TeeIntegrationTests
 
     // ========== Hardware Provider Type Tests ==========
 
-    [Fact]
-    public void IntelSgxProvider_ProviderType_IsSgx()
+    [Fact(Timeout = 120000)]
+    public async Task IntelSgxProvider_ProviderType_IsSgx()
     {
         var provider = new IntelSgxTeeProvider<double>();
         Assert.Equal(TeeProviderType.Sgx, provider.ProviderType);
     }
 
-    [Fact]
-    public void IntelTdxProvider_ProviderType_IsTdx()
+    [Fact(Timeout = 120000)]
+    public async Task IntelTdxProvider_ProviderType_IsTdx()
     {
         var provider = new IntelTdxTeeProvider<double>();
         Assert.Equal(TeeProviderType.Tdx, provider.ProviderType);
     }
 
-    [Fact]
-    public void AmdSevSnpProvider_ProviderType_IsSevSnp()
+    [Fact(Timeout = 120000)]
+    public async Task AmdSevSnpProvider_ProviderType_IsSevSnp()
     {
         var provider = new AmdSevSnpTeeProvider<double>();
         Assert.Equal(TeeProviderType.SevSnp, provider.ProviderType);
     }
 
-    [Fact]
-    public void ArmCcaProvider_ProviderType_IsCca()
+    [Fact(Timeout = 120000)]
+    public async Task ArmCcaProvider_ProviderType_IsCca()
     {
         var provider = new ArmCcaTeeProvider<double>();
         Assert.Equal(TeeProviderType.ArmCca, provider.ProviderType);
@@ -417,8 +418,8 @@ public class TeeIntegrationTests
 
     // ========== TeeOptions Defaults Tests ==========
 
-    [Fact]
-    public void TeeOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task TeeOptions_DefaultValues()
     {
         var options = new TeeOptions();
 
@@ -431,8 +432,8 @@ public class TeeIntegrationTests
         Assert.Equal(string.Empty, options.ExpectedMeasurement);
     }
 
-    [Fact]
-    public void TeeProviderType_HasAllExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task TeeProviderType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(TeeProviderType), TeeProviderType.Simulated));
         Assert.True(Enum.IsDefined(typeof(TeeProviderType), TeeProviderType.Sgx));

@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.Fairness;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -78,8 +79,8 @@ public class FederatedFairnessAndContributionTests
 
     // ========== ShapleyValueEvaluator Tests ==========
 
-    [Fact]
-    public void ShapleyValue_EvaluatesAllClients()
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_EvaluatesAllClients()
     {
         var options = new ContributionEvaluationOptions
         {
@@ -100,8 +101,8 @@ public class FederatedFairnessAndContributionTests
         }
     }
 
-    [Fact]
-    public void ShapleyValue_IdentifiesFreeRiders()
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_IdentifiesFreeRiders()
     {
         var options = new ContributionEvaluationOptions
         {
@@ -126,8 +127,8 @@ public class FederatedFairnessAndContributionTests
         Assert.DoesNotContain(2, freeRiders);
     }
 
-    [Fact]
-    public void ShapleyValue_MethodName_ReturnsCorrectName()
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_MethodName_ReturnsCorrectName()
     {
         var options = new ContributionEvaluationOptions { Method = ContributionMethod.ShapleyValue };
         var evaluator = new ShapleyValueEvaluator<double>(options);
@@ -135,16 +136,16 @@ public class FederatedFairnessAndContributionTests
         Assert.Equal("ShapleyValue", evaluator.MethodName);
     }
 
-    [Fact]
-    public void ShapleyValue_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ShapleyValueEvaluator<double>(null));
     }
 
     // ========== DataShapleyEvaluator Tests ==========
 
-    [Fact]
-    public void DataShapley_EvaluatesAllClients()
+    [Fact(Timeout = 60000)]
+    public async Task DataShapley_EvaluatesAllClients()
     {
         var options = new ContributionEvaluationOptions
         {
@@ -165,8 +166,8 @@ public class FederatedFairnessAndContributionTests
         }
     }
 
-    [Fact]
-    public void DataShapley_WithPerformanceCache_ScoresConsistent()
+    [Fact(Timeout = 60000)]
+    public async Task DataShapley_WithPerformanceCache_ScoresConsistent()
     {
         var options = new ContributionEvaluationOptions
         {
@@ -188,16 +189,16 @@ public class FederatedFairnessAndContributionTests
         }
     }
 
-    [Fact]
-    public void DataShapley_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task DataShapley_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new DataShapleyEvaluator<double>(null));
     }
 
     // ========== PrototypicalContributionEvaluator Tests ==========
 
-    [Fact]
-    public void Prototypical_EvaluatesAllClients()
+    [Fact(Timeout = 60000)]
+    public async Task Prototypical_EvaluatesAllClients()
     {
         var options = new ContributionEvaluationOptions
         {
@@ -217,8 +218,8 @@ public class FederatedFairnessAndContributionTests
         }
     }
 
-    [Fact]
-    public void Prototypical_SingleClient_ReturnsScore()
+    [Fact(Timeout = 60000)]
+    public async Task Prototypical_SingleClient_ReturnsScore()
     {
         var options = new ContributionEvaluationOptions { Method = ContributionMethod.Prototypical };
         var evaluator = new PrototypicalContributionEvaluator<double>(options);
@@ -235,16 +236,16 @@ public class FederatedFairnessAndContributionTests
         Assert.True(scores.ContainsKey(0));
     }
 
-    [Fact]
-    public void Prototypical_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task Prototypical_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new PrototypicalContributionEvaluator<double>(null));
     }
 
     // ========== GroupFairnessConstraint Tests ==========
 
-    [Fact]
-    public void GroupFairness_EvaluatesFairnessScore()
+    [Fact(Timeout = 60000)]
+    public async Task GroupFairness_EvaluatesFairnessScore()
     {
         var options = new FederatedFairnessOptions
         {
@@ -266,8 +267,8 @@ public class FederatedFairnessAndContributionTests
         Assert.InRange(fairnessScore, 0.0, 1.0);
     }
 
-    [Fact]
-    public void GroupFairness_AdjustsWeights()
+    [Fact(Timeout = 60000)]
+    public async Task GroupFairness_AdjustsWeights()
     {
         var options = new FederatedFairnessOptions
         {
@@ -298,8 +299,8 @@ public class FederatedFairnessAndContributionTests
         Assert.InRange(sum, 0.99, 1.01);
     }
 
-    [Fact]
-    public void GroupFairness_ConstraintName_MatchesType()
+    [Fact(Timeout = 60000)]
+    public async Task GroupFairness_ConstraintName_MatchesType()
     {
         var options = new FederatedFairnessOptions
         {
@@ -310,16 +311,16 @@ public class FederatedFairnessAndContributionTests
         Assert.Equal("EqualizedOdds", constraint.ConstraintName);
     }
 
-    [Fact]
-    public void GroupFairness_NullOptions_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task GroupFairness_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new GroupFairnessConstraint<double>(null));
     }
 
     // ========== ContributionBasedIncentive Tests ==========
 
-    [Fact]
-    public void ContributionIncentive_ComputesRewards()
+    [Fact(Timeout = 60000)]
+    public async Task ContributionIncentive_ComputesRewards()
     {
         var options = new ContributionEvaluationOptions { Method = ContributionMethod.DataShapley };
         var incentive = new ContributionBasedIncentive<double>(options);
@@ -347,8 +348,8 @@ public class FederatedFairnessAndContributionTests
         Assert.True(rewards[3] > rewards[2], "Client with higher contribution should get more reward");
     }
 
-    [Fact]
-    public void ContributionIncentive_ComputesTrustScores()
+    [Fact(Timeout = 60000)]
+    public async Task ContributionIncentive_ComputesTrustScores()
     {
         var options = new ContributionEvaluationOptions { Method = ContributionMethod.DataShapley };
         var incentive = new ContributionBasedIncentive<double>(options);
@@ -374,8 +375,8 @@ public class FederatedFairnessAndContributionTests
             "Consistent client should have higher trust than erratic one");
     }
 
-    [Fact]
-    public void ContributionIncentive_MechanismName()
+    [Fact(Timeout = 60000)]
+    public async Task ContributionIncentive_MechanismName()
     {
         var options = new ContributionEvaluationOptions { Method = ContributionMethod.DataShapley };
         var incentive = new ContributionBasedIncentive<double>(options);
@@ -384,8 +385,8 @@ public class FederatedFairnessAndContributionTests
 
     // ========== Options Tests ==========
 
-    [Fact]
-    public void FederatedFairnessOptions_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task FederatedFairnessOptions_DefaultValues()
     {
         var options = new FederatedFairnessOptions();
 
@@ -396,8 +397,8 @@ public class FederatedFairnessAndContributionTests
         Assert.Equal(2, options.NumberOfGroups);
     }
 
-    [Fact]
-    public void ContributionEvaluationOptions_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task ContributionEvaluationOptions_DefaultValues()
     {
         var options = new ContributionEvaluationOptions();
 
@@ -409,8 +410,8 @@ public class FederatedFairnessAndContributionTests
         Assert.Equal(0.01, options.FreeRiderThreshold);
     }
 
-    [Fact]
-    public void FairnessConstraintType_HasAllExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task FairnessConstraintType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(FairnessConstraintType), FairnessConstraintType.None));
         Assert.True(Enum.IsDefined(typeof(FairnessConstraintType), FairnessConstraintType.DemographicParity));
@@ -419,8 +420,8 @@ public class FederatedFairnessAndContributionTests
         Assert.True(Enum.IsDefined(typeof(FairnessConstraintType), FairnessConstraintType.MinimaxFairness));
     }
 
-    [Fact]
-    public void ContributionMethod_HasAllExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task ContributionMethod_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(ContributionMethod), ContributionMethod.ShapleyValue));
         Assert.True(Enum.IsDefined(typeof(ContributionMethod), ContributionMethod.DataShapley));
@@ -429,8 +430,8 @@ public class FederatedFairnessAndContributionTests
 
     // ========== Integration with FederatedLearningOptions ==========
 
-    [Fact]
-    public void FederatedLearningOptions_CanSetFairnessAndContribution()
+    [Fact(Timeout = 60000)]
+    public async Task FederatedLearningOptions_CanSetFairnessAndContribution()
     {
         var flOptions = new FederatedLearningOptions
         {
@@ -454,8 +455,8 @@ public class FederatedFairnessAndContributionTests
 
     // ========== Metadata Tests ==========
 
-    [Fact]
-    public void RoundMetadata_HasContributionScoreFields()
+    [Fact(Timeout = 60000)]
+    public async Task RoundMetadata_HasContributionScoreFields()
     {
         var metadata = new AiDotNet.Models.RoundMetadata();
 
@@ -467,8 +468,8 @@ public class FederatedFairnessAndContributionTests
         Assert.Empty(metadata.DriftingClientIds);
     }
 
-    [Fact]
-    public void FederatedLearningMetadata_HasContributionFields()
+    [Fact(Timeout = 60000)]
+    public async Task FederatedLearningMetadata_HasContributionFields()
     {
         var metadata = new AiDotNet.Models.FederatedLearningMetadata();
 

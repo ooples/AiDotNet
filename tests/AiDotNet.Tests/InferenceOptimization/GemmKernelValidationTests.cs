@@ -1,13 +1,14 @@
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.InferenceOptimization;
 
 public class GemmKernelValidationTests
 {
-    [Fact]
-    public void Execute_MatchesNaiveGemm()
+    [Fact(Timeout = 60000)]
+    public async Task Execute_MatchesNaiveGemm()
     {
         var kernel = new GemmKernel();
 
@@ -23,8 +24,8 @@ public class GemmKernelValidationTests
         Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
-    [Fact]
-    public void GemmTransposeB_MatchesNaive()
+    [Fact(Timeout = 60000)]
+    public async Task GemmTransposeB_MatchesNaive()
     {
         var kernel = new GemmKernel();
 

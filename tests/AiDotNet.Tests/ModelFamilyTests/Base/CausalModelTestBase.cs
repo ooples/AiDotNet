@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -33,8 +34,8 @@ public abstract class CausalModelTestBase
         return (x, y);
     }
 
-    [Fact]
-    public void TreatmentEffect_ShouldBeFinite()
+    [Fact(Timeout = 60000)]
+    public async Task TreatmentEffect_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -49,8 +50,8 @@ public abstract class CausalModelTestBase
         }
     }
 
-    [Fact]
-    public void Predict_ShouldBeDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -62,8 +63,8 @@ public abstract class CausalModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact]
-    public void Clone_ShouldProduceSameEstimates()
+    [Fact(Timeout = 60000)]
+    public async Task Clone_ShouldProduceSameEstimates()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -76,8 +77,8 @@ public abstract class CausalModelTestBase
             Assert.Equal(pred1[i], pred2[i]);
     }
 
-    [Fact]
-    public void OutputDimension_ShouldMatchInputRows()
+    [Fact(Timeout = 60000)]
+    public async Task OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -86,8 +87,8 @@ public abstract class CausalModelTestBase
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
     }
 
-    [Fact]
-    public void Metadata_ShouldExistAfterTraining()
+    [Fact(Timeout = 60000)]
+    public async Task Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -96,8 +97,8 @@ public abstract class CausalModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
-    public void Parameters_ShouldBeNonEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task Parameters_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

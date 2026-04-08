@@ -2,6 +2,7 @@ using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.NeuralNetwork;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
@@ -64,15 +65,15 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region AutoencoderDetector Tests
 
-    [Fact]
-    public void Autoencoder_Construction_NotFittedByDefault()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_Construction_NotFittedByDefault()
     {
         var detector = new AutoencoderDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
-    public void Autoencoder_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_OutlierGetsHighestScore()
     {
         var detector = new AutoencoderDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -83,8 +84,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void Autoencoder_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AutoencoderDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -97,8 +98,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region VAEDetector Tests
 
-    [Fact]
-    public void VAE_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task VAE_OutlierGetsHighestScore()
     {
         var detector = new VAEDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -108,8 +109,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void VAE_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task VAE_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new VAEDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -122,8 +123,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DAGMMDetector Tests
 
-    [Fact]
-    public void DAGMM_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task DAGMM_OutlierGetsHighestScore()
     {
         var detector = new DAGMMDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -133,8 +134,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void DAGMM_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task DAGMM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DAGMMDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -147,8 +148,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DeepSVDDDetector Tests
 
-    [Fact]
-    public void DeepSVDD_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task DeepSVDD_OutlierGetsHighestScore()
     {
         var detector = new DeepSVDDDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -158,8 +159,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void DeepSVDD_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task DeepSVDD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DeepSVDDDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -172,8 +173,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DevNetDetector Tests
 
-    [Fact]
-    public void DevNet_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task DevNet_OutlierGetsHighestScore()
     {
         var detector = new DevNetDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -183,8 +184,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void DevNet_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task DevNet_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DevNetDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -197,8 +198,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region GANomalyDetector Tests
 
-    [Fact]
-    public void GAnomaly_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task GAnomaly_OutlierGetsHighestScore()
     {
         var detector = new GANomalyDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -208,8 +209,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void GAnomaly_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task GAnomaly_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GANomalyDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -222,8 +223,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region AnoGANDetector Tests
 
-    [Fact]
-    public void AnoGAN_OutlierGetsHighestScore()
+    [Fact(Timeout = 120000)]
+    public async Task AnoGAN_OutlierGetsHighestScore()
     {
         var detector = new AnoGANDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -233,8 +234,8 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
-    public void AnoGAN_PredictClassifiesOutlierAsAnomaly()
+    [Fact(Timeout = 120000)]
+    public async Task AnoGAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AnoGANDetector<double>(epochs: 10);
         var data = CreateTestData();
@@ -247,8 +248,8 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
-    public void AllNeuralNetworkDetectors_PredictBeforeFit_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task AllNeuralNetworkDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]
         {

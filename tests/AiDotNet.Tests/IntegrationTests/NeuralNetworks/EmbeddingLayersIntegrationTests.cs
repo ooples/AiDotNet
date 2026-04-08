@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 using AiDotNet.NeuralNetworks.Layers;
@@ -12,8 +13,8 @@ public class EmbeddingLayersIntegrationTests
 {
     #region EmbeddingLayer Tests
 
-    [Fact]
-    public void EmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - vocabulary of 1000 tokens, 64-dimensional embeddings
         int vocabSize = 1000;
@@ -34,8 +35,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void EmbeddingLayer_ForwardPass_1D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ForwardPass_1D_ProducesValidOutput()
     {
         // Arrange - 1D input [seqLen]
         int vocabSize = 500;
@@ -55,8 +56,8 @@ public class EmbeddingLayersIntegrationTests
 
 
 
-    [Fact]
-    public void EmbeddingLayer_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
         int vocabSize = 100;
@@ -77,8 +78,8 @@ public class EmbeddingLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void EmbeddingLayer_AuxiliaryLoss_ComputesRegularization()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_AuxiliaryLoss_ComputesRegularization()
     {
         // Arrange
         int vocabSize = 100;
@@ -99,8 +100,8 @@ public class EmbeddingLayersIntegrationTests
 
     #region PatchEmbeddingLayer Tests
 
-    [Fact]
-    public void PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 32x32 image with 8x8 patches
         int imageHeight = 32;
@@ -125,8 +126,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PatchEmbeddingLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [C, H, W] (no batch dimension)
         int imageHeight = 16;
@@ -149,8 +150,8 @@ public class EmbeddingLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void PatchEmbeddingLayer_GetSetParameters_RoundTrips()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
         int imageHeight = 16;
@@ -174,8 +175,8 @@ public class EmbeddingLayersIntegrationTests
 
     #region TimeEmbeddingLayer Tests
 
-    [Fact]
-    public void TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - typical diffusion model configuration
         int embeddingDim = 64;
@@ -195,8 +196,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void TimeEmbeddingLayer_ForwardPass_2D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [batch, 1]
         int embeddingDim = 32;
@@ -216,8 +217,8 @@ public class EmbeddingLayersIntegrationTests
 
 
 
-    [Fact]
-    public void TimeEmbeddingLayer_SinusoidalEncoding_UniquePerTimestep()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_SinusoidalEncoding_UniquePerTimestep()
     {
         // Arrange
         int embeddingDim = 64;
@@ -248,8 +249,8 @@ public class EmbeddingLayersIntegrationTests
 
     #region PositionalEncodingLayer Tests
 
-    [Fact]
-    public void PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
         int maxSeqLen = 512;
@@ -267,8 +268,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_ForwardPass_3D_ProducesValidOutput()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedding]
         int maxSeqLen = 256;
@@ -285,8 +286,8 @@ public class EmbeddingLayersIntegrationTests
     }
 
 
-    [Fact]
-    public void PositionalEncodingLayer_AddsPositionalInformation()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_AddsPositionalInformation()
     {
         // Arrange
         int maxSeqLen = 64;
@@ -311,8 +312,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.True(hasNonZero, "Positional encoding should add non-zero values");
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_DifferentPositions_HaveDifferentEncodings()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_DifferentPositions_HaveDifferentEncodings()
     {
         // Arrange
         int maxSeqLen = 64;
@@ -343,8 +344,8 @@ public class EmbeddingLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_NoTrainableParameters()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_NoTrainableParameters()
     {
         // Arrange
         int maxSeqLen = 64;
@@ -362,8 +363,8 @@ public class EmbeddingLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
-    public void EmbeddingLayer_SingleToken_Works()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_SingleToken_Works()
     {
         // Arrange
         int vocabSize = 100;
@@ -381,8 +382,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void EmbeddingLayer_LargeVocabulary_Works()
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_LargeVocabulary_Works()
     {
         // Arrange - large vocabulary
         int vocabSize = 50000;
@@ -397,8 +398,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PatchEmbeddingLayer_SquareImage_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_SquareImage_Works()
     {
         // Arrange - 64x64 image with 16x16 patches
         int size = 64;
@@ -416,8 +417,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void TimeEmbeddingLayer_ZeroTimestep_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_ZeroTimestep_Works()
     {
         // Arrange
         int embeddingDim = 32;
@@ -434,8 +435,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void TimeEmbeddingLayer_MaxTimestep_Works()
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_MaxTimestep_Works()
     {
         // Arrange
         int embeddingDim = 32;
@@ -453,8 +454,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_ExactMaxLength_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ExactMaxLength_Works()
     {
         // Arrange
         int maxSeqLen = 64;
@@ -470,8 +471,8 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_ShortSequence_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ShortSequence_Works()
     {
         // Arrange - sequence much shorter than max
         int maxSeqLen = 512;

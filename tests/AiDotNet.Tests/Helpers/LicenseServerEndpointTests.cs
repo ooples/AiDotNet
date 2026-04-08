@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Helpers;
 
@@ -16,8 +17,8 @@ public class LicenseServerEndpointTests
 {
     // ─── Request format tests ───
 
-    [Fact]
-    public void ValidateRequest_ContainsRequiredFields()
+    [Fact(Timeout = 60000)]
+    public async Task ValidateRequest_ContainsRequiredFields()
     {
         // Exercise the ACTUAL production BuildRequestBody method
         var licenseKey = "aidn.test12345678.abcdefghijklmnop";
@@ -40,16 +41,16 @@ public class LicenseServerEndpointTests
         Assert.Matches("^[0-9a-f]{64}$", hashProp.GetString());
     }
 
-    [Fact]
-    public void MachineIdHash_IsDeterministic()
+    [Fact(Timeout = 60000)]
+    public async Task MachineIdHash_IsDeterministic()
     {
         var hash1 = LicenseValidator.GetMachineIdHash();
         var hash2 = LicenseValidator.GetMachineIdHash();
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
-    public void MachineIdHash_IsSha256Format()
+    [Fact(Timeout = 60000)]
+    public async Task MachineIdHash_IsSha256Format()
     {
         var hash = LicenseValidator.GetMachineIdHash();
         // SHA-256 hex string is 64 characters
@@ -59,8 +60,8 @@ public class LicenseServerEndpointTests
 
     // ─── Response parsing tests (using production ParseResponse) ───
 
-    [Fact]
-    public void ParseValidResponse_ActiveLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseValidResponse_ActiveLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -75,8 +76,8 @@ public class LicenseServerEndpointTests
         Assert.Equal("professional", result.Tier);
     }
 
-    [Fact]
-    public void ParseValidResponse_CommunityLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseValidResponse_CommunityLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -91,8 +92,8 @@ public class LicenseServerEndpointTests
         Assert.Equal("community", result.Tier);
     }
 
-    [Fact]
-    public void ParseValidResponse_EnterpriseLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseValidResponse_EnterpriseLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -107,8 +108,8 @@ public class LicenseServerEndpointTests
         Assert.Equal("enterprise", result.Tier);
     }
 
-    [Fact]
-    public void ParseErrorResponse_InvalidKey()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_InvalidKey()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -122,8 +123,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_ExpiredLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_ExpiredLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -137,8 +138,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Expired, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_RevokedLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_RevokedLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -152,8 +153,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Revoked, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_SuspendedLicense()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_SuspendedLicense()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -167,8 +168,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Revoked, result.Status); // Suspended maps to Revoked
     }
 
-    [Fact]
-    public void ParseErrorResponse_ActivationLimit()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_ActivationLimit()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -182,8 +183,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.SeatLimitReached, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_ServerError_MapsToValidationPending()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_ServerError_MapsToValidationPending()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -197,8 +198,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.ValidationPending, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_MissingFields()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_MissingFields()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -212,8 +213,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_UnknownError_With4xx()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_UnknownError_With4xx()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -227,8 +228,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void ParseErrorResponse_UnknownError_With5xx()
+    [Fact(Timeout = 60000)]
+    public async Task ParseErrorResponse_UnknownError_With5xx()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -244,15 +245,15 @@ public class LicenseServerEndpointTests
 
     // ─── LicenseValidator integration with fake server ───
 
-    [Fact]
-    public void LicenseValidator_DefaultServerUrl_IsConfigured()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_DefaultServerUrl_IsConfigured()
     {
         // Verify the default server URL points to the Supabase Edge Function
         Assert.Contains("supabase.co/functions/v1/validate-license", LicenseValidator.DefaultServerUrl);
     }
 
-    [Fact]
-    public void LicenseValidator_OfflineMode_ValidatesFormat()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_OfflineMode_ValidatesFormat()
     {
         // Offline mode (ServerUrl = "") should validate key format only
         var key = new AiDotNetLicenseKey("aidn.test12345678.abcdefghijklmnop")
@@ -275,8 +276,8 @@ public class LicenseServerEndpointTests
         }
     }
 
-    [Fact]
-    public void LicenseValidator_OfflineMode_InvalidFormat_RejectsKey()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_OfflineMode_InvalidFormat_RejectsKey()
     {
         // A key with invalid format should fail offline validation
         var key = new AiDotNetLicenseKey("invalid-key-format-no-aidn-prefix")
@@ -290,8 +291,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void LicenseValidator_UnreachableServer_FallsBackGracefully()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_UnreachableServer_FallsBackGracefully()
     {
         // With a non-existent server, validation should fall back to offline mode
         var key = new AiDotNetLicenseKey("aidn.test12345678.abcdefghijklmnop")
@@ -311,8 +312,8 @@ public class LicenseServerEndpointTests
             $"Expected ValidationPending, Active, or Invalid, got {result.Status}");
     }
 
-    [Fact]
-    public void LicenseValidator_CachesResults()
+    [Fact(Timeout = 60000)]
+    public async Task LicenseValidator_CachesResults()
     {
         var key = new AiDotNetLicenseKey("aidn.test12345678.abcdefghijklmnop")
         {
@@ -337,8 +338,8 @@ public class LicenseServerEndpointTests
     // (written in TypeScript). Since there is no C# production code producing these
     // responses, they test the contract schema that the C# client expects to consume.
 
-    [Fact]
-    public void CommunityLicenseResponse_NewKey_ParsedCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CommunityLicenseResponse_NewKey_ParsedCorrectly()
     {
         // Simulate the JSON response the Edge Function returns and parse it
         // through the production ParseResponse to verify the mapping is correct
@@ -355,8 +356,8 @@ public class LicenseServerEndpointTests
         Assert.Equal("community", result.Tier);
     }
 
-    [Fact]
-    public void CommunityLicenseResponse_ExistingKey_ParsedCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CommunityLicenseResponse_ExistingKey_ParsedCorrectly()
     {
         var responseJson = JsonSerializer.Serialize(new
         {
@@ -370,8 +371,8 @@ public class LicenseServerEndpointTests
         Assert.Equal("community", result.Tier);
     }
 
-    [Fact]
-    public void CommunityLicenseResponse_Error_ParsedCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CommunityLicenseResponse_Error_ParsedCorrectly()
     {
         // This tests the validate-license endpoint error response contract.
         // The register-community-license endpoint has a different response schema
@@ -388,8 +389,8 @@ public class LicenseServerEndpointTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
-    public void RegisterCommunityLicense_ResponseContract_HasExpectedFields()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterCommunityLicense_ResponseContract_HasExpectedFields()
     {
         // The register-community-license Edge Function returns a different schema
         // than validate-license. The website (pricing.astro) reads: license_key, message, error
@@ -410,8 +411,8 @@ public class LicenseServerEndpointTests
 
     // ─── Stripe webhook contract tests ───
 
-    [Fact]
-    public void StripeWebhook_LicenseKeyFormat_IsValid()
+    [Fact(Timeout = 60000)]
+    public async Task StripeWebhook_LicenseKeyFormat_IsValid()
     {
         // The webhook generates keys in format: aidn.{12chars}.{16chars}
         // Validate that the generated format passes production key format validation
@@ -431,8 +432,8 @@ public class LicenseServerEndpointTests
 
     // ─── BuildRequestBody tests ───
 
-    [Fact]
-    public void BuildRequestBody_WithTelemetryEnabled_IncludesHostname()
+    [Fact(Timeout = 60000)]
+    public async Task BuildRequestBody_WithTelemetryEnabled_IncludesHostname()
     {
         var validator = new LicenseValidator(new AiDotNetLicenseKey("aidn.test12345678.abcdefghijklmnop")
         {
@@ -448,8 +449,8 @@ public class LicenseServerEndpointTests
         Assert.True(body.ContainsKey("hostname"));
     }
 
-    [Fact]
-    public void BuildRequestBody_WithTelemetryDisabled_ExcludesHostname()
+    [Fact(Timeout = 60000)]
+    public async Task BuildRequestBody_WithTelemetryDisabled_ExcludesHostname()
     {
         var validator = new LicenseValidator(new AiDotNetLicenseKey("aidn.test12345678.abcdefghijklmnop")
         {

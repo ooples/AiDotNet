@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.NeuralNetworks
 {
@@ -42,8 +43,8 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             public List<string> ConvertIdsToTokens(List<int> ids) => new List<string>();
         }
 
-        [Fact]
-        public void TransformerEmbeddingNetwork_Embed_ReturnsCorrectDimension()
+        [Fact(Timeout = 120000)]
+        public async Task TransformerEmbeddingNetwork_Embed_ReturnsCorrectDimension()
         {
             // Arrange
             int embeddingDim = 64;
@@ -74,8 +75,8 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             Assert.Equal(embeddingDim, embedding.Length);
         }
 
-        [Fact]
-        public void TransformerEmbeddingNetwork_EmbedBatch_ReturnsCorrectMatrix()
+        [Fact(Timeout = 120000)]
+        public async Task TransformerEmbeddingNetwork_EmbedBatch_ReturnsCorrectMatrix()
         {
             // Arrange
             int embeddingDim = 32;
@@ -107,8 +108,8 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             Assert.Equal(embeddingDim, embeddings.Columns);
         }
 
-        [Fact]
-        public void TransformerEmbeddingNetwork_PoolingStrategy_ClsToken_Works()
+        [Fact(Timeout = 120000)]
+        public async Task TransformerEmbeddingNetwork_PoolingStrategy_ClsToken_Works()
         {
             // Arrange
             int embeddingDim = 16;

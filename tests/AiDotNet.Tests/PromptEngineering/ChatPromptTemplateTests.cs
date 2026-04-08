@@ -1,12 +1,13 @@
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.PromptEngineering;
 
 public class ChatPromptTemplateTests
 {
-    [Fact]
-    public void Constructor_CreatesEmptyTemplate()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_CreatesEmptyTemplate()
     {
         var template = new ChatPromptTemplate();
 
@@ -14,8 +15,8 @@ public class ChatPromptTemplateTests
         Assert.Empty(template.Messages);
     }
 
-    [Fact]
-    public void AddSystemMessage_AddsMessageCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddSystemMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
 
@@ -26,8 +27,8 @@ public class ChatPromptTemplateTests
         Assert.Equal("You are a helpful assistant", template.Messages[0].Content);
     }
 
-    [Fact]
-    public void AddUserMessage_AddsMessageCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddUserMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
 
@@ -38,8 +39,8 @@ public class ChatPromptTemplateTests
         Assert.Equal("What is the weather?", template.Messages[0].Content);
     }
 
-    [Fact]
-    public void AddAssistantMessage_AddsMessageCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddAssistantMessage_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
 
@@ -50,8 +51,8 @@ public class ChatPromptTemplateTests
         Assert.Equal("It's sunny today.", template.Messages[0].Content);
     }
 
-    [Fact]
-    public void AddMessage_WithCustomRole_AddsMessageCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task AddMessage_WithCustomRole_AddsMessageCorrectly()
     {
         var template = new ChatPromptTemplate();
 
@@ -62,8 +63,8 @@ public class ChatPromptTemplateTests
         Assert.Equal("Custom message", template.Messages[0].Content);
     }
 
-    [Fact]
-    public void AddMultipleMessages_CreatesConversation()
+    [Fact(Timeout = 60000)]
+    public async Task AddMultipleMessages_CreatesConversation()
     {
         var template = new ChatPromptTemplate();
 
@@ -77,8 +78,8 @@ public class ChatPromptTemplateTests
         Assert.Equal("assistant", template.Messages[2].Role);
     }
 
-    [Fact]
-    public void Format_ReturnsFormattedConversation()
+    [Fact(Timeout = 60000)]
+    public async Task Format_ReturnsFormattedConversation()
     {
         var template = new ChatPromptTemplate();
         template.AddSystemMessage("You are helpful");
@@ -90,8 +91,8 @@ public class ChatPromptTemplateTests
         Assert.Contains("User: Hello", result);
     }
 
-    [Fact]
-    public void ChainedCalls_Work()
+    [Fact(Timeout = 60000)]
+    public async Task ChainedCalls_Work()
     {
         var template = new ChatPromptTemplate()
             .AddSystemMessage("Be concise")

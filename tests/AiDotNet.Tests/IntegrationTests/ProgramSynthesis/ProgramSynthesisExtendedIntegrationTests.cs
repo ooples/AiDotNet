@@ -8,6 +8,7 @@ using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.ProgramSynthesis.Tokenization;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ProgramSynthesis;
 
@@ -19,8 +20,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 {
     #region CodeSynthesisArchitecture
 
-    [Fact]
-    public void CodeSynthesisArchitecture_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSynthesisArchitecture_DefaultParams()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -43,8 +44,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.False(arch.UseDataFlow);
     }
 
-    [Fact]
-    public void CodeSynthesisArchitecture_CustomParams()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSynthesisArchitecture_CustomParams()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Hybrid,
@@ -78,8 +79,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.True(arch.UseDataFlow);
     }
 
-    [Fact]
-    public void CodeSynthesisArchitecture_InheritsNeuralNetworkArchitecture()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSynthesisArchitecture_InheritsNeuralNetworkArchitecture()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -93,8 +94,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Engine Construction
 
-    [Fact]
-    public void CodeBERT_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBERT_Construction_DefaultParams()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -111,8 +112,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
-    public void CodeT5_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task CodeT5_Construction_DefaultParams()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -131,8 +132,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(2, model.NumDecoderLayers);
     }
 
-    [Fact]
-    public void GraphCodeBERT_Construction_DefaultParams()
+    [Fact(Timeout = 120000)]
+    public async Task GraphCodeBERT_Construction_DefaultParams()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -150,8 +151,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.True(model.UsesDataFlow);
     }
 
-    [Fact]
-    public void GraphCodeBERT_WithoutDataFlow()
+    [Fact(Timeout = 120000)]
+    public async Task GraphCodeBERT_WithoutDataFlow()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -168,8 +169,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.False(model.UsesDataFlow);
     }
 
-    [Fact]
-    public void CodeBERT_Metadata_NotNull()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBERT_Metadata_NotNull()
     {
         var arch = new CodeSynthesisArchitecture<double>(
             SynthesisType.Neural,
@@ -189,8 +190,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region ProgramSynthesisOptions
 
-    [Fact]
-    public void ProgramSynthesisOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisOptions_DefaultValues()
     {
         var opts = new ProgramSynthesisOptions();
 
@@ -205,8 +206,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(opts.Tokenizer);
     }
 
-    [Fact]
-    public void ProgramSynthesisOptions_SetCustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisOptions_SetCustomValues()
     {
         var opts = new ProgramSynthesisOptions
         {
@@ -230,16 +231,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(0, opts.NumDecoderLayers);
     }
 
-    [Fact]
-    public void ProgramSynthesisModelKind_HasExpectedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisModelKind_HasExpectedValues()
     {
         Assert.Equal(0, (int)ProgramSynthesisModelKind.CodeBERT);
         Assert.Equal(1, (int)ProgramSynthesisModelKind.GraphCodeBERT);
         Assert.Equal(2, (int)ProgramSynthesisModelKind.CodeT5);
     }
 
-    [Fact]
-    public void NeuralProgramSynthesizerOptions_IsNeuralNetworkOptions()
+    [Fact(Timeout = 120000)]
+    public async Task NeuralProgramSynthesizerOptions_IsNeuralNetworkOptions()
     {
         var opts = new NeuralProgramSynthesizerOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
@@ -249,8 +250,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Serving Options
 
-    [Fact]
-    public void ProgramSynthesisServingClientOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisServingClientOptions_DefaultValues()
     {
         var opts = new ProgramSynthesisServingClientOptions();
 
@@ -263,8 +264,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.True(opts.PreferServing);
     }
 
-    [Fact]
-    public void ProgramSynthesisServingClientOptions_SetCustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisServingClientOptions_SetCustomValues()
     {
         var opts = new ProgramSynthesisServingClientOptions
         {
@@ -288,8 +289,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Tokenization Options
 
-    [Fact]
-    public void CodeTokenizationPipelineOptions_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTokenizationPipelineOptions_DefaultValues()
     {
         var opts = new CodeTokenizationPipelineOptions();
 
@@ -297,8 +298,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(10_000, opts.MaxAstNodes);
     }
 
-    [Fact]
-    public void CodeTokenizationPipelineOptions_SetCustomValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTokenizationPipelineOptions_SetCustomValues()
     {
         var opts = new CodeTokenizationPipelineOptions
         {
@@ -314,8 +315,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Request Types
 
-    [Fact]
-    public void CodeGenerationRequest_DefaultsAndTaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeGenerationRequest_DefaultsAndTaskType()
     {
         var req = new CodeGenerationRequest();
         Assert.Equal(CodeTask.Generation, req.Task);
@@ -327,8 +328,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.MaxWallClockMilliseconds);
     }
 
-    [Fact]
-    public void CodeGenerationRequest_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeGenerationRequest_SetProperties()
     {
         var req = new CodeGenerationRequest
         {
@@ -350,8 +351,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Single(req.Examples);
     }
 
-    [Fact]
-    public void CodeCompletionRequest_DefaultsAndTaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCompletionRequest_DefaultsAndTaskType()
     {
         var req = new CodeCompletionRequest();
         Assert.Equal(CodeTask.Completion, req.Task);
@@ -360,8 +361,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(3, req.MaxCandidates);
     }
 
-    [Fact]
-    public void CodeCompletionRequest_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCompletionRequest_SetProperties()
     {
         var req = new CodeCompletionRequest
         {
@@ -376,16 +377,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(5, req.MaxCandidates);
     }
 
-    [Fact]
-    public void CodeBugDetectionRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBugDetectionRequest_TaskType()
     {
         var req = new CodeBugDetectionRequest();
         Assert.Equal(CodeTask.BugDetection, req.Task);
         Assert.Equal(string.Empty, req.Code);
     }
 
-    [Fact]
-    public void CodeBugFixingRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBugFixingRequest_TaskType()
     {
         var req = new CodeBugFixingRequest();
         Assert.Equal(CodeTask.BugFixing, req.Task);
@@ -393,8 +394,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.BugDescription);
     }
 
-    [Fact]
-    public void CodeCloneDetectionRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneDetectionRequest_TaskType()
     {
         var req = new CodeCloneDetectionRequest();
         Assert.Equal(CodeTask.CloneDetection, req.Task);
@@ -402,16 +403,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(0.8, req.MinSimilarity);
     }
 
-    [Fact]
-    public void CodeDocumentationRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeDocumentationRequest_TaskType()
     {
         var req = new CodeDocumentationRequest();
         Assert.Equal(CodeTask.Documentation, req.Task);
         Assert.Equal(string.Empty, req.Code);
     }
 
-    [Fact]
-    public void CodeRefactoringRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeRefactoringRequest_TaskType()
     {
         var req = new CodeRefactoringRequest();
         Assert.Equal(CodeTask.Refactoring, req.Task);
@@ -419,8 +420,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.Goal);
     }
 
-    [Fact]
-    public void CodeReviewRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeReviewRequest_TaskType()
     {
         var req = new CodeReviewRequest();
         Assert.Equal(CodeTask.CodeReview, req.Task);
@@ -428,8 +429,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.FilePath);
     }
 
-    [Fact]
-    public void CodeSearchRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSearchRequest_TaskType()
     {
         var req = new CodeSearchRequest();
         Assert.Equal(CodeTask.Search, req.Task);
@@ -437,24 +438,24 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(req.Corpus);
     }
 
-    [Fact]
-    public void CodeSummarizationRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSummarizationRequest_TaskType()
     {
         var req = new CodeSummarizationRequest();
         Assert.Equal(CodeTask.Summarization, req.Task);
         Assert.Equal(string.Empty, req.Code);
     }
 
-    [Fact]
-    public void CodeTestGenerationRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTestGenerationRequest_TaskType()
     {
         var req = new CodeTestGenerationRequest();
         Assert.Equal(CodeTask.TestGeneration, req.Task);
         Assert.Equal(string.Empty, req.Code);
     }
 
-    [Fact]
-    public void CodeTranslationRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTranslationRequest_TaskType()
     {
         var req = new CodeTranslationRequest();
         Assert.Equal(CodeTask.Translation, req.Task);
@@ -463,8 +464,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(ProgramLanguage.Generic, req.TargetLanguage);
     }
 
-    [Fact]
-    public void CodeUnderstandingRequest_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeUnderstandingRequest_TaskType()
     {
         var req = new CodeUnderstandingRequest();
         Assert.Equal(CodeTask.Understanding, req.Task);
@@ -472,8 +473,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.FilePath);
     }
 
-    [Fact]
-    public void AllRequests_InheritSqlDialectProperty()
+    [Fact(Timeout = 120000)]
+    public async Task AllRequests_InheritSqlDialectProperty()
     {
         var req = new CodeGenerationRequest
         {
@@ -489,8 +490,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Result Types
 
-    [Fact]
-    public void CodeGenerationResult_DefaultsAndTaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeGenerationResult_DefaultsAndTaskType()
     {
         var result = new CodeGenerationResult();
         Assert.Equal(CodeTask.Generation, result.Task);
@@ -500,8 +501,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.Telemetry);
     }
 
-    [Fact]
-    public void CodeCompletionResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCompletionResult_TaskType()
     {
         var result = new CodeCompletionResult();
         Assert.Equal(CodeTask.Completion, result.Task);
@@ -509,8 +510,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Empty(result.Candidates);
     }
 
-    [Fact]
-    public void CodeBugDetectionResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBugDetectionResult_TaskType()
     {
         var result = new CodeBugDetectionResult();
         Assert.Equal(CodeTask.BugDetection, result.Task);
@@ -518,8 +519,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Empty(result.Issues);
     }
 
-    [Fact]
-    public void CodeBugFixingResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeBugFixingResult_TaskType()
     {
         var result = new CodeBugFixingResult();
         Assert.Equal(CodeTask.BugFixing, result.Task);
@@ -528,8 +529,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.FixedIssues);
     }
 
-    [Fact]
-    public void CodeCloneDetectionResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneDetectionResult_TaskType()
     {
         var result = new CodeCloneDetectionResult();
         Assert.Equal(CodeTask.CloneDetection, result.Task);
@@ -537,8 +538,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Empty(result.CloneGroups);
     }
 
-    [Fact]
-    public void CodeDocumentationResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeDocumentationResult_TaskType()
     {
         var result = new CodeDocumentationResult();
         Assert.Equal(CodeTask.Documentation, result.Task);
@@ -546,8 +547,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(string.Empty, result.UpdatedCode);
     }
 
-    [Fact]
-    public void CodeRefactoringResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeRefactoringResult_TaskType()
     {
         var result = new CodeRefactoringResult();
         Assert.Equal(CodeTask.Refactoring, result.Task);
@@ -555,8 +556,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.Diff);
     }
 
-    [Fact]
-    public void CodeReviewResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeReviewResult_TaskType()
     {
         var result = new CodeReviewResult();
         Assert.Equal(CodeTask.CodeReview, result.Task);
@@ -565,8 +566,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.PrioritizedPlan);
     }
 
-    [Fact]
-    public void CodeSearchResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSearchResult_TaskType()
     {
         var result = new CodeSearchResult();
         Assert.Equal(CodeTask.Search, result.Task);
@@ -574,16 +575,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.Results);
     }
 
-    [Fact]
-    public void CodeSummarizationResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSummarizationResult_TaskType()
     {
         var result = new CodeSummarizationResult();
         Assert.Equal(CodeTask.Summarization, result.Task);
         Assert.Equal(string.Empty, result.Summary);
     }
 
-    [Fact]
-    public void CodeTestGenerationResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTestGenerationResult_TaskType()
     {
         var result = new CodeTestGenerationResult();
         Assert.Equal(CodeTask.TestGeneration, result.Task);
@@ -591,8 +592,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Empty(result.Tests);
     }
 
-    [Fact]
-    public void CodeTranslationResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTranslationResult_TaskType()
     {
         var result = new CodeTranslationResult();
         Assert.Equal(CodeTask.Translation, result.Task);
@@ -601,8 +602,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(string.Empty, result.TranslatedCode);
     }
 
-    [Fact]
-    public void CodeUnderstandingResult_TaskType()
+    [Fact(Timeout = 120000)]
+    public async Task CodeUnderstandingResult_TaskType()
     {
         var result = new CodeUnderstandingResult();
         Assert.Equal(CodeTask.Understanding, result.Task);
@@ -614,8 +615,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.ControlFlowSummaries);
     }
 
-    [Fact]
-    public void AllResults_SetSuccessAndError()
+    [Fact(Timeout = 120000)]
+    public async Task AllResults_SetSuccessAndError()
     {
         var result = new CodeGenerationResult
         {
@@ -631,8 +632,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal("req-456", result.RequestId);
     }
 
-    [Fact]
-    public void AllResults_SetErrorInfo()
+    [Fact(Timeout = 120000)]
+    public async Task AllResults_SetErrorInfo()
     {
         var result = new CodeBugFixingResult
         {
@@ -648,8 +649,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Execution Models
 
-    [Fact]
-    public void ProgramExecuteRequest_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramExecuteRequest_DefaultValues()
     {
         var req = new ProgramExecuteRequest();
 
@@ -663,8 +664,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.False(req.CompileOnly);
     }
 
-    [Fact]
-    public void ProgramExecuteRequest_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramExecuteRequest_SetProperties()
     {
         var req = new ProgramExecuteRequest
         {
@@ -685,8 +686,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Single(req.AllowedLanguages);
     }
 
-    [Fact]
-    public void ProgramExecuteResponse_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramExecuteResponse_Properties()
     {
         var resp = new ProgramExecuteResponse
         {
@@ -709,8 +710,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(resp.ErrorCode);
     }
 
-    [Fact]
-    public void ProgramEvaluateIoRequest_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramEvaluateIoRequest_DefaultValues()
     {
         var req = new ProgramEvaluateIoRequest();
 
@@ -721,8 +722,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Empty(req.TestCases);
     }
 
-    [Fact]
-    public void ProgramEvaluateIoResponse_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramEvaluateIoResponse_Properties()
     {
         var resp = new ProgramEvaluateIoResponse
         {
@@ -740,8 +741,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(resp.TestResults);
     }
 
-    [Fact]
-    public void ProgramEvaluateIoTestResult_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramEvaluateIoTestResult_Properties()
     {
         var result = new ProgramEvaluateIoTestResult
         {
@@ -760,8 +761,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(result.FailureReason);
     }
 
-    [Fact]
-    public void SqlExecuteRequest_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task SqlExecuteRequest_DefaultValues()
     {
         var req = new SqlExecuteRequest();
 
@@ -773,8 +774,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(req.DatasetId);
     }
 
-    [Fact]
-    public void SqlExecuteRequest_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SqlExecuteRequest_SetProperties()
     {
         var req = new SqlExecuteRequest
         {
@@ -791,8 +792,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal("CREATE TABLE users (id INT)", req.SchemaSql);
     }
 
-    [Fact]
-    public void SqlExecuteResponse_Properties()
+    [Fact(Timeout = 120000)]
+    public async Task SqlExecuteResponse_Properties()
     {
         var resp = new SqlExecuteResponse
         {
@@ -812,8 +813,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Model Classes (AST, Corpus, etc.)
 
-    [Fact]
-    public void CodeAstNode_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstNode_DefaultValues()
     {
         var node = new CodeAstNode();
         Assert.Equal(0, node.NodeId);
@@ -821,8 +822,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(ProgramLanguage.Generic, node.Language);
     }
 
-    [Fact]
-    public void CodeAstNode_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstNode_SetProperties()
     {
         var node = new CodeAstNode
         {
@@ -836,8 +837,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(ProgramLanguage.CSharp, node.Language);
     }
 
-    [Fact]
-    public void CodeAstEdge_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstEdge_SetProperties()
     {
         var edge = new CodeAstEdge
         {
@@ -849,8 +850,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(5, edge.ChildNodeId);
     }
 
-    [Fact]
-    public void CodeCorpusDocument_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCorpusDocument_DefaultValues()
     {
         var doc = new CodeCorpusDocument();
         Assert.Equal(string.Empty, doc.DocumentId);
@@ -859,8 +860,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(string.Empty, doc.Content);
     }
 
-    [Fact]
-    public void CodeCorpusDocument_SetProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCorpusDocument_SetProperties()
     {
         var doc = new CodeCorpusDocument
         {
@@ -876,8 +877,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal("print('hello')", doc.Content);
     }
 
-    [Fact]
-    public void CodeCorpusReference_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCorpusReference_DefaultValues()
     {
         var corpus = new CodeCorpusReference();
         Assert.NotNull(corpus.Documents);
@@ -886,8 +887,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(corpus.IndexId);
     }
 
-    [Fact]
-    public void CodeCorpusReference_WithDocuments()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCorpusReference_WithDocuments()
     {
         var corpus = new CodeCorpusReference
         {
@@ -904,8 +905,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Single(corpus.Documents);
     }
 
-    [Fact]
-    public void CodeTransformDiff_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTransformDiff_DefaultValues()
     {
         var diff = new CodeTransformDiff();
         Assert.NotNull(diff.Edits);
@@ -913,8 +914,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(diff.UnifiedDiff);
     }
 
-    [Fact]
-    public void CodeFixSuggestion_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeFixSuggestion_DefaultValues()
     {
         var fix = new CodeFixSuggestion();
         Assert.Equal(string.Empty, fix.Summary);
@@ -924,8 +925,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(fix.Diff);
     }
 
-    [Fact]
-    public void CodeSearchHit_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSearchHit_DefaultValues()
     {
         var hit = new CodeSearchHit();
         Assert.Equal(0.0, hit.Score);
@@ -937,8 +938,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(hit.MatchExplanation);
     }
 
-    [Fact]
-    public void CodeSecurityHotspot_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeSecurityHotspot_DefaultValues()
     {
         var hotspot = new CodeSecurityHotspot();
         Assert.Equal(string.Empty, hotspot.Category);
@@ -946,8 +947,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(hotspot.Location);
     }
 
-    [Fact]
-    public void CodeHotspot_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeHotspot_DefaultValues()
     {
         var hotspot = new CodeHotspot();
         Assert.Equal(string.Empty, hotspot.SymbolName);
@@ -955,24 +956,24 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(0.0, hotspot.Score);
     }
 
-    [Fact]
-    public void CodeDependency_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeDependency_DefaultValues()
     {
         var dep = new CodeDependency();
         Assert.Equal(string.Empty, dep.Name);
         Assert.Null(dep.Kind);
     }
 
-    [Fact]
-    public void CodeCallGraphEdge_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCallGraphEdge_DefaultValues()
     {
         var edge = new CodeCallGraphEdge();
         Assert.Equal(string.Empty, edge.Caller);
         Assert.Equal(string.Empty, edge.Callee);
     }
 
-    [Fact]
-    public void CodeProvenance_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeProvenance_DefaultValues()
     {
         var prov = new CodeProvenance();
         Assert.Null(prov.IndexId);
@@ -981,8 +982,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(prov.SourcePath);
     }
 
-    [Fact]
-    public void CodeExecutionTelemetry_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeExecutionTelemetry_DefaultValues()
     {
         var tel = new CodeExecutionTelemetry();
         Assert.Null(tel.ExitCode);
@@ -991,16 +992,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(tel.StderrBytes);
     }
 
-    [Fact]
-    public void CodeTaskTelemetry_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTaskTelemetry_DefaultValues()
     {
         var tel = new CodeTaskTelemetry();
         Assert.Equal(0L, tel.ProcessingTimeMs);
         Assert.Null(tel.Execution);
     }
 
-    [Fact]
-    public void CodeTaskTelemetry_WithExecution()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTaskTelemetry_WithExecution()
     {
         var tel = new CodeTaskTelemetry
         {
@@ -1018,8 +1019,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(256L, tel.Execution.StdoutBytes);
     }
 
-    [Fact]
-    public void CodeTokenizationResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeTokenizationResult_DefaultValues()
     {
         var result = new CodeTokenizationResult();
         Assert.Equal(ProgramLanguage.Generic, result.Language);
@@ -1027,16 +1028,16 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotNull(result.Tokenization);
     }
 
-    [Fact]
-    public void CodeAstNodePath_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstNodePath_DefaultValues()
     {
         var path = new CodeAstNodePath();
         Assert.NotNull(path.Segments);
         Assert.Empty(path.Segments);
     }
 
-    [Fact]
-    public void CodeAstPathSegment_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeAstPathSegment_DefaultValues()
     {
         var segment = new CodeAstPathSegment();
         Assert.Equal(string.Empty, segment.Kind);
@@ -1044,23 +1045,23 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Null(segment.Index);
     }
 
-    [Fact]
-    public void CodeEditOperation_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeEditOperation_DefaultValues()
     {
         var op = new CodeEditOperation();
         Assert.Equal(CodeEditOperationType.Insert, op.OperationType);
     }
 
-    [Fact]
-    public void CodeCloneGroup_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneGroup_DefaultValues()
     {
         var group = new CodeCloneGroup();
         Assert.NotNull(group.Instances);
         Assert.Empty(group.Instances);
     }
 
-    [Fact]
-    public void CodeCloneInstance_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task CodeCloneInstance_DefaultValues()
     {
         var instance = new CodeCloneInstance();
         Assert.NotNull(instance.Location);
@@ -1070,22 +1071,22 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Execution Enums
 
-    [Fact]
-    public void ProgramExecuteErrorCode_HasValues()
+    [Fact(Timeout = 120000)]
+    public async Task ProgramExecuteErrorCode_HasValues()
     {
         var values = Enum.GetValues(typeof(ProgramExecuteErrorCode));
         Assert.True(values.Length > 0);
     }
 
-    [Fact]
-    public void SqlExecuteErrorCode_HasValues()
+    [Fact(Timeout = 120000)]
+    public async Task SqlExecuteErrorCode_HasValues()
     {
         var values = Enum.GetValues(typeof(SqlExecuteErrorCode));
         Assert.True(values.Length > 0);
     }
 
-    [Fact]
-    public void CompilationDiagnosticSeverity_HasValues()
+    [Fact(Timeout = 120000)]
+    public async Task CompilationDiagnosticSeverity_HasValues()
     {
         var values = Enum.GetValues(typeof(CompilationDiagnosticSeverity));
         Assert.True(values.Length > 0);
@@ -1095,8 +1096,8 @@ public class ProgramSynthesisExtendedIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void Integration_CreateCodeReviewWithIssuesAndFixes()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CreateCodeReviewWithIssuesAndFixes()
     {
         var result = new CodeReviewResult
         {
@@ -1124,8 +1125,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(CodeIssueCategory.Correctness, result.Issues[0].Category);
     }
 
-    [Fact]
-    public void Integration_CreateCodeTranslationPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CreateCodeTranslationPipeline()
     {
         var req = new CodeTranslationRequest
         {
@@ -1151,8 +1152,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.NotEqual(string.Empty, result.TranslatedCode);
     }
 
-    [Fact]
-    public void Integration_CreateBugFixWithDiff()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CreateBugFixWithDiff()
     {
         var result = new CodeBugFixingResult
         {
@@ -1176,8 +1177,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(CodeEditOperationType.Replace, result.Diff.Edits[0].OperationType);
     }
 
-    [Fact]
-    public void Integration_CreateSearchWithProvenance()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CreateSearchWithProvenance()
     {
         var result = new CodeSearchResult
         {
@@ -1205,8 +1206,8 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal("repo-1", result.Results[0].Provenance.RepoId);
     }
 
-    [Fact]
-    public void Integration_CreateUnderstandingWithFullAnalysis()
+    [Fact(Timeout = 120000)]
+    public async Task Integration_CreateUnderstandingWithFullAnalysis()
     {
         var result = new CodeUnderstandingResult
         {

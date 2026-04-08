@@ -3,6 +3,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.CurriculumLearning.Schedulers;
 using AiDotNet.CurriculumLearning.Interfaces;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 
@@ -14,8 +15,8 @@ public class ConfigurationIntegrationTests
 {
     #region AutoML Options Tests
 
-    [Fact]
-    public void AutoMLBudgetOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task AutoMLBudgetOptions_DefaultValues_AreCorrect()
     {
         var options = new AutoMLBudgetOptions();
 
@@ -24,8 +25,8 @@ public class ConfigurationIntegrationTests
         Assert.Null(options.TrialLimitOverride);
     }
 
-    [Fact]
-    public void AutoMLBudgetOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task AutoMLBudgetOptions_CanSetAllProperties()
     {
         var options = new AutoMLBudgetOptions
         {
@@ -39,8 +40,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(50, options.TrialLimitOverride);
     }
 
-    [Fact]
-    public void AutoMLBudgetOptions_SupportsAllPresets()
+    [Fact(Timeout = 120000)]
+    public async Task AutoMLBudgetOptions_SupportsAllPresets()
     {
         // Verify all presets are valid
         foreach (AutoMLBudgetPreset preset in Enum.GetValues(typeof(AutoMLBudgetPreset)))
@@ -54,8 +55,8 @@ public class ConfigurationIntegrationTests
 
     #region RL Training Options Tests
 
-    [Fact]
-    public void RLTrainingOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_DefaultValues_AreCorrect()
     {
         var options = new RLTrainingOptions<double>();
 
@@ -75,8 +76,8 @@ public class ConfigurationIntegrationTests
         Assert.False(options.UsePrioritizedReplay);
     }
 
-    [Fact]
-    public void RLTrainingOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_CanSetAllProperties()
     {
         var options = new RLTrainingOptions<double>
         {
@@ -106,8 +107,8 @@ public class ConfigurationIntegrationTests
         Assert.True(options.UsePrioritizedReplay);
     }
 
-    [Fact]
-    public void RLTrainingOptions_SupportsCallbacks()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_SupportsCallbacks()
     {
         bool episodeCallbackCalled = false;
         bool stepCallbackCalled = false;
@@ -144,8 +145,8 @@ public class ConfigurationIntegrationTests
 
     #region RLCheckpointConfig Tests
 
-    [Fact]
-    public void RLCheckpointConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task RLCheckpointConfig_DefaultValues_AreCorrect()
     {
         var config = new RLCheckpointConfig();
 
@@ -155,8 +156,8 @@ public class ConfigurationIntegrationTests
         Assert.True(config.SaveOnBestReward);
     }
 
-    [Fact]
-    public void RLCheckpointConfig_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task RLCheckpointConfig_CanSetAllProperties()
     {
         var config = new RLCheckpointConfig
         {
@@ -176,8 +177,8 @@ public class ConfigurationIntegrationTests
 
     #region RLEarlyStoppingConfig Tests
 
-    [Fact]
-    public void RLEarlyStoppingConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task RLEarlyStoppingConfig_DefaultValues_AreCorrect()
     {
         var config = new RLEarlyStoppingConfig<double>();
 
@@ -188,8 +189,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(0.0, config.RewardThreshold);
     }
 
-    [Fact]
-    public void RLEarlyStoppingConfig_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task RLEarlyStoppingConfig_CanSetAllProperties()
     {
         var config = new RLEarlyStoppingConfig<double>
         {
@@ -203,8 +204,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(100.0, config.RewardThreshold);
     }
 
-    [Fact]
-    public void RLEarlyStoppingConfig_WorksWithFloat()
+    [Fact(Timeout = 120000)]
+    public async Task RLEarlyStoppingConfig_WorksWithFloat()
     {
         var config = new RLEarlyStoppingConfig<float>();
 
@@ -216,8 +217,8 @@ public class ConfigurationIntegrationTests
 
     #region ExplorationScheduleConfig Tests
 
-    [Fact]
-    public void ExplorationScheduleConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationScheduleConfig_DefaultValues_AreCorrect()
     {
         var config = new ExplorationScheduleConfig<double>();
 
@@ -227,8 +228,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(ExplorationDecayType.Linear, config.DecayType);
     }
 
-    [Fact]
-    public void ExplorationScheduleConfig_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationScheduleConfig_CanSetAllProperties()
     {
         var config = new ExplorationScheduleConfig<double>
         {
@@ -244,8 +245,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(ExplorationDecayType.Exponential, config.DecayType);
     }
 
-    [Fact]
-    public void ExplorationScheduleConfig_SupportsAllDecayTypes()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationScheduleConfig_SupportsAllDecayTypes()
     {
         foreach (ExplorationDecayType decayType in Enum.GetValues(typeof(ExplorationDecayType)))
         {
@@ -258,8 +259,8 @@ public class ConfigurationIntegrationTests
 
     #region InferenceOptimizationConfig Tests
 
-    [Fact]
-    public void InferenceOptimizationConfig_Default_HasCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Default_HasCorrectValues()
     {
         var config = InferenceOptimizationConfig.Default;
 
@@ -268,8 +269,8 @@ public class ConfigurationIntegrationTests
         Assert.False(config.EnableSpeculativeDecoding);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_HighPerformance_HasCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_HighPerformance_HasCorrectValues()
     {
         var config = InferenceOptimizationConfig.HighPerformance;
 
@@ -281,8 +282,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(5, config.SpeculationDepth);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_DefaultValues_AreCorrect()
     {
         var config = new InferenceOptimizationConfig();
 
@@ -320,8 +321,8 @@ public class ConfigurationIntegrationTests
         Assert.False(config.EnableWeightOnlyQuantization);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_AcceptsValidConfig()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_AcceptsValidConfig()
     {
         var config = InferenceOptimizationConfig.Default;
 
@@ -329,8 +330,8 @@ public class ConfigurationIntegrationTests
         config.Validate();
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsInvalidKVCacheMaxSize()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsInvalidKVCacheMaxSize()
     {
         var config = new InferenceOptimizationConfig { KVCacheMaxSizeMB = 0 };
 
@@ -338,8 +339,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("KVCacheMaxSizeMB must be positive", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsInvalidMaxBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsInvalidMaxBatchSize()
     {
         var config = new InferenceOptimizationConfig { MaxBatchSize = 0 };
 
@@ -347,8 +348,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("MaxBatchSize must be positive", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsInvalidMinBatchSize()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsInvalidMinBatchSize()
     {
         var config = new InferenceOptimizationConfig { MinBatchSize = 0 };
 
@@ -356,8 +357,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("MinBatchSize must be positive", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsMinGreaterThanMax()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsMinGreaterThanMax()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -370,8 +371,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("cannot exceed MaxBatchSize", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsNegativeBatchTimeout()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsNegativeBatchTimeout()
     {
         var config = new InferenceOptimizationConfig { BatchTimeoutMs = -1 };
 
@@ -379,8 +380,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("BatchTimeoutMs must be non-negative", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsNegativeSpeculationDepth()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsNegativeSpeculationDepth()
     {
         var config = new InferenceOptimizationConfig { SpeculationDepth = -1 };
 
@@ -388,8 +389,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("SpeculationDepth must be non-negative", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsInvalidSlidingWindowSize()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsInvalidSlidingWindowSize()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -401,8 +402,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("KVCacheWindowSize must be positive", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_Validate_RejectsInvalidPagedBlockSize()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_Validate_RejectsInvalidPagedBlockSize()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -414,8 +415,8 @@ public class ConfigurationIntegrationTests
         Assert.Contains("PagedKVCacheBlockSize must be positive", ex.Message);
     }
 
-    [Fact]
-    public void InferenceOptimizationConfig_SupportsAllEnumValues()
+    [Fact(Timeout = 120000)]
+    public async Task InferenceOptimizationConfig_SupportsAllEnumValues()
     {
         var config = new InferenceOptimizationConfig();
 
@@ -459,8 +460,8 @@ public class ConfigurationIntegrationTests
 
     #region ResNetConfiguration Tests
 
-    [Fact]
-    public void ResNetConfiguration_DefaultParameters_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_DefaultParameters_AreCorrect()
     {
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 1000);
 
@@ -474,8 +475,8 @@ public class ConfigurationIntegrationTests
         Assert.False(config.UseAutodiff);
     }
 
-    [Fact]
-    public void ResNetConfiguration_InputShape_ComputedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_InputShape_ComputedCorrectly()
     {
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
             inputHeight: 32, inputWidth: 32, inputChannels: 3);
@@ -489,8 +490,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(3 * 32 * 32, config.TotalInputSize);
     }
 
-    [Fact]
-    public void ResNetConfiguration_UsesBottleneck_CorrectForVariants()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_UsesBottleneck_CorrectForVariants()
     {
         // BasicBlock variants (no bottleneck)
         Assert.False(new ResNetConfiguration(ResNetVariant.ResNet18, 10).UsesBottleneck);
@@ -502,8 +503,8 @@ public class ConfigurationIntegrationTests
         Assert.True(new ResNetConfiguration(ResNetVariant.ResNet152, 10).UsesBottleneck);
     }
 
-    [Fact]
-    public void ResNetConfiguration_BlockCounts_CorrectForAllVariants()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_BlockCounts_CorrectForAllVariants()
     {
         // ResNet18: [2, 2, 2, 2]
         var config18 = new ResNetConfiguration(ResNetVariant.ResNet18, 10);
@@ -526,8 +527,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(new[] { 3, 8, 36, 3 }, config152.BlockCounts);
     }
 
-    [Fact]
-    public void ResNetConfiguration_Expansion_CorrectForVariants()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_Expansion_CorrectForVariants()
     {
         // BasicBlock expansion = 1
         Assert.Equal(1, new ResNetConfiguration(ResNetVariant.ResNet18, 10).Expansion);
@@ -539,15 +540,15 @@ public class ConfigurationIntegrationTests
         Assert.Equal(4, new ResNetConfiguration(ResNetVariant.ResNet152, 10).Expansion);
     }
 
-    [Fact]
-    public void ResNetConfiguration_BaseChannels_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_BaseChannels_AreCorrect()
     {
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, 10);
         Assert.Equal(new[] { 64, 128, 256, 512 }, config.BaseChannels);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateResNet50_CreatesCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateResNet50_CreatesCorrectConfig()
     {
         var config = ResNetConfiguration.CreateResNet50(1000);
 
@@ -555,8 +556,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(1000, config.NumClasses);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateForCIFAR_CreatesCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateForCIFAR_CreatesCorrectConfig()
     {
         var config = ResNetConfiguration.CreateForCIFAR(ResNetVariant.ResNet18, 10);
 
@@ -566,8 +567,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(32, config.InputWidth);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateLightweight_CreatesCorrectConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateLightweight_CreatesCorrectConfig()
     {
         var config = ResNetConfiguration.CreateLightweight(100);
 
@@ -575,8 +576,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(100, config.NumClasses);
     }
 
-    [Fact]
-    public void ResNetConfiguration_CreateForTesting_CreatesMinimalConfig()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_CreateForTesting_CreatesMinimalConfig()
     {
         var config = ResNetConfiguration.CreateForTesting(10);
 
@@ -586,48 +587,48 @@ public class ConfigurationIntegrationTests
         Assert.Equal(32, config.InputWidth);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsInvalidNumClasses()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsInvalidNumClasses()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 0));
         Assert.Contains("Number of classes must be greater than 0", ex.Message);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsInvalidInputHeight()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsInvalidInputHeight()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10, inputHeight: 0));
         Assert.Contains("Input height must be greater than 0", ex.Message);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsInvalidInputWidth()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsInvalidInputWidth()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10, inputWidth: 0));
         Assert.Contains("Input width must be greater than 0", ex.Message);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsInvalidInputChannels()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsInvalidInputChannels()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10, inputChannels: 0));
         Assert.Contains("Input channels must be greater than 0", ex.Message);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsTooSmallInputHeight()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsTooSmallInputHeight()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10, inputHeight: 16));
         Assert.Contains("at least 32x32 pixels", ex.Message);
     }
 
-    [Fact]
-    public void ResNetConfiguration_RejectsTooSmallInputWidth()
+    [Fact(Timeout = 120000)]
+    public async Task ResNetConfiguration_RejectsTooSmallInputWidth()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10, inputWidth: 16));
@@ -638,8 +639,8 @@ public class ConfigurationIntegrationTests
 
     #region BenchmarkingOptions Tests
 
-    [Fact]
-    public void BenchmarkingOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkingOptions_DefaultValues_AreCorrect()
     {
         var options = new BenchmarkingOptions();
 
@@ -656,8 +657,8 @@ public class ConfigurationIntegrationTests
         Assert.Null(options.Text);
     }
 
-    [Fact]
-    public void BenchmarkingOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkingOptions_CanSetAllProperties()
     {
         var options = new BenchmarkingOptions
         {
@@ -692,8 +693,8 @@ public class ConfigurationIntegrationTests
 
     #region CurriculumLearningOptions Tests
 
-    [Fact]
-    public void CurriculumLearningOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearningOptions_DefaultValues_AreCorrect()
     {
         var options = new CurriculumLearningOptions<double, double[], double>();
 
@@ -716,8 +717,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(CurriculumVerbosity.Normal, options.Verbosity);
     }
 
-    [Fact]
-    public void CurriculumLearningOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearningOptions_CanSetAllProperties()
     {
         var options = new CurriculumLearningOptions<double, double[], double>
         {
@@ -753,8 +754,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(CurriculumVerbosity.Verbose, options.Verbosity);
     }
 
-    [Fact]
-    public void CurriculumLearningOptions_SupportsAllScheduleTypes()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearningOptions_SupportsAllScheduleTypes()
     {
         foreach (CurriculumScheduleType scheduleType in Enum.GetValues(typeof(CurriculumScheduleType)))
         {
@@ -766,8 +767,8 @@ public class ConfigurationIntegrationTests
         }
     }
 
-    [Fact]
-    public void CurriculumLearningOptions_SupportsAllDifficultyEstimatorTypes()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearningOptions_SupportsAllDifficultyEstimatorTypes()
     {
         foreach (DifficultyEstimatorType estimator in Enum.GetValues(typeof(DifficultyEstimatorType)))
         {
@@ -779,8 +780,8 @@ public class ConfigurationIntegrationTests
         }
     }
 
-    [Fact]
-    public void CurriculumEarlyStoppingOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumEarlyStoppingOptions_DefaultValues_AreCorrect()
     {
         var options = new CurriculumEarlyStoppingOptions();
 
@@ -789,8 +790,8 @@ public class ConfigurationIntegrationTests
         Assert.Null(options.MinDelta);
     }
 
-    [Fact]
-    public void CurriculumEarlyStoppingOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumEarlyStoppingOptions_CanSetAllProperties()
     {
         var options = new CurriculumEarlyStoppingOptions
         {
@@ -804,8 +805,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(0.001, options.MinDelta);
     }
 
-    [Fact]
-    public void SelfPacedOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedOptions_DefaultValues_AreCorrect()
     {
         var options = new SelfPacedOptions();
 
@@ -815,8 +816,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(SelfPaceRegularizer.Hard, options.Regularizer);
     }
 
-    [Fact]
-    public void SelfPacedOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SelfPacedOptions_CanSetAllProperties()
     {
         var options = new SelfPacedOptions
         {
@@ -832,8 +833,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(SelfPaceRegularizer.Linear, options.Regularizer);
     }
 
-    [Fact]
-    public void CompetenceBasedOptions_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedOptions_DefaultValues_AreCorrect()
     {
         var options = new CompetenceBasedOptions();
 
@@ -844,8 +845,8 @@ public class ConfigurationIntegrationTests
         Assert.Null(options.SmoothingFactor);
     }
 
-    [Fact]
-    public void CompetenceBasedOptions_CanSetAllProperties()
+    [Fact(Timeout = 120000)]
+    public async Task CompetenceBasedOptions_CanSetAllProperties()
     {
         var options = new CompetenceBasedOptions
         {
@@ -867,22 +868,22 @@ public class ConfigurationIntegrationTests
 
     #region RLEpisodeMetrics and RLStepMetrics Tests
 
-    [Fact]
-    public void RLEpisodeMetrics_CanBeInstantiated()
+    [Fact(Timeout = 120000)]
+    public async Task RLEpisodeMetrics_CanBeInstantiated()
     {
         var metrics = new RLEpisodeMetrics<double>();
         Assert.NotNull(metrics);
     }
 
-    [Fact]
-    public void RLStepMetrics_CanBeInstantiated()
+    [Fact(Timeout = 120000)]
+    public async Task RLStepMetrics_CanBeInstantiated()
     {
         var metrics = new RLStepMetrics<double>();
         Assert.NotNull(metrics);
     }
 
-    [Fact]
-    public void RLTrainingSummary_CanBeInstantiated()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingSummary_CanBeInstantiated()
     {
         var summary = new RLTrainingSummary<double>();
         Assert.NotNull(summary);
@@ -892,8 +893,8 @@ public class ConfigurationIntegrationTests
 
     #region Generic Type Tests
 
-    [Fact]
-    public void RLTrainingOptions_WorksWithDifferentNumericTypes()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_WorksWithDifferentNumericTypes()
     {
         // Test with double
         var doubleOptions = new RLTrainingOptions<double>();
@@ -908,8 +909,8 @@ public class ConfigurationIntegrationTests
         Assert.NotNull(decimalOptions);
     }
 
-    [Fact]
-    public void ExplorationScheduleConfig_WorksWithDifferentNumericTypes()
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationScheduleConfig_WorksWithDifferentNumericTypes()
     {
         // Test with double
         var doubleConfig = new ExplorationScheduleConfig<double>();
@@ -924,8 +925,8 @@ public class ConfigurationIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
-    public void RLTrainingOptions_WithAllConfigs_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task RLTrainingOptions_WithAllConfigs_WorksTogether()
     {
         // Create a complete RL training configuration
         var options = new RLTrainingOptions<double>
@@ -966,8 +967,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(50000, options.ExplorationSchedule.DecaySteps);
     }
 
-    [Fact]
-    public void CurriculumLearningOptions_WithAllConfigs_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearningOptions_WithAllConfigs_WorksTogether()
     {
         var options = new CurriculumLearningOptions<double, double[], double>
         {
@@ -997,8 +998,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(SelfPaceRegularizer.Logarithmic, options.SelfPaced.Regularizer);
     }
 
-    [Fact]
-    public void BenchmarkingOptions_WithFederatedConfigs_WorksTogether()
+    [Fact(Timeout = 120000)]
+    public async Task BenchmarkingOptions_WithFederatedConfigs_WorksTogether()
     {
         var options = new BenchmarkingOptions
         {

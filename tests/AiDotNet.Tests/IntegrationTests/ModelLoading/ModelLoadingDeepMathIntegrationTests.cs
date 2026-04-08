@@ -1,6 +1,7 @@
 using AiDotNet.ModelLoading;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelLoading;
 
@@ -16,8 +17,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // WeightMapping: Direct Mappings
     // ============================
 
-    [Fact]
-    public void WeightMapping_DirectMapping_ReturnsTarget()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_DirectMapping_ReturnsTarget()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("src.weight", "dst.weight");
@@ -25,15 +26,15 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("dst.weight", mapping.Map("src.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_NoMapping_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_NoMapping_ReturnsNull()
     {
         var mapping = new WeightMapping();
         Assert.Null(mapping.Map("nonexistent.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_DirectOverride_LastWins()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_DirectOverride_LastWins()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("src.weight", "first.weight");
@@ -42,8 +43,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("second.weight", mapping.Map("src.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_DirectMappingsCount_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_DirectMappingsCount_Correct()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("a", "b");
@@ -53,8 +54,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(3, mapping.DirectMappingCount);
     }
 
-    [Fact]
-    public void WeightMapping_ConstructorWithMappings_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_ConstructorWithMappings_WorksCorrectly()
     {
         var dict = new Dictionary<string, string>
         {
@@ -68,8 +69,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(2, mapping.DirectMappingCount);
     }
 
-    [Fact]
-    public void WeightMapping_DirectMappings_ReadOnlyDictionary()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_DirectMappings_ReadOnlyDictionary()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("a", "b");
@@ -82,8 +83,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // WeightMapping: Pattern Mappings
     // ============================
 
-    [Fact]
-    public void WeightMapping_PatternMapping_TransformsName()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_PatternMapping_TransformsName()
     {
         var mapping = new WeightMapping();
         mapping.AddPatternMapping(@"layer\.(\d+)\.weight", "block.$1.weight");
@@ -91,8 +92,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("block.5.weight", mapping.Map("layer.5.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_PatternMapping_NoMatch_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_PatternMapping_NoMatch_ReturnsNull()
     {
         var mapping = new WeightMapping();
         mapping.AddPatternMapping(@"layer\.(\d+)\.weight", "block.$1.weight");
@@ -100,8 +101,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Null(mapping.Map("encoder.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_PatternMapping_MultipleGroups()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_PatternMapping_MultipleGroups()
     {
         var mapping = new WeightMapping();
         mapping.AddPatternMapping(@"encoder\.down\.(\d+)\.block\.(\d+)\.weight", "enc.d$1.b$2.w");
@@ -109,8 +110,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("enc.d3.b2.w", mapping.Map("encoder.down.3.block.2.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_PatternMappingCount_Correct()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_PatternMappingCount_Correct()
     {
         var mapping = new WeightMapping();
         mapping.AddPatternMapping(@"a\.(\d+)", "b.$1");
@@ -119,8 +120,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(2, mapping.PatternMappingCount);
     }
 
-    [Fact]
-    public void WeightMapping_DirectBeforePattern_DirectTakesPriority()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_DirectBeforePattern_DirectTakesPriority()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("layer.0.weight", "direct.result");
@@ -130,8 +131,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("direct.result", mapping.Map("layer.0.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_PatternUsedWhenNoDirectMatch()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_PatternUsedWhenNoDirectMatch()
     {
         var mapping = new WeightMapping();
         mapping.AddMapping("layer.0.weight", "direct.result");
@@ -145,8 +146,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // WeightMapping: Factory Methods
     // ============================
 
-    [Fact]
-    public void WeightMapping_StableDiffusionV1VAE_HasDirectMappings()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_StableDiffusionV1VAE_HasDirectMappings()
     {
         var mapping = WeightMapping.CreateStableDiffusionV1VAE();
 
@@ -156,8 +157,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("vae.outputConv.weight", mapping.Map("decoder.conv_out.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_StableDiffusionV1VAE_HasPatternMappings()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_StableDiffusionV1VAE_HasPatternMappings()
     {
         var mapping = WeightMapping.CreateStableDiffusionV1VAE();
 
@@ -172,8 +173,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("decoder.up.0.block.1.conv1.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_StableDiffusionV1VAE_DownsampleMappings()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_StableDiffusionV1VAE_DownsampleMappings()
     {
         var mapping = WeightMapping.CreateStableDiffusionV1VAE();
 
@@ -181,8 +182,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("encoder.down.2.downsample.conv.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_StableDiffusionV1UNet_TimeEmbedding()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_StableDiffusionV1UNet_TimeEmbedding()
     {
         var mapping = WeightMapping.CreateStableDiffusionV1UNet();
 
@@ -191,8 +192,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal("unet.timeEmbed.linear2.weight", mapping.Map("time_embed.2.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_StableDiffusionV1UNet_MiddleBlock()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_StableDiffusionV1UNet_MiddleBlock()
     {
         var mapping = WeightMapping.CreateStableDiffusionV1UNet();
 
@@ -202,8 +203,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("middle_block.2.in_layers.0.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_CLIPTextEncoder_EmbeddingMappings()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_CLIPTextEncoder_EmbeddingMappings()
     {
         var mapping = WeightMapping.CreateCLIPTextEncoder();
 
@@ -213,8 +214,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("text_model.embeddings.position_embedding.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_CLIPTextEncoder_AttentionPatterns()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_CLIPTextEncoder_AttentionPatterns()
     {
         var mapping = WeightMapping.CreateCLIPTextEncoder();
 
@@ -224,8 +225,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("text_model.encoder.layers.3.self_attn.k_proj.weight"));
     }
 
-    [Fact]
-    public void WeightMapping_CLIPTextEncoder_MLPPatterns()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_CLIPTextEncoder_MLPPatterns()
     {
         var mapping = WeightMapping.CreateCLIPTextEncoder();
 
@@ -235,8 +236,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("text_model.encoder.layers.7.mlp.fc2.bias"));
     }
 
-    [Fact]
-    public void WeightMapping_CLIPTextEncoder_FinalLayerNorm()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_CLIPTextEncoder_FinalLayerNorm()
     {
         var mapping = WeightMapping.CreateCLIPTextEncoder();
 
@@ -246,8 +247,8 @@ public class ModelLoadingDeepMathIntegrationTests
             mapping.Map("text_model.final_layer_norm.bias"));
     }
 
-    [Fact]
-    public void WeightMapping_SDXLVAE_InheritsFromV1()
+    [Fact(Timeout = 120000)]
+    public async Task WeightMapping_SDXLVAE_InheritsFromV1()
     {
         var sdxl = WeightMapping.CreateSDXLVAE();
         var v1 = WeightMapping.CreateStableDiffusionV1VAE();
@@ -263,15 +264,15 @@ public class ModelLoadingDeepMathIntegrationTests
     // ParameterRegistry: Registration
     // ============================
 
-    [Fact]
-    public void ParameterRegistry_Empty_ZeroCount()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Empty_ZeroCount()
     {
         var registry = new ParameterRegistry<double>();
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact]
-    public void ParameterRegistry_Register_IncrementsCount()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Register_IncrementsCount()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? stored = null;
@@ -283,8 +284,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(1, registry.Count);
     }
 
-    [Fact]
-    public void ParameterRegistry_GetNames_ReturnsAllNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_GetNames_ReturnsAllNames()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("a.weight", new[] { 2 }, () => null, _ => { });
@@ -296,8 +297,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Contains("b.weight", names);
     }
 
-    [Fact]
-    public void ParameterRegistry_TryGet_ExistingName_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TryGet_ExistingName_ReturnsTrue()
     {
         var registry = new ParameterRegistry<double>();
         var tensor = new Tensor<double>(new[] { 2, 3 });
@@ -309,15 +310,15 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Same(tensor, result);
     }
 
-    [Fact]
-    public void ParameterRegistry_TryGet_NonExistentName_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TryGet_NonExistentName_ReturnsFalse()
     {
         var registry = new ParameterRegistry<double>();
         Assert.False(registry.TryGet("nonexistent", out _));
     }
 
-    [Fact]
-    public void ParameterRegistry_CaseInsensitiveLookup()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_CaseInsensitiveLookup()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("Layer.Weight", new[] { 2 }, () => null, _ => { });
@@ -326,8 +327,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.True(registry.TryGet("LAYER.WEIGHT", out _));
     }
 
-    [Fact]
-    public void ParameterRegistry_GetShape_ReturnsCorrectShape()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_GetShape_ReturnsCorrectShape()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("conv.weight", new[] { 64, 3, 7, 7 }, () => null, _ => { });
@@ -337,15 +338,15 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(new[] { 64, 3, 7, 7 }, shape);
     }
 
-    [Fact]
-    public void ParameterRegistry_GetShape_NonExistent_ReturnsNull()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_GetShape_NonExistent_ReturnsNull()
     {
         var registry = new ParameterRegistry<double>();
         Assert.Null(registry.GetShape("nonexistent"));
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_CorrectShape_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_CorrectShape_ReturnsTrue()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? stored = null;
@@ -359,8 +360,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Same(tensor, stored);
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_WrongShape_ThrowsArgument()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_WrongShape_ThrowsArgument()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("layer.weight", new[] { 2, 3 },
@@ -371,8 +372,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => registry.TrySet("layer.weight", wrongTensor));
     }
 
-    [Fact]
-    public void ParameterRegistry_TrySet_NonExistent_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_TrySet_NonExistent_ReturnsFalse()
     {
         var registry = new ParameterRegistry<double>();
         var tensor = new Tensor<double>(new[] { 2 });
@@ -384,8 +385,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // ParameterRegistry: Child Registration
     // ============================
 
-    [Fact]
-    public void ParameterRegistry_RegisterChild_PrefixesNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_RegisterChild_PrefixesNames()
     {
         var parent = new ParameterRegistry<double>();
         var child = new ParameterRegistry<double>();
@@ -404,8 +405,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // ParameterRegistry: Validate
     // ============================
 
-    [Fact]
-    public void ParameterRegistry_Validate_AllMatched()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_AllMatched()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("a.weight", new[] { 2 }, () => null, _ => { });
@@ -419,8 +420,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.True(result.IsComplete);
     }
 
-    [Fact]
-    public void ParameterRegistry_Validate_UnmatchedWeights()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_UnmatchedWeights()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("a.weight", new[] { 2 }, () => null, _ => { });
@@ -432,8 +433,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Contains("extra.weight", result.UnmatchedWeights);
     }
 
-    [Fact]
-    public void ParameterRegistry_Validate_MissingParameters()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_MissingParameters()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("a.weight", new[] { 2 }, () => null, _ => { });
@@ -446,8 +447,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Contains("b.weight", result.MissingParameters);
     }
 
-    [Fact]
-    public void ParameterRegistry_Validate_WithMapping()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_WithMapping()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("target.weight", new[] { 2 }, () => null, _ => { });
@@ -460,8 +461,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.True(result.IsComplete);
     }
 
-    [Fact]
-    public void ParameterRegistry_Validate_MappingReturnsNull_Unmatched()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Validate_MappingReturnsNull_Unmatched()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("target.weight", new[] { 2 }, () => null, _ => { });
@@ -478,39 +479,39 @@ public class ModelLoadingDeepMathIntegrationTests
     // WeightLoadValidation: Computed Properties
     // ============================
 
-    [Fact]
-    public void WeightLoadValidation_IsComplete_NoMissing()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadValidation_IsComplete_NoMissing()
     {
         var v = new WeightLoadValidation();
         v.Matched.Add("a");
         Assert.True(v.IsComplete);
     }
 
-    [Fact]
-    public void WeightLoadValidation_IsComplete_HasMissing()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadValidation_IsComplete_HasMissing()
     {
         var v = new WeightLoadValidation();
         v.MissingParameters.Add("b");
         Assert.False(v.IsComplete);
     }
 
-    [Fact]
-    public void WeightLoadValidation_IsValid_NoShapeMismatches()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadValidation_IsValid_NoShapeMismatches()
     {
         var v = new WeightLoadValidation();
         Assert.True(v.IsValid);
     }
 
-    [Fact]
-    public void WeightLoadValidation_IsValid_HasShapeMismatches()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadValidation_IsValid_HasShapeMismatches()
     {
         var v = new WeightLoadValidation();
         v.ShapeMismatches.Add(("param", new[] { 2, 3 }, new[] { 4, 5 }));
         Assert.False(v.IsValid);
     }
 
-    [Fact]
-    public void WeightLoadValidation_ToString_IncludesAllCounts()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadValidation_ToString_IncludesAllCounts()
     {
         var v = new WeightLoadValidation();
         v.Matched.Add("a");
@@ -527,8 +528,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // WeightLoadResult: Properties
     // ============================
 
-    [Fact]
-    public void WeightLoadResult_Defaults_Empty()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadResult_Defaults_Empty()
     {
         var r = new WeightLoadResult();
         Assert.False(r.Success);
@@ -540,8 +541,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Null(r.ErrorMessage);
     }
 
-    [Fact]
-    public void WeightLoadResult_ToString_Success()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadResult_ToString_Success()
     {
         var r = new WeightLoadResult { Success = true, LoadedCount = 5, FailedCount = 1, SkippedCount = 2 };
         var str = r.ToString();
@@ -550,8 +551,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Contains("Skipped: 2", str);
     }
 
-    [Fact]
-    public void WeightLoadResult_ToString_Failed_ShowsError()
+    [Fact(Timeout = 120000)]
+    public async Task WeightLoadResult_ToString_Failed_ShowsError()
     {
         var r = new WeightLoadResult { Success = false, ErrorMessage = "Shape mismatch" };
         var str = r.ToString();
@@ -563,8 +564,8 @@ public class ModelLoadingDeepMathIntegrationTests
     // ParameterRegistry: Load Weights
     // ============================
 
-    [Fact]
-    public void ParameterRegistry_Load_NonStrict_SkipsUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_NonStrict_SkipsUnknown()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? stored = null;
@@ -586,8 +587,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(1, result.SkippedCount);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_Strict_FailsOnUnknown()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_Strict_FailsOnUnknown()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("layer.weight", new[] { 2 }, () => null, _ => { });
@@ -603,8 +604,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(1, result.FailedCount);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_WithMapping_TranslatesNames()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_WithMapping_TranslatesNames()
     {
         var registry = new ParameterRegistry<double>();
         Tensor<double>? stored = null;
@@ -626,8 +627,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.NotNull(stored);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_MappingReturnsNull_Skips()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_MappingReturnsNull_Skips()
     {
         var registry = new ParameterRegistry<double>();
 
@@ -643,8 +644,8 @@ public class ModelLoadingDeepMathIntegrationTests
         Assert.Equal(1, result.SkippedCount);
     }
 
-    [Fact]
-    public void ParameterRegistry_Load_ShapeMismatch_Strict_Fails()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRegistry_Load_ShapeMismatch_Strict_Fails()
     {
         var registry = new ParameterRegistry<double>();
         registry.Register("layer.weight", new[] { 2, 3 }, () => null, _ => { });

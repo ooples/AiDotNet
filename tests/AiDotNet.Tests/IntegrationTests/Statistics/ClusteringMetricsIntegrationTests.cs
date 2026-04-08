@@ -3,6 +3,7 @@ using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Statistics;
 
@@ -21,8 +22,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// When covariance matrix is identity, Mahalanobis distance equals Euclidean distance.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_IdentityCovariance_EqualsEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_IdentityCovariance_EqualsEuclidean()
     {
         // Arrange - Identity covariance matrix
         var identityInverse = new Matrix<double>(2, 2);
@@ -47,8 +48,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Without covariance matrix, falls back to Euclidean distance.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_NoCovarianceMatrix_FallsBackToEuclidean()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_NoCovarianceMatrix_FallsBackToEuclidean()
     {
         // Arrange
         var a = new Vector<double>(new[] { 0.0, 0.0 });
@@ -70,8 +71,8 @@ public class ClusteringMetricsIntegrationTests
     /// Covariance matrix: [[2, 1], [1, 2]], inverse: [[2/3, -1/3], [-1/3, 2/3]]
     /// Result: sqrt(6) ≈ 2.449
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_CustomCovariance_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_CustomCovariance_ReturnsExactValue()
     {
         // Arrange - Inverse of covariance matrix [[2, 1], [1, 2]]
         // Inverse is [[2/3, -1/3], [-1/3, 2/3]]
@@ -98,8 +99,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Distance between identical points should be zero.
     /// </summary>
-    [Fact]
-    public void MahalanobisDistance_IdenticalPoints_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task MahalanobisDistance_IdenticalPoints_ReturnsZero()
     {
         // Arrange
         var inverseCovariance = new Matrix<double>(2, 2);
@@ -126,8 +127,8 @@ public class ClusteringMetricsIntegrationTests
     /// Perfect clustering should have silhouette score close to 1.
     /// Data: Two well-separated clusters.
     /// </summary>
-    [Fact]
-    public void SilhouetteScore_WellSeparatedClusters_ReturnsHighScore()
+    [Fact(Timeout = 120000)]
+    public async Task SilhouetteScore_WellSeparatedClusters_ReturnsHighScore()
     {
         // Arrange - Two well-separated clusters
         // Cluster 0: (0, 0), (1, 0), (0, 1), (1, 1) - centered around (0.5, 0.5)
@@ -156,8 +157,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Single cluster should return 0 (need at least 2 clusters).
     /// </summary>
-    [Fact]
-    public void SilhouetteScore_SingleCluster_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task SilhouetteScore_SingleCluster_ReturnsZero()
     {
         // Arrange - All points in one cluster
         var data = new Matrix<double>(4, 2);
@@ -180,8 +181,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Silhouette score should be in range [-1, 1].
     /// </summary>
-    [Fact]
-    public void SilhouetteScore_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task SilhouetteScore_AlwaysInValidRange()
     {
         // Arrange
         var data = new Matrix<double>(6, 2);
@@ -213,8 +214,8 @@ public class ClusteringMetricsIntegrationTests
     /// sklearn.metrics.adjusted_rand_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
     /// Perfect agreement.
     /// </summary>
-    [Fact]
-    public void AdjustedRandIndex_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -233,8 +234,8 @@ public class ClusteringMetricsIntegrationTests
     /// Label values don't matter, only groupings.
     /// sklearn.metrics.adjusted_rand_score([0, 0, 1, 1], [1, 1, 0, 0]) = 1.0
     /// </summary>
-    [Fact]
-    public void AdjustedRandIndex_SwappedLabels_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_SwappedLabels_ReturnsOne()
     {
         // Arrange - Same grouping, different label values
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -257,8 +258,8 @@ public class ClusteringMetricsIntegrationTests
     /// Math: With 4 points in pattern [AA, BB] vs [AB, AB], every point is
     /// paired incorrectly - true clusters are split exactly across predicted clusters.
     /// </summary>
-    [Fact]
-    public void AdjustedRandIndex_AntiCorrelatedLabels_ReturnsNegative()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_AntiCorrelatedLabels_ReturnsNegative()
     {
         // Arrange - Anti-correlated groupings (each true cluster split across pred clusters)
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -277,8 +278,8 @@ public class ClusteringMetricsIntegrationTests
     /// Verified with sklearn:
     /// sklearn.metrics.adjusted_rand_score([0, 0, 0, 1, 1, 1], [0, 0, 1, 1, 2, 2]) = 0.24242424242424243
     /// </summary>
-    [Fact]
-    public void AdjustedRandIndex_PartialAgreement_ReturnsExactValue()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_PartialAgreement_ReturnsExactValue()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -296,8 +297,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// ARI should be symmetric.
     /// </summary>
-    [Fact]
-    public void AdjustedRandIndex_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_IsSymmetric()
     {
         // Arrange
         var labels1 = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0, 2.0 });
@@ -320,8 +321,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Well-separated clusters should have low Davies-Bouldin index.
     /// </summary>
-    [Fact]
-    public void DaviesBouldinIndex_WellSeparatedClusters_ReturnsLowValue()
+    [Fact(Timeout = 120000)]
+    public async Task DaviesBouldinIndex_WellSeparatedClusters_ReturnsLowValue()
     {
         // Arrange - Two well-separated clusters
         var data = new Matrix<double>(8, 2);
@@ -349,8 +350,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Davies-Bouldin index should be non-negative.
     /// </summary>
-    [Fact]
-    public void DaviesBouldinIndex_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task DaviesBouldinIndex_AlwaysNonNegative()
     {
         // Arrange
         var data = new Matrix<double>(6, 2);
@@ -379,8 +380,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Well-separated clusters should have high Calinski-Harabasz index.
     /// </summary>
-    [Fact]
-    public void CalinskiHarabaszIndex_WellSeparatedClusters_ReturnsHighValue()
+    [Fact(Timeout = 120000)]
+    public async Task CalinskiHarabaszIndex_WellSeparatedClusters_ReturnsHighValue()
     {
         // Arrange - Two well-separated clusters
         var data = new Matrix<double>(8, 2);
@@ -407,8 +408,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Calinski-Harabasz index should be non-negative.
     /// </summary>
-    [Fact]
-    public void CalinskiHarabaszIndex_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task CalinskiHarabaszIndex_AlwaysNonNegative()
     {
         // Arrange
         var data = new Matrix<double>(6, 2);
@@ -437,8 +438,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have high normalized mutual information.
     /// </summary>
-    [Fact]
-    public void NormalizedMutualInformation_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMutualInformation_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0, 2.0, 2.0 });
@@ -456,8 +457,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// NMI should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void NormalizedMutualInformation_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedMutualInformation_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -480,8 +481,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have zero variation of information.
     /// </summary>
-    [Fact]
-    public void VariationOfInformation_PerfectAgreement_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task VariationOfInformation_PerfectAgreement_ReturnsZero()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -499,8 +500,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Variation of Information should be non-negative.
     /// </summary>
-    [Fact]
-    public void VariationOfInformation_AlwaysNonNegative()
+    [Fact(Timeout = 120000)]
+    public async Task VariationOfInformation_AlwaysNonNegative()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -518,8 +519,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// VI should be symmetric.
     /// </summary>
-    [Fact]
-    public void VariationOfInformation_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task VariationOfInformation_IsSymmetric()
     {
         // Arrange
         var labels1 = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0, 2.0 });
@@ -542,8 +543,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Jaccard Index = 1.
     /// </summary>
-    [Fact]
-    public void JaccardIndex_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task JaccardIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -561,8 +562,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Jaccard Index should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void JaccardIndex_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task JaccardIndex_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -585,8 +586,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Rand Index = 1.
     /// </summary>
-    [Fact]
-    public void RandIndex_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task RandIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -604,8 +605,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Rand Index should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void RandIndex_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task RandIndex_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -628,8 +629,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Fowlkes-Mallows Index = 1.
     /// </summary>
-    [Fact]
-    public void FowlkesMallowsIndex_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task FowlkesMallowsIndex_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -647,8 +648,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// FMI should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void FowlkesMallowsIndex_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task FowlkesMallowsIndex_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -671,8 +672,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have V-Measure = 1.
     /// </summary>
-    [Fact]
-    public void VMeasure_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task VMeasure_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -690,8 +691,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// V-Measure should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void VMeasure_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task VMeasure_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -714,8 +715,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Homogeneity = 1.
     /// </summary>
-    [Fact]
-    public void Homogeneity_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Homogeneity_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -733,8 +734,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Completeness = 1.
     /// </summary>
-    [Fact]
-    public void Completeness_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Completeness_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -756,8 +757,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have Purity = 1.
     /// </summary>
-    [Fact]
-    public void Purity_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task Purity_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -775,8 +776,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Purity should be in range [0, 1].
     /// </summary>
-    [Fact]
-    public void Purity_AlwaysInValidRange()
+    [Fact(Timeout = 120000)]
+    public async Task Purity_AlwaysInValidRange()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
@@ -799,8 +800,8 @@ public class ClusteringMetricsIntegrationTests
     /// <summary>
     /// Perfect agreement should have F-Measure = 1.
     /// </summary>
-    [Fact]
-    public void FMeasure_PerfectAgreement_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task FMeasure_PerfectAgreement_ReturnsOne()
     {
         // Arrange
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
@@ -819,8 +820,8 @@ public class ClusteringMetricsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
-    public void AdjustedRandIndex_FloatType_ReturnsCorrectValue()
+    [Fact(Timeout = 120000)]
+    public async Task AdjustedRandIndex_FloatType_ReturnsCorrectValue()
     {
         // Arrange
         var trueLabels = new Vector<float>(new[] { 0.0f, 0.0f, 1.0f, 1.0f });
@@ -835,8 +836,8 @@ public class ClusteringMetricsIntegrationTests
         Assert.Equal(1.0, score, 1e-5);
     }
 
-    [Fact]
-    public void SilhouetteScore_FloatType_ReturnsValidValue()
+    [Fact(Timeout = 120000)]
+    public async Task SilhouetteScore_FloatType_ReturnsValidValue()
     {
         // Arrange
         var data = new Matrix<float>(4, 2);

@@ -1,6 +1,7 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -125,8 +126,8 @@ public class NormalDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void NormalDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task NormalDecomposition_Invert_IdentityMatrix_ReturnsIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);

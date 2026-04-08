@@ -6,6 +6,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
 
@@ -19,8 +20,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region AutoMLParameterSampler Tests
 
-    [Fact]
-    public void ParameterSampler_IntegerRange_StaysInBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_IntegerRange_StaysInBounds()
     {
         var random = RandomHelper.CreateSeededRandom(42);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -43,8 +44,8 @@ public class AutoMLCoreComponentsIntegrationTests
         }
     }
 
-    [Fact]
-    public void ParameterSampler_FloatRange_StaysInBounds()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_FloatRange_StaysInBounds()
     {
         var random = RandomHelper.CreateSeededRandom(137);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -67,8 +68,8 @@ public class AutoMLCoreComponentsIntegrationTests
         }
     }
 
-    [Fact]
-    public void ParameterSampler_LogScale_ConcentratesInLowerRange()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_LogScale_ConcentratesInLowerRange()
     {
         var random = RandomHelper.CreateSeededRandom(173);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -102,8 +103,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.True(belowMedian > 800, $"Log scale should concentrate values below median, but only {belowMedian}/1000 were");
     }
 
-    [Fact]
-    public void ParameterSampler_BooleanType_ReturnsTrueOrFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_BooleanType_ReturnsTrueOrFalse()
     {
         var random = RandomHelper.CreateSeededRandom(43);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -127,8 +128,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.True(sawFalse, "Boolean sampler should produce false at least once in 100 trials");
     }
 
-    [Fact]
-    public void ParameterSampler_Categorical_OnlyFromAllowedValues()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_Categorical_OnlyFromAllowedValues()
     {
         var random = RandomHelper.CreateSeededRandom(59);
         var allowed = new List<object> { "relu", "gelu", "silu", "tanh" };
@@ -156,8 +157,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.True(seen.Count >= 3, $"Only saw {seen.Count} categories in 100 trials");
     }
 
-    [Fact]
-    public void ParameterSampler_CategoricalWithNullOrEmptyList_FallsBackToDefault()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_CategoricalWithNullOrEmptyList_FallsBackToDefault()
     {
         var random = RandomHelper.CreateSeededRandom(67);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -174,8 +175,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal("adam", sample["optimizer"]);
     }
 
-    [Fact]
-    public void ParameterSampler_IntegerWithStep_QuantizedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_IntegerWithStep_QuantizedCorrectly()
     {
         var random = RandomHelper.CreateSeededRandom(71);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -199,8 +200,8 @@ public class AutoMLCoreComponentsIntegrationTests
         }
     }
 
-    [Fact]
-    public void ParameterSampler_FloatWithStep_QuantizedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_FloatWithStep_QuantizedCorrectly()
     {
         var random = RandomHelper.CreateSeededRandom(73);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -228,8 +229,8 @@ public class AutoMLCoreComponentsIntegrationTests
         }
     }
 
-    [Fact]
-    public void ParameterSampler_MultipleParameters_AllPresent()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_MultipleParameters_AllPresent()
     {
         var random = RandomHelper.CreateSeededRandom(79);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -256,8 +257,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.IsType<string>(sample["act"]);
     }
 
-    [Fact]
-    public void ParameterSampler_Deterministic_SameSeedSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_Deterministic_SameSeedSameResult()
     {
         var searchSpace = new Dictionary<string, ParameterRange>
         {
@@ -275,8 +276,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal((int)s1["epochs"], (int)s2["epochs"]);
     }
 
-    [Fact]
-    public void ParameterSampler_NullRandom_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_NullRandom_Throws()
     {
         var searchSpace = new Dictionary<string, ParameterRange>();
 
@@ -284,8 +285,8 @@ public class AutoMLCoreComponentsIntegrationTests
             AutoMLParameterSampler.Sample(null!, searchSpace));
     }
 
-    [Fact]
-    public void ParameterSampler_NullSearchSpace_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_NullSearchSpace_Throws()
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
@@ -293,8 +294,8 @@ public class AutoMLCoreComponentsIntegrationTests
             AutoMLParameterSampler.Sample(random, null!));
     }
 
-    [Fact]
-    public void ParameterSampler_EqualMinMax_ReturnsSingleValue()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_EqualMinMax_ReturnsSingleValue()
     {
         var random = RandomHelper.CreateSeededRandom(83);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -311,8 +312,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(42, (int)sample["fixed"]);
     }
 
-    [Fact]
-    public void ParameterSampler_SwappedMinMax_StillWorks()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterSampler_SwappedMinMax_StillWorks()
     {
         var random = RandomHelper.CreateSeededRandom(89);
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -335,8 +336,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region ParameterRange Tests
 
-    [Fact]
-    public void ParameterRange_Clone_DeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRange_Clone_DeepCopy()
     {
         var original = new ParameterRange
         {
@@ -365,8 +366,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(3, original.CategoricalValues?.Count);
     }
 
-    [Fact]
-    public void ParameterRange_Clone_NullCategoricalValues_HandledGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRange_Clone_NullCategoricalValues_HandledGracefully()
     {
         var original = new ParameterRange
         {
@@ -386,8 +387,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region TrialResult Tests
 
-    [Fact]
-    public void TrialResult_DefaultValues()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_DefaultValues()
     {
         var result = new TrialResult();
 
@@ -400,8 +401,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Empty(result.Parameters);
     }
 
-    [Fact]
-    public void TrialResult_Clone_DeepCopy()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_Clone_DeepCopy()
     {
         var original = new TrialResult
         {
@@ -441,8 +442,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(0.01, original.Parameters["lr"]);
     }
 
-    [Fact]
-    public void TrialResult_CloneRedacted_HidesParameters()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_CloneRedacted_HidesParameters()
     {
         var original = new TrialResult
         {
@@ -471,8 +472,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Null(redacted.Metadata);
     }
 
-    [Fact]
-    public void TrialResult_Clone_ArrayParameter_DeepCopied()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_Clone_ArrayParameter_DeepCopied()
     {
         var original = new TrialResult
         {
@@ -498,8 +499,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(128, originalArray[0]);
     }
 
-    [Fact]
-    public void TrialResult_FailedTrial_PropertiesCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task TrialResult_FailedTrial_PropertiesCorrect()
     {
         var result = new TrialResult
         {
@@ -518,8 +519,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region Architecture Tests
 
-    [Fact]
-    public void Architecture_AddOperation_UpdatesNodeCount()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_AddOperation_UpdatesNodeCount()
     {
         var arch = new Architecture<double>();
 
@@ -533,8 +534,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(4, arch.NodeCount); // no change, already 4
     }
 
-    [Fact]
-    public void Architecture_Operations_TrackCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_Operations_TrackCorrectly()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -547,8 +548,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(1, arch.Operations[0].ToNode);
     }
 
-    [Fact]
-    public void Architecture_GetDescription_FormatsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_GetDescription_FormatsCorrectly()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -561,8 +562,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Contains("avgpool3x3", desc);
     }
 
-    [Fact]
-    public void Architecture_NodeChannels_CanBeSet()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_NodeChannels_CanBeSet()
     {
         var arch = new Architecture<double>();
         arch.AddOperation(1, 0, "conv3x3");
@@ -573,8 +574,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(16, arch.NodeChannels[1]);
     }
 
-    [Fact]
-    public void Architecture_EmptyOperations_HasZeroNodes()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_EmptyOperations_HasZeroNodes()
     {
         var arch = new Architecture<double>();
 
@@ -586,8 +587,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region SearchSpaceBase Tests
 
-    [Fact]
-    public void SearchSpaceBase_DefaultOperations_HasStandardSet()
+    [Fact(Timeout = 120000)]
+    public async Task SearchSpaceBase_DefaultOperations_HasStandardSet()
     {
         var space = new SearchSpaceBase<double>();
 
@@ -599,8 +600,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(5, space.Operations.Count);
     }
 
-    [Fact]
-    public void SearchSpaceBase_DefaultProperties()
+    [Fact(Timeout = 120000)]
+    public async Task SearchSpaceBase_DefaultProperties()
     {
         var space = new SearchSpaceBase<double>();
 
@@ -609,8 +610,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(1, space.OutputChannels);
     }
 
-    [Fact]
-    public void SearchSpaceBase_CustomOperations_Settable()
+    [Fact(Timeout = 120000)]
+    public async Task SearchSpaceBase_CustomOperations_Settable()
     {
         var space = new SearchSpaceBase<double>
         {
@@ -631,8 +632,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region AutoMLBudgetDefaults Tests
 
-    [Fact]
-    public void BudgetDefaults_CI_Preset()
+    [Fact(Timeout = 120000)]
+    public async Task BudgetDefaults_CI_Preset()
     {
         var (timeLimit, trialLimit) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.CI);
 
@@ -640,8 +641,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(10, trialLimit);
     }
 
-    [Fact]
-    public void BudgetDefaults_Fast_Preset()
+    [Fact(Timeout = 120000)]
+    public async Task BudgetDefaults_Fast_Preset()
     {
         var (timeLimit, trialLimit) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.Fast);
 
@@ -649,8 +650,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(30, trialLimit);
     }
 
-    [Fact]
-    public void BudgetDefaults_Standard_Preset()
+    [Fact(Timeout = 120000)]
+    public async Task BudgetDefaults_Standard_Preset()
     {
         var (timeLimit, trialLimit) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.Standard);
 
@@ -658,8 +659,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(100, trialLimit);
     }
 
-    [Fact]
-    public void BudgetDefaults_Thorough_Preset()
+    [Fact(Timeout = 120000)]
+    public async Task BudgetDefaults_Thorough_Preset()
     {
         var (timeLimit, trialLimit) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.Thorough);
 
@@ -667,8 +668,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Equal(300, trialLimit);
     }
 
-    [Fact]
-    public void BudgetDefaults_PresetsHaveIncreasingLimits()
+    [Fact(Timeout = 120000)]
+    public async Task BudgetDefaults_PresetsHaveIncreasingLimits()
     {
         var (ciTime, ciTrials) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.CI);
         var (fastTime, fastTrials) = AutoMLBudgetDefaults.Resolve(AutoMLBudgetPreset.Fast);
@@ -688,8 +689,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region CompressionOptimizer Tests
 
-    [Fact]
-    public void CompressionOptimizer_ConstructsWithDefaults()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptimizer_ConstructsWithDefaults()
     {
         var optimizer = new CompressionOptimizer<double>();
 
@@ -698,8 +699,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Null(optimizer.BestTrial);
     }
 
-    [Fact]
-    public void CompressionOptimizer_ConstructsWithOptions()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptimizer_ConstructsWithOptions()
     {
         var options = new CompressionOptimizerOptions
         {
@@ -713,8 +714,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Empty(optimizer.TrialHistory);
     }
 
-    [Fact]
-    public void CompressionOptimizer_Optimize_RunsTrials()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptimizer_Optimize_RunsTrials()
     {
         var options = new CompressionOptimizerOptions
         {
@@ -735,8 +736,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.NotNull(optimizer.BestTrial);
     }
 
-    [Fact]
-    public void CompressionOptimizer_Deterministic_SameSeedSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task CompressionOptimizer_Deterministic_SameSeedSameResult()
     {
         var weights = new Vector<double>(Enumerable.Range(0, 50).Select(i => (double)i).ToArray());
         Func<Vector<double>, double> evaluator = w => 0.85;
@@ -754,8 +755,8 @@ public class AutoMLCoreComponentsIntegrationTests
 
     #region End-to-End AutoML Search Space Tests
 
-    [Fact]
-    public void EndToEnd_DefineSearchSpace_SampleAndRecord()
+    [Fact(Timeout = 120000)]
+    public async Task EndToEnd_DefineSearchSpace_SampleAndRecord()
     {
         // Define a realistic search space for a neural network
         var searchSpace = new Dictionary<string, ParameterRange>
@@ -833,8 +834,8 @@ public class AutoMLCoreComponentsIntegrationTests
         Assert.Empty(redacted.Parameters);
     }
 
-    [Fact]
-    public void Architecture_BuildAndDescribe_FullPipeline()
+    [Fact(Timeout = 120000)]
+    public async Task Architecture_BuildAndDescribe_FullPipeline()
     {
         var arch = new Architecture<double>();
 

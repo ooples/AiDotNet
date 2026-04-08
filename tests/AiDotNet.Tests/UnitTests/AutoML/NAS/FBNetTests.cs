@@ -4,6 +4,7 @@ using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 {
@@ -12,8 +13,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class FBNetTests
     {
-        [Fact]
-        public void FBNet_Constructor_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -23,8 +24,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(fbnet);
         }
 
-        [Fact]
-        public void FBNet_GetArchitectureParameters_ReturnsCorrectCount()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GetArchitectureParameters_ReturnsCorrectCount()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -38,8 +39,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(15, params_.Count);
         }
 
-        [Fact]
-        public void FBNet_GetTemperature_ReturnsInitialValue()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GetTemperature_ReturnsInitialValue()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -52,8 +53,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5.0, temp);
         }
 
-        [Fact]
-        public void FBNet_AnnealTemperature_DecreasesTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_AnnealTemperature_DecreasesTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -68,8 +69,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(midTemp < initialTemp);
         }
 
-        [Fact]
-        public void FBNet_GumbelSoftmax_ReturnsProbabilities()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GumbelSoftmax_ReturnsProbabilities()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -87,8 +88,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(theta.Length, probs.Length);
         }
 
-        [Fact]
-        public void FBNet_GumbelSoftmax_HardMode_ReturnsOneHot()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GumbelSoftmax_HardMode_ReturnsOneHot()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -108,8 +109,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(sum - 1.0) < 0.01);
         }
 
-        [Fact]
-        public void FBNet_ComputeExpectedLatency_ReturnsNonNegativeValue()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_ComputeExpectedLatency_ReturnsNonNegativeValue()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -122,8 +123,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(latency >= 0.0);
         }
 
-        [Fact]
-        public void FBNet_ComputeTotalLoss_IncludesLatencyPenalty()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_ComputeTotalLoss_IncludesLatencyPenalty()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -137,8 +138,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss > taskLoss - 0.01); // Should include some latency term
         }
 
-        [Fact]
-        public void FBNet_DeriveArchitecture_ReturnsValidArchitecture()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -152,8 +153,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, architecture.Operations.Count);
         }
 
-        [Fact]
-        public void FBNet_MeetsConstraints_ReturnsBoolean()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_MeetsConstraints_ReturnsBoolean()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -166,8 +167,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meetsConstraints || !meetsConstraints);
         }
 
-        [Fact]
-        public void FBNet_GetArchitectureCost_ReturnsValidCost()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GetArchitectureCost_ReturnsValidCost()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -182,8 +183,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact]
-        public void FBNet_SetConstraints_UpdatesConstraints()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_SetConstraints_UpdatesConstraints()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -203,8 +204,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meetsConstraints || !meetsConstraints);
         }
 
-        [Fact]
-        public void FBNet_WithDifferentPlatforms_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_WithDifferentPlatforms_InitializesCorrectly()
         {
             // Arrange & Act
             var searchSpace = new SearchSpaceBase<double>();
@@ -218,8 +219,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(fbnetEdge);
         }
 
-        [Fact]
-        public void FBNet_GetArchitectureGradients_MatchesParameters()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GetArchitectureGradients_MatchesParameters()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -239,8 +240,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
-        public void FBNet_SingleLayer_InitializesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_SingleLayer_InitializesCorrectly()
         {
             // Arrange & Act - minimal numLayers
             var searchSpace = new SearchSpaceBase<double>();
@@ -252,8 +253,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Single(params_);
         }
 
-        [Fact]
-        public void FBNet_AnnealTemperature_AtStepZero_ReturnsInitialTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_AnnealTemperature_AtStepZero_ReturnsInitialTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -267,8 +268,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp >= 4.9); // Should be very close to 5.0
         }
 
-        [Fact]
-        public void FBNet_AnnealTemperature_AtFinalStep_ReturnsMinTemperature()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_AnnealTemperature_AtFinalStep_ReturnsMinTemperature()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -282,8 +283,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp < 5.0);
         }
 
-        [Fact]
-        public void FBNet_AnnealTemperature_BeyondTotalSteps_HandlesGracefully()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_AnnealTemperature_BeyondTotalSteps_HandlesGracefully()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -297,8 +298,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp >= 0.0);
         }
 
-        [Fact]
-        public void FBNet_GumbelSoftmax_SingleElementVector_ReturnsOne()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GumbelSoftmax_SingleElementVector_ReturnsOne()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -314,8 +315,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(probs[0] - 1.0) < 0.01);
         }
 
-        [Fact]
-        public void FBNet_GumbelSoftmax_AllZeroLogits_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_GumbelSoftmax_AllZeroLogits_HandlesCorrectly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -334,8 +335,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(sum - 1.0) < 0.01);
         }
 
-        [Fact]
-        public void FBNet_ZeroLatencyWeight_TaskLossOnly()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_ZeroLatencyWeight_TaskLossOnly()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -349,8 +350,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(totalLoss - taskLoss) < 0.01);
         }
 
-        [Fact]
-        public void FBNet_HighLatencyWeight_DominatedByLatency()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_HighLatencyWeight_DominatedByLatency()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -364,8 +365,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss > taskLoss);
         }
 
-        [Fact]
-        public void FBNet_DeriveArchitecture_SingleLayer_ReturnsOneOperation()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_DeriveArchitecture_SingleLayer_ReturnsOneOperation()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -379,8 +380,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Single(architecture.Operations);
         }
 
-        [Fact]
-        public void FBNet_SetConstraints_VeryTightConstraints_StillWorks()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_SetConstraints_VeryTightConstraints_StillWorks()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();
@@ -400,8 +401,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meetsConstraints); // Likely won't meet very tight constraints
         }
 
-        [Fact]
-        public void FBNet_SetConstraints_VeryLooseConstraints_Satisfied()
+        [Fact(Timeout = 60000)]
+        public async Task FBNet_SetConstraints_VeryLooseConstraints_Satisfied()
         {
             // Arrange
             var searchSpace = new SearchSpaceBase<double>();

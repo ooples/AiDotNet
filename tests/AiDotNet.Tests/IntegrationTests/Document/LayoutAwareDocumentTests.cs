@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Document;
 
@@ -35,16 +36,16 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLM Tests
 
-    [Fact]
-    public void LayoutLM_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLM<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LayoutLM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLM<double>(arch);
@@ -55,8 +56,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LayoutLM_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLM<double>(arch);
@@ -68,16 +69,16 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLMv2 Tests
 
-    [Fact]
-    public void LayoutLMv2_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv2_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv2<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LayoutLMv2_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv2_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv2<double>(arch);
@@ -88,8 +89,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LayoutLMv2_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv2_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv2<double>(arch);
@@ -101,16 +102,16 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLMv3 Tests
 
-    [Fact]
-    public void LayoutLMv3_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv3_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv3<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LayoutLMv3_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv3_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv3<double>(arch);
@@ -121,8 +122,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LayoutLMv3_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutLMv3_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LayoutLMv3<double>(arch);
@@ -134,16 +135,16 @@ public class LayoutAwareDocumentTests
 
     #region LayoutXLM Tests
 
-    [Fact]
-    public void LayoutXLM_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutXLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LayoutXLM<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LayoutXLM_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutXLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LayoutXLM<double>(arch);
@@ -154,8 +155,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LayoutXLM_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LayoutXLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LayoutXLM<double>(arch);
@@ -167,16 +168,16 @@ public class LayoutAwareDocumentTests
 
     #region DocFormer Tests
 
-    [Fact]
-    public void DocFormer_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DocFormer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DocFormer<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DocFormer_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DocFormer_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new DocFormer<double>(arch);
@@ -187,8 +188,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DocFormer_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DocFormer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DocFormer<double>(arch);
@@ -200,16 +201,16 @@ public class LayoutAwareDocumentTests
 
     #region DiT Tests
 
-    [Fact]
-    public void DiT_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new DiT<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void DiT_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new DiT<double>(arch, imageSize: 64);
@@ -220,8 +221,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void DiT_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new DiT<double>(arch, imageSize: 64);
@@ -233,16 +234,16 @@ public class LayoutAwareDocumentTests
 
     #region LiLT Tests
 
-    [Fact]
-    public void LiLT_NativeConstruction_Succeeds()
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
         var model = new LiLT<double>(arch);
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void LiLT_Predict_ReturnsOutput()
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
         var model = new LiLT<double>(arch);
@@ -253,8 +254,8 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
-    public void LiLT_GetModelMetadata_ReturnsValidData()
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
         var model = new LiLT<double>(arch);
@@ -266,8 +267,8 @@ public class LayoutAwareDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
-    public void AllLayoutAwareModels_RequiresOCR_IsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task AllLayoutAwareModels_RequiresOCR_IsTrue()
     {
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
@@ -287,8 +288,8 @@ public class LayoutAwareDocumentTests
         }
     }
 
-    [Fact]
-    public void DiT_RequiresOCR_IsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
         var model = new DiT<double>(arch, imageSize: 64);

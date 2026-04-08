@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Audio.Features;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.Features
 {
@@ -22,8 +23,8 @@ namespace AiDotNet.Tests.Audio.Features
             return audio;
         }
 
-        [Fact]
-        public void ChromaExtractor_DefaultOptions_Extracts12PitchClasses()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaExtractor_DefaultOptions_Extracts12PitchClasses()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();
@@ -37,8 +38,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.True(chroma.Shape[0] > 0, "Should have at least one frame");
         }
 
-        [Fact]
-        public void ChromaExtractor_Name_IsChroma()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaExtractor_Name_IsChroma()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();
@@ -47,8 +48,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("Chroma", extractor.Name);
         }
 
-        [Fact]
-        public void ChromaExtractor_FeatureDimension_Is12()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaExtractor_FeatureDimension_Is12()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();
@@ -57,8 +58,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(12, extractor.FeatureDimension);
         }
 
-        [Fact]
-        public void ChromaExtractor_OutputValues_AreFinite()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaExtractor_OutputValues_AreFinite()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();
@@ -79,8 +80,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void ChromaExtractor_Normalized_ValuesInRange()
+        [Fact(Timeout = 60000)]
+        public async Task ChromaExtractor_Normalized_ValuesInRange()
         {
             // Arrange
             var options = new ChromaOptions { Normalize = true };
@@ -102,8 +103,8 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
-        public void GetPitchClassName_ReturnsCorrectNames()
+        [Fact(Timeout = 60000)]
+        public async Task GetPitchClassName_ReturnsCorrectNames()
         {
             Assert.Equal("C", ChromaExtractor<float>.GetPitchClassName(0));
             Assert.Equal("C#", ChromaExtractor<float>.GetPitchClassName(1));
@@ -119,16 +120,16 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("B", ChromaExtractor<float>.GetPitchClassName(11));
         }
 
-        [Fact]
-        public void GetPitchClassName_WrapsAround()
+        [Fact(Timeout = 60000)]
+        public async Task GetPitchClassName_WrapsAround()
         {
             // Test that indices > 11 wrap around
             Assert.Equal("C", ChromaExtractor<float>.GetPitchClassName(12));
             Assert.Equal("D", ChromaExtractor<float>.GetPitchClassName(14));
         }
 
-        [Fact]
-        public void GetDominantPitchClass_ReturnsMaxIndex()
+        [Fact(Timeout = 60000)]
+        public async Task GetDominantPitchClass_ReturnsMaxIndex()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();
@@ -142,8 +143,8 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(9, dominant); // A = index 9
         }
 
-        [Fact]
-        public void GetDominantPitchClass_ThrowsForWrongLength()
+        [Fact(Timeout = 60000)]
+        public async Task GetDominantPitchClass_ThrowsForWrongLength()
         {
             // Arrange
             var extractor = new ChromaExtractor<float>();

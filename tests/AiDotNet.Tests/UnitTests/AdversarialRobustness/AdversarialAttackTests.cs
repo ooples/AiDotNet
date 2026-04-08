@@ -6,6 +6,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.AdversarialRobustness;
 
@@ -98,8 +99,8 @@ public class AdversarialAttackTests
 
     #region FGSM Attack Tests
 
-    [Fact]
-    public void FGSMAttack_Constructor_WithValidOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_Constructor_WithValidOptions_Initializes()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -113,14 +114,14 @@ public class AdversarialAttackTests
         Assert.Equal(0.1, attack.GetOptions().Epsilon);
     }
 
-    [Fact]
-    public void FGSMAttack_Constructor_WithNullOptions_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_Constructor_WithNullOptions_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() => new FGSMAttack<double, Vector<double>, Vector<double>>(null!));
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialExample_WithNullInput_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialExample_WithNullInput_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -129,8 +130,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(null!, OneHotLabel(0), model));
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialExample_WithNullModel_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialExample_WithNullModel_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -139,8 +140,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(input, OneHotLabel(0), null!));
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -157,8 +158,8 @@ public class AdversarialAttackTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialExample_RespectsBounds()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialExample_RespectsBounds()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -177,8 +178,8 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialExample_PerturbationWithinEpsilon()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialExample_PerturbationWithinEpsilon()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -201,8 +202,8 @@ public class AdversarialAttackTests
         Assert.True(maxPerturbation <= options.Epsilon + 1e-10);
     }
 
-    [Fact]
-    public void FGSMAttack_TargetedAttack_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_TargetedAttack_WorksCorrectly()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -224,8 +225,8 @@ public class AdversarialAttackTests
 
     #region PGD Attack Tests
 
-    [Fact]
-    public void PGDAttack_Constructor_WithValidOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task PGDAttack_Constructor_WithValidOptions_Initializes()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -240,8 +241,8 @@ public class AdversarialAttackTests
         Assert.Equal(40, attack.GetOptions().Iterations);
     }
 
-    [Fact]
-    public void PGDAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
+    [Fact(Timeout = 60000)]
+    public async Task PGDAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -259,8 +260,8 @@ public class AdversarialAttackTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void PGDAttack_GenerateAdversarialExample_RespectsBounds()
+    [Fact(Timeout = 60000)]
+    public async Task PGDAttack_GenerateAdversarialExample_RespectsBounds()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -280,8 +281,8 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void PGDAttack_WithRandomStart_ProducesDifferentResults()
+    [Fact(Timeout = 60000)]
+    public async Task PGDAttack_WithRandomStart_ProducesDifferentResults()
     {
         var options1 = new AdversarialAttackOptions<double>
         {
@@ -321,8 +322,8 @@ public class AdversarialAttackTests
         Assert.True(anyDifferent);
     }
 
-    [Fact]
-    public void PGDAttack_L2Norm_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task PGDAttack_L2Norm_WorksCorrectly()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -344,8 +345,8 @@ public class AdversarialAttackTests
 
     #region C&W Attack Tests
 
-    [Fact]
-    public void CWAttack_Constructor_WithValidOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task CWAttack_Constructor_WithValidOptions_Initializes()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -357,8 +358,8 @@ public class AdversarialAttackTests
         Assert.NotNull(attack);
     }
 
-    [Fact]
-    public void CWAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
+    [Fact(Timeout = 60000)]
+    public async Task CWAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -375,8 +376,8 @@ public class AdversarialAttackTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void CWAttack_GenerateAdversarialExample_RespectsBounds()
+    [Fact(Timeout = 60000)]
+    public async Task CWAttack_GenerateAdversarialExample_RespectsBounds()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -395,8 +396,8 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void CWAttack_TargetedAttack_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task CWAttack_TargetedAttack_WorksCorrectly()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -418,8 +419,8 @@ public class AdversarialAttackTests
 
     #region AutoAttack Tests
 
-    [Fact]
-    public void AutoAttack_Constructor_WithValidOptions_Initializes()
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_Constructor_WithValidOptions_Initializes()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -431,8 +432,8 @@ public class AdversarialAttackTests
         Assert.NotNull(attack);
     }
 
-    [Fact]
-    public void AutoAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_GenerateAdversarialExample_ReturnsValidAdversarial()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -449,8 +450,8 @@ public class AdversarialAttackTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
-    public void AutoAttack_GenerateAdversarialExample_RespectsBounds()
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_GenerateAdversarialExample_RespectsBounds()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -473,8 +474,8 @@ public class AdversarialAttackTests
 
     #region Batch Processing Tests
 
-    [Fact]
-    public void FGSMAttack_GenerateAdversarialBatch_ProcessesAllInputs()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_GenerateAdversarialBatch_ProcessesAllInputs()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -495,8 +496,8 @@ public class AdversarialAttackTests
         Assert.Equal(4, adversarialBatch[0].Length);
     }
 
-    [Fact]
-    public void GenerateAdversarialBatch_NullInputs_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task GenerateAdversarialBatch_NullInputs_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -506,8 +507,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(null!, labels, model));
     }
 
-    [Fact]
-    public void GenerateAdversarialBatch_NullLabels_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task GenerateAdversarialBatch_NullLabels_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -522,8 +523,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(inputs, null!, model));
     }
 
-    [Fact]
-    public void GenerateAdversarialBatch_MismatchedLabelCount_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task GenerateAdversarialBatch_MismatchedLabelCount_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -543,8 +544,8 @@ public class AdversarialAttackTests
 
     #region Perturbation Calculation Tests
 
-    [Fact]
-    public void CalculatePerturbation_ReturnsCorrectDifference()
+    [Fact(Timeout = 60000)]
+    public async Task CalculatePerturbation_ReturnsCorrectDifference()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -558,8 +559,8 @@ public class AdversarialAttackTests
         Assert.Equal(0.1, perturbation[2], 5);
     }
 
-    [Fact]
-    public void CalculatePerturbation_NullOriginal_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculatePerturbation_NullOriginal_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -568,8 +569,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(null!, adversarial));
     }
 
-    [Fact]
-    public void CalculatePerturbation_NullAdversarial_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculatePerturbation_NullAdversarial_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -578,8 +579,8 @@ public class AdversarialAttackTests
         Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(original, null!));
     }
 
-    [Fact]
-    public void CalculatePerturbation_DifferentLengths_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task CalculatePerturbation_DifferentLengths_ThrowsException()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -593,8 +594,8 @@ public class AdversarialAttackTests
 
     #region Serialization Tests
 
-    [Fact]
-    public void FGSMAttack_Serialize_ReturnsNonEmptyBytes()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_Serialize_ReturnsNonEmptyBytes()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -609,8 +610,8 @@ public class AdversarialAttackTests
         Assert.NotEmpty(bytes);
     }
 
-    [Fact]
-    public void FGSMAttack_Deserialize_RestoresOptions()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_Deserialize_RestoresOptions()
     {
         var originalOptions = new AdversarialAttackOptions<double>
         {
@@ -629,16 +630,16 @@ public class AdversarialAttackTests
         Assert.Equal(50, restored.GetOptions().Iterations);
     }
 
-    [Fact]
-    public void FGSMAttack_Deserialize_NullData_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_Deserialize_NullData_ThrowsException()
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => attack.Deserialize(null!));
     }
 
-    [Fact]
-    public void FGSMAttack_SaveAndLoadModel_PreservesState()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_SaveAndLoadModel_PreservesState()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"attack_test_{Guid.NewGuid()}.json");
         try
@@ -666,16 +667,16 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void SaveModel_NullPath_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task SaveModel_NullPath_ThrowsException()
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentException>(() => attack.SaveModel(null!));
     }
 
-    [Fact]
-    public void LoadModel_NonExistentFile_ThrowsException()
+    [Fact(Timeout = 60000)]
+    public async Task LoadModel_NonExistentFile_ThrowsException()
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
@@ -686,8 +687,8 @@ public class AdversarialAttackTests
 
     #region Reset Tests
 
-    [Fact]
-    public void Reset_DoesNotThrow()
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DoesNotThrow()
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
@@ -700,8 +701,8 @@ public class AdversarialAttackTests
 
     #region Edge Cases
 
-    [Fact]
-    public void FGSMAttack_ZeroEpsilon_ReturnsOriginalInput()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_ZeroEpsilon_ReturnsOriginalInput()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -719,8 +720,8 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void FGSMAttack_LargeEpsilon_ClipsToValidRange()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_LargeEpsilon_ClipsToValidRange()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -738,8 +739,8 @@ public class AdversarialAttackTests
         }
     }
 
-    [Fact]
-    public void FGSMAttack_SingleDimensionInput_WorksCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_SingleDimensionInput_WorksCorrectly()
     {
         var options = new AdversarialAttackOptions<double>
         {
@@ -754,8 +755,8 @@ public class AdversarialAttackTests
         Assert.Single(adversarial.ToArray());
     }
 
-    [Fact]
-    public void FGSMAttack_LargeInput_HandlesCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FGSMAttack_LargeInput_HandlesCorrectly()
     {
         var options = new AdversarialAttackOptions<double>
         {

@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -16,8 +17,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region Huber Weights
 
-    [Fact]
-    public void HuberWeights_SmallResiduals_WeightIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_SmallResiduals_WeightIsOne()
     {
         // Huber: if |r| <= k, weight = 1
         // k = 1.345 (common default)
@@ -29,8 +30,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
             Assert.Equal(1.0, weights[i], Tolerance);
     }
 
-    [Fact]
-    public void HuberWeights_LargeResiduals_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_LargeResiduals_HandCalculated()
     {
         // Huber: if |r| > k, weight = k / |r|
         // k = 1.345
@@ -46,8 +47,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(k / 10.0, weights[2], Tolerance);
     }
 
-    [Fact]
-    public void HuberWeights_MixedResiduals_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_MixedResiduals_HandCalculated()
     {
         // Mix of small and large residuals
         // k = 2.0
@@ -64,8 +65,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(2.0 / 4.0, weights[3], Tolerance);
     }
 
-    [Fact]
-    public void HuberWeights_ZeroResidual_WeightIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_ZeroResidual_WeightIsOne()
     {
         var residuals = new Vector<double>([0.0]);
         var weights = WeightFunctionHelper<double>.CalculateWeights(
@@ -74,8 +75,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void HuberWeights_AtBoundary_WeightIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_AtBoundary_WeightIsOne()
     {
         // At exactly k, weight should be 1
         double k = 2.0;
@@ -87,8 +88,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, weights[1], Tolerance);
     }
 
-    [Fact]
-    public void HuberWeights_AlwaysPositive()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_AlwaysPositive()
     {
         var residuals = new Vector<double>([0.1, -0.5, 3.0, -10.0, 100.0]);
         var weights = WeightFunctionHelper<double>.CalculateWeights(
@@ -102,8 +103,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region Bisquare Weights
 
-    [Fact]
-    public void BisquareWeights_SmallResiduals_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_SmallResiduals_HandCalculated()
     {
         // Bisquare: if |r| <= k, weight = (1 - (r/k)^2)^2
         // k = 4.685
@@ -120,8 +121,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(expected, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void BisquareWeights_LargeResiduals_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_LargeResiduals_Zero()
     {
         // Bisquare: if |r| > k, weight = 0
         double k = 4.685;
@@ -134,8 +135,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(0.0, weights[2], Tolerance);
     }
 
-    [Fact]
-    public void BisquareWeights_ZeroResidual_WeightIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_ZeroResidual_WeightIsOne()
     {
         // r=0: u=0, weight = (1-0)^2 = 1
         var residuals = new Vector<double>([0.0]);
@@ -145,8 +146,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void BisquareWeights_AtBoundary_WeightIsZero()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_AtBoundary_WeightIsZero()
     {
         // At exactly k: u = 1, weight = (1-1)^2 = 0
         double k = 3.0;
@@ -158,8 +159,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(0.0, weights[1], Tolerance);
     }
 
-    [Fact]
-    public void BisquareWeights_MultipleValues_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_MultipleValues_HandCalculated()
     {
         // k = 3.0
         // r = [0, 1.5, 2.0, 3.0, 4.0]
@@ -178,8 +179,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(0.0, weights[4], Tolerance);
     }
 
-    [Fact]
-    public void BisquareWeights_NegativeResiduals_SameAsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task BisquareWeights_NegativeResiduals_SameAsPositive()
     {
         // Bisquare uses |r|, so positive and negative residuals give same weight
         double k = 3.0;
@@ -199,8 +200,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region Andrews Weights
 
-    [Fact]
-    public void AndrewsWeights_SmallResiduals_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task AndrewsWeights_SmallResiduals_HandCalculated()
     {
         // Andrews: if |r| <= k*pi, weight = sin(r/k) / (r/k)
         // k = 1.339
@@ -217,8 +218,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(expected, weights[0], Tolerance);
     }
 
-    [Fact]
-    public void AndrewsWeights_LargeResiduals_Zero()
+    [Fact(Timeout = 120000)]
+    public async Task AndrewsWeights_LargeResiduals_Zero()
     {
         // Andrews: if |r| > k*pi, weight = 0
         double k = 1.339;
@@ -232,8 +233,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(0.0, weights[2], Tolerance);
     }
 
-    [Fact]
-    public void AndrewsWeights_SincProperty()
+    [Fact(Timeout = 120000)]
+    public async Task AndrewsWeights_SincProperty()
     {
         // Andrews weight is the sinc function: sin(r/k) / (r/k)
         // At small values, sinc ≈ 1
@@ -252,8 +253,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AndrewsWeights_NegativeResiduals_SameAsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task AndrewsWeights_NegativeResiduals_SameAsPositive()
     {
         // Andrews uses |r| for boundary check, but sin(r/k)/(r/k) uses signed r
         // sin(-x)/(-x) = (-sin(x))/(-x) = sin(x)/x
@@ -275,8 +276,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region Weight Function Cross-Comparisons
 
-    [Fact]
-    public void HuberWeights_GreaterThanOrEqual_BisquareWeights()
+    [Fact(Timeout = 120000)]
+    public async Task HuberWeights_GreaterThanOrEqual_BisquareWeights()
     {
         // Huber weights are always >= Bisquare weights for the same residual
         // Because Bisquare goes to 0 for large residuals, while Huber only goes to k/|r|
@@ -296,8 +297,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void AllWeightFunctions_ZeroResidual_WeightIsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AllWeightFunctions_ZeroResidual_WeightIsOne()
     {
         var residuals = new Vector<double>([0.0]);
         double k = 2.0;
@@ -311,8 +312,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, bisquare[0], Tolerance);
     }
 
-    [Fact]
-    public void InvalidWeightFunction_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task InvalidWeightFunction_Throws()
     {
         var residuals = new Vector<double>([1.0]);
         Assert.Throws<ArgumentException>(() =>
@@ -323,8 +324,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region TimeSeriesHelper - DifferenceSeries
 
-    [Fact]
-    public void DifferenceSeries_Order1_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_Order1_HandCalculated()
     {
         // y = [10, 13, 15, 19]
         // d=1: [13-10, 15-13, 19-15] = [3, 2, 4]
@@ -337,8 +338,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(4.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_Order2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_Order2_HandCalculated()
     {
         // y = [1, 4, 9, 16, 25]
         // d=1: [3, 5, 7, 9]
@@ -352,8 +353,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(2.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_Order0_Unchanged()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_Order0_Unchanged()
     {
         var y = new Vector<double>([1.0, 2.0, 3.0]);
         var result = TimeSeriesHelper<double>.DifferenceSeries(y, 0);
@@ -364,8 +365,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_ConstantSeries_AllZeros()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_ConstantSeries_AllZeros()
     {
         var y = new Vector<double>([5.0, 5.0, 5.0, 5.0]);
         var result = TimeSeriesHelper<double>.DifferenceSeries(y, 1);
@@ -375,8 +376,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
             Assert.Equal(0.0, result[i], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_LinearTrend_ConstantFirstDifference()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_LinearTrend_ConstantFirstDifference()
     {
         // Linear: y = 2 + 3*t → first difference = 3 everywhere
         var y = new Vector<double>([2.0, 5.0, 8.0, 11.0, 14.0]);
@@ -387,8 +388,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
             Assert.Equal(3.0, result[i], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_QuadraticTrend_ConstantSecondDifference()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_QuadraticTrend_ConstantSecondDifference()
     {
         // Quadratic: y = t^2 = [0, 1, 4, 9, 16, 25]
         // First difference: [1, 3, 5, 7, 9]
@@ -401,8 +402,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
             Assert.Equal(2.0, result[i], Tolerance);
     }
 
-    [Fact]
-    public void DifferenceSeries_ReducesLength()
+    [Fact(Timeout = 120000)]
+    public async Task DifferenceSeries_ReducesLength()
     {
         // Differencing d times reduces length by d
         var y = new Vector<double>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
@@ -419,8 +420,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region TimeSeriesHelper - AutoCorrelation
 
-    [Fact]
-    public void AutoCorrelation_Lag0_IsOne()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCorrelation_Lag0_IsOne()
     {
         // ACF(0) should be sum(y[i]*y[i]) / sum(y[i]*y[i]) = 1
         // Note: the implementation computes sum(y[i]*y[i+0]) / sum(y[i]^2) for i in [0,n-1]
@@ -430,8 +431,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, acf, Tolerance);
     }
 
-    [Fact]
-    public void AutoCorrelation_HandCalculated_Lag1()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCorrelation_HandCalculated_Lag1()
     {
         // y = [1, 2, 3, 4, 5]
         // Lag 1, i goes from 0 to n-lag-1 = 3
@@ -445,8 +446,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(40.0 / 30.0, acf, Tolerance);
     }
 
-    [Fact]
-    public void AutoCorrelation_HandCalculated_Lag2()
+    [Fact(Timeout = 120000)]
+    public async Task AutoCorrelation_HandCalculated_Lag2()
     {
         // y = [1, 2, 3, 4, 5]
         // Lag 2, i goes from 0 to 2
@@ -459,8 +460,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(26.0 / 14.0, acf, Tolerance);
     }
 
-    [Fact]
-    public void MultipleAutoCorrelation_LengthCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleAutoCorrelation_LengthCorrect()
     {
         var y = new Vector<double>([1.0, 2.0, 3.0, 4.0, 5.0]);
         var acf = TimeSeriesHelper<double>.CalculateMultipleAutoCorrelation(y, 3);
@@ -469,8 +470,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(1.0, acf[0], Tolerance); // lag 0 is always 1
     }
 
-    [Fact]
-    public void MultipleAutoCorrelation_ConsistentWithSingle()
+    [Fact(Timeout = 120000)]
+    public async Task MultipleAutoCorrelation_ConsistentWithSingle()
     {
         var y = new Vector<double>([1.0, 3.0, 2.0, 5.0, 4.0, 6.0]);
         var multiAcf = TimeSeriesHelper<double>.CalculateMultipleAutoCorrelation(y, 3);
@@ -486,8 +487,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region TimeSeriesHelper - AR Residuals
 
-    [Fact]
-    public void CalculateARResiduals_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateARResiduals_HandCalculated()
     {
         // y = [1, 2, 3, 4, 5]
         // AR coefficients = [0.5] (order 1)
@@ -506,8 +507,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(3.0, residuals[3], Tolerance);
     }
 
-    [Fact]
-    public void CalculateARResiduals_Order2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateARResiduals_Order2_HandCalculated()
     {
         // y = [1, 2, 3, 4, 5]
         // AR coefficients = [0.5, 0.3] (order 2)
@@ -524,8 +525,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         Assert.Equal(2.1, residuals[2], Tolerance);
     }
 
-    [Fact]
-    public void CalculateARResiduals_PerfectFit_ZeroResiduals()
+    [Fact(Timeout = 120000)]
+    public async Task CalculateARResiduals_PerfectFit_ZeroResiduals()
     {
         // If y follows exact AR(1) with coeff 2.0: y = [1, 2, 4, 8]
         // residuals should be 0 everywhere
@@ -542,8 +543,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
 
     #region SamplingHelper
 
-    [Fact]
-    public void SampleWithoutReplacement_CorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithoutReplacement_CorrectSize()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -557,8 +558,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SampleWithoutReplacement_NoDuplicates()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithoutReplacement_NoDuplicates()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -573,8 +574,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SampleWithoutReplacement_AllIndicesInRange()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithoutReplacement_AllIndicesInRange()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -588,15 +589,15 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SampleWithoutReplacement_SizeExceedsPopulation_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithoutReplacement_SizeExceedsPopulation_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             SamplingHelper.SampleWithoutReplacement(5, 10));
     }
 
-    [Fact]
-    public void SampleWithReplacement_CorrectSize()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithReplacement_CorrectSize()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -610,8 +611,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SampleWithReplacement_AllIndicesInRange()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithReplacement_AllIndicesInRange()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -625,8 +626,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SampleWithReplacement_CanHaveDuplicates()
+    [Fact(Timeout = 120000)]
+    public async Task SampleWithReplacement_CanHaveDuplicates()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -643,8 +644,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CreateBootstrapSamples_CorrectNumberAndSize()
+    [Fact(Timeout = 120000)]
+    public async Task CreateBootstrapSamples_CorrectNumberAndSize()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -661,8 +662,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CreateBootstrapSamples_CustomSize()
+    [Fact(Timeout = 120000)]
+    public async Task CreateBootstrapSamples_CustomSize()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -679,8 +680,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void CreateBootstrapSamples_ContainsOriginalValues()
+    [Fact(Timeout = 120000)]
+    public async Task CreateBootstrapSamples_ContainsOriginalValues()
     {
         SamplingHelper.SetSeed(42);
         try
@@ -698,8 +699,8 @@ public class WeightFunctionAndTimeSeriesHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void SamplingHelper_Seed_Reproducible()
+    [Fact(Timeout = 120000)]
+    public async Task SamplingHelper_Seed_Reproducible()
     {
         SamplingHelper.SetSeed(123);
         int[] first;

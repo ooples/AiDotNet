@@ -1,5 +1,6 @@
 using AiDotNet.TimeSeries.AnomalyDetection;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
@@ -10,16 +11,16 @@ public class LSTMVAETests
 {
     #region Constructor Tests
 
-    [Fact]
-    public void Constructor_WithDefaultOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new LSTMVAE<double>();
 
         Assert.NotNull(model);
     }
 
-    [Fact]
-    public void Constructor_WithCustomOptions_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -40,8 +41,8 @@ public class LSTMVAETests
 
     #region Training Tests
 
-    [Fact]
-    public void Train_WithValidData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithValidData_CompletesWithoutError()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -61,8 +62,8 @@ public class LSTMVAETests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void Train_WithMinimalData_CompletesWithoutError()
+    [Fact(Timeout = 60000)]
+    public async Task Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -86,8 +87,8 @@ public class LSTMVAETests
 
     #region Prediction Tests
 
-    [Fact]
-    public void PredictSingle_AfterTraining_ReturnsFiniteValue()
+    [Fact(Timeout = 60000)]
+    public async Task PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -115,8 +116,8 @@ public class LSTMVAETests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
-    public void Predict_WithMatrix_ReturnsValidPredictions()
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -148,8 +149,8 @@ public class LSTMVAETests
 
     #region Anomaly Detection Tests
 
-    [Fact]
-    public void DetectAnomalies_AfterTraining_ReturnsValidResults()
+    [Fact(Timeout = 60000)]
+    public async Task DetectAnomalies_AfterTraining_ReturnsValidResults()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -181,8 +182,8 @@ public class LSTMVAETests
         Assert.Equal(testData.Rows, anomalies.Length);
     }
 
-    [Fact]
-    public void ComputeAnomalyScores_AfterTraining_ReturnsNonNegativeValues()
+    [Fact(Timeout = 60000)]
+    public async Task ComputeAnomalyScores_AfterTraining_ReturnsNonNegativeValues()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -224,8 +225,8 @@ public class LSTMVAETests
 
     #region Serialization Tests
 
-    [Fact]
-    public void Serialize_AndDeserialize_PreservesModel()
+    [Fact(Timeout = 60000)]
+    public async Task Serialize_AndDeserialize_PreservesModel()
     {
         var options = new LSTMVAEOptions<double>
         {
@@ -264,8 +265,8 @@ public class LSTMVAETests
 
     #region Float Type Tests
 
-    [Fact]
-    public void Constructor_WithFloatType_CreatesValidModel()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new LSTMVAEOptions<float>
         {

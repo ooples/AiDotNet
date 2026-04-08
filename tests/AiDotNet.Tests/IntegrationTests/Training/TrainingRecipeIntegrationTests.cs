@@ -13,6 +13,7 @@ using AiDotNet.Training;
 using AiDotNet.Training.Configuration;
 using AiDotNet.Training.Factories;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.IntegrationTests.Training
 {
@@ -26,8 +27,8 @@ namespace AiDotNetTests.IntegrationTests.Training
         // MODEL FACTORY - Verify specific model types with their unique params
         // ============================================================
 
-        [Fact]
-        public void ModelFactory_ARIMA_WithSpecificPDQ_AppliesParameters()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_ARIMA_WithSpecificPDQ_AppliesParameters()
         {
             // Arrange - ARIMA has unique P, D, Q properties
             var config = new ModelConfig
@@ -51,8 +52,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
         }
 
-        [Fact]
-        public void ModelFactory_ARIMA_DefaultParams_DiffersFromCustomParams()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_ARIMA_DefaultParams_DiffersFromCustomParams()
         {
             // Arrange - create two models: one default, one with custom params
             var defaultConfig = new ModelConfig { Name = "ARIMA" };
@@ -90,8 +91,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(3, customArima.Q);
         }
 
-        [Fact]
-        public void ModelFactory_SARIMA_WithSeasonalParams_AppliesParameters()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_SARIMA_WithSeasonalParams_AppliesParameters()
         {
             // Arrange - SARIMA extends ARIMA with seasonal parameters
             var config = new ModelConfig
@@ -122,8 +123,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(12, (int)seasonalPeriodProp!.GetValue(options)!);
         }
 
-        [Fact]
-        public void ModelFactory_ExponentialSmoothing_WithTrendAndSeasonal_AppliesParameters()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_ExponentialSmoothing_WithTrendAndSeasonal_AppliesParameters()
         {
             // Arrange - ExponentialSmoothing has specific options
             var config = new ModelConfig
@@ -185,8 +186,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(50, predictions.Length);
         }
 
-        [Fact]
-        public void ModelFactory_SARIMA_TrainsAndPredictsWithEnoughData()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_SARIMA_TrainsAndPredictsWithEnoughData()
         {
             // Arrange - SARIMA needs at least 25 samples for default seasonal period
             var config = new ModelConfig { Name = "SARIMA" };
@@ -210,8 +211,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(50, predictions.Length);
         }
 
-        [Fact]
-        public void ModelFactory_VAR_TrainsAndPredictsSuccessfully()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_VAR_TrainsAndPredictsSuccessfully()
         {
             // Arrange
             var config = new ModelConfig { Name = "VAR" };
@@ -237,8 +238,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(50, predictions.Length);
         }
 
-        [Fact]
-        public void ModelFactory_ARMA_TrainsAndPredictsSuccessfully()
+        [Fact(Timeout = 120000)]
+        public async Task ModelFactory_ARMA_TrainsAndPredictsSuccessfully()
         {
             // Arrange
             var config = new ModelConfig { Name = "ARMA" };
@@ -268,8 +269,8 @@ namespace AiDotNetTests.IntegrationTests.Training
         // LOSS FUNCTION FACTORY - Verify specific params change behavior
         // ============================================================
 
-        [Fact]
-        public void LossFunctionFactory_HuberLoss_DifferentDeltas_ProduceDifferentLosses()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_HuberLoss_DifferentDeltas_ProduceDifferentLosses()
         {
             // Arrange - Huber with small delta vs large delta
             var smallDeltaLoss = LossFunctionFactory<double>.Create(
@@ -293,8 +294,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.True(lossLarge >= 0.0);
         }
 
-        [Fact]
-        public void LossFunctionFactory_FocalLoss_DifferentGamma_ProduceDifferentLosses()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_FocalLoss_DifferentGamma_ProduceDifferentLosses()
         {
             // Arrange - Focal loss with different gamma values
             var gamma1 = LossFunctionFactory<double>.Create(
@@ -318,8 +319,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.NotEqual(loss1, loss5);
         }
 
-        [Fact]
-        public void LossFunctionFactory_QuantileLoss_DifferentQuantiles_ProduceDifferentLosses()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_QuantileLoss_DifferentQuantiles_ProduceDifferentLosses()
         {
             // Arrange - predicting at 10th percentile vs 90th percentile
             var q10 = LossFunctionFactory<double>.Create(
@@ -341,8 +342,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.NotEqual(loss10, loss90);
         }
 
-        [Fact]
-        public void LossFunctionFactory_ElasticNet_DifferentL1Ratios_ProduceDifferentLosses()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_ElasticNet_DifferentL1Ratios_ProduceDifferentLosses()
         {
             // Arrange - pure L1-like vs pure L2-like
             var l1Heavy = LossFunctionFactory<double>.Create(
@@ -366,8 +367,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.NotEqual(lossL1, lossL2);
         }
 
-        [Fact]
-        public void LossFunctionFactory_ContrastiveLoss_DifferentMargins_CreateSuccessfully()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_ContrastiveLoss_DifferentMargins_CreateSuccessfully()
         {
             // Arrange & Act - ContrastiveLoss uses a special API (Calculate(Vector, Vector, T))
             // so we verify creation with different margin parameters succeeds
@@ -386,8 +387,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.IsType<ContrastiveLoss<double>>(largeMargin);
         }
 
-        [Fact]
-        public void LossFunctionFactory_MarginLoss_WithCustomMPlusMMinusLambda_Works()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_MarginLoss_WithCustomMPlusMMinusLambda_Works()
         {
             // Arrange - Margin loss with default and custom capsule network parameters
             var defaultLoss = LossFunctionFactory<double>.Create(LossType.Margin);
@@ -413,8 +414,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.NotEqual(defaultValue, customValue);
         }
 
-        [Fact]
-        public void LossFunctionFactory_ScaleInvariantDepth_CustomLambda_Works()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_ScaleInvariantDepth_CustomLambda_Works()
         {
             // Arrange - compare default lambda vs custom lambda
             var defaultLoss = LossFunctionFactory<double>.Create(LossType.ScaleInvariantDepth);
@@ -439,8 +440,8 @@ namespace AiDotNetTests.IntegrationTests.Training
         // OPTIMIZER - Verify specific optimizer types are created
         // ============================================================
 
-        [Fact]
-        public void Trainer_WithAdamOptimizer_CreatesAdamInstance()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithAdamOptimizer_CreatesAdamInstance()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -462,8 +463,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.IsType<AdamOptimizer<double, Matrix<double>, Vector<double>>>(trainer.Optimizer);
         }
 
-        [Fact]
-        public void Trainer_WithGradientDescentOptimizer_CreatesGDInstance()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithGradientDescentOptimizer_CreatesGDInstance()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -485,8 +486,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.IsType<GradientDescentOptimizer<double, Matrix<double>, Vector<double>>>(trainer.Optimizer);
         }
 
-        [Fact]
-        public void Trainer_WithNormalOptimizer_LearningRateIsApplied()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithNormalOptimizer_LearningRateIsApplied()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -509,8 +510,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(0.042, options.InitialLearningRate, 10);
         }
 
-        [Fact]
-        public void Trainer_WithAdamOptimizer_LearningRateIsApplied()
+        [Fact(Timeout = 120000)]
+        public async Task Trainer_WithAdamOptimizer_LearningRateIsApplied()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -570,8 +571,8 @@ namespace AiDotNetTests.IntegrationTests.Training
         // FULL END-TO-END - Specific model + optimizer + loss combos
         // ============================================================
 
-        [Fact]
-        public void EndToEnd_ARIMA_WithAdam_HuberLoss_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_ARIMA_WithAdam_HuberLoss_CompletesTraining()
         {
             // Arrange - full pipeline with specific parameters
             var config = new TrainingRecipeConfig
@@ -633,8 +634,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             }
         }
 
-        [Fact]
-        public void EndToEnd_ExponentialSmoothing_WithGD_FocalLoss_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_ExponentialSmoothing_WithGD_FocalLoss_CompletesTraining()
         {
             // Arrange
             var config = new TrainingRecipeConfig
@@ -687,8 +688,8 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.Equal(0.05, trainer.Optimizer.GetOptions().InitialLearningRate, 10);
         }
 
-        [Fact]
-        public void EndToEnd_AutoRegressive_WithSGD_QuantileLoss_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task EndToEnd_AutoRegressive_WithSGD_QuantileLoss_CompletesTraining()
         {
             // Arrange - AutoRegressive with SGD optimizer and Quantile loss
             var config = new TrainingRecipeConfig
@@ -735,8 +736,8 @@ namespace AiDotNetTests.IntegrationTests.Training
         // YAML FULL PIPELINE - Roundtrip from YAML string to trained model
         // ============================================================
 
-        [Fact]
-        public void YamlEndToEnd_FullRecipeWithAllSections_CompletesTraining()
+        [Fact(Timeout = 120000)]
+        public async Task YamlEndToEnd_FullRecipeWithAllSections_CompletesTraining()
         {
             // Arrange - create CSV data and YAML config
             var csvFile = Path.GetTempFileName();
@@ -803,8 +804,8 @@ trainer:
             }
         }
 
-        [Fact]
-        public void YamlEndToEnd_OptimizerWithLearningRate_PropagatesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task YamlEndToEnd_OptimizerWithLearningRate_PropagatesCorrectly()
         {
             // Arrange - specifically test YAML -> OptimizerConfig.LearningRate -> optimizer.Options.InitialLearningRate
             var csvFile = Path.GetTempFileName();
@@ -852,8 +853,8 @@ trainer:
         // CONFIG DESERIALIZATION - Verify complex YAML maps correctly
         // ============================================================
 
-        [Fact]
-        public void YamlConfig_FullRecipe_AllParamsDeserializeCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task YamlConfig_FullRecipe_AllParamsDeserializeCorrectly()
         {
             // Arrange
             var yaml = @"
@@ -934,8 +935,8 @@ trainer:
         // CSV DATA LOADER - Verify data loading and splitting
         // ============================================================
 
-        [Fact]
-        public void CsvDataLoader_WithLargeDataset_SplitsCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task CsvDataLoader_WithLargeDataset_SplitsCorrectly()
         {
             // Arrange
             var tempFile = Path.GetTempFileName();
@@ -973,8 +974,8 @@ trainer:
             }
         }
 
-        [Fact]
-        public void CsvDataLoader_WithMiddleColumnLabel_ParsesCorrectly()
+        [Fact(Timeout = 120000)]
+        public async Task CsvDataLoader_WithMiddleColumnLabel_ParsesCorrectly()
         {
             // Arrange - label is the second column (index 1)
             var tempFile = Path.GetTempFileName();
@@ -1007,8 +1008,8 @@ trainer:
         // LOSS FUNCTION TYPE VERIFICATION
         // ============================================================
 
-        [Fact]
-        public void LossFunctionFactory_AllCreatableTypes_ReturnCorrectType()
+        [Fact(Timeout = 120000)]
+        public async Task LossFunctionFactory_AllCreatableTypes_ReturnCorrectType()
         {
             // Verify that each loss type returns an instance of the expected class
             Assert.IsType<MeanSquaredErrorLoss<double>>(LossFunctionFactory<double>.Create(LossType.MeanSquaredError));

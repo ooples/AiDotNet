@@ -1,6 +1,7 @@
 using AiDotNet.Distributions;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Distributions;
 
@@ -14,8 +15,8 @@ public class DistributionsIntegrationTests
 
     #region NormalDistribution Tests
 
-    [Fact]
-    public void Normal_PdfAtMean_IsPeak()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_PdfAtMean_IsPeak()
     {
         var dist = new NormalDistribution<double>(0, 1);
         var pdfAtMean = dist.Pdf(0.0);
@@ -23,15 +24,15 @@ public class DistributionsIntegrationTests
         Assert.True(pdfAtMean > pdfAway);
     }
 
-    [Fact]
-    public void Normal_CdfAtMean_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_CdfAtMean_ReturnsHalf()
     {
         var dist = new NormalDistribution<double>(0, 1);
         Assert.Equal(0.5, dist.Cdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Normal_CdfInverseCdf_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_CdfInverseCdf_RoundTrip()
     {
         var dist = new NormalDistribution<double>(0, 1);
         double[] probs = { 0.1, 0.25, 0.5, 0.75, 0.9 };
@@ -42,32 +43,32 @@ public class DistributionsIntegrationTests
         }
     }
 
-    [Fact]
-    public void Normal_MeanAndVariance_MatchParameters()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_MeanAndVariance_MatchParameters()
     {
         var dist = new NormalDistribution<double>(5.0, 4.0);
         Assert.Equal(5.0, dist.Mean, Tolerance);
         Assert.Equal(4.0, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Normal_NumParameters_IsTwo()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_NumParameters_IsTwo()
     {
         var dist = new NormalDistribution<double>(0, 1);
         Assert.Equal(2, dist.NumParameters);
         Assert.Equal(2, dist.ParameterNames.Length);
     }
 
-    [Fact]
-    public void Normal_GradLogPdf_ReturnsCorrectLength()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_GradLogPdf_ReturnsCorrectLength()
     {
         var dist = new NormalDistribution<double>(0, 1);
         var grad = dist.GradLogPdf(0.5);
         Assert.Equal(2, grad.Length);
     }
 
-    [Fact]
-    public void Normal_FisherInformation_Is2x2()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_FisherInformation_Is2x2()
     {
         var dist = new NormalDistribution<double>(0, 1);
         var fisher = dist.FisherInformation();
@@ -75,8 +76,8 @@ public class DistributionsIntegrationTests
         Assert.Equal(2, fisher.Columns);
     }
 
-    [Fact]
-    public void Normal_Clone_ReturnsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Clone_ReturnsIndependentCopy()
     {
         var dist = new NormalDistribution<double>(3.0, 2.0);
         var clone = dist.Clone() as NormalDistribution<double>;
@@ -87,23 +88,23 @@ public class DistributionsIntegrationTests
         Assert.NotSame(dist, clone);
     }
 
-    [Fact]
-    public void Normal_FromMeanStdDev_SetsVarianceCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_FromMeanStdDev_SetsVarianceCorrectly()
     {
         var dist = NormalDistribution<double>.FromMeanStdDev(0.0, 2.0);
         Assert.Equal(0.0, dist.Mean, Tolerance);
         Assert.Equal(4.0, dist.Variance, Tolerance); // stddev=2 => variance=4
     }
 
-    [Fact]
-    public void Normal_InvalidVariance_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_InvalidVariance_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new NormalDistribution<double>(0, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new NormalDistribution<double>(0, -1));
     }
 
-    [Fact]
-    public void Normal_Sample_ProducesValues()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_Sample_ProducesValues()
     {
         var dist = new NormalDistribution<double>(0, 1);
         var rng = RandomHelper.CreateSeededRandom(42);
@@ -112,8 +113,8 @@ public class DistributionsIntegrationTests
         Assert.False(double.IsInfinity(sample));
     }
 
-    [Fact]
-    public void Normal_DefaultConstructor_IsStandardNormal()
+    [Fact(Timeout = 120000)]
+    public async Task Normal_DefaultConstructor_IsStandardNormal()
     {
         var dist = new NormalDistribution<double>();
         Assert.Equal(0.0, dist.Mean, Tolerance);
@@ -124,38 +125,38 @@ public class DistributionsIntegrationTests
 
     #region BetaDistribution Tests
 
-    [Fact]
-    public void Beta_PdfInUnitInterval_IsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_PdfInUnitInterval_IsPositive()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
         Assert.True(dist.Pdf(0.3) > 0);
     }
 
-    [Fact]
-    public void Beta_CdfBoundaries()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_CdfBoundaries()
     {
         var dist = new BetaDistribution<double>(2.0, 2.0);
         Assert.Equal(0.0, dist.Cdf(0.0), Tolerance);
         Assert.Equal(1.0, dist.Cdf(1.0), Tolerance);
     }
 
-    [Fact]
-    public void Beta_Mean_EqualsAlphaOverAlphaPlusBeta()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Mean_EqualsAlphaOverAlphaPlusBeta()
     {
         double alpha = 3.0, beta = 7.0;
         var dist = new BetaDistribution<double>(alpha, beta);
         Assert.Equal(alpha / (alpha + beta), dist.Mean, Tolerance);
     }
 
-    [Fact]
-    public void Beta_InvalidParameters_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_InvalidParameters_Throw()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new BetaDistribution<double>(0, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BetaDistribution<double>(1, 0));
     }
 
-    [Fact]
-    public void Beta_Clone_ReturnsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task Beta_Clone_ReturnsIndependentCopy()
     {
         var dist = new BetaDistribution<double>(2.0, 3.0);
         var clone = dist.Clone();
@@ -167,31 +168,31 @@ public class DistributionsIntegrationTests
 
     #region GammaDistribution Tests
 
-    [Fact]
-    public void Gamma_PdfPositiveForPositiveX()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_PdfPositiveForPositiveX()
     {
         var dist = new GammaDistribution<double>(2.0, 1.0);
         Assert.True(dist.Pdf(1.0) > 0);
     }
 
-    [Fact]
-    public void Gamma_MeanEqualsShapeOverRate()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_MeanEqualsShapeOverRate()
     {
         double shape = 3.0, rate = 2.0;
         var dist = new GammaDistribution<double>(shape, rate);
         Assert.Equal(shape / rate, dist.Mean, Tolerance);
     }
 
-    [Fact]
-    public void Gamma_VarianceEqualsShapeOverRateSquared()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_VarianceEqualsShapeOverRateSquared()
     {
         double shape = 3.0, rate = 2.0;
         var dist = new GammaDistribution<double>(shape, rate);
         Assert.Equal(shape / (rate * rate), dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Gamma_InvalidParameters_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task Gamma_InvalidParameters_Throw()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new GammaDistribution<double>(0, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new GammaDistribution<double>(1, 0));
@@ -201,30 +202,30 @@ public class DistributionsIntegrationTests
 
     #region ExponentialDistribution Tests
 
-    [Fact]
-    public void Exponential_CdfAtZero_IsZero()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_CdfAtZero_IsZero()
     {
         var dist = new ExponentialDistribution<double>(1.0);
         Assert.Equal(0.0, dist.Cdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_MeanEqualsOneOverRate()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_MeanEqualsOneOverRate()
     {
         var dist = new ExponentialDistribution<double>(2.0);
         Assert.Equal(0.5, dist.Mean, Tolerance);
     }
 
-    [Fact]
-    public void Exponential_PdfAtZero_EqualsRate()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_PdfAtZero_EqualsRate()
     {
         double rate = 3.0;
         var dist = new ExponentialDistribution<double>(rate);
         Assert.Equal(rate, dist.Pdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Exponential_InvalidRate_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Exponential_InvalidRate_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExponentialDistribution<double>(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExponentialDistribution<double>(-1));
@@ -234,8 +235,8 @@ public class DistributionsIntegrationTests
 
     #region PoissonDistribution Tests
 
-    [Fact]
-    public void Poisson_MeanEqualsVariance()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_MeanEqualsVariance()
     {
         double lambda = 4.0;
         var dist = new PoissonDistribution<double>(lambda);
@@ -243,16 +244,16 @@ public class DistributionsIntegrationTests
         Assert.Equal(lambda, dist.Variance, Tolerance);
     }
 
-    [Fact]
-    public void Poisson_PmfAtKnownValues()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_PmfAtKnownValues()
     {
         var dist = new PoissonDistribution<double>(1.0);
         // P(X=0) = e^(-1) ≈ 0.3679
         Assert.Equal(Math.Exp(-1), dist.Pdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Poisson_InvalidLambda_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Poisson_InvalidLambda_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PoissonDistribution<double>(0));
     }
@@ -261,8 +262,8 @@ public class DistributionsIntegrationTests
 
     #region LaplaceDistribution Tests
 
-    [Fact]
-    public void Laplace_PdfSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_PdfSymmetric()
     {
         var dist = new LaplaceDistribution<double>(0.0, 1.0);
         var pdfPositive = dist.Pdf(1.0);
@@ -270,15 +271,15 @@ public class DistributionsIntegrationTests
         Assert.Equal(pdfPositive, pdfNegative, Tolerance);
     }
 
-    [Fact]
-    public void Laplace_CdfAtMedian_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_CdfAtMedian_ReturnsHalf()
     {
         var dist = new LaplaceDistribution<double>(0.0, 1.0);
         Assert.Equal(0.5, dist.Cdf(0.0), Tolerance);
     }
 
-    [Fact]
-    public void Laplace_Mean_MatchesLocation()
+    [Fact(Timeout = 120000)]
+    public async Task Laplace_Mean_MatchesLocation()
     {
         var dist = new LaplaceDistribution<double>(3.0, 2.0);
         Assert.Equal(3.0, dist.Mean, Tolerance);
@@ -288,23 +289,23 @@ public class DistributionsIntegrationTests
 
     #region LogNormalDistribution Tests
 
-    [Fact]
-    public void LogNormal_PdfPositiveForPositiveX()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_PdfPositiveForPositiveX()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         Assert.True(dist.Pdf(1.0) > 0);
     }
 
-    [Fact]
-    public void LogNormal_CdfProperties()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_CdfProperties()
     {
         var dist = new LogNormalDistribution<double>(0.0, 1.0);
         Assert.True(dist.Cdf(0.01) >= 0);
         Assert.True(dist.Cdf(100.0) <= 1.0);
     }
 
-    [Fact]
-    public void LogNormal_Clone_ReturnsIndependentCopy()
+    [Fact(Timeout = 120000)]
+    public async Task LogNormal_Clone_ReturnsIndependentCopy()
     {
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
         var clone = dist.Clone();
@@ -318,8 +319,8 @@ public class DistributionsIntegrationTests
 
     #region WeibullDistribution Tests
 
-    [Fact]
-    public void Weibull_ShapeParameterEffects()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_ShapeParameterEffects()
     {
         // Shape=1 is Exponential
         var weibull1 = new WeibullDistribution<double>(1.0, 1.0);
@@ -327,15 +328,15 @@ public class DistributionsIntegrationTests
         Assert.Equal(exponential.Mean, weibull1.Mean, 0.1);
     }
 
-    [Fact]
-    public void Weibull_PdfPositive()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_PdfPositive()
     {
         var dist = new WeibullDistribution<double>(2.0, 1.0);
         Assert.True(dist.Pdf(0.5) > 0);
     }
 
-    [Fact]
-    public void Weibull_InvalidParameters_Throw()
+    [Fact(Timeout = 120000)]
+    public async Task Weibull_InvalidParameters_Throw()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new WeibullDistribution<double>(0, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new WeibullDistribution<double>(1, 0));
@@ -345,8 +346,8 @@ public class DistributionsIntegrationTests
 
     #region StudentTDistribution Tests
 
-    [Fact]
-    public void StudentT_ApproachesNormalAsDfIncreases()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_ApproachesNormalAsDfIncreases()
     {
         var normal = new NormalDistribution<double>(0, 1);
         var studentT = new StudentTDistribution<double>(1000); // High df
@@ -354,15 +355,15 @@ public class DistributionsIntegrationTests
         Assert.Equal(normal.Cdf(0.0), studentT.Cdf(0.0), 0.01);
     }
 
-    [Fact]
-    public void StudentT_PdfSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_PdfSymmetric()
     {
         var dist = new StudentTDistribution<double>(5);
         Assert.Equal(dist.Pdf(1.0), dist.Pdf(-1.0), Tolerance);
     }
 
-    [Fact]
-    public void StudentT_InvalidDf_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task StudentT_InvalidDf_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new StudentTDistribution<double>(0));
     }
@@ -371,8 +372,8 @@ public class DistributionsIntegrationTests
 
     #region NegativeBinomialDistribution Tests
 
-    [Fact]
-    public void NegativeBinomial_PmfAtKnownValues()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomial_PmfAtKnownValues()
     {
         var dist = new NegativeBinomialDistribution<double>(5.0, 0.5);
         var pmf0 = dist.Pdf(0.0);
@@ -380,8 +381,8 @@ public class DistributionsIntegrationTests
         Assert.True(pmf0 < 1);
     }
 
-    [Fact]
-    public void NegativeBinomial_Mean_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task NegativeBinomial_Mean_IsCorrect()
     {
         double r = 5.0, p = 0.5;
         var dist = new NegativeBinomialDistribution<double>(r, p);
@@ -394,8 +395,8 @@ public class DistributionsIntegrationTests
 
     #region Cross-Distribution Tests
 
-    [Fact]
-    public void AllDistributions_Sample_ProducesFiniteValues()
+    [Fact(Timeout = 120000)]
+    public async Task AllDistributions_Sample_ProducesFiniteValues()
     {
         var rng = RandomHelper.CreateSeededRandom(42);
         var distributions = new IParametricDistribution<double>[]

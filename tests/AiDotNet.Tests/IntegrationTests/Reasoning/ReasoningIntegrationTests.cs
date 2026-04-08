@@ -6,6 +6,7 @@ using AiDotNet.Reasoning.Aggregation;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Search;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Reasoning;
 
@@ -17,8 +18,8 @@ public class ReasoningIntegrationTests
 {
     #region ReasoningConfig Tests
 
-    [Fact]
-    public void ReasoningConfig_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningConfig_DefaultValues_AreCorrect()
     {
         var config = new ReasoningConfig();
 
@@ -40,8 +41,8 @@ public class ReasoningIntegrationTests
         Assert.False(config.EnableDiversitySampling);
     }
 
-    [Fact]
-    public void ReasoningConfig_CustomValues_ArePreserved()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningConfig_CustomValues_ArePreserved()
     {
         var config = new ReasoningConfig
         {
@@ -85,8 +86,8 @@ public class ReasoningIntegrationTests
 
     #region ReasoningStep Tests
 
-    [Fact]
-    public void ReasoningStep_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_DefaultValues_AreCorrect()
     {
         var step = new ReasoningStep<double>();
 
@@ -103,8 +104,8 @@ public class ReasoningIntegrationTests
         Assert.Empty(step.Metadata);
     }
 
-    [Fact]
-    public void ReasoningStep_WithContent_PreservesValues()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_WithContent_PreservesValues()
     {
         var step = new ReasoningStep<double>
         {
@@ -126,8 +127,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("0.15", step.ExternalVerificationResult);
     }
 
-    [Fact]
-    public void ReasoningStep_Refinement_TracksOriginalContent()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_Refinement_TracksOriginalContent()
     {
         var step = new ReasoningStep<double>
         {
@@ -142,8 +143,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(1, step.RefinementCount);
     }
 
-    [Fact]
-    public void ReasoningStep_ToString_ReturnsFormattedString()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_ToString_ReturnsFormattedString()
     {
         var step = new ReasoningStep<double>
         {
@@ -156,8 +157,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("Step 3: Final answer: 36", result);
     }
 
-    [Fact]
-    public void ReasoningStep_Metadata_CanStoreCustomData()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_Metadata_CanStoreCustomData()
     {
         var step = new ReasoningStep<double>();
         step.Metadata["calculation_type"] = "multiplication";
@@ -167,8 +168,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("high", step.Metadata["confidence_level"]);
     }
 
-    [Fact]
-    public void ReasoningStep_CreatedAt_IsSet()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningStep_CreatedAt_IsSet()
     {
         var before = DateTime.UtcNow;
         var step = new ReasoningStep<double>();
@@ -182,8 +183,8 @@ public class ReasoningIntegrationTests
 
     #region ReasoningChain Tests
 
-    [Fact]
-    public void ReasoningChain_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_DefaultValues_AreCorrect()
     {
         var chain = new ReasoningChain<double>();
 
@@ -196,8 +197,8 @@ public class ReasoningIntegrationTests
         Assert.Empty(chain.Metadata);
     }
 
-    [Fact]
-    public void ReasoningChain_AddStep_IncrementsStepNumber()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_AddStep_IncrementsStepNumber()
     {
         var chain = new ReasoningChain<double>();
 
@@ -211,8 +212,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(3, chain.Steps[2].StepNumber);
     }
 
-    [Fact]
-    public void ReasoningChain_StepScores_ReturnsVector()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_StepScores_ReturnsVector()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", Score = 0.9 });
@@ -227,8 +228,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0.95, scores[2]);
     }
 
-    [Fact]
-    public void ReasoningChain_StepScores_EmptyChain_ReturnsEmptyVector()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_StepScores_EmptyChain_ReturnsEmptyVector()
     {
         var chain = new ReasoningChain<double>();
 
@@ -237,8 +238,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0, scores.Length);
     }
 
-    [Fact]
-    public void ReasoningChain_GetMinimumScore_ReturnsLowestScore()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_GetMinimumScore_ReturnsLowestScore()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", Score = 0.9 });
@@ -250,8 +251,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0.7, minScore);
     }
 
-    [Fact]
-    public void ReasoningChain_GetMinimumScore_EmptyChain_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_GetMinimumScore_EmptyChain_ReturnsZero()
     {
         var chain = new ReasoningChain<double>();
 
@@ -260,8 +261,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0.0, minScore);
     }
 
-    [Fact]
-    public void ReasoningChain_GetAverageScore_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_GetAverageScore_CalculatesCorrectly()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", Score = 0.8 });
@@ -273,8 +274,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0.9, avgScore, 5);
     }
 
-    [Fact]
-    public void ReasoningChain_IsFullyVerified_AllVerified_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_IsFullyVerified_AllVerified_ReturnsTrue()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", IsVerified = true });
@@ -284,8 +285,8 @@ public class ReasoningIntegrationTests
         Assert.True(chain.IsFullyVerified);
     }
 
-    [Fact]
-    public void ReasoningChain_IsFullyVerified_NotAllVerified_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_IsFullyVerified_NotAllVerified_ReturnsFalse()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", IsVerified = true });
@@ -295,16 +296,16 @@ public class ReasoningIntegrationTests
         Assert.False(chain.IsFullyVerified);
     }
 
-    [Fact]
-    public void ReasoningChain_IsFullyVerified_EmptyChain_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_IsFullyVerified_EmptyChain_ReturnsFalse()
     {
         var chain = new ReasoningChain<double>();
 
         Assert.False(chain.IsFullyVerified);
     }
 
-    [Fact]
-    public void ReasoningChain_TotalRefinements_SumsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_TotalRefinements_SumsCorrectly()
     {
         var chain = new ReasoningChain<double>();
         chain.AddStep(new ReasoningStep<double> { Content = "Step 1", RefinementCount = 0 });
@@ -314,8 +315,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(3, chain.TotalRefinements);
     }
 
-    [Fact]
-    public void ReasoningChain_Duration_CalculatesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_Duration_CalculatesCorrectly()
     {
         var chain = new ReasoningChain<double>
         {
@@ -327,8 +328,8 @@ public class ReasoningIntegrationTests
         Assert.True(chain.Duration.TotalSeconds <= 11);
     }
 
-    [Fact]
-    public void ReasoningChain_Duration_WhenCompleted_UsesCompletedAt()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_Duration_WhenCompleted_UsesCompletedAt()
     {
         var start = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         var end = new DateTime(2024, 1, 1, 12, 0, 15, DateTimeKind.Utc);
@@ -342,8 +343,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(15, chain.Duration.TotalSeconds);
     }
 
-    [Fact]
-    public void ReasoningChain_ToString_FormatsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningChain_ToString_FormatsCorrectly()
     {
         var chain = new ReasoningChain<double>
         {
@@ -364,8 +365,8 @@ public class ReasoningIntegrationTests
 
     #region ThoughtNode Tests
 
-    [Fact]
-    public void ThoughtNode_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_DefaultValues_AreCorrect()
     {
         var node = new ThoughtNode<double>();
 
@@ -381,8 +382,8 @@ public class ReasoningIntegrationTests
         Assert.Empty(node.Metadata);
     }
 
-    [Fact]
-    public void ThoughtNode_WithValues_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_WithValues_PreservesData()
     {
         var node = new ThoughtNode<double>
         {
@@ -400,8 +401,8 @@ public class ReasoningIntegrationTests
         Assert.False(node.IsTerminal);
     }
 
-    [Fact]
-    public void ThoughtNode_ParentChild_Relationship_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_ParentChild_Relationship_IsCorrect()
     {
         var root = new ThoughtNode<double>
         {
@@ -431,16 +432,16 @@ public class ReasoningIntegrationTests
         Assert.Same(root, child2.Parent);
     }
 
-    [Fact]
-    public void ThoughtNode_IsRoot_ReturnsTrue_WhenNoParent()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_IsRoot_ReturnsTrue_WhenNoParent()
     {
         var node = new ThoughtNode<double> { Thought = "Root" };
 
         Assert.True(node.IsRoot());
     }
 
-    [Fact]
-    public void ThoughtNode_IsRoot_ReturnsFalse_WhenHasParent()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_IsRoot_ReturnsFalse_WhenHasParent()
     {
         var parent = new ThoughtNode<double> { Thought = "Parent" };
         var child = new ThoughtNode<double> { Thought = "Child", Parent = parent };
@@ -448,16 +449,16 @@ public class ReasoningIntegrationTests
         Assert.False(child.IsRoot());
     }
 
-    [Fact]
-    public void ThoughtNode_IsLeaf_ReturnsTrue_WhenNoChildren()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_IsLeaf_ReturnsTrue_WhenNoChildren()
     {
         var node = new ThoughtNode<double> { Thought = "Leaf" };
 
         Assert.True(node.IsLeaf());
     }
 
-    [Fact]
-    public void ThoughtNode_IsLeaf_ReturnsFalse_WhenHasChildren()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_IsLeaf_ReturnsFalse_WhenHasChildren()
     {
         var parent = new ThoughtNode<double> { Thought = "Parent" };
         parent.Children.Add(new ThoughtNode<double> { Thought = "Child" });
@@ -465,16 +466,16 @@ public class ReasoningIntegrationTests
         Assert.False(parent.IsLeaf());
     }
 
-    [Fact]
-    public void ThoughtNode_PathLength_EqualsDepthPlusOne()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_PathLength_EqualsDepthPlusOne()
     {
         var node = new ThoughtNode<double> { Depth = 3 };
 
         Assert.Equal(4, node.PathLength);
     }
 
-    [Fact]
-    public void ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0 };
         var level1 = new ThoughtNode<double> { Thought = "Level 1", Parent = root, Depth = 1 };
@@ -488,8 +489,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("Level 2", path[2]);
     }
 
-    [Fact]
-    public void ThoughtNode_PathScores_ReturnsCorrectVector()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_PathScores_ReturnsCorrectVector()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0, EvaluationScore = 0.9 };
         var level1 = new ThoughtNode<double> { Thought = "Level 1", Parent = root, Depth = 1, EvaluationScore = 0.85 };
@@ -503,8 +504,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(0.95, scores[2]);
     }
 
-    [Fact]
-    public void ThoughtNode_CheckIsTerminalByHeuristic_DetectsFinalAnswer()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_CheckIsTerminalByHeuristic_DetectsFinalAnswer()
     {
         var node1 = new ThoughtNode<double> { Thought = "The final answer is 42" };
         var node2 = new ThoughtNode<double> { Thought = "In conclusion, we should choose option A" };
@@ -517,16 +518,16 @@ public class ReasoningIntegrationTests
         Assert.True(node4.CheckIsTerminalByHeuristic());
     }
 
-    [Fact]
-    public void ThoughtNode_CheckIsTerminalByHeuristic_ReturnsFalse_ForNonTerminal()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_CheckIsTerminalByHeuristic_ReturnsFalse_ForNonTerminal()
     {
         var node = new ThoughtNode<double> { Thought = "Let's consider option B" };
 
         Assert.False(node.CheckIsTerminalByHeuristic());
     }
 
-    [Fact]
-    public void ThoughtNode_CheckIsTerminalByHeuristic_ReturnsTrue_WhenMarkedTerminal()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_CheckIsTerminalByHeuristic_ReturnsTrue_WhenMarkedTerminal()
     {
         var node = new ThoughtNode<double>
         {
@@ -537,8 +538,8 @@ public class ReasoningIntegrationTests
         Assert.True(node.CheckIsTerminalByHeuristic());
     }
 
-    [Fact]
-    public void ThoughtNode_ToString_FormatsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_ToString_FormatsCorrectly()
     {
         var node = new ThoughtNode<double>
         {
@@ -554,8 +555,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("Consider option A", result);
     }
 
-    [Fact]
-    public void ThoughtNode_ToString_IncludesTerminalMarker()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_ToString_IncludesTerminalMarker()
     {
         var node = new ThoughtNode<double>
         {
@@ -568,8 +569,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("[TERMINAL]", result);
     }
 
-    [Fact]
-    public void ThoughtNode_Metadata_CanStoreCustomData()
+    [Fact(Timeout = 120000)]
+    public async Task ThoughtNode_Metadata_CanStoreCustomData()
     {
         var node = new ThoughtNode<double>();
         node.Metadata["evaluation_response"] = "Good reasoning";
@@ -583,8 +584,8 @@ public class ReasoningIntegrationTests
 
     #region ReasoningResult Tests
 
-    [Fact]
-    public void ReasoningResult_DefaultValues_AreCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_DefaultValues_AreCorrect()
     {
         var result = new ReasoningResult<double>();
 
@@ -607,8 +608,8 @@ public class ReasoningIntegrationTests
         Assert.Empty(result.Metadata);
     }
 
-    [Fact]
-    public void ReasoningResult_WithValues_PreservesData()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_WithValues_PreservesData()
     {
         var result = new ReasoningResult<double>
         {
@@ -626,8 +627,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(5.5, result.TotalDuration.TotalSeconds);
     }
 
-    [Fact]
-    public void ReasoningResult_FailedResult_HasErrorMessage()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_FailedResult_HasErrorMessage()
     {
         var result = new ReasoningResult<double>
         {
@@ -639,8 +640,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("Reasoning timeout after 60 seconds", result.ErrorMessage);
     }
 
-    [Fact]
-    public void ReasoningResult_VerificationFeedback_CanAddItems()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_VerificationFeedback_CanAddItems()
     {
         var result = new ReasoningResult<double>();
         result.VerificationFeedback.Add("Step 1 verified: Logic is sound");
@@ -649,8 +650,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(2, result.VerificationFeedback.Count);
     }
 
-    [Fact]
-    public void ReasoningResult_ToolsUsed_CanAddItems()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_ToolsUsed_CanAddItems()
     {
         var result = new ReasoningResult<double>();
         result.ToolsUsed.Add("Calculator");
@@ -660,8 +661,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("Calculator", result.ToolsUsed);
     }
 
-    [Fact]
-    public void ReasoningResult_Metrics_CanStoreData()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_Metrics_CanStoreData()
     {
         var result = new ReasoningResult<double>();
         result.Metrics["llm_calls"] = 5;
@@ -672,8 +673,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(1500, result.Metrics["tokens_used"]);
     }
 
-    [Fact]
-    public void ReasoningResult_AlternativeChains_CanAddChains()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_AlternativeChains_CanAddChains()
     {
         var result = new ReasoningResult<double>();
         result.AlternativeChains.Add(new ReasoningChain<double> { FinalAnswer = "Option A" });
@@ -682,8 +683,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(2, result.AlternativeChains.Count);
     }
 
-    [Fact]
-    public void ReasoningResult_ConfidenceScores_CanSetVector()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_ConfidenceScores_CanSetVector()
     {
         var result = new ReasoningResult<double>();
         result.ConfidenceScores = new Vector<double>(new[] { 0.9, 0.85, 0.92, 0.88 });
@@ -692,8 +693,8 @@ public class ReasoningIntegrationTests
         Assert.Equal(4, result.ConfidenceScores.Length);
     }
 
-    [Fact]
-    public void ReasoningResult_GetSummary_FormatsCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_GetSummary_FormatsCorrectly()
     {
         var result = new ReasoningResult<double>
         {
@@ -712,8 +713,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("Confidence: 0.92", summary);
     }
 
-    [Fact]
-    public void ReasoningResult_GetSummary_IncludesToolsUsed()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_GetSummary_IncludesToolsUsed()
     {
         var result = new ReasoningResult<double>
         {
@@ -730,8 +731,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("Calculator", summary);
     }
 
-    [Fact]
-    public void ReasoningResult_GetSummary_IncludesErrorWhenFailed()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_GetSummary_IncludesErrorWhenFailed()
     {
         var result = new ReasoningResult<double>
         {
@@ -746,8 +747,8 @@ public class ReasoningIntegrationTests
         Assert.Contains("Error: Timeout occurred", summary);
     }
 
-    [Fact]
-    public void ReasoningResult_ToString_ReturnsSummary()
+    [Fact(Timeout = 120000)]
+    public async Task ReasoningResult_ToString_ReturnsSummary()
     {
         var result = new ReasoningResult<double>
         {
@@ -766,16 +767,16 @@ public class ReasoningIntegrationTests
 
     #region MajorityVotingAggregator Tests
 
-    [Fact]
-    public void MajorityVotingAggregator_MethodName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_MethodName_IsCorrect()
     {
         var aggregator = new MajorityVotingAggregator<double>();
 
         Assert.Equal("Majority Voting", aggregator.MethodName);
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_ReturnsMostCommonAnswer()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_ReturnsMostCommonAnswer()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { "36", "36", "35", "36", "37", "36", "36" };
@@ -786,8 +787,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("36", result);
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_IsCaseInsensitive()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_IsCaseInsensitive()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { "Yes", "yes", "YES", "No", "no" };
@@ -798,8 +799,8 @@ public class ReasoningIntegrationTests
         Assert.True(result.Equals("Yes", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_TrimsWhitespace()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_TrimsWhitespace()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { " answer ", "answer", "  answer", "other" };
@@ -810,8 +811,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("answer", result);
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_SkipsEmptyAnswers()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_SkipsEmptyAnswers()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { "", "valid", " ", "valid", null! };
@@ -822,8 +823,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("valid", result);
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_ThrowsOnEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_ThrowsOnEmptyList()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string>();
@@ -832,8 +833,8 @@ public class ReasoningIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(answers, scores));
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_ThrowsOnNullList()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_ThrowsOnNullList()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var scores = new Vector<double>(0);
@@ -841,8 +842,8 @@ public class ReasoningIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(null!, scores));
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_ThrowsWhenAllAnswersEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_ThrowsWhenAllAnswersEmpty()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { "", " ", "  " };
@@ -851,8 +852,8 @@ public class ReasoningIntegrationTests
         Assert.Throws<InvalidOperationException>(() => aggregator.Aggregate(answers, scores));
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_SingleAnswer_ReturnsIt()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_SingleAnswer_ReturnsIt()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         var answers = new List<string> { "only answer" };
@@ -863,8 +864,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("only answer", result);
     }
 
-    [Fact]
-    public void MajorityVotingAggregator_Aggregate_Tie_ReturnsFirst()
+    [Fact(Timeout = 120000)]
+    public async Task MajorityVotingAggregator_Aggregate_Tie_ReturnsFirst()
     {
         var aggregator = new MajorityVotingAggregator<double>();
         // Equal counts - should return one of them (implementation detail: returns highest count first encountered)
@@ -880,16 +881,16 @@ public class ReasoningIntegrationTests
 
     #region WeightedAggregator Tests
 
-    [Fact]
-    public void WeightedAggregator_MethodName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedAggregator_MethodName_IsCorrect()
     {
         var aggregator = new WeightedAggregator<double>();
 
         Assert.Equal("Weighted Voting", aggregator.MethodName);
     }
 
-    [Fact]
-    public void WeightedAggregator_Aggregate_ConsidersConfidenceScores()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedAggregator_Aggregate_ConsidersConfidenceScores()
     {
         var aggregator = new WeightedAggregator<double>();
         var answers = new List<string> { "A", "B", "B" };
@@ -901,8 +902,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("A", result);
     }
 
-    [Fact]
-    public void WeightedAggregator_Aggregate_SumsWeightsForSameAnswer()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedAggregator_Aggregate_SumsWeightsForSameAnswer()
     {
         var aggregator = new WeightedAggregator<double>();
         var answers = new List<string> { "A", "B", "A" };
@@ -914,8 +915,8 @@ public class ReasoningIntegrationTests
         Assert.Equal("A", result);
     }
 
-    [Fact]
-    public void WeightedAggregator_Aggregate_ThrowsOnEmptyList()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedAggregator_Aggregate_ThrowsOnEmptyList()
     {
         var aggregator = new WeightedAggregator<double>();
         var answers = new List<string>();
@@ -924,8 +925,8 @@ public class ReasoningIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(answers, scores));
     }
 
-    [Fact]
-    public void WeightedAggregator_Aggregate_ThrowsOnMismatchedCounts()
+    [Fact(Timeout = 120000)]
+    public async Task WeightedAggregator_Aggregate_ThrowsOnMismatchedCounts()
     {
         var aggregator = new WeightedAggregator<double>();
         var answers = new List<string> { "A", "B", "C" };
@@ -938,16 +939,16 @@ public class ReasoningIntegrationTests
 
     #region Search Algorithm Tests
 
-    [Fact]
-    public void BeamSearch_AlgorithmName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BeamSearch_AlgorithmName_IsCorrect()
     {
         var search = new BeamSearch<double>();
 
         Assert.Equal("Beam Search", search.AlgorithmName);
     }
 
-    [Fact]
-    public void BeamSearch_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BeamSearch_Description_IsNotEmpty()
     {
         var search = new BeamSearch<double>();
 
@@ -955,7 +956,7 @@ public class ReasoningIntegrationTests
         Assert.Contains("beam", search.Description.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ThrowsOnNullRoot()
     {
         var search = new BeamSearch<double>();
@@ -967,7 +968,7 @@ public class ReasoningIntegrationTests
             search.SearchAsync(null!, generator, evaluator, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ThrowsOnNullGenerator()
     {
         var search = new BeamSearch<double>();
@@ -979,7 +980,7 @@ public class ReasoningIntegrationTests
             search.SearchAsync(root, null!, evaluator, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ThrowsOnNullEvaluator()
     {
         var search = new BeamSearch<double>();
@@ -991,7 +992,7 @@ public class ReasoningIntegrationTests
             search.SearchAsync(root, generator, null!, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ThrowsOnNullConfig()
     {
         var search = new BeamSearch<double>();
@@ -1003,7 +1004,7 @@ public class ReasoningIntegrationTests
             search.SearchAsync(root, generator, evaluator, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ThrowsOnInvalidBeamWidth()
     {
         var search = new BeamSearch<double>();
@@ -1016,7 +1017,7 @@ public class ReasoningIntegrationTests
             search.SearchAsync(root, generator, evaluator, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_ReturnsPathIncludingRoot()
     {
         var search = new BeamSearch<double>();
@@ -1036,7 +1037,7 @@ public class ReasoningIntegrationTests
         Assert.Equal("Root problem", path[0].Thought);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_MarksRootAsVisited()
     {
         var search = new BeamSearch<double>();
@@ -1050,7 +1051,7 @@ public class ReasoningIntegrationTests
         Assert.True(root.IsVisited);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BeamSearch_SearchAsync_RespectsCancellation()
     {
         var search = new BeamSearch<double>();
@@ -1065,64 +1066,64 @@ public class ReasoningIntegrationTests
             search.SearchAsync(root, generator, evaluator, config, cts.Token));
     }
 
-    [Fact]
-    public void BestFirstSearch_AlgorithmName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BestFirstSearch_AlgorithmName_IsCorrect()
     {
         var search = new BestFirstSearch<double>();
 
         Assert.Equal("Best-First Search", search.AlgorithmName);
     }
 
-    [Fact]
-    public void BestFirstSearch_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BestFirstSearch_Description_IsNotEmpty()
     {
         var search = new BestFirstSearch<double>();
 
         Assert.False(string.IsNullOrEmpty(search.Description));
     }
 
-    [Fact]
-    public void BreadthFirstSearch_AlgorithmName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task BreadthFirstSearch_AlgorithmName_IsCorrect()
     {
         var search = new BreadthFirstSearch<double>();
 
         Assert.Equal("Breadth-First Search", search.AlgorithmName);
     }
 
-    [Fact]
-    public void BreadthFirstSearch_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task BreadthFirstSearch_Description_IsNotEmpty()
     {
         var search = new BreadthFirstSearch<double>();
 
         Assert.False(string.IsNullOrEmpty(search.Description));
     }
 
-    [Fact]
-    public void DepthFirstSearch_AlgorithmName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task DepthFirstSearch_AlgorithmName_IsCorrect()
     {
         var search = new DepthFirstSearch<double>();
 
         Assert.Equal("Depth-First Search", search.AlgorithmName);
     }
 
-    [Fact]
-    public void DepthFirstSearch_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task DepthFirstSearch_Description_IsNotEmpty()
     {
         var search = new DepthFirstSearch<double>();
 
         Assert.False(string.IsNullOrEmpty(search.Description));
     }
 
-    [Fact]
-    public void MonteCarloTreeSearch_AlgorithmName_IsCorrect()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarloTreeSearch_AlgorithmName_IsCorrect()
     {
         var search = new MonteCarloTreeSearch<double>();
 
         Assert.Equal("Monte Carlo Tree Search (MCTS)", search.AlgorithmName);
     }
 
-    [Fact]
-    public void MonteCarloTreeSearch_Description_IsNotEmpty()
+    [Fact(Timeout = 120000)]
+    public async Task MonteCarloTreeSearch_Description_IsNotEmpty()
     {
         var search = new MonteCarloTreeSearch<double>();
 

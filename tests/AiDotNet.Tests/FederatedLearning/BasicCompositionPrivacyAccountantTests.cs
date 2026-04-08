@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using AiDotNet.FederatedLearning.Privacy.Accounting;
@@ -18,8 +19,8 @@ public class BasicCompositionPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.AddRound(epsilon, delta, samplingRate));
     }
 
-    [Fact]
-    public void AddRound_AccumulatesEpsilonAndDelta()
+    [Fact(Timeout = 60000)]
+    public async Task AddRound_AccumulatesEpsilonAndDelta()
     {
         var accountant = new BasicCompositionPrivacyAccountant();
 
@@ -41,8 +42,8 @@ public class BasicCompositionPrivacyAccountantTests
         Assert.Throws<ArgumentOutOfRangeException>(() => accountant.GetEpsilonAtDelta(targetDelta));
     }
 
-    [Fact]
-    public void GetEpsilonAtDelta_ReturnsTotalEpsilon()
+    [Fact(Timeout = 60000)]
+    public async Task GetEpsilonAtDelta_ReturnsTotalEpsilon()
     {
         var accountant = new BasicCompositionPrivacyAccountant();
         accountant.AddRound(epsilon: 0.5, delta: 1e-5, samplingRate: 1.0);

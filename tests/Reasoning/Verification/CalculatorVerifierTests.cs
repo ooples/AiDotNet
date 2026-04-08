@@ -1,6 +1,7 @@
 using Xunit;
 using AiDotNet.Reasoning.Verification;
 using AiDotNet.Reasoning.Models;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Reasoning.Verification;
 
@@ -37,7 +38,7 @@ public class CalculatorVerifierTests
         Assert.Equal(shouldBeValid, result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithMultiStepMath_ValidatesCorrectly()
     {
         // Arrange
@@ -60,7 +61,7 @@ public class CalculatorVerifierTests
         Assert.Contains("verified", result.Message.ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithIncorrectCalculation_DetectsError()
     {
         // Arrange
@@ -97,7 +98,7 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithNoMathematicalContent_ReturnsNotApplicable()
     {
         // Arrange
@@ -118,7 +119,7 @@ public class CalculatorVerifierTests
         Assert.Contains("no mathematical", result.Message.ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithDecimalNumbers_HandlesCorrectly()
     {
         // Arrange
@@ -131,7 +132,7 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithParentheses_RespectsOrderOfOperations()
     {
         // Arrange
@@ -144,15 +145,15 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
-    public void VerifierName_ReturnsCorrectName()
+    [Fact(Timeout = 60000)]
+    public async Task VerifierName_ReturnsCorrectName()
     {
         // Assert
         Assert.Equal("Calculator Verifier", _verifier.VerifierName);
     }
 
-    [Fact]
-    public void Description_ContainsRelevantKeywords()
+    [Fact(Timeout = 60000)]
+    public async Task Description_ContainsRelevantKeywords()
     {
         // Assert
         var description = _verifier.Description.ToLowerInvariant();

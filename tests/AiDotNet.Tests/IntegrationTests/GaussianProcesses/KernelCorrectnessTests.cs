@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Kernels;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.GaussianProcesses;
 
@@ -16,8 +17,8 @@ public class KernelCorrectnessTests
 
     #region Cosine Kernel Tests
 
-    [Fact]
-    public void CosineKernel_SameVector_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineKernel_SameVector_ReturnsOne()
     {
         var kernel = new CosineKernel<double>();
         var x = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -28,8 +29,8 @@ public class KernelCorrectnessTests
             $"Cosine kernel of same vector should be 1.0, got {result}");
     }
 
-    [Fact]
-    public void CosineKernel_OrthogonalVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task CosineKernel_OrthogonalVectors_ReturnsZero()
     {
         var kernel = new CosineKernel<double>();
         var x1 = new Vector<double>(new double[] { 1.0, 0.0 });
@@ -41,8 +42,8 @@ public class KernelCorrectnessTests
             $"Cosine kernel of orthogonal vectors should be 0, got {result}");
     }
 
-    [Fact]
-    public void CosineKernel_OppositeVectors_ReturnsNegativeOne()
+    [Fact(Timeout = 120000)]
+    public async Task CosineKernel_OppositeVectors_ReturnsNegativeOne()
     {
         var kernel = new CosineKernel<double>();
         var x1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -54,8 +55,8 @@ public class KernelCorrectnessTests
             $"Cosine kernel of opposite vectors should be -1.0, got {result}");
     }
 
-    [Fact]
-    public void CosineKernel_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task CosineKernel_IsSymmetric()
     {
         var kernel = new CosineKernel<double>();
         var x1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -68,8 +69,8 @@ public class KernelCorrectnessTests
             $"Kernel should be symmetric: k(x1,x2)={k12}, k(x2,x1)={k21}");
     }
 
-    [Fact]
-    public void CosineKernel_WithOutputScale_ScalesCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task CosineKernel_WithOutputScale_ScalesCorrectly()
     {
         var scale = 2.5;
         var kernel = new CosineKernel<double>(outputScale: scale);
@@ -86,8 +87,8 @@ public class KernelCorrectnessTests
 
     #region Arc Kernel Tests
 
-    [Fact]
-    public void ArcKernel_Order0_SameVector_ReturnsOne()
+    [Fact(Timeout = 120000)]
+    public async Task ArcKernel_Order0_SameVector_ReturnsOne()
     {
         var kernel = new ArcKernel<double>(order: 0);
         var x = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -98,8 +99,8 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of same vector should be 1.0, got {result}");
     }
 
-    [Fact]
-    public void ArcKernel_Order0_OrthogonalVectors_ReturnsHalf()
+    [Fact(Timeout = 120000)]
+    public async Task ArcKernel_Order0_OrthogonalVectors_ReturnsHalf()
     {
         var kernel = new ArcKernel<double>(order: 0);
         var x1 = new Vector<double>(new double[] { 1.0, 0.0 });
@@ -112,8 +113,8 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of orthogonal vectors should be 0.5, got {result}");
     }
 
-    [Fact]
-    public void ArcKernel_Order0_OppositeVectors_ReturnsZero()
+    [Fact(Timeout = 120000)]
+    public async Task ArcKernel_Order0_OppositeVectors_ReturnsZero()
     {
         var kernel = new ArcKernel<double>(order: 0);
         var x1 = new Vector<double>(new double[] { 1.0, 0.0 });
@@ -126,8 +127,8 @@ public class KernelCorrectnessTests
             $"Arc kernel order 0 of opposite vectors should be 0, got {result}");
     }
 
-    [Fact]
-    public void ArcKernel_IsSymmetric()
+    [Fact(Timeout = 120000)]
+    public async Task ArcKernel_IsSymmetric()
     {
         var kernel = new ArcKernel<double>(order: 1);
         var x1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -160,8 +161,8 @@ public class KernelCorrectnessTests
 
     #region Cylindrical Kernel Tests
 
-    [Fact]
-    public void CylindricalKernel_SamePoint_ReturnsNonZero()
+    [Fact(Timeout = 120000)]
+    public async Task CylindricalKernel_SamePoint_ReturnsNonZero()
     {
         var rbf = new GaussianKernel<double>(1.0);
         var kernel = new CylindricalKernel<double>(
@@ -177,8 +178,8 @@ public class KernelCorrectnessTests
             $"Cylindrical kernel of same point should be close to 1, got {result}");
     }
 
-    [Fact]
-    public void CylindricalKernel_AngularDim_WrapsAround()
+    [Fact(Timeout = 120000)]
+    public async Task CylindricalKernel_AngularDim_WrapsAround()
     {
         var rbf = new GaussianKernel<double>(1.0);
         var period = 24.0; // 24 hours
@@ -205,8 +206,8 @@ public class KernelCorrectnessTests
             $"Angular wrapping not working: k(23,1)={k12}, k(23,21)={k13}, ratio={ratio}");
     }
 
-    [Fact]
-    public void CylindricalKernel_WithRBF_FactoryWorks()
+    [Fact(Timeout = 120000)]
+    public async Task CylindricalKernel_WithRBF_FactoryWorks()
     {
         var kernel = CylindricalKernel<double>.WithRBF(
             totalDims: 3,
@@ -227,8 +228,8 @@ public class KernelCorrectnessTests
 
     #region Spectral Delta Kernel Tests
 
-    [Fact]
-    public void SpectralDeltaKernel_SamePoint_ReturnsVariance()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralDeltaKernel_SamePoint_ReturnsVariance()
     {
         var variance = 2.5;
         var kernel = new SpectralDeltaKernel<double>(
@@ -244,8 +245,8 @@ public class KernelCorrectnessTests
             $"Spectral delta kernel at same point should return variance {variance}, got {result}");
     }
 
-    [Fact]
-    public void SpectralDeltaKernel_HasCorrectPeriod()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralDeltaKernel_HasCorrectPeriod()
     {
         var period = 7.0; // weekly
         var kernel = SpectralDeltaKernel<double>.FromPeriod(period: period);
@@ -254,8 +255,8 @@ public class KernelCorrectnessTests
             $"Kernel period should be {period}, got {kernel.Period}");
     }
 
-    [Fact]
-    public void SpectralDeltaKernel_OscillatesWithFrequency()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralDeltaKernel_OscillatesWithFrequency()
     {
         var frequency = 1.0;
         var kernel = new SpectralDeltaKernel<double>(
@@ -276,8 +277,8 @@ public class KernelCorrectnessTests
         Assert.True(k03 > 0, $"k(0,1) should be positive, got {k03}");
     }
 
-    [Fact]
-    public void SpectralDeltaKernel_PSD_IsCenteredAtFrequency()
+    [Fact(Timeout = 120000)]
+    public async Task SpectralDeltaKernel_PSD_IsCenteredAtFrequency()
     {
         var frequency = 5.0;
         var bandwidth = 0.5;
@@ -298,8 +299,8 @@ public class KernelCorrectnessTests
 
     #region Grid Kernel Tests
 
-    [Fact]
-    public void GridKernel_SamePoint_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GridKernel_SamePoint_ReturnsPositive()
     {
         var gridX = Enumerable.Range(0, 5).Select(i => (double)i).ToArray();
         var gridY = Enumerable.Range(0, 5).Select(i => (double)i).ToArray();
@@ -315,8 +316,8 @@ public class KernelCorrectnessTests
             $"Grid kernel of same point should be positive, got {result}");
     }
 
-    [Fact]
-    public void GridKernel_Precompute_ComputesEigenvalues()
+    [Fact(Timeout = 120000)]
+    public async Task GridKernel_Precompute_ComputesEigenvalues()
     {
         var gridX = Enumerable.Range(0, 4).Select(i => (double)i).ToArray();
         var gridY = Enumerable.Range(0, 3).Select(i => (double)i).ToArray();
@@ -334,8 +335,8 @@ public class KernelCorrectnessTests
             "All eigenvalues should be non-negative for PSD kernel");
     }
 
-    [Fact]
-    public void GridKernel_LogDeterminant_IsFinite()
+    [Fact(Timeout = 120000)]
+    public async Task GridKernel_LogDeterminant_IsFinite()
     {
         var gridX = Enumerable.Range(0, 4).Select(i => (double)i).ToArray();
         var gridY = Enumerable.Range(0, 3).Select(i => (double)i).ToArray();
@@ -352,8 +353,8 @@ public class KernelCorrectnessTests
         Assert.False(double.IsInfinity(logDet), "Log-determinant should be finite");
     }
 
-    [Fact]
-    public void GridKernel_KroneckerMultiply_GivesCorrectResult()
+    [Fact(Timeout = 120000)]
+    public async Task GridKernel_KroneckerMultiply_GivesCorrectResult()
     {
         // Small grid for exact verification
         var gridX = new[] { 0.0, 1.0 };
@@ -377,8 +378,8 @@ public class KernelCorrectnessTests
 
     #region Grid Interpolation Kernel Tests
 
-    [Fact]
-    public void GridInterpolationKernel_SamePoint_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task GridInterpolationKernel_SamePoint_ReturnsPositive()
     {
         var bounds = new[] { (0.0, 10.0), (0.0, 10.0) };
         var kernel = GridInterpolationKernel<double>.WithUniformGrid(
@@ -393,8 +394,8 @@ public class KernelCorrectnessTests
             $"Grid interpolation kernel of same point should be positive, got {result}");
     }
 
-    [Fact]
-    public void GridInterpolationKernel_ClosePoints_HighSimilarity()
+    [Fact(Timeout = 120000)]
+    public async Task GridInterpolationKernel_ClosePoints_HighSimilarity()
     {
         var bounds = new[] { (0.0, 10.0), (0.0, 10.0) };
         var kernel = GridInterpolationKernel<double>.WithUniformGrid(
@@ -413,8 +414,8 @@ public class KernelCorrectnessTests
             $"Close points should have higher similarity: k(close)={kClose}, k(far)={kFar}");
     }
 
-    [Fact]
-    public void GridInterpolationKernel_InterpolationWeights_SumToOne()
+    [Fact(Timeout = 120000)]
+    public async Task GridInterpolationKernel_InterpolationWeights_SumToOne()
     {
         var bounds = new[] { (0.0, 10.0) };
         var kernel = GridInterpolationKernel<double>.WithUniformGrid(
@@ -437,8 +438,8 @@ public class KernelCorrectnessTests
 
     #region Product Structure Kernel Tests
 
-    [Fact]
-    public void ProductStructureKernel_SamePoint_ReturnsPositive()
+    [Fact(Timeout = 120000)]
+    public async Task ProductStructureKernel_SamePoint_ReturnsPositive()
     {
         var kernel = ProductStructureKernel<double>.WithRBF(
             new[] { new[] { 0 }, new[] { 1 } },
@@ -451,8 +452,8 @@ public class KernelCorrectnessTests
             $"Product kernel of same point should be positive, got {result}");
     }
 
-    [Fact]
-    public void ProductStructureKernel_IsProductOfGroupKernels()
+    [Fact(Timeout = 120000)]
+    public async Task ProductStructureKernel_IsProductOfGroupKernels()
     {
         // Create individual RBF kernels with same lengthscale
         var kernel1 = new GaussianKernel<double>(1.0);
@@ -482,8 +483,8 @@ public class KernelCorrectnessTests
             $"Product kernel should be product of group kernels: expected {expected}, got {actual}");
     }
 
-    [Fact]
-    public void ProductStructureKernel_FullyFactorized_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ProductStructureKernel_FullyFactorized_Works()
     {
         var kernel = ProductStructureKernel<double>.FullyFactorized(3, baseLengthscale: 1.0);
 

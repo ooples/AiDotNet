@@ -2,6 +2,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Padding;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Serving.Tests;
 
@@ -10,8 +11,8 @@ namespace AiDotNet.Serving.Tests;
 /// </summary>
 public class PaddingStrategyTests
 {
-    [Fact]
-    public void MinimalPaddingStrategy_ShouldPadToMaxLength()
+    [Fact(Timeout = 60000)]
+    public async Task MinimalPaddingStrategy_ShouldPadToMaxLength()
     {
         // Arrange
         var strategy = new MinimalPaddingStrategy();
@@ -43,8 +44,8 @@ public class PaddingStrategyTests
         Assert.Equal(1.0, attentionMask[2, 3]); // Actual data (last element)
     }
 
-    [Fact]
-    public void MinimalPaddingStrategy_ShouldUnpadCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task MinimalPaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
         var strategy = new MinimalPaddingStrategy();
@@ -72,8 +73,8 @@ public class PaddingStrategyTests
         Assert.Equal(9.0, unpaddedVectors[2][3]);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_ShouldPadToNearestBucket()
+    [Fact(Timeout = 60000)]
+    public async Task BucketPaddingStrategy_ShouldPadToNearestBucket()
     {
         // Arrange
         var bucketSizes = new[] { 8, 16, 32, 64 };
@@ -94,8 +95,8 @@ public class PaddingStrategyTests
         Assert.NotNull(attentionMask);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_ShouldUnpadCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task BucketPaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
         var bucketSizes = new[] { 8, 16, 32, 64 };
@@ -118,8 +119,8 @@ public class PaddingStrategyTests
         Assert.Equal(2, unpaddedVectors[1].Length);
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_ShouldPadToFixedSize()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_ShouldPadToFixedSize()
     {
         // Arrange
         var strategy = new FixedSizePaddingStrategy(fixedLength: 10);
@@ -139,8 +140,8 @@ public class PaddingStrategyTests
         Assert.NotNull(attentionMask);
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_ShouldThrow_WhenVectorExceedsFixedSize()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_ShouldThrow_WhenVectorExceedsFixedSize()
     {
         // Arrange
         var strategy = new FixedSizePaddingStrategy(fixedLength: 5);
@@ -153,8 +154,8 @@ public class PaddingStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.PadBatch(vectors, out _));
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_ShouldUnpadCorrectly()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_ShouldUnpadCorrectly()
     {
         // Arrange
         var strategy = new FixedSizePaddingStrategy(fixedLength: 10);
@@ -176,8 +177,8 @@ public class PaddingStrategyTests
         Assert.Equal(4, unpaddedVectors[1].Length);
     }
 
-    [Fact]
-    public void PaddingStrategies_ShouldThrow_WhenVectorsArrayEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task PaddingStrategies_ShouldThrow_WhenVectorsArrayEmpty()
     {
         // Arrange
         var minimalStrategy = new MinimalPaddingStrategy();
@@ -193,8 +194,8 @@ public class PaddingStrategyTests
 
     #region PR #758 Bug Fix Tests - Parameter Validation
 
-    [Fact]
-    public void FixedSizePaddingStrategy_Constructor_ThrowsOnNonPositiveFixedLength()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_Constructor_ThrowsOnNonPositiveFixedLength()
     {
         Assert.Throws<ArgumentException>(() =>
             new FixedSizePaddingStrategy(fixedLength: 0));
@@ -202,8 +203,8 @@ public class PaddingStrategyTests
             new FixedSizePaddingStrategy(fixedLength: -1));
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_Constructor_ThrowsOnNullOrEmptyBucketSizes()
+    [Fact(Timeout = 60000)]
+    public async Task BucketPaddingStrategy_Constructor_ThrowsOnNullOrEmptyBucketSizes()
     {
         Assert.Throws<ArgumentException>(() =>
             new BucketPaddingStrategy(null!));
@@ -211,8 +212,8 @@ public class PaddingStrategyTests
             new BucketPaddingStrategy(Array.Empty<int>()));
     }
 
-    [Fact]
-    public void MinimalPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    [Fact(Timeout = 60000)]
+    public async Task MinimalPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
         var strategy = new MinimalPaddingStrategy();
@@ -228,8 +229,8 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    [Fact(Timeout = 60000)]
+    public async Task BucketPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
         var strategy = new BucketPaddingStrategy(new[] { 8, 16, 32 });
@@ -245,8 +246,8 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
     {
         // Arrange
         var strategy = new FixedSizePaddingStrategy(fixedLength: 10);
@@ -262,8 +263,8 @@ public class PaddingStrategyTests
         Assert.Contains("index 1", ex.Message);
     }
 
-    [Fact]
-    public void MinimalPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    [Fact(Timeout = 60000)]
+    public async Task MinimalPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange
         var strategy = new MinimalPaddingStrategy();
@@ -281,8 +282,8 @@ public class PaddingStrategyTests
         Assert.Contains("-1", ex.Message);
     }
 
-    [Fact]
-    public void BucketPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    [Fact(Timeout = 60000)]
+    public async Task BucketPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange
         var strategy = new BucketPaddingStrategy(new[] { 8, 16, 32 });
@@ -300,8 +301,8 @@ public class PaddingStrategyTests
         Assert.Contains("-5", ex.Message);
     }
 
-    [Fact]
-    public void FixedSizePaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    [Fact(Timeout = 60000)]
+    public async Task FixedSizePaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
     {
         // Arrange
         var strategy = new FixedSizePaddingStrategy(fixedLength: 10);

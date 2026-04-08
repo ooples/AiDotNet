@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class MeanAbsoluteErrorLossTests
     {
-        [Fact]
-        public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -23,8 +24,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithDifferentPredictions_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithDifferentPredictions_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -39,8 +40,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithNegativeValues_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithNegativeValues_HandlesCorrectly()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -55,8 +56,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(4.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -71,8 +72,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -98,8 +99,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithPositiveDifferences_ReturnsPositiveValues()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithPositiveDifferences_ReturnsPositiveValues()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -116,8 +117,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[2] > 0.0);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithNegativeDifferences_ReturnsNegativeValues()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithNegativeDifferences_ReturnsNegativeValues()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -134,8 +135,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[2] < 0.0);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -146,8 +147,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateLoss_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<float>();
@@ -161,8 +162,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0f, result, 5);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<float>();
@@ -176,8 +177,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.True(item > 0.0f));
         }
 
-        [Fact]
-        public void CalculateLoss_IsRobustToOutliers_ComparedToMSE()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_IsRobustToOutliers_ComparedToMSE()
         {
             // Arrange
             var maeLoss = new MeanAbsoluteErrorLoss<double>();
@@ -197,8 +198,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(32.333333333333333, maeResult, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithMixedPositiveAndNegativeErrors_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithMixedPositiveAndNegativeErrors_HandlesCorrectly()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();
@@ -213,8 +214,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateDerivative_MagnitudeIsConstant()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_MagnitudeIsConstant()
         {
             // Arrange
             var loss = new MeanAbsoluteErrorLoss<double>();

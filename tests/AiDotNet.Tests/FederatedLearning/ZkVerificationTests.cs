@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.Verification;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -35,8 +36,8 @@ public class ZkVerificationTests
 
     // ========== HashCommitmentScheme Tests ==========
 
-    [Fact]
-    public void HashCommitment_CommitAndOpen_Verifies()
+    [Fact(Timeout = 60000)]
+    public async Task HashCommitment_CommitAndOpen_Verifies()
     {
         var scheme = new HashCommitmentScheme<double>();
         var gradient = CreateGradient(10);
@@ -52,8 +53,8 @@ public class ZkVerificationTests
         Assert.True(verified, "Verifying a valid commitment should succeed");
     }
 
-    [Fact]
-    public void HashCommitment_DifferentGradients_DifferentCommitments()
+    [Fact(Timeout = 60000)]
+    public async Task HashCommitment_DifferentGradients_DifferentCommitments()
     {
         var scheme = new HashCommitmentScheme<double>();
         var gradient1 = CreateTensor(1.0, 2.0, 3.0);
@@ -67,15 +68,15 @@ public class ZkVerificationTests
         Assert.NotNull(commit2);
     }
 
-    [Fact]
-    public void HashCommitment_RandomnessLengthValidation()
+    [Fact(Timeout = 60000)]
+    public async Task HashCommitment_RandomnessLengthValidation()
     {
         // Short randomness length should throw
         Assert.Throws<ArgumentOutOfRangeException>(() => new HashCommitmentScheme<double>(randomnessLength: 8));
     }
 
-    [Fact]
-    public void HashCommitment_VerifyAggregation_Works()
+    [Fact(Timeout = 60000)]
+    public async Task HashCommitment_VerifyAggregation_Works()
     {
         var scheme = new HashCommitmentScheme<double>();
         var gradients = new List<Tensor<double>>
@@ -97,8 +98,8 @@ public class ZkVerificationTests
 
     // ========== PedersenCommitment Tests ==========
 
-    [Fact]
-    public void PedersenCommitment_CommitAndVerify_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task PedersenCommitment_CommitAndVerify_Succeeds()
     {
         var scheme = new PedersenCommitment<double>();
         var gradient = CreateGradient(10);
@@ -114,8 +115,8 @@ public class ZkVerificationTests
         Assert.True(verified, "Pedersen commitment verification should succeed");
     }
 
-    [Fact]
-    public void PedersenCommitment_VerifyAggregation_Works()
+    [Fact(Timeout = 60000)]
+    public async Task PedersenCommitment_VerifyAggregation_Works()
     {
         var scheme = new PedersenCommitment<double>();
         var gradients = new List<Tensor<double>>
@@ -136,8 +137,8 @@ public class ZkVerificationTests
 
     // ========== GradientNormRangeProof Tests ==========
 
-    [Fact]
-    public void GradientNormRangeProof_SmallGradient_ProofVerifies()
+    [Fact(Timeout = 60000)]
+    public async Task GradientNormRangeProof_SmallGradient_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
         var proof = new GradientNormRangeProof<double>(proofSystem, normBound: 10.0);
@@ -148,8 +149,8 @@ public class ZkVerificationTests
         Assert.NotNull(normProof);
     }
 
-    [Fact]
-    public void GradientNormRangeProof_GenerateAndVerify_Constraint()
+    [Fact(Timeout = 60000)]
+    public async Task GradientNormRangeProof_GenerateAndVerify_Constraint()
     {
         var proofSystem = new HashCommitmentScheme<double>();
         var proof = new GradientNormRangeProof<double>(proofSystem, normBound: 10.0);
@@ -176,8 +177,8 @@ public class ZkVerificationTests
         Assert.True(verified, "Small gradient should pass norm bound verification");
     }
 
-    [Fact]
-    public void GradientNormRangeProof_NullProofSystem_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task GradientNormRangeProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new GradientNormRangeProof<double>(null, 10.0));
@@ -185,8 +186,8 @@ public class ZkVerificationTests
 
     // ========== GradientBoundednessProof Tests ==========
 
-    [Fact]
-    public void GradientBoundednessProof_BoundedGradient_ProofVerifies()
+    [Fact(Timeout = 60000)]
+    public async Task GradientBoundednessProof_BoundedGradient_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
         var proof = new GradientBoundednessProof<double>(proofSystem, elementBound: 1.0);
@@ -197,8 +198,8 @@ public class ZkVerificationTests
         Assert.NotNull(boundProof);
     }
 
-    [Fact]
-    public void GradientBoundednessProof_NullProofSystem_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task GradientBoundednessProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new GradientBoundednessProof<double>(null, 1.0));
@@ -206,8 +207,8 @@ public class ZkVerificationTests
 
     // ========== LossThresholdProof Tests ==========
 
-    [Fact]
-    public void LossThresholdProof_LowLoss_ProofVerifies()
+    [Fact(Timeout = 60000)]
+    public async Task LossThresholdProof_LowLoss_ProofVerifies()
     {
         var proofSystem = new HashCommitmentScheme<double>();
         var proof = new LossThresholdProof<double>(proofSystem, threshold: 10.0);
@@ -217,8 +218,8 @@ public class ZkVerificationTests
         Assert.NotNull(lossProof);
     }
 
-    [Fact]
-    public void LossThresholdProof_NullProofSystem_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task LossThresholdProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new LossThresholdProof<double>(null, 10.0));
@@ -226,8 +227,8 @@ public class ZkVerificationTests
 
     // ========== ComputationIntegrityProof Tests ==========
 
-    [Fact]
-    public void ComputationIntegrityProof_GenerateProof_Succeeds()
+    [Fact(Timeout = 60000)]
+    public async Task ComputationIntegrityProof_GenerateProof_Succeeds()
     {
         var proofSystem = new HashCommitmentScheme<double>();
         var proof = new ComputationIntegrityProof<double>(proofSystem, expectedEpochs: 5);
@@ -247,8 +248,8 @@ public class ZkVerificationTests
         Assert.True(verified);
     }
 
-    [Fact]
-    public void ComputationIntegrityProof_NullProofSystem_Throws()
+    [Fact(Timeout = 60000)]
+    public async Task ComputationIntegrityProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new ComputationIntegrityProof<double>(null, 5));
@@ -256,8 +257,8 @@ public class ZkVerificationTests
 
     // ========== ModelUpdateVerifier Tests ==========
 
-    [Fact]
-    public void ModelUpdateVerifier_DefaultOptions_Created()
+    [Fact(Timeout = 60000)]
+    public async Task ModelUpdateVerifier_DefaultOptions_Created()
     {
         var verifier = new ModelUpdateVerifier<double>();
 
@@ -265,8 +266,8 @@ public class ZkVerificationTests
         Assert.NotNull(verifier);
     }
 
-    [Fact]
-    public void ModelUpdateVerifier_WithOptions_Created()
+    [Fact(Timeout = 60000)]
+    public async Task ModelUpdateVerifier_WithOptions_Created()
     {
         var options = new VerificationOptions
         {
@@ -279,8 +280,8 @@ public class ZkVerificationTests
         Assert.NotNull(verifier);
     }
 
-    [Fact]
-    public void ModelUpdateVerifier_VerifyClientUpdate_WithCommitment_Passes()
+    [Fact(Timeout = 60000)]
+    public async Task ModelUpdateVerifier_VerifyClientUpdate_WithCommitment_Passes()
     {
         var options = new VerificationOptions
         {
@@ -304,8 +305,8 @@ public class ZkVerificationTests
         Assert.Equal(1, result.Round);
     }
 
-    [Fact]
-    public void ModelUpdateVerifier_GetVerifiedClientCount_TracksClients()
+    [Fact(Timeout = 60000)]
+    public async Task ModelUpdateVerifier_GetVerifiedClientCount_TracksClients()
     {
         var options = new VerificationOptions
         {
@@ -326,8 +327,8 @@ public class ZkVerificationTests
         Assert.True(verified >= 0);
     }
 
-    [Fact]
-    public void ModelUpdateVerifier_GetRejectedClientCount_TracksRejections()
+    [Fact(Timeout = 60000)]
+    public async Task ModelUpdateVerifier_GetRejectedClientCount_TracksRejections()
     {
         var options = new VerificationOptions
         {
@@ -346,8 +347,8 @@ public class ZkVerificationTests
 
     // ========== VerificationOptions Defaults ==========
 
-    [Fact]
-    public void VerificationOptions_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task VerificationOptions_DefaultValues()
     {
         var options = new VerificationOptions();
 
@@ -362,21 +363,21 @@ public class ZkVerificationTests
         Assert.NotNull(options.Commitment);
     }
 
-    [Fact]
-    public void ZkProofSystem_HasAllExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task ZkProofSystem_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(ZkProofSystem), ZkProofSystem.Pedersen));
     }
 
-    [Fact]
-    public void VerificationLevel_HasExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task VerificationLevel_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(VerificationLevel), VerificationLevel.NormBound));
         Assert.True(Enum.IsDefined(typeof(VerificationLevel), VerificationLevel.ElementBound));
     }
 
-    [Fact]
-    public void ConstraintType_HasAllExpectedValues()
+    [Fact(Timeout = 60000)]
+    public async Task ConstraintType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(ConstraintType), ConstraintType.NormBound));
         Assert.True(Enum.IsDefined(typeof(ConstraintType), ConstraintType.ElementBound));
@@ -386,8 +387,8 @@ public class ZkVerificationTests
 
     // ========== VerificationProof / VerificationConstraint Defaults ==========
 
-    [Fact]
-    public void VerificationProof_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task VerificationProof_DefaultValues()
     {
         var proof = new VerificationProof();
 
@@ -398,8 +399,8 @@ public class ZkVerificationTests
         Assert.Equal(string.Empty, proof.ProofSystem);
     }
 
-    [Fact]
-    public void VerificationConstraint_DefaultValues()
+    [Fact(Timeout = 60000)]
+    public async Task VerificationConstraint_DefaultValues()
     {
         var constraint = new VerificationConstraint();
 

@@ -3,6 +3,7 @@ using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
@@ -18,8 +19,8 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 /// </summary>
 public class ClusteringMathTests
 {
-    [Fact]
-    public void KMeans_FindsClusters_WellSeparatedData()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_FindsClusters_WellSeparatedData()
     {
         // Create 3 well-separated clusters
         var data = CreateClusteredData(
@@ -55,8 +56,8 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
-    public void KMeans_DeterministicTraining_SameDataSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_DeterministicTraining_SameDataSameResult()
     {
         var data1 = CreateClusteredData(
             clusterCenters: new double[,] { { 0, 0 }, { 10, 0 } },
@@ -86,8 +87,8 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
-    public void KMeans_SerializeRoundTrip_PredictionsMatch()
+    [Fact(Timeout = 120000)]
+    public async Task KMeans_SerializeRoundTrip_PredictionsMatch()
     {
         var data = CreateClusteredData(
             clusterCenters: new double[,] { { 0, 0 }, { 10, 0 } },
@@ -114,8 +115,8 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
-    public void DBSCAN_FindsDenseClusters_IdentifiesNoise()
+    [Fact(Timeout = 120000)]
+    public async Task DBSCAN_FindsDenseClusters_IdentifiesNoise()
     {
         // Two dense clusters with some noise points
         var random = new Random(42);

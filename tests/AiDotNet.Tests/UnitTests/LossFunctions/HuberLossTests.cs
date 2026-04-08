@@ -3,13 +3,14 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class HuberLossTests
     {
-        [Fact]
-        public void Constructor_WithDefaultDelta_UsesOneAsDefault()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithDefaultDelta_UsesOneAsDefault()
         {
             // Arrange & Act
             var loss = new HuberLoss<double>();
@@ -24,8 +25,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.125, result, 10);
         }
 
-        [Fact]
-        public void Constructor_WithCustomDelta_UsesSpecifiedValue()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithCustomDelta_UsesSpecifiedValue()
         {
             // Arrange & Act
             var loss = new HuberLoss<double>(2.0);
@@ -41,8 +42,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.125, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var loss = new HuberLoss<double>();
@@ -56,8 +57,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithSmallErrors_UsesQuadraticLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithSmallErrors_UsesQuadraticLoss()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -73,8 +74,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.18333333333333333, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithLargeErrors_UsesLinearLoss()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithLargeErrors_UsesLinearLoss()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -90,8 +91,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(3.5, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithMixedErrors_UsesBothQuadraticAndLinear()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithMixedErrors_UsesBothQuadraticAndLinear()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -108,8 +109,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.8125, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithNegativeErrors_HandlesCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithNegativeErrors_HandlesCorrectly()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -125,8 +126,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
-        public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new HuberLoss<double>();
@@ -137,8 +138,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithPerfectPredictions_ReturnsZero()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
             var loss = new HuberLoss<double>();
@@ -152,8 +153,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
         }
 
-        [Fact]
-        public void CalculateDerivative_WithSmallErrors_ReturnsLinearDerivative()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithSmallErrors_ReturnsLinearDerivative()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -169,8 +170,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.3, result[1], 10);   // 0.6 / 2
         }
 
-        [Fact]
-        public void CalculateDerivative_WithLargeErrors_ReturnsClippedDerivative()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithLargeErrors_ReturnsClippedDerivative()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);
@@ -186,8 +187,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-0.5, result[1], 10);  // 1.0 * -1 / 2 = -0.5
         }
 
-        [Fact]
-        public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
             var loss = new HuberLoss<double>();
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
-        public void CalculateLoss_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new HuberLoss<float>(1.0f);
@@ -213,8 +214,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.8125f, result, 5);
         }
 
-        [Fact]
-        public void CalculateDerivative_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var loss = new HuberLoss<float>(1.0f);
@@ -229,8 +230,8 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5f, result[1], 5);
         }
 
-        [Fact]
-        public void CalculateLoss_LessRobustToOutliersThanMAE_ButMoreThanMSE()
+        [Fact(Timeout = 60000)]
+        public async Task CalculateLoss_LessRobustToOutliersThanMAE_ButMoreThanMSE()
         {
             // Arrange
             var loss = new HuberLoss<double>(1.0);

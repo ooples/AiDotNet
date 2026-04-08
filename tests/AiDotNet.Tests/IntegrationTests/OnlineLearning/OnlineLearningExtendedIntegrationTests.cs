@@ -4,6 +4,7 @@ using AiDotNet.OnlineLearning;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.OnlineLearning;
 
@@ -18,8 +19,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlineSGDClassifier - Gradient and Convergence Verification
 
-    [Fact]
-    public void SGDClassifier_LinearSeparable_ConvergesTo100PercentAccuracy()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_LinearSeparable_ConvergesTo100PercentAccuracy()
     {
         // Generate linearly separable data: y=1 if x[0]+x[1]>0, else y=0
         var classifier = new OnlineSGDClassifier<double>(
@@ -61,8 +62,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"SGD classifier should achieve >90% on linearly separable data, got {accuracy:P}");
     }
 
-    [Fact]
-    public void SGDClassifier_ProbabilityOutput_IsBetween0And1()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_ProbabilityOutput_IsBetween0And1()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
         var rng = RandomHelper.CreateSeededRandom(42);
@@ -85,8 +86,8 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGDClassifier_Sigmoid_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_Sigmoid_HandCalculated()
     {
         // Set known weights and verify sigmoid output
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01, l2Penalty: 0.0);
@@ -110,8 +111,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0 - expected, classifier.PredictProbability(x2), 1e-4);
     }
 
-    [Fact]
-    public void SGDClassifier_L2Regularization_ShrinkWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_L2Regularization_ShrinkWeights()
     {
         // Train two models: one with L2, one without
         var noReg = new OnlineSGDClassifier<double>(
@@ -152,8 +153,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"L2-regularized weights (norm={Math.Sqrt(normWithReg):F4}) should be smaller than unregularized (norm={Math.Sqrt(normNoReg):F4})");
     }
 
-    [Fact]
-    public void SGDClassifier_L1Regularization_ProducesSparseWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_L1Regularization_ProducesSparseWeights()
     {
         // y depends only on x[0], x[1..4] are noise
         var classifier = new OnlineSGDClassifier<double>(
@@ -188,8 +189,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"L1 should push at least 2 of 4 noise features near zero, got {nearZero}");
     }
 
-    [Fact]
-    public void SGDClassifier_Reset_ClearsAllState()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_Reset_ClearsAllState()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
 
@@ -205,8 +206,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Null(classifier.GetWeights());
     }
 
-    [Fact]
-    public void SGDClassifier_DecisionFunction_MatchesLinearPrediction()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_DecisionFunction_MatchesLinearPrediction()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01, l2Penalty: 0.0);
 
@@ -220,8 +221,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(5.5, decision, Tolerance);
     }
 
-    [Fact]
-    public void SGDClassifier_FeatureImportance_ReflectsAbsoluteWeights()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_FeatureImportance_ReflectsAbsoluteWeights()
     {
         var classifier = new OnlineSGDClassifier<double>();
 
@@ -241,8 +242,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlineSGDRegressor - Loss Function and Gradient Verification
 
-    [Fact]
-    public void SGDRegressor_SimpleLinear_ConvergesToTrueLine()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_SimpleLinear_ConvergesToTrueLine()
     {
         // True model: y = 2*x + 1 + noise
         var regressor = new OnlineSGDRegressor<double>(
@@ -275,8 +276,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"Bias should be close to 1.0, got {bias:F4}");
     }
 
-    [Fact]
-    public void SGDRegressor_HuberLoss_GradientHandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_HuberLoss_GradientHandCalculated()
     {
         // Huber loss gradient: 2*residual if |residual| <= epsilon, else 2*epsilon*sign(residual)
         var regressor = new OnlineSGDRegressor<double>(
@@ -317,8 +318,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.02, weights[0], 1e-4);
     }
 
-    [Fact]
-    public void SGDRegressor_EpsilonInsensitiveLoss_ZeroGradientInBand()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_EpsilonInsensitiveLoss_ZeroGradientInBand()
     {
         // Epsilon-insensitive: gradient = 0 if |residual| <= epsilon
         var regressor = new OnlineSGDRegressor<double>(
@@ -342,8 +343,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0, weights[0], Tolerance); // No update
     }
 
-    [Fact]
-    public void SGDRegressor_RobustToOutliers_HuberVsSquaredError()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_RobustToOutliers_HuberVsSquaredError()
     {
         // Huber should be more robust to outliers than squared error
         var squaredModel = new OnlineSGDRegressor<double>(
@@ -391,8 +392,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"Huber MSE ({huberMSE:F4}) should not be much worse than Squared ({squaredMSE:F4})");
     }
 
-    [Fact]
-    public void SGDRegressor_Score_R2_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_Score_R2_HandCalculated()
     {
         var regressor = new OnlineSGDRegressor<double>(learningRate: 0.01, l2Penalty: 0.0);
 
@@ -414,8 +415,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlinePassiveAggressiveClassifier - Update Rule Verification
 
-    [Fact]
-    public void PAClassifier_PA_UpdateRule_HandCalculated()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_PA_UpdateRule_HandCalculated()
     {
         // PA update: w = w + tau * y * x, where tau = loss / ||x||^2
         // loss = max(0, 1 - y * (w.x))
@@ -439,8 +440,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.0, weights[1], 0.01);
     }
 
-    [Fact]
-    public void PAClassifier_PA_I_BoundedUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_PA_I_BoundedUpdate()
     {
         // PA-I: tau = min(C, loss / ||x||^2)
         // With C=0.5 and large loss, update should be bounded by C
@@ -462,8 +463,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.5, weights[0], 0.01);
     }
 
-    [Fact]
-    public void PAClassifier_CorrectPrediction_NoUpdate()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_CorrectPrediction_NoUpdate()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(type: PAType.PA);
 
@@ -482,8 +483,8 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0, weights[1], 0.01); // Unchanged
     }
 
-    [Fact]
-    public void PAClassifier_LinearSeparable_ConvergesToZeroLoss()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_LinearSeparable_ConvergesToZeroLoss()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
 
@@ -523,8 +524,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlinePassiveAggressiveRegressor - Update Rule Verification
 
-    [Fact]
-    public void PARegressor_SimpleConvergence()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_SimpleConvergence()
     {
         // PA regressor should converge on a simple linear relationship
         var regressor = new OnlinePassiveAggressiveRegressor<double>(
@@ -552,8 +553,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"PA regressor weight should be close to 3.0, got {weights[0]:F4}");
     }
 
-    [Fact]
-    public void PARegressor_EpsilonInsensitive_NoUpdateInBand()
+    [Fact(Timeout = 120000)]
+    public async Task PARegressor_EpsilonInsensitive_NoUpdateInBand()
     {
         var regressor = new OnlinePassiveAggressiveRegressor<double>(
             c: 1.0, epsilon: 1.0, type: PAType.PA_I);
@@ -576,8 +577,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Learning Rate Schedule Verification
 
-    [Fact]
-    public void SGDClassifier_InverseScaling_ProducesSmallerUpdates()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_InverseScaling_ProducesSmallerUpdates()
     {
         // With InverseScaling, effective lr decreases over time
         // Compare same classifier with Constant lr vs InverseScaling
@@ -622,8 +623,8 @@ public class OnlineLearningExtendedIntegrationTests
             $"InverseScaling weight norm ({Math.Sqrt(normInv):F4}) should be smaller than Constant ({Math.Sqrt(normConst):F4})");
     }
 
-    [Fact]
-    public void SGDClassifier_ConstantLR_SameUpdateMagnitude()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_ConstantLR_SameUpdateMagnitude()
     {
         var classifier = new OnlineSGDClassifier<double>(
             learningRate: 0.1,
@@ -649,8 +650,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Get/Set Parameters Round-Trip
 
-    [Fact]
-    public void SGDClassifier_GetSetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_GetSetParameters_RoundTrip()
     {
         var classifier = new OnlineSGDClassifier<double>();
 
@@ -666,8 +667,8 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void SGDRegressor_GetSetParameters_RoundTrip()
+    [Fact(Timeout = 120000)]
+    public async Task SGDRegressor_GetSetParameters_RoundTrip()
     {
         var regressor = new OnlineSGDRegressor<double>();
 
@@ -683,8 +684,8 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
-    public void PAClassifier_WithParameters_CreatesEquivalentModel()
+    [Fact(Timeout = 120000)]
+    public async Task PAClassifier_WithParameters_CreatesEquivalentModel()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
 
@@ -710,8 +711,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Batch Prediction
 
-    [Fact]
-    public void SGDClassifier_BatchPredict_MatchesSinglePredictions()
+    [Fact(Timeout = 120000)]
+    public async Task SGDClassifier_BatchPredict_MatchesSinglePredictions()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
 
@@ -748,8 +749,8 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region ADWINDriftDetector in Online Learning Context
 
-    [Fact]
-    public void ADWINDriftDetector_DetectsConceptDriftDuringOnlineLearning()
+    [Fact(Timeout = 120000)]
+    public async Task ADWINDriftDetector_DetectsConceptDriftDuringOnlineLearning()
     {
         // Simulate concept drift: first half y = x[0]>0, second half y = x[0]<0
         var classifier = new OnlineSGDClassifier<double>(

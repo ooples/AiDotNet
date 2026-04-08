@@ -1,12 +1,13 @@
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class MultivectorTests
 {
-    [Fact]
-    public void GeometricProduct_BasisVectorsFollowAnticommutation()
+    [Fact(Timeout = 60000)]
+    public async Task GeometricProduct_BasisVectorsFollowAnticommutation()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
         var e1 = BasisVector(algebra, 0);
@@ -22,8 +23,8 @@ public class MultivectorTests
         AssertBlade(e1Squared, 0, 1.0, 12);
     }
 
-    [Fact]
-    public void OuterProduct_DisjointVectorsProduceBlade()
+    [Fact(Timeout = 60000)]
+    public async Task OuterProduct_DisjointVectorsProduceBlade()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
         var e1 = BasisVector(algebra, 0);
@@ -36,8 +37,8 @@ public class MultivectorTests
         Assert.True(zero.IsZero);
     }
 
-    [Fact]
-    public void InnerProduct_GradeSelectionMatchesLeftContraction()
+    [Fact(Timeout = 60000)]
+    public async Task InnerProduct_GradeSelectionMatchesLeftContraction()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
         var e1 = BasisVector(algebra, 0);
@@ -48,8 +49,8 @@ public class MultivectorTests
         AssertBlade(result, 2, 1.0, 12);
     }
 
-    [Fact]
-    public void Reverse_NegatesBivector()
+    [Fact(Timeout = 60000)]
+    public async Task Reverse_NegatesBivector()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
         var e12 = BasisBlade(algebra, 1 | 2);
@@ -59,8 +60,8 @@ public class MultivectorTests
         AssertBlade(reversed, 1 | 2, -1.0, 12);
     }
 
-    [Fact]
-    public void MetricSignature_ChangesSquareSign()
+    [Fact(Timeout = 60000)]
+    public async Task MetricSignature_ChangesSquareSign()
     {
         var algebra = new CliffordAlgebra(1, 1, 0);
         var e1 = BasisVector(algebra, 0);
@@ -70,8 +71,8 @@ public class MultivectorTests
         AssertBlade(e2 * e2, 0, -1.0, 12);
     }
 
-    [Fact]
-    public void Inverse_VectorMultipliesToIdentity()
+    [Fact(Timeout = 60000)]
+    public async Task Inverse_VectorMultipliesToIdentity()
     {
         var algebra = new CliffordAlgebra(3, 0, 0);
         var e1 = BasisVector(algebra, 0);

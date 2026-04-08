@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Audio.MusicAnalysis;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.Audio.MusicAnalysis
 {
@@ -56,8 +57,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // BeatTracker Tests
-        [Fact]
-        public void BeatTracker_Track_ReturnsResult()
+        [Fact(Timeout = 60000)]
+        public async Task BeatTracker_Track_ReturnsResult()
         {
             // Arrange
             var tracker = new BeatTracker<float>();
@@ -71,8 +72,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(result.Tempo > 0, "Tempo should be positive");
         }
 
-        [Fact]
-        public void BeatTracker_DetectTempo_ReturnsReasonableTempo()
+        [Fact(Timeout = 60000)]
+        public async Task BeatTracker_DetectTempo_ReturnsReasonableTempo()
         {
             // Arrange
             var tracker = new BeatTracker<float>();
@@ -86,8 +87,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Tempo {result.Tempo} should be in reasonable range");
         }
 
-        [Fact]
-        public void BeatTracker_DetectBeats_ReturnsMultipleBeats()
+        [Fact(Timeout = 60000)]
+        public async Task BeatTracker_DetectBeats_ReturnsMultipleBeats()
         {
             // Arrange
             var tracker = new BeatTracker<float>();
@@ -101,8 +102,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(result.BeatTimes.Count > 0, "Should detect at least some beats");
         }
 
-        [Fact]
-        public void BeatTracker_ConfidenceScore_InRange()
+        [Fact(Timeout = 60000)]
+        public async Task BeatTracker_ConfidenceScore_InRange()
         {
             // Arrange
             var tracker = new BeatTracker<float>();
@@ -116,8 +117,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Confidence {result.ConfidenceScore} should be in [0, 1]");
         }
 
-        [Fact]
-        public void BeatTracker_AverageBeatInterval_MatchesTempo()
+        [Fact(Timeout = 60000)]
+        public async Task BeatTracker_AverageBeatInterval_MatchesTempo()
         {
             // Arrange
             var tracker = new BeatTracker<float>();
@@ -132,8 +133,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // ChordRecognizer Tests
-        [Fact]
-        public void ChordRecognizer_Recognize_ReturnsChords()
+        [Fact(Timeout = 60000)]
+        public async Task ChordRecognizer_Recognize_ReturnsChords()
         {
             // Arrange
             var recognizer = new ChordRecognizer<float>();
@@ -147,8 +148,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(chords.Count > 0, "Should recognize at least one chord");
         }
 
-        [Fact]
-        public void ChordRecognizer_ChordSegment_HasValidProperties()
+        [Fact(Timeout = 60000)]
+        public async Task ChordRecognizer_ChordSegment_HasValidProperties()
         {
             // Arrange
             var recognizer = new ChordRecognizer<float>();
@@ -167,8 +168,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             }
         }
 
-        [Fact]
-        public void ChordRecognizer_ChordConfidence_InRange()
+        [Fact(Timeout = 60000)]
+        public async Task ChordRecognizer_ChordConfidence_InRange()
         {
             // Arrange
             var recognizer = new ChordRecognizer<float>();
@@ -186,8 +187,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // KeyDetector Tests
-        [Fact]
-        public void KeyDetector_Detect_ReturnsKey()
+        [Fact(Timeout = 60000)]
+        public async Task KeyDetector_Detect_ReturnsKey()
         {
             // Arrange
             var detector = new KeyDetector<float>();
@@ -201,8 +202,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(key.KeyIndex >= 0 && key.KeyIndex < 12, $"Key index {key.KeyIndex} should be in [0, 11]");
         }
 
-        [Fact]
-        public void KeyDetector_KeyCorrelation_InRange()
+        [Fact(Timeout = 60000)]
+        public async Task KeyDetector_KeyCorrelation_InRange()
         {
             // Arrange
             var detector = new KeyDetector<float>();
@@ -216,8 +217,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Key correlation {key.Correlation} should be in [-1, 1]");
         }
 
-        [Fact]
-        public void KeyDetector_ModeIsValid()
+        [Fact(Timeout = 60000)]
+        public async Task KeyDetector_ModeIsValid()
         {
             // Arrange
             var detector = new KeyDetector<float>();
@@ -231,8 +232,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 "Mode should be Major or Minor");
         }
 
-        [Fact]
-        public void KeyDetector_NameIsNotEmpty()
+        [Fact(Timeout = 60000)]
+        public async Task KeyDetector_NameIsNotEmpty()
         {
             // Arrange
             var detector = new KeyDetector<float>();
@@ -245,8 +246,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.False(string.IsNullOrEmpty(key.Name), "Key name should not be empty");
         }
 
-        [Fact]
-        public void KeyDetector_RelativeKey_IsValid()
+        [Fact(Timeout = 60000)]
+        public async Task KeyDetector_RelativeKey_IsValid()
         {
             // Arrange
             var detector = new KeyDetector<float>();

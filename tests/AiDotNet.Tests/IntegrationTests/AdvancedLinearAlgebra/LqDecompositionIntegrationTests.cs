@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -187,8 +188,8 @@ public class LqDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void LqDecomposition_IdentityMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -207,8 +208,8 @@ public class LqDecompositionIntegrationTests
             $"Identity matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void LqDecomposition_DiagonalMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
         var D = new Matrix<double>(4, 4);
@@ -222,8 +223,8 @@ public class LqDecompositionIntegrationTests
             "Diagonal matrix L should be lower triangular");
     }
 
-    [Fact]
-    public void LqDecomposition_LowerTriangularMatrix_PreservesStructure()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_LowerTriangularMatrix_PreservesStructure()
     {
         // Arrange - Lower triangular matrix
         var L_input = new Matrix<double>(4, 4);
@@ -240,8 +241,8 @@ public class LqDecompositionIntegrationTests
             "Lower triangular input L should produce lower triangular L");
     }
 
-    [Fact]
-    public void LqDecomposition_ZeroMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -294,8 +295,8 @@ public class LqDecompositionIntegrationTests
 
     #region Rectangular Matrix Tests
 
-    [Fact]
-    public void LqDecomposition_TallMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
         var A = CreateTestMatrix(6, 3);
@@ -310,8 +311,8 @@ public class LqDecompositionIntegrationTests
             $"Tall matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
-    public void LqDecomposition_WideMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_WideMatrix_ValidDecomposition()
     {
         // Arrange - More columns than rows
         var A = CreateTestMatrix(3, 6);
@@ -335,8 +336,8 @@ public class LqDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void LqDecomposition_LargeMatrix_ValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task LqDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(10, 10, seed: 999);

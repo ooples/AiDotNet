@@ -2,13 +2,14 @@ using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class ProductQuantizationCompressionTests
     {
-        [Fact]
-        public void Constructor_WithValidParameters_CreatesInstance()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var compression = new ProductQuantizationCompression<double>(
@@ -22,8 +23,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
-        public void Constructor_WithInvalidNumSubvectors_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidNumSubvectors_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -32,8 +33,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new ProductQuantizationCompression<double>(numSubvectors: -1));
         }
 
-        [Fact]
-        public void Constructor_WithInvalidNumCentroids_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Constructor_WithInvalidNumCentroids_ThrowsException()
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -42,8 +43,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new ProductQuantizationCompression<double>(numCentroids: -1));
         }
 
-        [Fact]
-        public void Compress_WithValidWeights_ReturnsCompressedData()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>(
@@ -62,8 +63,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<ProductQuantizationMetadata<double>>(metadata);
         }
 
-        [Fact]
-        public void Compress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>();
@@ -72,8 +73,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
-        public void Compress_WithEmptyWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>();
@@ -83,8 +84,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
-        public void Compress_ProducesProductQuantizationMetadata()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_ProducesProductQuantizationMetadata()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>(
@@ -103,8 +104,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(8, pqMetadata.OriginalLength);
         }
 
-        [Fact]
-        public void Decompress_ReconstructsApproximateWeights()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_ReconstructsApproximateWeights()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>(
@@ -121,8 +122,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Decompress_WithNullWeights_ThrowsException()
+        [Fact(Timeout = 60000)]
+        public async Task Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>();
@@ -135,8 +136,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void GetCompressedSize_ReturnsPositiveSize()
+        [Fact(Timeout = 60000)]
+        public async Task GetCompressedSize_ReturnsPositiveSize()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<double>(
@@ -156,8 +157,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
-        public void Compress_WithFloatType_WorksCorrectly()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var compression = new ProductQuantizationCompression<float>(
@@ -174,8 +175,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(weights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
-        public void Compress_WithReproducibleSeed_ProducesSameResults()
+        [Fact(Timeout = 60000)]
+        public async Task Compress_WithReproducibleSeed_ProducesSameResults()
         {
             // Arrange
             var compression1 = new ProductQuantizationCompression<double>(
@@ -198,8 +199,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
-        public void Metadata_GetMetadataSize_ReturnsPositiveValue()
+        [Fact(Timeout = 60000)]
+        public async Task Metadata_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
             var codebooks = new double[][] {

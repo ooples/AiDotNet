@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.UnitTests.Serialization;
 
 using System;
@@ -8,23 +9,23 @@ using Xunit;
 
 public class ModelTypeRegistryTests
 {
-    [Fact]
-    public void RegisteredTypeCount_IsPositive()
+    [Fact(Timeout = 60000)]
+    public async Task RegisteredTypeCount_IsPositive()
     {
         // The static constructor auto-discovers IModelSerializer types
         Assert.True(ModelTypeRegistry.RegisteredTypeCount > 0,
             "Registry should auto-discover model types from the AiDotNet assembly.");
     }
 
-    [Fact]
-    public void RegisteredTypeNames_IsNotEmpty()
+    [Fact(Timeout = 60000)]
+    public async Task RegisteredTypeNames_IsNotEmpty()
     {
         var names = ModelTypeRegistry.RegisteredTypeNames;
         Assert.NotEmpty(names);
     }
 
-    [Fact]
-    public void Register_AddsCustomType()
+    [Fact(Timeout = 60000)]
+    public async Task Register_AddsCustomType()
     {
         int countBefore = ModelTypeRegistry.RegisteredTypeCount;
 
@@ -38,50 +39,50 @@ public class ModelTypeRegistryTests
         Assert.Equal(typeof(StubModelSerializer), resolved);
     }
 
-    [Fact]
-    public void Register_ThrowsOnNullName()
+    [Fact(Timeout = 60000)]
+    public async Task Register_ThrowsOnNullName()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelTypeRegistry.Register(null, typeof(StubModelSerializer)));
     }
 
-    [Fact]
-    public void Register_ThrowsOnEmptyName()
+    [Fact(Timeout = 60000)]
+    public async Task Register_ThrowsOnEmptyName()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelTypeRegistry.Register("", typeof(StubModelSerializer)));
     }
 
-    [Fact]
-    public void Register_ThrowsOnNullType()
+    [Fact(Timeout = 60000)]
+    public async Task Register_ThrowsOnNullType()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelTypeRegistry.Register("SomeName", null));
     }
 
-    [Fact]
-    public void Resolve_ReturnsNullForUnknownType()
+    [Fact(Timeout = 60000)]
+    public async Task Resolve_ReturnsNullForUnknownType()
     {
         var result = ModelTypeRegistry.Resolve("CompletelyFakeModelType_12345");
         Assert.Null(result);
     }
 
-    [Fact]
-    public void Resolve_ReturnsNullForNullName()
+    [Fact(Timeout = 60000)]
+    public async Task Resolve_ReturnsNullForNullName()
     {
         var result = ModelTypeRegistry.Resolve(null);
         Assert.Null(result);
     }
 
-    [Fact]
-    public void Resolve_ReturnsNullForEmptyName()
+    [Fact(Timeout = 60000)]
+    public async Task Resolve_ReturnsNullForEmptyName()
     {
         var result = ModelTypeRegistry.Resolve("");
         Assert.Null(result);
     }
 
-    [Fact]
-    public void Resolve_IsCaseInsensitive()
+    [Fact(Timeout = 60000)]
+    public async Task Resolve_IsCaseInsensitive()
     {
         string uniqueName = $"CaseTestModel_{Guid.NewGuid():N}";
         ModelTypeRegistry.Register(uniqueName, typeof(StubModelSerializer));
@@ -91,15 +92,15 @@ public class ModelTypeRegistryTests
         Assert.Equal(typeof(StubModelSerializer), resolved);
     }
 
-    [Fact]
-    public void RegisterFactory_ThrowsOnNullName()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterFactory_ThrowsOnNullName()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelTypeRegistry.RegisterFactory(null, t => null));
     }
 
-    [Fact]
-    public void RegisterFactory_NullFactory_RemovesRegistration()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterFactory_NullFactory_RemovesRegistration()
     {
         // Passing null factory removes the registration (cleanup pattern)
         var exception = Record.Exception(() =>
@@ -107,22 +108,22 @@ public class ModelTypeRegistryTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void RegisterAssembly_ThrowsOnNull()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterAssembly_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelTypeRegistry.RegisterAssembly(null));
     }
 
-    [Fact]
-    public void CreateInstance_ThrowsOnNull()
+    [Fact(Timeout = 60000)]
+    public async Task CreateInstance_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelTypeRegistry.CreateInstance<double>(null));
     }
 
-    [Fact]
-    public void CreateInstance_NonGenericType_ReturnsInstance()
+    [Fact(Timeout = 60000)]
+    public async Task CreateInstance_NonGenericType_ReturnsInstance()
     {
         // StubModelSerializer is non-generic and has a parameterless constructor
         var instance = ModelTypeRegistry.CreateInstance<double>(typeof(StubModelSerializer));
@@ -130,8 +131,8 @@ public class ModelTypeRegistryTests
         Assert.IsType<StubModelSerializer>(instance);
     }
 
-    [Fact]
-    public void RegisterFactory_IsUsedByCreateInstance()
+    [Fact(Timeout = 60000)]
+    public async Task RegisterFactory_IsUsedByCreateInstance()
     {
         // Use a unique name per test run to avoid global state leaks between tests
         string typeName = $"FactoryTest_{Guid.NewGuid():N}";

@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.LinearAlgebra;
 
@@ -16,8 +17,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Kronecker Product ──────────────────────────────────────────────
 
-    [Fact]
-    public void KroneckerProduct_TraceProperty_TrAkronB_Equals_TrA_Times_TrB()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_TraceProperty_TrAkronB_Equals_TrA_Times_TrB()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -40,8 +41,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(trA * trB, trAkB, Tol);
     }
 
-    [Fact]
-    public void KroneckerProduct_DeterminantProperty_DetAkronB()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_DeterminantProperty_DetAkronB()
     {
         // det(A ⊗ B) = det(A)^q * det(B)^p where A is p×p, B is q×q
         var A = new Matrix<double>(new double[,]
@@ -66,8 +67,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(expected, detAkB, Tol);
     }
 
-    [Fact]
-    public void KroneckerProduct_MixedProductProperty()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_MixedProductProperty()
     {
         // (A ⊗ B)(C ⊗ D) = (AC) ⊗ (BD)
         var A = new Matrix<double>(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -83,8 +84,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(rhs[i, j], lhs[i, j], Tol);
     }
 
-    [Fact]
-    public void KroneckerProduct_IdentityKronecker_IsBlockDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_IdentityKronecker_IsBlockDiagonal()
     {
         // I_2 ⊗ A = block diagonal [A, 0; 0, A]
         var I2 = new Matrix<double>(new double[,] { { 1, 0 }, { 0, 1 } });
@@ -111,8 +112,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(A[1, 1], result[3, 3], Tol);
     }
 
-    [Fact]
-    public void KroneckerProduct_Dimensions_mpByNq()
+    [Fact(Timeout = 120000)]
+    public async Task KroneckerProduct_Dimensions_mpByNq()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -134,8 +135,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Matrix Exponential ─────────────────────────────────────────────
 
-    [Fact]
-    public void MatrixExponential_ZeroMatrix_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixExponential_ZeroMatrix_ReturnsIdentity()
     {
         var zero = new Matrix<double>(new double[,] { { 0, 0 }, { 0, 0 } });
         var expZero = zero.MatrixExponential();
@@ -146,8 +147,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, expZero[1, 1], Tol);
     }
 
-    [Fact]
-    public void MatrixExponential_DiagonalMatrix_ExponentiatesDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixExponential_DiagonalMatrix_ExponentiatesDiagonal()
     {
         // exp(diag(a,b)) = diag(exp(a), exp(b))
         var D = new Matrix<double>(new double[,] { { 1, 0 }, { 0, 2 } });
@@ -159,8 +160,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(Math.Exp(2), expD[1, 1], LooseTol);
     }
 
-    [Fact]
-    public void MatrixExponential_DeterminantProperty_DetExpA_Equals_ExpTrA()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixExponential_DeterminantProperty_DetExpA_Equals_ExpTrA()
     {
         // det(exp(A)) = exp(tr(A)) — Jacobi's formula
         var A = new Matrix<double>(new double[,]
@@ -177,8 +178,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(expTrA, detExpA, LooseTol);
     }
 
-    [Fact]
-    public void MatrixExponential_ScalarMultiple_OfIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixExponential_ScalarMultiple_OfIdentity()
     {
         // exp(c*I) = exp(c)*I
         double c = 0.5;
@@ -192,8 +193,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(expC, expCI[1, 1], LooseTol);
     }
 
-    [Fact]
-    public void MatrixExponential_NilpotentMatrix_ExactResult()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixExponential_NilpotentMatrix_ExactResult()
     {
         // For nilpotent N (N^2=0): exp(N) = I + N
         var N = new Matrix<double>(new double[,]
@@ -219,8 +220,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Matrix Power ───────────────────────────────────────────────────
 
-    [Fact]
-    public void MatrixPower_ZeroPower_ReturnsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_ZeroPower_ReturnsIdentity()
     {
         var A = new Matrix<double>(new double[,] { { 3, 1 }, { 2, 5 } });
         var A0 = A.MatrixPower(0);
@@ -231,8 +232,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, A0[1, 1], Tol);
     }
 
-    [Fact]
-    public void MatrixPower_FirstPower_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_FirstPower_ReturnsOriginal()
     {
         var A = new Matrix<double>(new double[,] { { 3, 1 }, { 2, 5 } });
         var A1 = A.MatrixPower(1);
@@ -242,8 +243,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(A[i, j], A1[i, j], Tol);
     }
 
-    [Fact]
-    public void MatrixPower_AdditiveProperty_AmPlusN_Equals_Am_Times_An()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_AdditiveProperty_AmPlusN_Equals_Am_Times_An()
     {
         // A^(m+n) = A^m * A^n
         var A = new Matrix<double>(new double[,] { { 1, 2 }, { 0, 3 } });
@@ -258,8 +259,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(A8[i, j], A3xA5[i, j], Tol);
     }
 
-    [Fact]
-    public void MatrixPower_DeterminantProperty_DetAk_Equals_DetA_k()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_DeterminantProperty_DetAk_Equals_DetA_k()
     {
         // det(A^k) = det(A)^k
         var A = new Matrix<double>(new double[,] { { 2, 1 }, { 1, 3 } });
@@ -271,8 +272,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(Math.Pow(detA, 4), detA4, Tol);
     }
 
-    [Fact]
-    public void MatrixPower_HandComputed_2x2_Squared()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_HandComputed_2x2_Squared()
     {
         // A = [[1,2],[3,4]], A^2 = [[7,10],[15,22]]
         var A = new Matrix<double>(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -284,8 +285,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(22.0, A2[1, 1], Tol);
     }
 
-    [Fact]
-    public void MatrixPower_IdempotentMatrix_PowerEqualsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task MatrixPower_IdempotentMatrix_PowerEqualsOriginal()
     {
         // For a projection matrix P (P^2=P), P^k = P for all k >= 1
         // P = 1/2 * [[1,1],[1,1]] is idempotent
@@ -304,8 +305,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Inverse Methods ────────────────────────────────────────────────
 
-    [Fact]
-    public void InverseGaussianJordan_TimesOriginal_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task InverseGaussianJordan_TimesOriginal_IsIdentity()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -322,8 +323,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, product[1, 1], Tol);
     }
 
-    [Fact]
-    public void InverseGaussianJordan_3x3_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task InverseGaussianJordan_3x3_HandComputed()
     {
         // A = [[1,2,3],[0,1,4],[5,6,0]]
         // det(A) = 1(0-24)-2(0-20)+3(0-5) = -24+40-15 = 1
@@ -348,8 +349,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void InverseNewton_TimesOriginal_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task InverseNewton_TimesOriginal_IsIdentity()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -366,8 +367,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, product[1, 1], LooseTol);
     }
 
-    [Fact]
-    public void InverseStrassen_2x2_TimesOriginal_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task InverseStrassen_2x2_TimesOriginal_IsIdentity()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -384,8 +385,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, product[1, 1], Tol);
     }
 
-    [Fact]
-    public void InverseDispatcher_AllMethods_ProduceSameResult()
+    [Fact(Timeout = 120000)]
+    public async Task InverseDispatcher_AllMethods_ProduceSameResult()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -405,8 +406,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void InverseOfInverse_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task InverseOfInverse_ReturnsOriginal()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -424,8 +425,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Triangular Matrix Inversion ────────────────────────────────────
 
-    [Fact]
-    public void InvertUpperTriangular_TimesOriginal_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task InvertUpperTriangular_TimesOriginal_IsIdentity()
     {
         var U = new Matrix<double>(new double[,]
         {
@@ -446,8 +447,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void InvertUpperTriangular_ResultIsUpperTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task InvertUpperTriangular_ResultIsUpperTriangular()
     {
         var U = new Matrix<double>(new double[,]
         {
@@ -464,8 +465,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(0.0, Uinv[2, 1], Tol);
     }
 
-    [Fact]
-    public void InvertLowerTriangular_TimesOriginal_IsIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task InvertLowerTriangular_TimesOriginal_IsIdentity()
     {
         var L = new Matrix<double>(new double[,]
         {
@@ -486,8 +487,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void InvertLowerTriangular_ResultIsLowerTriangular()
+    [Fact(Timeout = 120000)]
+    public async Task InvertLowerTriangular_ResultIsLowerTriangular()
     {
         var L = new Matrix<double>(new double[,]
         {
@@ -504,8 +505,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(0.0, Linv[1, 2], Tol);
     }
 
-    [Fact]
-    public void InvertDiagonalMatrix_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task InvertDiagonalMatrix_HandComputed()
     {
         var D = new Matrix<double>(new double[,]
         {
@@ -523,8 +524,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Forward Substitution ───────────────────────────────────────────
 
-    [Fact]
-    public void ForwardSubstitution_HandComputed()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardSubstitution_HandComputed()
     {
         // Lx = b where L = [[2,0,0],[1,3,0],[4,5,6]], b = [4,7,38]
         // x1 = 4/2 = 2
@@ -549,8 +550,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
-    public void ForwardSubstitution_IdentityMatrix_ReturnsSameVector()
+    [Fact(Timeout = 120000)]
+    public async Task ForwardSubstitution_IdentityMatrix_ReturnsSameVector()
     {
         var I = new Matrix<double>(new double[,]
         {
@@ -569,8 +570,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Matrix Type Checks ─────────────────────────────────────────────
 
-    [Fact]
-    public void IsSymmetricMatrix_SymmetricInput_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSymmetricMatrix_SymmetricInput_ReturnsTrue()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -582,8 +583,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(A.IsSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsSymmetricMatrix_AsymmetricInput_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsSymmetricMatrix_AsymmetricInput_ReturnsFalse()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -594,8 +595,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(A.IsSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsSkewSymmetricMatrix_SkewInput_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsSkewSymmetricMatrix_SkewInput_ReturnsTrue()
     {
         // A = -A^T, diag = 0
         var A = new Matrix<double>(new double[,]
@@ -608,8 +609,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(A.IsSkewSymmetricMatrix());
     }
 
-    [Fact]
-    public void IsPermutationMatrix_ValidPermutation_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPermutationMatrix_ValidPermutation_ReturnsTrue()
     {
         var P = new Matrix<double>(new double[,]
         {
@@ -621,8 +622,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(P.IsPermutationMatrix());
     }
 
-    [Fact]
-    public void IsPermutationMatrix_NotPermutation_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsPermutationMatrix_NotPermutation_ReturnsFalse()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -633,8 +634,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.False(A.IsPermutationMatrix());
     }
 
-    [Fact]
-    public void IsToeplitzMatrix_ValidToeplitz_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsToeplitzMatrix_ValidToeplitz_ReturnsTrue()
     {
         // Toeplitz: constant diagonals
         var T = new Matrix<double>(new double[,]
@@ -647,8 +648,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(T.IsToeplitzMatrix());
     }
 
-    [Fact]
-    public void IsHankelMatrix_ValidHankel_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsHankelMatrix_ValidHankel_ReturnsTrue()
     {
         // Hankel: constant anti-diagonals
         var H = new Matrix<double>(new double[,]
@@ -661,8 +662,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(H.IsHankelMatrix());
     }
 
-    [Fact]
-    public void IsStochasticMatrix_RowStochastic_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsStochasticMatrix_RowStochastic_ReturnsTrue()
     {
         // Row stochastic: non-negative, each row sums to 1
         var S = new Matrix<double>(new double[,]
@@ -674,8 +675,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(S.IsStochasticMatrix());
     }
 
-    [Fact]
-    public void IsDoublyStochasticMatrix_Valid_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsDoublyStochasticMatrix_Valid_ReturnsTrue()
     {
         // Both rows and columns sum to 1
         var DS = new Matrix<double>(new double[,]
@@ -687,8 +688,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(DS.IsDoublyStochasticMatrix());
     }
 
-    [Fact]
-    public void IsIdempotentMatrix_ProjectionMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsIdempotentMatrix_ProjectionMatrix_ReturnsTrue()
     {
         // P^2 = P
         var P = new Matrix<double>(new double[,]
@@ -700,8 +701,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(P.IsIdempotentMatrix());
     }
 
-    [Fact]
-    public void IsInvolutoryMatrix_ValidInvolution_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsInvolutoryMatrix_ValidInvolution_ReturnsTrue()
     {
         // A^2 = I
         var A = new Matrix<double>(new double[,]
@@ -713,8 +714,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(A.IsInvolutoryMatrix());
     }
 
-    [Fact]
-    public void IsPositiveDefiniteMatrix_SPDMatrix_ReturnsTrue()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveDefiniteMatrix_SPDMatrix_ReturnsTrue()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -725,8 +726,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.True(A.IsPositiveDefiniteMatrix());
     }
 
-    [Fact]
-    public void IsPositiveDefiniteMatrix_IndefiniteMatrix_ReturnsFalse()
+    [Fact(Timeout = 120000)]
+    public async Task IsPositiveDefiniteMatrix_IndefiniteMatrix_ReturnsFalse()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -740,8 +741,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Flatten and Reshape ────────────────────────────────────────────
 
-    [Fact]
-    public void Flatten_ThenReshape_ReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Flatten_ThenReshape_ReturnsOriginal()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -764,8 +765,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(A[i, j], B[i, j], Tol);
     }
 
-    [Fact]
-    public void Reshape_PreservesElementOrder()
+    [Fact(Timeout = 120000)]
+    public async Task Reshape_PreservesElementOrder()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -786,8 +787,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
 
     // ─── Cross-Property Identities ──────────────────────────────────────
 
-    [Fact]
-    public void CrossProperty_InverseTranspose_Equals_TransposeInverse()
+    [Fact(Timeout = 120000)]
+    public async Task CrossProperty_InverseTranspose_Equals_TransposeInverse()
     {
         // (A^-1)^T = (A^T)^-1
         var A = new Matrix<double>(new double[,]
@@ -804,8 +805,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(AinvT[i, j], ATinv[i, j], Tol);
     }
 
-    [Fact]
-    public void CrossProperty_ProductInverse_Equals_ReversedInverseProduct()
+    [Fact(Timeout = 120000)]
+    public async Task CrossProperty_ProductInverse_Equals_ReversedInverseProduct()
     {
         // (AB)^-1 = B^-1 * A^-1
         var A = new Matrix<double>(new double[,] { { 2, 1 }, { 1, 3 } });
@@ -821,8 +822,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(ABinv[i, j], BinvAinv[i, j], Tol);
     }
 
-    [Fact]
-    public void CrossProperty_KroneckerInverse_Equals_InverseKronecker()
+    [Fact(Timeout = 120000)]
+    public async Task CrossProperty_KroneckerInverse_Equals_InverseKronecker()
     {
         // (A ⊗ B)^-1 = A^-1 ⊗ B^-1
         var A = new Matrix<double>(new double[,] { { 2, 1 }, { 1, 3 } });
@@ -838,8 +839,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(AkBinv[i, j], AinvkBinv[i, j], Tol);
     }
 
-    [Fact]
-    public void CrossProperty_PowerAndDet_AreConsistent()
+    [Fact(Timeout = 120000)]
+    public async Task CrossProperty_PowerAndDet_AreConsistent()
     {
         // det(A^3) = det(A)^3
         var A = new Matrix<double>(new double[,]
@@ -856,8 +857,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
         Assert.Equal(Math.Pow(detA, 3), detA3, Tol);
     }
 
-    [Fact]
-    public void CrossProperty_ExpAndInverse_ExpNegA_Equals_InvExpA()
+    [Fact(Timeout = 120000)]
+    public async Task CrossProperty_ExpAndInverse_ExpNegA_Equals_InvExpA()
     {
         // exp(-A) = (exp(A))^-1 for small A
         var A = new Matrix<double>(new double[,]
@@ -875,8 +876,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(expAinv[i, j], expNegA[i, j], LooseTol);
     }
 
-    [Fact]
-    public void Negate_TwiceReturnsOriginal()
+    [Fact(Timeout = 120000)]
+    public async Task Negate_TwiceReturnsOriginal()
     {
         var A = new Matrix<double>(new double[,]
         {
@@ -891,8 +892,8 @@ public class MatrixExtensionsDeepMathIntegrationTests
                 Assert.Equal(A[i, j], doubleNeg[i, j], Tol);
     }
 
-    [Fact]
-    public void PointwiseMultiply_WithIdentityVector_PreservesRows()
+    [Fact(Timeout = 120000)]
+    public async Task PointwiseMultiply_WithIdentityVector_PreservesRows()
     {
         // Pointwise multiply each row by [1,1,...] should preserve the matrix
         var A = new Matrix<double>(new double[,]

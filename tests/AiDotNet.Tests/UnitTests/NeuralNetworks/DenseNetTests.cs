@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -13,8 +14,8 @@ public class DenseNetTests
 {
     #region DenseNet-121 Tests
 
-    [Fact]
-    public void DenseNet121_Constructor_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet121_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
@@ -27,8 +28,8 @@ public class DenseNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
-    public void DenseNet169_Constructor_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet169_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = DenseNetNetwork<float>.DenseNet169(numClasses: 100);
@@ -39,8 +40,8 @@ public class DenseNetTests
         Assert.Equal(100, network.NumClasses);
     }
 
-    [Fact]
-    public void DenseNet201_Constructor_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet201_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = DenseNetNetwork<float>.DenseNet201(numClasses: 100);
@@ -50,8 +51,8 @@ public class DenseNetTests
         Assert.Equal(DenseNetVariant.DenseNet201, network.Variant);
     }
 
-    [Fact]
-    public void DenseNet264_Constructor_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet264_Constructor_CreatesValidNetwork()
     {
         // Arrange & Act
         var network = DenseNetNetwork<float>.DenseNet264(numClasses: 100);
@@ -65,8 +66,8 @@ public class DenseNetTests
 
     #region Configuration Tests
 
-    [Fact]
-    public void DenseNetConfiguration_GetBlockLayers_ReturnsCorrectValues()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNetConfiguration_GetBlockLayers_ReturnsCorrectValues()
     {
         // Test DenseNet-121
         var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10);
@@ -89,8 +90,8 @@ public class DenseNetTests
         Assert.Equal([6, 12, 64, 48], layers264);
     }
 
-    [Fact]
-    public void DenseNet_WithCustomGrowthRate_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_WithCustomGrowthRate_CreatesValidNetwork()
     {
         // Arrange - Use factory method with custom growth rate
         // Note: The default factory methods use growth rate 32, so test with that
@@ -101,8 +102,8 @@ public class DenseNetTests
         Assert.Equal(32, network.GrowthRate); // Default growth rate
     }
 
-    [Fact]
-    public void DenseNet_WithGrayscaleInput_CreatesValidNetwork()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_WithGrayscaleInput_CreatesValidNetwork()
     {
         // Arrange
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10, inputChannels: 1);
@@ -116,8 +117,8 @@ public class DenseNetTests
 
     #region DenseBlock Tests
 
-    [Fact]
-    public void DenseBlock_Constructor_CreatesValidBlock()
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Constructor_CreatesValidBlock()
     {
         // Arrange & Act
         var block = new DenseBlock<float>(
@@ -133,8 +134,8 @@ public class DenseNetTests
         Assert.Equal(64 + 6 * 32, block.OutputChannels); // 64 + 192 = 256
     }
 
-    [Fact]
-    public void DenseBlock_OutputChannels_CalculatedCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_OutputChannels_CalculatedCorrectly()
     {
         // Arrange
         int inputChannels = 64;
@@ -149,8 +150,8 @@ public class DenseNetTests
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
     }
 
-    [Fact]
-    public void DenseBlock_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         var block = new DenseBlock<float>(
@@ -178,8 +179,8 @@ public class DenseNetTests
 
     #region TransitionLayer Tests
 
-    [Fact]
-    public void TransitionLayer_Constructor_CreatesValidLayer()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Constructor_CreatesValidLayer()
     {
         // Arrange & Act
         var layer = new TransitionLayer<float>(
@@ -192,8 +193,8 @@ public class DenseNetTests
         Assert.Equal(128, layer.OutputChannels); // 256 * 0.5
     }
 
-    [Fact]
-    public void TransitionLayer_Forward_ProducesCorrectOutputShape()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
         var layer = new TransitionLayer<float>(
@@ -216,8 +217,8 @@ public class DenseNetTests
         Assert.Equal(14, output.Shape[3]); // width (28 / 2)
     }
 
-    [Fact]
-    public void TransitionLayer_DifferentCompressionFactor_WorksCorrectly()
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_DifferentCompressionFactor_WorksCorrectly()
     {
         // Arrange - no compression (compression = 1.0)
         var layer = new TransitionLayer<float>(
@@ -234,8 +235,8 @@ public class DenseNetTests
 
     #region Model Metadata Tests
 
-    [Fact]
-    public void DenseNet_GetModelMetadata_ReturnsValidMetadata()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
@@ -255,8 +256,8 @@ public class DenseNetTests
 
     #region Clone and Layer Access Tests
 
-    [Fact]
-    public void DenseNet_Clone_CreatesNewInstance()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_Clone_CreatesNewInstance()
     {
         // Arrange
         var original = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
@@ -269,8 +270,8 @@ public class DenseNetTests
         Assert.IsType<DenseNetNetwork<float>>(clone);
     }
 
-    [Fact]
-    public void DenseNet_GetLayer_ReturnsCorrectLayer()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetLayer_ReturnsCorrectLayer()
     {
         // Arrange
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
@@ -284,8 +285,8 @@ public class DenseNetTests
         Assert.IsType<DenseLayer<float>>(lastLayer); // Classification head
     }
 
-    [Fact]
-    public void DenseNet_GetLayer_ThrowsOnInvalidIndex()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetLayer_ThrowsOnInvalidIndex()
     {
         // Arrange
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
@@ -299,8 +300,8 @@ public class DenseNetTests
 
     #region Larger Variant Tests
 
-    [Fact]
-    public void DenseNet_LargerVariants_HaveMoreLayers()
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_LargerVariants_HaveMoreLayers()
     {
         // Arrange
         var d121 = DenseNetNetwork<float>.DenseNet121(numClasses: 10);

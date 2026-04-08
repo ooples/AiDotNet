@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 namespace AiDotNet.Tests.FederatedLearning;
 
 using System;
@@ -11,8 +12,8 @@ using Xunit;
 /// </summary>
 public class GaussianDifferentialPrivacyTests
 {
-    [Fact]
-    public void Constructor_WithValidClipNorm_InitializesSuccessfully()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithValidClipNorm_InitializesSuccessfully()
     {
         // Arrange & Act
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -22,15 +23,15 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed());
     }
 
-    [Fact]
-    public void Constructor_WithNegativeClipNorm_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task Constructor_WithNegativeClipNorm_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacy<double>(clipNorm: -1.0));
     }
 
-    [Fact]
-    public void ApplyPrivacy_WithValidParameters_AddsNoiseToModel()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_WithValidParameters_AddsNoiseToModel()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 10.0, randomSeed: 42);
@@ -60,8 +61,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.True(hasNoise, "Noise should have been added to the model");
     }
 
-    [Fact]
-    public void ApplyPrivacy_UpdatesPrivacyBudget()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_UpdatesPrivacyBudget()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -82,8 +83,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.8, dp.GetPrivacyBudgetConsumed(), precision: 5);
     }
 
-    [Fact]
-    public void ApplyPrivacy_WithZeroEpsilon_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_WithZeroEpsilon_ThrowsArgumentException()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -97,8 +98,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: 0.0, delta: 1e-5));
     }
 
-    [Fact]
-    public void ApplyPrivacy_WithInvalidDelta_ThrowsArgumentException()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_WithInvalidDelta_ThrowsArgumentException()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -113,8 +114,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: 1.0, delta: 1.0));
     }
 
-    [Fact]
-    public void ResetPrivacyBudget_ResetsToZero()
+    [Fact(Timeout = 60000)]
+    public async Task ResetPrivacyBudget_ResetsToZero()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -134,8 +135,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed());
     }
 
-    [Fact]
-    public void GetMechanismName_ReturnsCorrectName()
+    [Fact(Timeout = 60000)]
+    public async Task GetMechanismName_ReturnsCorrectName()
     {
         // Arrange
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 2.5);
@@ -148,8 +149,8 @@ public class GaussianDifferentialPrivacyTests
         Assert.Contains("2.5", name);
     }
 
-    [Fact]
-    public void ApplyPrivacy_WithSameSeed_ProducesSameNoise()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_WithSameSeed_ProducesSameNoise()
     {
         // Arrange
         var dp1 = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 123);
@@ -171,8 +172,8 @@ public class GaussianDifferentialPrivacyTests
         }
     }
 
-    [Fact]
-    public void ApplyPrivacy_PerformsGradientClipping()
+    [Fact(Timeout = 60000)]
+    public async Task ApplyPrivacy_PerformsGradientClipping()
     {
         // Arrange
         var clipNorm = 1.0;

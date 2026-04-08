@@ -10,6 +10,7 @@ using AiDotNet.Safety.Adversarial;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -25,8 +26,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialRobustnessEvaluator Tests
 
-    [Fact]
-    public void Evaluator_Homoglyphs_DetectsAttack()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluator_Homoglyphs_DetectsAttack()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
         var findings = evaluator.EvaluateText("H\u0435ll\u043E w\u043Erld th\u0456s \u0456s \u0430 t\u0435st");
@@ -35,8 +36,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact]
-    public void Evaluator_InvisibleChars_DetectsAttack()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluator_InvisibleChars_DetectsAttack()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
         var findings = evaluator.EvaluateText(
@@ -45,8 +46,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
-    public void Evaluator_NormalText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluator_NormalText_NoFindings()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
         var findings = evaluator.EvaluateText("This is a normal English sentence with no tricks.");
@@ -54,8 +55,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
-    public void Evaluator_CustomThreshold_Works()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluator_CustomThreshold_Works()
     {
         var strict = new AdversarialRobustnessEvaluator<double>(threshold: 0.1);
         var lenient = new AdversarialRobustnessEvaluator<double>(threshold: 0.9);
@@ -67,8 +68,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(strictFindings.Count >= lenientFindings.Count);
     }
 
-    [Fact]
-    public void Evaluator_EmptyText_NoFindings()
+    [Fact(Timeout = 120000)]
+    public async Task Evaluator_EmptyText_NoFindings()
     {
         var evaluator = new AdversarialRobustnessEvaluator<double>();
         var findings = evaluator.EvaluateText("");
@@ -80,8 +81,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialImageEvaluator Tests
 
-    [Fact]
-    public void ImageEvaluator_RandomTensor_ProcessesWithoutError()
+    [Fact(Timeout = 120000)]
+    public async Task ImageEvaluator_RandomTensor_ProcessesWithoutError()
     {
         var evaluator = new AdversarialImageEvaluator<double>();
         var data = new double[3 * 32 * 32];
@@ -94,8 +95,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void ImageEvaluator_SmallTensor_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task ImageEvaluator_SmallTensor_HandlesGracefully()
     {
         var evaluator = new AdversarialImageEvaluator<double>();
         var data = new double[3 * 8 * 8];
@@ -106,8 +107,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
-    public void ImageEvaluator_CustomThreshold_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ImageEvaluator_CustomThreshold_Works()
     {
         var evaluator = new AdversarialImageEvaluator<double>(threshold: 0.3);
         var data = new double[3 * 16 * 16];
@@ -124,8 +125,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialPreferenceAlignment Tests
 
-    [Fact]
-    public void PreferenceAlignment_NonTrainableModel_ReturnsWrappedModel()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_NonTrainableModel_ReturnsWrappedModel()
     {
         var options = new AlignmentMethodOptions<double>();
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -140,8 +141,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotSame(model, alignedModel);
     }
 
-    [Fact]
-    public void PreferenceAlignment_TrainableModel_ModifiesInPlace()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_TrainableModel_ModifiesInPlace()
     {
         var options = new AlignmentMethodOptions<double>
         {
@@ -174,8 +175,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(anyChanged, "Gradient-based training should modify model parameters");
     }
 
-    [Fact]
-    public void PreferenceAlignment_ConstitutionalPrinciples_NonTrainable_ReturnsWrapped()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_ConstitutionalPrinciples_NonTrainable_ReturnsWrapped()
     {
         var options = new AlignmentMethodOptions<double>();
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -189,8 +190,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotSame(model, result);
     }
 
-    [Fact]
-    public void PreferenceAlignment_ConstitutionalPrinciples_Trainable_ModifiesModel()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_ConstitutionalPrinciples_Trainable_ModifiesModel()
     {
         var options = new AlignmentMethodOptions<double>
         {
@@ -222,8 +223,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(anyChanged, "Constitutional training should modify model parameters");
     }
 
-    [Fact]
-    public void PreferenceAlignment_EvaluateAlignment_ProducesMetrics()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_EvaluateAlignment_ProducesMetrics()
     {
         var options = new AlignmentMethodOptions<double>();
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -238,8 +239,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(metrics.HonestyScore >= 0 && metrics.HonestyScore <= 1);
     }
 
-    [Fact]
-    public void PreferenceAlignment_RedTeaming_ProducesResults()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_RedTeaming_ProducesResults()
     {
         var options = new AlignmentMethodOptions<double>();
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -257,8 +258,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(results.SuccessRate >= 0 && results.SuccessRate <= 1);
     }
 
-    [Fact]
-    public void PreferenceAlignment_SerializeDeserialize_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_SerializeDeserialize_Works()
     {
         var options = new AlignmentMethodOptions<double> { LearningRate = 0.001 };
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -274,8 +275,8 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(options.LearningRate, newAlignment.GetOptions().LearningRate);
     }
 
-    [Fact]
-    public void PreferenceAlignment_Reset_ClearsRewardModel()
+    [Fact(Timeout = 120000)]
+    public async Task PreferenceAlignment_Reset_ClearsRewardModel()
     {
         var options = new AlignmentMethodOptions<double>();
         var alignment = new AdversarialPreferenceAlignment<double>(options);
@@ -296,8 +297,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region ViTAdversarialAttack Tests
 
-    [Fact]
-    public void ViTAttack_Instantiation_Works()
+    [Fact(Timeout = 120000)]
+    public async Task ViTAttack_Instantiation_Works()
     {
         var options = new AdversarialAttackOptions<double>();
         var attack = new ViTAdversarialAttack<double, Vector<double>, Vector<double>>(options);
@@ -309,8 +310,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdaptiveRandomizedSmoothing Tests
 
-    [Fact]
-    public void AdaptiveSmoothing_Instantiation_Works()
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveSmoothing_Instantiation_Works()
     {
         var options = new CertifiedDefenseOptions<double>();
         var defense = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
@@ -322,8 +323,8 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AdversarialPromptDefense Tests
 
-    [Fact]
-    public void PromptDefense_Instantiation_Works()
+    [Fact(Timeout = 120000)]
+    public async Task PromptDefense_Instantiation_Works()
     {
         var options = new AdversarialDefenseOptions<double>();
         var defense = new AdversarialPromptDefense<double, Vector<double>, Vector<double>>(options);

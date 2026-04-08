@@ -2,6 +2,7 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.AdvancedLinearAlgebra;
 
@@ -118,8 +119,8 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
-    public void HessenbergDecomposition_IdentityMatrix_PreservesIdentity()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_IdentityMatrix_PreservesIdentity()
     {
         // Arrange
         var I = Matrix<double>.CreateIdentityMatrix(4);
@@ -139,8 +140,8 @@ public class HessenbergDecompositionIntegrationTests
         }
     }
 
-    [Fact]
-    public void HessenbergDecomposition_DiagonalMatrix_PreservesDiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_DiagonalMatrix_PreservesDiagonal()
     {
         // Arrange - Diagonal matrices are already upper Hessenberg
         var D = new Matrix<double>(4, 4);
@@ -154,8 +155,8 @@ public class HessenbergDecompositionIntegrationTests
             "Diagonal matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
-    public void HessenbergDecomposition_UpperTriangularMatrix_PreservesStructure()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_UpperTriangularMatrix_PreservesStructure()
     {
         // Arrange - Upper triangular is already upper Hessenberg
         var U = new Matrix<double>(4, 4);
@@ -172,8 +173,8 @@ public class HessenbergDecompositionIntegrationTests
             "Upper triangular matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
-    public void HessenbergDecomposition_SymmetricMatrix_ProducesTridiagonal()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_SymmetricMatrix_ProducesTridiagonal()
     {
         // Arrange - For symmetric matrices, Hessenberg form should be tridiagonal
         var A = CreateSymmetricMatrix(4, seed: 789);
@@ -246,8 +247,8 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
-    public void HessenbergDecomposition_LargeMatrix_ProducesValidDecomposition()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_LargeMatrix_ProducesValidDecomposition()
     {
         // Arrange
         var A = CreateTestMatrix(10, seed: 999);
@@ -260,8 +261,8 @@ public class HessenbergDecompositionIntegrationTests
             "Large matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
-    public void HessenbergDecomposition_ZeroMatrix_HandlesGracefully()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_ZeroMatrix_HandlesGracefully()
     {
         // Arrange
         var Z = new Matrix<double>(3, 3); // All zeros
@@ -278,8 +279,8 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
-    public void HessenbergDecomposition_NonSquareMatrix_ThrowsException()
+    [Fact(Timeout = 120000)]
+    public async Task HessenbergDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
         var A = new Matrix<double>(3, 4); // Non-square
